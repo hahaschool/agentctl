@@ -2,13 +2,14 @@
 
 > Goal: close the newly surfaced `agentctl-agent-worker` container vulnerability backlog on `main` with the smallest defensible runtime-image change, while keeping the worker on a glibc-based slim image and avoiding a blind regression back to Alpine/musl.
 >
-> Status note: this follow-up opened after a fresh 2026-03-20 `main` scan surfaced 100 open GitHub code-scanning findings for the worker image. PR #307 merged the worker-only runtime refresh plus the `python3-setuptools` compatibility follow-up for node-gyp on Debian trixie, and PR #314 then refreshed the `git` runtime library closure, but the plan remains active until the post-merge `main` scan output converges and the open-alert count settles.
+> Status note: this follow-up opened after a fresh 2026-03-20 `main` scan surfaced 100 open GitHub code-scanning findings for the worker image. PR #307 merged the worker-only runtime refresh plus the `python3-setuptools` compatibility follow-up for node-gyp on Debian trixie, and PR #314 then refreshed the `git` runtime library closure. The plan remains active because the newest `main` Trivy upload has already landed and the worker alert backlog still has not dropped.
 
 ## Current Alert Picture
 
 The current `main` backlog is concentrated in the worker container image:
 
-- 100 open code-scanning findings are still reported immediately after PR #314 merged, and all 100 findings are attached to `library/agentctl-agent-worker`
+- 100 open code-scanning findings are still reported on `main`, and all 100 findings are attached to `library/agentctl-agent-worker`
+- the newest `trivy-agentctl-agent-worker` analysis on `refs/heads/main` targets commit `3748b533c76a8da78cbe8922b5f450ffa4f0ba4b`, was created at `2026-03-20T05:18:55Z`, and still reports `results_count: 121`
 - Current GitHub code-scanning severity buckets for that backlog are 1 `error`, 14 `warning`, and 85 `note`
 - Highest-signal package families before the PR #314 follow-up clustered around:
   - `zlib1g`
@@ -17,6 +18,12 @@ The current `main` backlog is concentrated in the worker container image:
   - `git`-linked curl/TLS/runtime libraries such as `libcurl3t64-gnutls`, `libnghttp2-14`, `libnghttp3-9`, `libngtcp2-16`, and `libtasn1-6`
 
 The control-plane image is not currently carrying the same open backlog, so the first pass stays worker-scoped unless validation shows the base-image move should be mirrored for parity.
+
+Current interpretation:
+
+- this is not just a lagging post-merge scan; GitHub already ingested a fresh worker Trivy SARIF for the latest `main` commit
+- PR #314 successfully changed package versions, but the current Trivy/Debian vulnerability dataset still flags those newer versions and broader base-image packages, often without a fixed version advertised
+- another narrow apt-pin or single-library override is not the strongest next move unless new evidence points to a specific fixable package set
 
 ## Remediation Direction
 
@@ -37,6 +44,12 @@ The second, package-level follow-up is now also on `main` via PR #314:
 - the follow-up upgrades `libcurl3t64-gnutls`, `libexpat1`, `libnghttp2-14`, `libnghttp3-9`, `libngtcp2-16`, `libtasn1-6`, and `zlib1g`, then removes the temporary repo metadata in the same layer
 - the rationale is repo-specific: the worker image intentionally adds `git`, and Debian package metadata showed `git` was the common root pulling the remaining expat/curl library family into the runtime image
 
+The latest post-merge evidence changes the decision boundary for the next slice:
+
+- the repo now has proof that the upgraded package set is still flagged on `main`
+- the smallest credible next engineering slice is runtime surface reduction, especially around whether final-image `git` can be removed, moved behind a different execution path, or otherwise excluded from the steady-state worker image
+- if no such reduction is feasible, section 26 should remain open as a documented known risk until the vulnerability feed or base image meaningfully changes
+
 ## Verification Expectations
 
 Because local Docker access may not be available in every agent environment, verification should stay focused and honest:
@@ -45,7 +58,7 @@ Because local Docker access may not be available in every agent environment, ver
 - review the worker Dockerfile diff for scope control
 - rely on PR CI plus the post-merge `main` workflows to run the container build and security audit
 - confirm the PR CI/security stack passes before merge; PR #314 cleared CI, Security Audit, CodeQL, container scanning, dependency audit, secret scanning, and Semgrep before merge
-- compare the post-merge `main` code-scanning alert count against the pre-fix baseline before closing the roadmap item
+- compare the post-merge `main` code-scanning alert count and Trivy `results_count` against the pre-fix baseline before closing the roadmap item
 
 ## Deferred / Out of Scope
 
