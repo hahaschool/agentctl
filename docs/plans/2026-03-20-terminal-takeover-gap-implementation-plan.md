@@ -9,9 +9,9 @@
 **Tech Stack:** Fastify WebSocket routes, `node-pty`, existing worker `CliSessionManager`, control-plane worker proxy routes, React/Next.js runtime session UI, Vitest, Playwright.
 
 > Status note (2026-03-21): Tasks 1-4 are now on `main` via PRs #340, #341,
-> #342, #343, and #344. The only remaining work tracked here is Task 5
-> follow-through: focused runtime-session attach e2e coverage plus
-> roadmap/plan reconciliation.
+> #342, #343, and #344, and PR #350 delivered the runtime-session attach
+> e2e portion of Task 5 on `main`. The only remaining Task 5 work is this
+> roadmap/plan sync that marks the overall slice delivered.
 
 ---
 
@@ -272,11 +272,13 @@ Expected: PASS
 
 **Step 3: Sync roadmap/docs**
 
-- Update `docs/ROADMAP.md` so 27.3 stops claiming “planned” / “live attach pending”.
+- Update `docs/ROADMAP.md` so 27.3 is recorded as delivered rather than still
+  carrying a docs-only follow-through tail.
 - Record the correct factual split:
   - shipped on `main`: worker/control-plane/web/CLI live attach via PRs #340-#344
-  - remaining in this plan: focused runtime-session attach e2e + docs reconciliation
-- Keep this plan doc linked from the roadmap as the follow-through tracker.
+  - shipped on `main` via PR #350: focused runtime-session attach e2e coverage
+- Mark this plan as delivered once the roadmap/plan sync lands, while keeping
+  the document linked from the roadmap as the implementation record.
 
 **Step 4: Run final focused verification**
 

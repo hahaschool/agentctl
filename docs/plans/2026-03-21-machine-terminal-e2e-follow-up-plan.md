@@ -138,7 +138,7 @@ git commit -m "fix(web): harden machine terminal test seams"
 **Step 2: Mark the roadmap item accordingly**
 
 - If the machine terminal Playwright slice shipped, update the roadmap item and plan registry entry without changing the meaning of §27.3.
-- For PR #346, mark section 29 and this plan as delivered while keeping the §27.3 gap plan active only for runtime-session attach follow-through.
+- For PR #346, mark section 29 and this plan as delivered while preserving the historical separation from §27.3 live managed-session attach work.
 
 **Step 3: Run lightweight doc verification**
 
