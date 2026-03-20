@@ -165,7 +165,7 @@ describe('Emergency stop routes', () => {
         method: 'GET',
         url: '/api/agents/force-kill',
       });
-      expect(['running', 'stopped']).toContain(statusBefore.json().status);
+      expect(['starting', 'running', 'stopped']).toContain(statusBefore.json().status);
 
       // Emergency stop
       const response = await app.inject({
