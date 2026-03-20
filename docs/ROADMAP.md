@@ -1574,6 +1574,26 @@ Agent run lifecycle has hidden intermediate states users can't see:
 ### 26.1 Agent Worker Runtime Image Refresh
 
 - [ ] Reduce the open `agentctl-agent-worker` container alert backlog on `main`, currently still reporting 100 code-scanning findings while the post-merge scan convergence is pending
+
+## 27. Session Lifecycle — Force Kill + Stall Detection
+
+### 27.1 Force Kill — P0
+
+- [ ] Worker: `POST /api/sessions/:id/kill` — SIGTERM then SIGKILL after 5s
+- [ ] CP: proxy kill route to worker, mark session as ended
+- [ ] Web: "Force Kill" button on session detail + sessions list (active/stalled only)
+
+### 27.2 Stall Detection — P0
+
+- [ ] Worker heartbeat reports `stalled` when session has no output for 15+ minutes
+- [ ] CP accepts `stalled` as valid session status
+- [ ] Web: yellow warning banner on stalled sessions
+
+### 27.3 Terminal Takeover — P1 (planned, not yet started)
+
+- [ ] Worker: attach to running CLI process stdin/stdout via PTY
+- [ ] Web: "Attach Terminal" button opens xterm.js connected to CLI process
+- [ ] User can type directly into running CLI to unblock stuck operations
 - [x] Address the highest-signal runtime packages first (`zlib1g`, `libexpat1`, `libldap-2.5-0`, PAM/systemd/ncurses) with the smallest defensible base-image/runtime-package change *(PR #307)*
 - [x] Keep the fix scoped to the worker container unless the validation data shows the control-plane image must move in lockstep *(PR #307)*
 
