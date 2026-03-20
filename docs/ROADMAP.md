@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-21 (PRs #340, #341, #342, #343, #344, #345, #346, and #347 are now on `main`; section 27.3's live managed-session terminal attach feature is shipped on `main`, while the linked gap plan remains active only for focused runtime-session attach e2e/docs follow-through; section 29 is now delivered via the dedicated machine-terminal Playwright coverage in PR #346; PR #347 repaired the stale agent-worker async-start route/test mismatch behind the failed `main` CI runs on `33f16fb` and `a5b7957`; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `7fdbdd9` is the current `main` head and its post-merge workflows are still in progress)
+> Last updated: 2026-03-21 (PRs #340, #341, #342, #343, #344, #345, #346, and #347 are now on `main`; section 27.3's live managed-session terminal attach feature is shipped on `main`, while the linked gap plan remains active only for focused runtime-session attach e2e/docs follow-through; section 29 is now delivered via the dedicated machine-terminal Playwright coverage in PR #346; PR #347 repaired the stale agent-worker async-start route/test mismatch behind the failed `main` CI runs on `33f16fb` and `a5b7957`; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `7fdbdd9` is now the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green)
 
 ## Current State
 
