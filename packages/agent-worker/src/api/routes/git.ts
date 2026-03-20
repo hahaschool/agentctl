@@ -11,6 +11,7 @@ import { WorkerError } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
+import { createGitUnavailableError, isGitUnavailableError } from '../../runtime/git-runtime.js';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
@@ -140,12 +141,20 @@ function resolveAndRevalidate(validated: string): string {
 
 async function runGit(args: string[], cwd: string): Promise<string> {
   const safeCwd = sanitizePath(cwd, ROOT_PATH);
-  const { stdout } = await execFileAsync('git', args, {
-    cwd: safeCwd,
-    timeout: GIT_COMMAND_TIMEOUT_MS,
-    maxBuffer: GIT_MAX_BUFFER,
-  });
-  return stdout.trim();
+  try {
+    const { stdout } = await execFileAsync('git', args, {
+      cwd: safeCwd,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+      maxBuffer: GIT_MAX_BUFFER,
+    });
+    return stdout.trim();
+  } catch (err) {
+    if (isGitUnavailableError(err)) {
+      throw createGitUnavailableError(args, safeCwd);
+    }
+
+    throw err;
+  }
 }
 
 function parseStatusCounts(
@@ -310,7 +319,11 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
       // Check if it's a git repository
       try {
         await runGit(['rev-parse', '--git-dir'], validatedDirPath);
-      } catch {
+      } catch (err) {
+        if (err instanceof WorkerError && err.code === 'GIT_UNAVAILABLE') {
+          throw err;
+        }
+
         return reply.code(400).send({
           error: 'NOT_A_GIT_REPO',
           message: `Path '${validatedDirPath}' is not inside a git repository`,
@@ -406,6 +419,10 @@ export async function gitRoutes(app: FastifyInstance, options: GitRouteOptions):
 
         return response;
       } catch (err) {
+        if (err instanceof WorkerError && err.code === 'GIT_UNAVAILABLE') {
+          throw err;
+        }
+
         const errMessage = err instanceof Error ? err.message : String(err);
         logger.error({ err, path: validatedDirPath }, 'git status failed');
         throw new WorkerError('GIT_STATUS_FAILED', `Failed to get git status: ${errMessage}`, {

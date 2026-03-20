@@ -11,6 +11,7 @@ import type { IpcMessage, IpcResponse } from './ipc/index.js';
 import { createIpcResponse, IpcServer } from './ipc/index.js';
 import { createLogger } from './logger.js';
 import { CliSessionManager } from './runtime/cli-session-manager.js';
+import { isGitBinaryAvailable } from './runtime/git-runtime.js';
 import { AgentPool, ExecutionEnvironmentRegistry } from './runtime/index.js';
 import { WorktreeManager } from './worktree/index.js';
 
@@ -205,15 +206,32 @@ function createIpcHandler(pool: AgentPool): (msg: IpcMessage) => Promise<IpcResp
 async function main(): Promise<void> {
   // Create a WorktreeManager if a project path is configured.
   // When PROJECT_PATH is empty or unset, agents will run without worktree isolation.
-  const worktreeManager = PROJECT_PATH
-    ? new WorktreeManager({
+  let worktreeManager: WorktreeManager | undefined;
+
+  if (PROJECT_PATH) {
+    let gitAvailable = false;
+
+    try {
+      gitAvailable = await isGitBinaryAvailable();
+    } catch (err) {
+      logger.warn(
+        { err, projectPath: PROJECT_PATH },
+        'Failed to probe git availability; disabling worktree isolation',
+      );
+    }
+
+    if (gitAvailable) {
+      worktreeManager = new WorktreeManager({
         projectPath: PROJECT_PATH,
         logger: logger.child({ component: 'worktree-manager' }),
-      })
-    : undefined;
-
-  if (worktreeManager) {
-    logger.info({ projectPath: PROJECT_PATH }, 'WorktreeManager enabled for agent isolation');
+      });
+      logger.info({ projectPath: PROJECT_PATH }, 'WorktreeManager enabled for agent isolation');
+    } else {
+      logger.warn(
+        { projectPath: PROJECT_PATH },
+        'Git unavailable; disabling worktree isolation for this worker runtime',
+      );
+    }
   } else {
     logger.info('No PROJECT_PATH set, agents will run without worktree isolation');
   }

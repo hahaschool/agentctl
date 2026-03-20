@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import type { WorkdirSafetyTier } from '@agentctl/shared';
+import { isGitUnavailableError } from './git-runtime.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -28,8 +29,31 @@ export async function checkWorkdirSafety(
   workdir: string,
   activeTaskCount: number,
 ): Promise<SafetyCheckResult> {
-  const isGitRepo = await detectGitRepo(workdir);
   const parallelTaskCount = Math.max(activeTaskCount, 0);
+  const gitRepoState = await detectGitRepoState(workdir);
+
+  if (gitRepoState === 'git_unavailable') {
+    if (parallelTaskCount > 1) {
+      return {
+        tier: 'unsafe',
+        isGitRepo: false,
+        hasUncommittedChanges: false,
+        parallelTaskCount,
+        blockReason:
+          'Git is unavailable and parallel tasks require worktree isolation before execution.',
+      };
+    }
+
+    return {
+      tier: 'guarded',
+      isGitRepo: false,
+      hasUncommittedChanges: false,
+      parallelTaskCount,
+      warning: 'Git is unavailable; worktree isolation and repository safety checks are disabled.',
+    };
+  }
+
+  const isGitRepo = gitRepoState === 'repo';
 
   if (!isGitRepo) {
     if (parallelTaskCount > 1) {
@@ -102,14 +126,16 @@ export async function createSandbox(workdir: string, taskId: string): Promise<Sa
   };
 }
 
-async function detectGitRepo(workdir: string): Promise<boolean> {
+async function detectGitRepoState(
+  workdir: string,
+): Promise<'repo' | 'not_repo' | 'git_unavailable'> {
   try {
     const { stdout } = await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], {
       cwd: workdir,
     });
-    return stdout.trim() === 'true';
-  } catch {
-    return false;
+    return stdout.trim() === 'true' ? 'repo' : 'not_repo';
+  } catch (err) {
+    return isGitUnavailableError(err) ? 'git_unavailable' : 'not_repo';
   }
 }
 

@@ -33,7 +33,15 @@ async function buildApp(): Promise<FastifyInstance> {
     if (err instanceof WorkerError) {
       let statusCode = 500;
       if (err.code.endsWith('_NOT_FOUND')) statusCode = 404;
-      else if (err.code.startsWith('INVALID_') || err.code.startsWith('NOT_A_')) statusCode = 400;
+      else if (
+        err.code.endsWith('_UNAVAILABLE') ||
+        err.code.endsWith('_OFFLINE') ||
+        err.code.endsWith('_UNREACHABLE')
+      ) {
+        statusCode = 503;
+      } else if (err.code.startsWith('INVALID_') || err.code.startsWith('NOT_A_')) {
+        statusCode = 400;
+      }
       return reply.status(statusCode).send({
         error: err.code,
         message: err.message,
@@ -436,6 +444,28 @@ describe('Git routes', () => {
       expect(res.statusCode).toBe(400);
       const body = res.json();
       expect(body.error).toBe('NOT_A_GIT_REPO');
+    });
+
+    it('returns 503 when git binary is unavailable', async () => {
+      mockValidDirectory();
+
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, _args: unknown, _opts: unknown, cb?: unknown) => {
+          const callback = cb as (err: Error | null, result?: { stdout: string }) => void;
+          const err = Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' });
+          callback(err);
+          return {} as ReturnType<typeof execFile>;
+        },
+      );
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/git/status?path=/Users/testuser/project',
+      });
+
+      expect(res.statusCode).toBe(503);
+      const body = res.json();
+      expect(body.error).toBe('GIT_UNAVAILABLE');
     });
 
     it('returns 400 when symlink resolves to denied directory', async () => {
