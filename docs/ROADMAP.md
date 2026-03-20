@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-21 (PRs #340, #341, #342, #343, and #344 are now on `main`; section 27.3's live managed-session terminal attach feature is shipped on `main`, while the linked gap plan remains active only for focused runtime-session attach e2e/docs follow-through; section 29 remains the dedicated machine-terminal Playwright follow-up; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `1e04375` is the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green, while the post-merge workflows for `1d89c6c` are still in progress)
+> Last updated: 2026-03-21 (PRs #340, #341, #342, #343, #344, #345, #346, and #347 are now on `main`; section 27.3's live managed-session terminal attach feature is shipped on `main`, while the linked gap plan remains active only for focused runtime-session attach e2e/docs follow-through; section 29 is now delivered via the dedicated machine-terminal Playwright coverage in PR #346; PR #347 repaired the stale agent-worker async-start route/test mismatch behind the failed `main` CI runs on `33f16fb` and `a5b7957`; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `7fdbdd9` is the current `main` head and its post-merge workflows are still in progress)
 
 ## Current State
 
@@ -1655,15 +1655,15 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] CLI: `agentctl takeover <session-id>` for managed session terminals *(PR #342)*
 - [x] User can type directly into the running CLI to unblock interactive waits *(PRs #341, #343, #344)*
 
-## 29. Machines / Terminal E2E Follow-up — P1
+## 29. Machines / Terminal E2E Follow-up — Delivered
 
 > Plan: [plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md)
 >
-> Status note: this follow-up is scoped to the existing machine terminal page regression surface only. It intentionally excludes §27.3 live attach to the running managed Claude CLI, which is now on `main`; the linked terminal-takeover gap plan only remains for focused runtime-session attach e2e/docs follow-through.
+> Status note: this follow-up was intentionally scoped to the existing machine terminal page regression surface only, and PR #346 delivered it on `main` with a dedicated Playwright spec for the existing page shell/connect/error paths. It stays separate from §27.3 live attach to the running managed Claude CLI, and no extra shared attach/transport hardening was needed to ship the machine-terminal coverage.
 
-- [ ] Add a dedicated Playwright path for the machine terminal page without pulling live managed-session attach into the same slice
-- [ ] Cover the terminal page shell, one stable terminal-connect/render path, and a minimal error-handling path for the existing machine terminal UI
-- [ ] Only harden machine terminal page test seams when that is necessary to make the machine-terminal e2e path stable; any shared attach/transport changes stay under §27.3
+- [x] Add a dedicated Playwright path for the machine terminal page without pulling live managed-session attach into the same slice *(PR #346)*
+- [x] Cover the terminal page shell, one stable terminal-connect/render path, and a minimal error-handling path for the existing machine terminal UI *(PR #346)*
+- [x] Keep shared attach/transport changes out of this slice; the machine terminal page shipped without additional page-level hardening *(PR #346)*
 
 ---
 
@@ -1682,7 +1682,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
-| **P1** | Machines / Terminal E2E Follow-up | 29 | Planned — a dedicated Playwright follow-up now tracks the existing machine terminal page separately from the already-shipped §27.3 live managed-session attach |
+| **P1** | Machines / Terminal E2E Follow-up | 29 | ✅ Delivered — PR #346 shipped dedicated Playwright coverage for the existing machine terminal page without widening into §27.3 |
 | **P1** | Terminal Takeover | 27.3 | Feature delivered — PRs #340-#344 shipped worker/control-plane/web/CLI live attach on `main`; the linked gap plan only remains for focused runtime-session attach e2e + docs reconciliation |
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
@@ -1892,7 +1892,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; the remaining machines / terminal coverage now lives in the dedicated section 29 follow-up | 25.1-25.3 |
-| [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Active — tracks the deferred machine terminal / terminal page Playwright coverage separately from the already-shipped §27.3 live managed-session attach | 29 |
+| [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Delivered — PR #346 added the dedicated machine terminal Playwright coverage on `main`; no page-level hardening was required beyond the focused e2e spec | 29 |
 | [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Delivered — PRs #307, #314, #322, and #326 are on `main`; as of 2026-03-20 GitHub code scanning shows `0` open alerts and both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) | 26.1 |
 | [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Delivered — PR #322 landed the git-capability hardening slice on `main`; post-#326 worker scans converged to `0` open alerts without removing `git` from the standard worker image | 26.2 |
 | [terminal-takeover-gap-implementation-plan](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md) | Active — PRs #340-#344 shipped the live managed-session terminal attach feature on `main`; the remaining follow-through is focused runtime-session attach e2e + roadmap/plan reconciliation | 27.3 |

@@ -8,6 +8,8 @@
 
 **Tech Stack:** Playwright, Next.js App Router, existing web test harness/mocks, Vitest for any supporting component/page hardening.
 
+> Status note: Delivered on `main` via PR #346. `packages/web/e2e/machines-terminal.spec.ts` now covers the machine terminal page shell, a stable connect/render path, and the existing spawn-error path using deterministic HTTP/WebSocket mocks. No machine-terminal page hardening was required, so Task 2 was not needed.
+
 ---
 
 ## Scope Guardrails
@@ -66,6 +68,8 @@ git commit -m "test(web): cover machine terminal page"
 ```
 
 ## Task 2: Harden the machine terminal page surface only if the new spec exposes a real gap
+
+> Outcome: Not needed for PR #346. The dedicated machine-terminal Playwright spec passed without additional page-level changes.
 
 **Files:**
 - Modify only if needed: `packages/web/src/app/machines/[id]/terminal/page.tsx`
@@ -134,6 +138,7 @@ git commit -m "fix(web): harden machine terminal test seams"
 **Step 2: Mark the roadmap item accordingly**
 
 - If the machine terminal Playwright slice shipped, update the roadmap item and plan registry entry without changing the meaning of §27.3.
+- For PR #346, mark section 29 and this plan as delivered while keeping the §27.3 gap plan active only for runtime-session attach follow-through.
 
 **Step 3: Run lightweight doc verification**
 
