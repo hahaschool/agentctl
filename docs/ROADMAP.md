@@ -909,7 +909,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 > Dev/beta tier separation so AI agent development never disrupts the developer's running services.
 > Plan: [dev-environment-cd-strategy](plans/2026-03-12-dev-environment-cd-strategy.md) | User guide: [USER-SETUP-CD-TIERS.md](USER-SETUP-CD-TIERS.md)
 >
-> Status note: active development should stay on `dev-1` / `dev-2`. Beta promotion remains manual and protected via the GitHub environment gate + deployment UI preflight, so security/CI cleanup can proceed without interrupting the beta stage.
+> Status note: active development should stay on `dev-1` / `dev-2`. Beta promotion remains local/manual via `./scripts/env-promote.sh --from dev-1|dev-2` until the deployment target has a self-hosted runner and the repository enables `BETA_SELF_HOSTED_RUNNER_READY`. Until then, `promote-beta.yml` is only a future gate scaffold and GitHub-hosted automation must not touch beta.
 
 ### 12.0 De-Hardcode Ports (Prerequisite) — ✅ Delivered (PR #103)
 
@@ -950,10 +950,11 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Auto-source `.env.dev-N` in agent worktree setup *(PR #127)*
 - [x] Cleanup on PR completion *(PR #125)*
 
-### 12.6 GitHub Actions CD Gate — P3
+### 12.6 GitHub Actions CD Gate — Partial
 
 - [ ] Self-hosted runner on deployment target
-- [x] `promote-beta.yml` workflow with environment protection rules *(PR #136)*
+- [ ] Repository variable `BETA_SELF_HOSTED_RUNNER_READY` enabled after the self-hosted runner is validated
+- [x] `promote-beta.yml` workflow scaffold with environment protection rules *(PR #136; future gate only until the prerequisites above land)*
 - [ ] Extend to prod tier on remote machines via Tailscale
 
 ### 12.7 Deployment Page UI — P1 ✅
@@ -1559,7 +1560,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 - [x] Remove the unsafe/ambiguous default source-tier behavior from `promote-beta.yml` *(PR #298)*
 - [x] Sync `docs/USER-SETUP-CD-TIERS.md` with the actual `scripts/env-promote.sh --from <tier>` CLI *(PR #298)*
-- [x] Re-verify that beta remains GitHub-environment gated while agents work only in `dev-1` / `dev-2` *(PR #298)*
+- [x] Re-verify that agents work only in `dev-1` / `dev-2`, and that beta promotion stays an explicit/manual operator action until self-hosted GitHub execution is ready *(PR #298)*
 
 ### 24.4 Production Deploy Guardrails for Missing Secrets
 
@@ -1755,7 +1756,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **—** | ~~Security: CodeQL Misc (temp-file, shell-injection)~~ | — | ✅ Delivered — audit-logger + knowledge-maintenance (PR #106) |
 | **—** | ~~Security: CodeQL Worker Alerts~~ | — | ✅ Delivered — inline path checks, rate-limit config, symlink guards (PR #138) |
 | **—** | ~~Security: CP Rate Limiting~~ | — | ✅ Delivered — memory-decay routes (PR #135) |
-| **P3** | ~~Environment: promote-beta.yml~~ | 12.6 | ✅ Delivered — workflow_dispatch + environment protection + rollback (PR #136) |
+| **P3** | Environment: promote-beta.yml | 12.6 | Partial — workflow scaffold landed in PR #136, but live GitHub-triggered beta promotion still requires a self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY` |
 | **—** | ~~Hardcoded Port Audit~~ | 12.0 | ✅ Delivered — scripts, TUI, Playwright config (PR #137) |
 | **—** | ~~Open Source & Community~~ | 13 | ✅ Delivered — BSL 1.1, CONTRIBUTING, SECURITY, GitHub templates |
 | **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
