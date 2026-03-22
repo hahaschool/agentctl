@@ -667,7 +667,7 @@ describe('api.getRuntimeSessionTerminalTakeover', () => {
 });
 
 describe('api.startRuntimeSessionTerminalTakeover', () => {
-  it('calls POST /api/sessions/:id/takeover', async () => {
+  it('calls POST /api/sessions/:id/takeover with an explicit empty JSON body', async () => {
     vi.mocked(fetch).mockResolvedValue(
       makeFetchResponse({
         ok: true,
@@ -683,27 +683,13 @@ describe('api.startRuntimeSessionTerminalTakeover', () => {
     const [url, init] = lastFetchCall();
     expect(url).toBe('/api/sessions/rc-1/takeover');
     expect(init?.method).toBe('POST');
-  });
-
-  it('does not set Content-Type when no body is provided', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      makeFetchResponse({
-        ok: true,
-        terminalId: 'term-1',
-        takeoverToken: 'token-1',
-        claudeSessionId: 'claude-1',
-      }),
-    );
-
-    await api.startRuntimeSessionTerminalTakeover('rc-1');
-
-    const [, init] = lastFetchCall();
-    expect((init?.headers as Record<string, string>)?.['Content-Type']).toBeUndefined();
+    expect(JSON.parse(init?.body as string)).toEqual({});
+    expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
 });
 
 describe('api.stopRuntimeSessionTerminalTakeover', () => {
-  it('calls POST /api/sessions/:id/release with no resume param by default', async () => {
+  it('calls POST /api/sessions/:id/release with an explicit empty JSON body by default', async () => {
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, resumed: false }));
 
     await api.stopRuntimeSessionTerminalTakeover('rc-1');
@@ -711,9 +697,11 @@ describe('api.stopRuntimeSessionTerminalTakeover', () => {
     const [url, init] = lastFetchCall();
     expect(url).toBe('/api/sessions/rc-1/release');
     expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body as string)).toEqual({});
+    expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
 
-  it('appends resume query param when provided', async () => {
+  it('appends resume query param and keeps the explicit empty JSON body', async () => {
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, resumed: true }));
 
     await api.stopRuntimeSessionTerminalTakeover('rc-1', { resume: true });
@@ -721,15 +709,8 @@ describe('api.stopRuntimeSessionTerminalTakeover', () => {
     const [url, init] = lastFetchCall();
     expect(url).toBe('/api/sessions/rc-1/release?resume=true');
     expect(init?.method).toBe('POST');
-  });
-
-  it('does not set Content-Type when no body is provided', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, resumed: false }));
-
-    await api.stopRuntimeSessionTerminalTakeover('rc-1');
-
-    const [, init] = lastFetchCall();
-    expect((init?.headers as Record<string, string>)?.['Content-Type']).toBeUndefined();
+    expect(JSON.parse(init?.body as string)).toEqual({});
+    expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
   });
 });
 
