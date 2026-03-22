@@ -156,7 +156,7 @@ jobs:
 
       # Persist node_modules across jobs so downstream jobs skip `pnpm install`
       - name: Cache node_modules
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             node_modules
