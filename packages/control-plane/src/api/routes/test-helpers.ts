@@ -89,6 +89,7 @@ export function createFullMockDbRegistry(
     updateRunPhase: vi.fn(),
     completeRun: vi.fn(),
     getRun: vi.fn().mockResolvedValue(undefined),
+    refreshSessionHeartbeat: vi.fn().mockResolvedValue(undefined),
     getRecentRuns: vi.fn().mockResolvedValue([]),
     insertActions: vi.fn().mockResolvedValue(3),
     queryActions: vi.fn().mockResolvedValue({ actions: [], total: 0, hasMore: false }),
