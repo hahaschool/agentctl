@@ -562,7 +562,10 @@ describe('Agent routes — with dbRegistry', () => {
     getRecentRuns: vi.fn().mockResolvedValue([]),
     completeRun: vi.fn().mockResolvedValue(undefined),
     updateRunPhase: vi.fn().mockResolvedValue(undefined),
+    updateRunProgress: vi.fn().mockResolvedValue(undefined),
     createRun: vi.fn().mockResolvedValue('run-001'),
+    getRun: vi.fn().mockResolvedValue({ id: 'run-001', agentId: 'agent-1' }),
+    createSessionFromRun: vi.fn().mockResolvedValue(undefined),
     insertActions: vi.fn(),
     getMachine: vi.fn(),
   } as unknown as DbAgentRegistry;
@@ -1046,6 +1049,64 @@ describe('Agent routes — with dbRegistry', () => {
       expect(mockDbRegistry.updateRunPhase).toHaveBeenCalledWith('run-001', 'dispatching');
       expect(mockDbRegistry.completeRun).not.toHaveBeenCalled();
       expect(response.json()).toMatchObject({ ok: true, runId: 'run-001', phase: 'dispatching' });
+    });
+
+    it('creates a session record when a phase-only progress update reports sessionId early', async () => {
+      vi.mocked(mockDbRegistry.updateRunPhase).mockClear();
+      vi.mocked(mockDbRegistry.updateRunProgress).mockClear();
+      vi.mocked(mockDbRegistry.getRun).mockClear();
+      vi.mocked(mockDbRegistry.getAgent).mockClear();
+      vi.mocked(mockDbRegistry.createSessionFromRun).mockClear();
+      vi.mocked(mockDbRegistry.completeRun).mockClear();
+
+      vi.mocked(mockDbRegistry.getRun).mockResolvedValueOnce({
+        id: 'run-001',
+        agentId: 'agent-1',
+      } as never);
+      vi.mocked(mockDbRegistry.getAgent).mockResolvedValueOnce({
+        id: 'agent-1',
+        machineId: 'machine-early',
+        name: 'Test Agent',
+        projectPath: '/repo/early-session',
+        config: { model: 'claude-sonnet-4-20250514', allowedTools: null },
+      } as never);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/complete',
+        payload: {
+          runId: 'run-001',
+          phase: 'running',
+          sessionId: 'claude-early-session',
+          costUsd: 0.11,
+          tokensIn: 21,
+          tokensOut: 34,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mockDbRegistry.updateRunPhase).toHaveBeenCalledWith('run-001', 'running');
+      expect(mockDbRegistry.updateRunProgress).toHaveBeenCalledWith('run-001', {
+        costUsd: '0.11',
+        tokensIn: 21,
+        tokensOut: 34,
+        sessionId: 'claude-early-session',
+      });
+      expect(mockDbRegistry.getRun).toHaveBeenCalledWith('run-001');
+      expect(mockDbRegistry.getAgent).toHaveBeenCalledWith('agent-1');
+      expect(mockDbRegistry.createSessionFromRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'claude-early-session',
+          agentId: 'agent-1',
+          machineId: 'machine-early',
+          projectPath: '/repo/early-session',
+          model: 'claude-sonnet-4-20250514',
+          status: 'active',
+          startedAt: expect.any(Date),
+        }),
+      );
+      expect(mockDbRegistry.completeRun).not.toHaveBeenCalled();
+      expect(response.json()).toMatchObject({ ok: true, runId: 'run-001', phase: 'running' });
     });
 
     it('returns 400 when phase is invalid', async () => {
