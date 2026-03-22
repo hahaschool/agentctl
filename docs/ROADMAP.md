@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-21 (PR #350 is now on `main`, so section 27.3's live managed-session terminal attach work is fully delivered with focused runtime-session attach e2e coverage on `main`; section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346; direct `main` commits `7a2ae06` and `d1b7a77` delivered section 30.2 early session linking plus section 30.1 real-time cost/token reporting in run history; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `b5b807e` remains the latest `main` commit where `CI`, `Security Audit`, and `Build` are all confirmed green while newer `main` workflows settle)
+> Last updated: 2026-03-21 (PRs #350, #351, #352, and #353 are now on `main`, so section 27.3's live managed-session terminal attach work is fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, and direct `main` commits `7a2ae06` and `d1b7a77` delivered section 30.2 early session linking plus section 30.1 real-time cost/token reporting in run history; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `6b4792e` is now the latest `main` commit where the merge-triggered `CI`, `Security Audit`, and `Build` workflows are all confirmed green, and PR #353 is on `main` to suppress the historical gitleaks false positives behind the scheduled `Security Audit` reruns)
 
 ## Current State
 
@@ -39,9 +39,12 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > and `actions/download-artifact` refs in `ci.yml`, `deploy-prod.yml`, and
 > `dast-zap.yml` to the current Node24 majors while leaving
 > `build-images.yml` / `security-audit.yml` alone to avoid overlap with an
-> already-active Trivy remediation branch. As of this update, `38a24c0` is
-> the latest `main` commit where `CI`, `Security Audit`, and `Build` are all
-> confirmed green.
+> already-active Trivy remediation branch. PR #352 then re-stabilized the
+> control-plane dispatch test suite after the MCP discovery preflight landed,
+> and PR #353 then ignored the historical gitleaks fingerprints that only
+> resurfaced on scheduled full-history security scans. As of this update,
+> `6b4792e` is the latest `main` commit where the merge-triggered `CI`,
+> `Security Audit`, and `Build` workflows are all confirmed green.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
