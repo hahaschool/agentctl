@@ -4,7 +4,7 @@
 
 **Goal:** Make section 12.6 honest by failing `promote-beta.yml` before approval unless a self-hosted beta runner is explicitly marked ready, and sync the roadmap/setup docs to that behavior.
 
-**Architecture:** Keep the existing beta promotion shape, but split it into an `ubuntu-latest` readiness gate, a dedicated `agentctl-beta` zero-side-effect host-verification job before approval, and a self-hosted-only promote job. Rely on `env-promote.sh` for any state-changing rollback instead of adding a second workflow-level PM2 restart path. Update the roadmap and operator guide so the current supported path remains local `env-promote.sh` promotion until self-hosted runner infrastructure exists.
+**Architecture:** Keep the existing beta promotion shape, but split it into an `ubuntu-latest` readiness gate, a dedicated `agentctl-beta` pre-approval host-verification job before approval, and a self-hosted-only promote job. Avoid touching PM2 or beta service state before approval. Rely on `env-promote.sh` for failures inside its own state-changing phases, and report the lack of automatic post-health-check artifact rollback honestly instead of adding a second workflow-level PM2 restart path. Update the roadmap and operator guide so the current supported path remains local `env-promote.sh` promotion until self-hosted runner infrastructure exists.
 
 **Tech Stack:** GitHub Actions workflow YAML, shell preflight guards, Markdown docs
 

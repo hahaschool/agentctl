@@ -6,8 +6,8 @@
 # Current status:
 #   - the GitHub Environment approval path stays in place
 #   - the workflow fails fast until BETA_SELF_HOSTED_RUNNER_READY=true
-#   - zero-side-effect host readiness checks run before approval on the
-#     dedicated self-hosted runner
+#   - pre-approval host readiness checks run before approval on the dedicated
+#     self-hosted runner without touching PM2 or beta service state
 #   - until then, operators must continue using:
 #       ./scripts/env-promote.sh --from dev-1
 #       ./scripts/env-promote.sh --from dev-2
@@ -110,8 +110,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
-  # Beta host verification — zero-side-effect checks on the dedicated runner
-  # before consuming the beta environment approval gate
+  # Beta host verification — pre-approval checks on the dedicated runner
+  # before consuming the beta environment approval gate or touching PM2
   # ---------------------------------------------------------------------------
   verify-beta-host:
     name: Verify beta host readiness
@@ -157,7 +157,7 @@ jobs:
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(printf '%s, ' "${missing[@]}")"
             missing_csv="${missing_csv%, }"
-            echo "::error::Self-hosted runner '${{ runner.name }}' is missing zero-side-effect beta promotion prerequisites: $missing_csv. Approval is intentionally blocked until the agentctl-beta runner mirrors the beta deployment host assumptions used by scripts/env-promote.sh. Until then, keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
+            echo "::error::Self-hosted runner '${{ runner.name }}' is missing beta promotion prerequisites: $missing_csv. Approval is intentionally blocked until the agentctl-beta runner mirrors the beta deployment host assumptions used by scripts/env-promote.sh. Until then, keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
             exit 1
           fi
 
@@ -167,7 +167,7 @@ jobs:
             echo "- Source tier: \`${{ needs.validate-inputs.outputs.source_tier }}\`"
             echo "- Runner: \`${{ runner.name }}\`"
             echo "- Dry run: \`${{ inputs.dry_run }}\`"
-            echo "- Zero-side-effect checks passed before approval"
+            echo "- Pre-approval host checks passed without touching PM2 or beta service state"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
@@ -296,4 +296,8 @@ jobs:
       - name: Report promotion failure
         if: failure()
         run: |
-          echo "::error title=Beta Promotion Failed::Promotion of tier '${{ needs.validate-inputs.outputs.source_tier || inputs.source_tier }}' failed on self-hosted runner '${{ runner.name }}'. scripts/env-promote.sh owns any state-changing rollback inside the beta host workflow itself. If this runner is not actually the beta deployment host labeled agentctl-beta, disable BETA_SELF_HOSTED_RUNNER_READY and keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally."
+          if [ "${{ steps.health.outcome }}" = "failure" ]; then
+            echo "::error title=Beta Promotion Failed::Promotion of tier '${{ needs.validate-inputs.outputs.source_tier || inputs.source_tier }}' passed scripts/env-promote.sh but failed the post-promote health check on self-hosted runner '${{ runner.name }}'. The current beta workflow does not retain previous build artifacts for automatic recovery after this point, so manual intervention on the beta host is required."
+          else
+            echo "::error title=Beta Promotion Failed::Promotion of tier '${{ needs.validate-inputs.outputs.source_tier || inputs.source_tier }}' failed on self-hosted runner '${{ runner.name }}'. If scripts/env-promote.sh had already entered a state-changing phase, it may already have attempted local recovery inside the beta host workflow. If this runner is not actually the beta deployment host labeled agentctl-beta, disable BETA_SELF_HOSTED_RUNNER_READY and keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally."
+          fi
