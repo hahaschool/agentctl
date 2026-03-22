@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-21 (PRs #350, #351, #352, and #353 are now on `main`, so section 27.3's live managed-session terminal attach work is fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, and direct `main` commits `7a2ae06` and `d1b7a77` delivered section 30.2 early session linking plus section 30.1 real-time cost/token reporting in run history; explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-21; `6b4792e` is now the latest `main` commit where the merge-triggered `CI`, `Security Audit`, and `Build` workflows are all confirmed green, and PR #353 is on `main` to suppress the historical gitleaks false positives behind the scheduled `Security Audit` reruns)
+> Last updated: 2026-03-22 (PR #355 is now on `main` at `573e0aec`, so section 12.6's beta-promotion wording is reality-synced without changing the remaining requirement for a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY`; direct `main` commits `58d8b840`, `e5f07913`, and `73145841` then hardened the existing runtime-session/session-lifecycle surfaces by reaping stale `claudeSessionId` sessions after 30 minutes without heartbeats, auto-creating `rc_session` rows when the SDK reports a session ID early, and restoring explicit empty-body takeover/release POSTs from the web client; section 27.3 remains fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, section 30 remains delivered with `7a2ae06` + `d1b7a77` plus the early-session-link hardening in `e5f07913`, open PRs are `0`, and explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-22)
 
 ## Current State
 
@@ -125,8 +125,11 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > Status note: The relay decision is complete, and a narrow manual takeover flow
 > is already on `main` for Claude managed sessions via shared contracts,
 > worker/control-plane lifecycle routes, `RcSessionManager`, and runtime-session
-> web controls. The remaining roadmap item here is re-evaluating the relay only
-> if Anthropic later exposes richer programmatic session APIs.
+> web controls. Direct `main` follow-through in `58d8b840`, `e5f07913`, and
+> `73145841` tightened stale-session reaping, early `rc_session` creation, and
+> the existing takeover/release POST semantics without expanding this slice's
+> scope. The remaining roadmap item here is re-evaluating the relay only if
+> Anthropic later exposes richer programmatic session APIs.
 
 - [x] Spike: evaluate Remote Control relay vs current CLI `-p`
 - [x] Decision: keep `claude -p` as the primary managed-session path for now
@@ -954,7 +957,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 - [ ] Dedicated `agentctl-beta` self-hosted runner on the beta deployment target
 - [ ] Repository variable `BETA_SELF_HOSTED_RUNNER_READY` enabled after the self-hosted runner is validated
-- [x] `promote-beta.yml` workflow scaffold with environment protection rules *(PR #136; future gate only until the prerequisites above land)*
+- [x] `promote-beta.yml` workflow scaffold with environment protection rules and fail-fast reality-sync until the beta self-hosted runner exists *(PR #136, PR #355; still future-gated until the prerequisites above land)*
 - [ ] Extend to prod tier on remote machines via Tailscale
 
 ### 12.7 Deployment Page UI — P1 ✅
@@ -1611,6 +1614,11 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 27. Session Lifecycle — Force Kill + Stall Detection
 
+> Status note: the base force-kill and stall-detection slices are delivered, and
+> direct `main` commit `58d8b840` tightened the related stale-session reaper so
+> managed sessions with a `claudeSessionId` are only exempt while heartbeats are
+> still fresh instead of remaining active forever after the CLI disappears.
+
 ### 27.1 Force Kill — Delivered
 
 - [x] Worker: `POST /api/sessions/:id/kill` — SIGTERM then SIGKILL after 5s *(PR #310)*
@@ -1648,9 +1656,11 @@ Agent run lifecycle has hidden intermediate states users can't see:
 > Status note: PRs #340, #341, #342, #343, #344, and #350 now ship the full
 > live managed-session terminal attach feature on `main` across the control
 > plane, worker, CLI, and web runtime session surfaces, including focused
-> runtime-session attach Playwright coverage. The linked gap plan is now
-> delivered as the implementation record for this slice, not an active
-> follow-through tracker.
+> runtime-session attach Playwright coverage. Direct `main` commit `73145841`
+> then restored the explicit empty JSON takeover/release POST bodies expected by
+> the existing web client route helpers. The linked gap plan is now delivered as
+> the implementation record for this slice, not an active follow-through
+> tracker.
 
 - [x] Machine-level PTY terminal APIs + xterm.js UI are on `main`
 - [x] Runtime session panel already exposes Claude Remote Control manual takeover
@@ -1686,6 +1696,11 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 30.2 Early Session ID Linking — Delivered
 
+> Status note: direct `main` commit `7a2ae06` delivered the early session-link
+> plumbing, and `e5f07913` then hardened the control-plane follow-through by
+> auto-creating the backing `rc_session` row when the SDK runner reports a
+> session ID during a live progress update.
+
 - [x] SDK runner `onSessionIdResolved` callback fires immediately when session_id appears
 - [x] Agent instance reports sessionId to CP within seconds of run starting
 - [x] Running runs show "Live" indicator + Session link appears quickly
@@ -1699,7 +1714,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
-| **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history |
+| **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, and `e5f07913` hardened the early `rc_session` bookkeeping on current `main` |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
@@ -1756,7 +1771,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **—** | ~~Security: CodeQL Misc (temp-file, shell-injection)~~ | — | ✅ Delivered — audit-logger + knowledge-maintenance (PR #106) |
 | **—** | ~~Security: CodeQL Worker Alerts~~ | — | ✅ Delivered — inline path checks, rate-limit config, symlink guards (PR #138) |
 | **—** | ~~Security: CP Rate Limiting~~ | — | ✅ Delivered — memory-decay routes (PR #135) |
-| **P3** | Environment: promote-beta.yml | 12.6 | Partial — workflow scaffold landed in PR #136, but live GitHub-triggered beta promotion still requires a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY` |
+| **P3** | Environment: promote-beta.yml | 12.6 | Partial — PR #355 reality-synced the existing workflow scaffold, but live GitHub-triggered beta promotion still requires a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY` |
 | **—** | ~~Hardcoded Port Audit~~ | 12.0 | ✅ Delivered — scripts, TUI, Playwright config (PR #137) |
 | **—** | ~~Open Source & Community~~ | 13 | ✅ Delivered — BSL 1.1, CONTRIBUTING, SECURITY, GitHub templates |
 | **—** | ~~CI: Security Audit Push Trigger~~ | — | ✅ Delivered — CodeQL rescans on push to main (PR #140) |
