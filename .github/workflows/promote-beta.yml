@@ -137,6 +137,9 @@ jobs:
     needs:
       - validate-inputs
       - await-beta-approval
+    outputs:
+      promotion_step_outcome: ${{ steps.promote.outcome }}
+      health_step_outcome: ${{ steps.health.outcome }}
 
     steps:
       # Preserve local .env.* files on the beta host worktree.
@@ -265,7 +268,7 @@ jobs:
     needs:
       - validate-inputs
       - promote
-    if: needs.promote.result == 'failure'
+    if: inputs.dry_run == false && needs.promote.result == 'failure' && (needs.promote.outputs.promotion_step_outcome == 'failure' || needs.promote.outputs.health_step_outcome == 'failure')
 
     steps:
       # Preserve local .env.* files on the beta host worktree.
