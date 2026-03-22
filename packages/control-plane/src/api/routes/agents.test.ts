@@ -566,6 +566,7 @@ describe('Agent routes — with dbRegistry', () => {
     createRun: vi.fn().mockResolvedValue('run-001'),
     getRun: vi.fn().mockResolvedValue({ id: 'run-001', agentId: 'agent-1' }),
     createSessionFromRun: vi.fn().mockResolvedValue(undefined),
+    refreshSessionHeartbeat: vi.fn().mockResolvedValue(undefined),
     insertActions: vi.fn(),
     getMachine: vi.fn(),
   } as unknown as DbAgentRegistry;
@@ -1057,6 +1058,7 @@ describe('Agent routes — with dbRegistry', () => {
       vi.mocked(mockDbRegistry.getRun).mockClear();
       vi.mocked(mockDbRegistry.getAgent).mockClear();
       vi.mocked(mockDbRegistry.createSessionFromRun).mockClear();
+      vi.mocked(mockDbRegistry.refreshSessionHeartbeat).mockClear();
       vi.mocked(mockDbRegistry.completeRun).mockClear();
 
       vi.mocked(mockDbRegistry.getRun).mockResolvedValueOnce({
@@ -1105,6 +1107,7 @@ describe('Agent routes — with dbRegistry', () => {
           startedAt: expect.any(Date),
         }),
       );
+      expect(mockDbRegistry.refreshSessionHeartbeat).toHaveBeenCalledWith('claude-early-session');
       expect(mockDbRegistry.completeRun).not.toHaveBeenCalled();
       expect(response.json()).toMatchObject({ ok: true, runId: 'run-001', phase: 'running' });
     });

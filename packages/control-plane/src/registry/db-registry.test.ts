@@ -570,6 +570,23 @@ describe('DbAgentRegistry', () => {
   });
 
   // -------------------------------------------------------------------------
+  // refreshSessionHeartbeat()
+  // -------------------------------------------------------------------------
+
+  describe('refreshSessionHeartbeat()', () => {
+    it('marks the session active and updates lastHeartbeat', async () => {
+      await registry.refreshSessionHeartbeat('session-123');
+
+      expect(mockDb.update).toHaveBeenCalledOnce();
+      expect(mockDb.set).toHaveBeenCalledWith({
+        lastHeartbeat: expect.any(Date),
+        status: 'active',
+      });
+      expect(mockDb.where).toHaveBeenCalledOnce();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // listAgents()
   // -------------------------------------------------------------------------
 
