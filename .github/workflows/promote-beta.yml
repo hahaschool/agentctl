@@ -16,8 +16,8 @@
 #
 # Required repository variables (non-secret):
 #   BETA_SELF_HOSTED_RUNNER_READY — set to true only after the beta deployment
-#                                   host is registered as an eligible
-#                                   self-hosted runner for this workflow
+#                                   host is registered as a self-hosted runner
+#                                   with the dedicated `agentctl-beta` label
 #
 # The workflow intentionally does not pretend that scripts/env-promote.sh can
 # run correctly on GitHub-hosted runners because the script assumes local tier
@@ -90,13 +90,13 @@ jobs:
             {
               echo "### Beta promotion is intentionally gated"
               echo
-              echo "This workflow only becomes live after the beta deployment host is registered as a GitHub Actions self-hosted runner and the repository variable \`BETA_SELF_HOSTED_RUNNER_READY\` is set to \`true\`."
+              echo "This workflow only becomes live after the beta deployment host is registered as a GitHub Actions self-hosted runner with the dedicated \`agentctl-beta\` label and the repository variable \`BETA_SELF_HOSTED_RUNNER_READY\` is set to \`true\`."
               echo
               echo "- Current supported path: \`./scripts/env-promote.sh --from dev-1\`"
               echo "- Alternate source tier: \`./scripts/env-promote.sh --from dev-2\`"
-              echo "- Next infra step: register the beta deployment host as the self-hosted runner for this workflow, then set \`BETA_SELF_HOSTED_RUNNER_READY=true\`"
+              echo "- Next infra step: register the beta deployment host as the self-hosted runner for this workflow with the \`agentctl-beta\` label, then set \`BETA_SELF_HOSTED_RUNNER_READY=true\`"
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Beta promotion via GitHub Actions is disabled until the beta deployment host is registered as a self-hosted runner and repository variable BETA_SELF_HOSTED_RUNNER_READY=true. Until then, run ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
+            echo "::error::Beta promotion via GitHub Actions is disabled until the beta deployment host is registered as a self-hosted runner with the agentctl-beta label and repository variable BETA_SELF_HOSTED_RUNNER_READY=true. Until then, run ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
             exit 1
           fi
 
@@ -104,7 +104,7 @@ jobs:
             echo "### Beta runner readiness confirmed"
             echo
             echo "- BETA_SELF_HOSTED_RUNNER_READY=true"
-            echo "- The next job will request beta environment approval before dispatching onto a self-hosted runner."
+            echo "- The next job will request beta environment approval before dispatching onto the self-hosted runner labeled \`agentctl-beta\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
@@ -124,7 +124,7 @@ jobs:
             echo
             echo "- Source tier: \`${{ needs.validate-inputs.outputs.source_tier }}\`"
             echo "- Dry run: \`${{ inputs.dry_run }}\`"
-            echo "- Execution target: self-hosted runner on the beta deployment host"
+            echo "- Execution target: self-hosted runner labeled \`agentctl-beta\` on the beta deployment host"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
@@ -132,7 +132,9 @@ jobs:
   # ---------------------------------------------------------------------------
   promote:
     name: Promote ${{ needs.validate-inputs.outputs.source_tier }} to beta
-    runs-on: self-hosted
+    runs-on:
+      - self-hosted
+      - agentctl-beta
     timeout-minutes: 20
     needs:
       - validate-inputs
@@ -169,7 +171,17 @@ jobs:
             fi
           done
 
-          for bin in git pnpm pm2 curl flock; do
+          if ! git describe --exact-match HEAD >/dev/null 2>&1; then
+            missing+=("exact version tag at HEAD (run ./scripts/version-bump.sh first)")
+          fi
+
+          for env_file in ".env.${{ needs.validate-inputs.outputs.source_tier }}" ".env.beta"; do
+            if [ -f "$env_file" ] && ! grep -Eq '^DATABASE_URL=.+' "$env_file"; then
+              missing+=("$env_file with non-empty DATABASE_URL")
+            fi
+          done
+
+          for bin in git pnpm pm2 curl flock python3 psql; do
             if ! command -v "$bin" >/dev/null 2>&1; then
               missing+=("$bin (binary)")
             fi
@@ -178,7 +190,7 @@ jobs:
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(printf '%s, ' "${missing[@]}")"
             missing_csv="${missing_csv%, }"
-            echo "::error::Self-hosted runner '${{ runner.name }}' is missing local beta promotion prerequisites: $missing_csv. Until this runner mirrors the beta deployment host assumptions used by scripts/env-promote.sh, keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
+            echo "::error::Self-hosted runner '${{ runner.name }}' is missing local beta promotion prerequisites: $missing_csv. Until the agentctl-beta runner mirrors the beta deployment host assumptions used by scripts/env-promote.sh, keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
             exit 1
           fi
 
@@ -256,14 +268,16 @@ jobs:
       - name: Report promotion failure
         if: failure()
         run: |
-          echo "::error title=Beta Promotion Failed::Promotion of tier '${{ needs.validate-inputs.outputs.source_tier || inputs.source_tier }}' failed on self-hosted runner '${{ runner.name }}'. scripts/env-promote.sh already attempted local rollback. If this runner is not actually ready on the beta deployment host, disable BETA_SELF_HOSTED_RUNNER_READY and keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally."
+          echo "::error title=Beta Promotion Failed::Promotion of tier '${{ needs.validate-inputs.outputs.source_tier || inputs.source_tier }}' failed on self-hosted runner '${{ runner.name }}'. If scripts/env-promote.sh already reached a state-changing phase, the follow-up rollback job will attempt local PM2 recovery. If this runner is not actually the beta deployment host labeled agentctl-beta, disable BETA_SELF_HOSTED_RUNNER_READY and keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally."
 
   # ---------------------------------------------------------------------------
   # Rollback — best-effort local PM2 recovery on the beta self-hosted runner
   # ---------------------------------------------------------------------------
   rollback:
     name: Rollback beta
-    runs-on: self-hosted
+    runs-on:
+      - self-hosted
+      - agentctl-beta
     timeout-minutes: 15
     needs:
       - validate-inputs
@@ -295,7 +309,7 @@ jobs:
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(printf '%s, ' "${missing[@]}")"
             missing_csv="${missing_csv%, }"
-            echo "::error::Self-hosted runner '${{ runner.name }}' cannot perform local beta rollback because these prerequisites are missing: $missing_csv. Until the runner is configured correctly, use ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
+            echo "::error::Self-hosted runner '${{ runner.name }}' cannot perform local beta rollback because these prerequisites are missing: $missing_csv. Until the agentctl-beta runner is configured correctly, use ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
             exit 1
           fi
 

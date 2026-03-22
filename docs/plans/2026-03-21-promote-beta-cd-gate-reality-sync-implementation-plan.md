@@ -22,6 +22,9 @@ Add a preflight job that:
 - runs on `ubuntu-latest`
 - validates `inputs.source_tier`
 - checks `vars.BETA_SELF_HOSTED_RUNNER_READY == 'true'`
+- checks the same zero-side-effect prerequisites that `env-promote.sh` enforces
+  before touching beta: exact version-tagged `HEAD`, source/beta
+  `DATABASE_URL`s, and required local binaries
 - fails with actionable guidance when the runner is not ready
 
 **Step 2: Move execution jobs onto self-hosted runners**
@@ -29,7 +32,7 @@ Add a preflight job that:
 Update `promote` and `rollback` so they:
 
 - depend on the preflight job
-- use `runs-on: self-hosted`
+- use `runs-on: [self-hosted, agentctl-beta]`
 - preserve the existing beta environment gate only after readiness passes
 
 **Step 3: Keep failure messaging operator-focused**
@@ -38,11 +41,12 @@ Make sure the workflow summary or error text says:
 
 - local/manual promote remains `./scripts/env-promote.sh --from dev-1|dev-2`
 - the GitHub path becomes live only after the deployment target has a
-  registered self-hosted runner and the readiness variable is enabled
+  dedicated `agentctl-beta` self-hosted runner and the readiness variable is
+  enabled
 
 **Step 4: Verify the workflow diff**
 
-Run: `rg -n 'BETA_SELF_HOSTED_RUNNER_READY|runs-on: self-hosted|env-promote.sh --from' .github/workflows/promote-beta.yml`
+Run: `rg -n 'BETA_SELF_HOSTED_RUNNER_READY|agentctl-beta|env-promote.sh --from|version-bump.sh|DATABASE_URL=.+' .github/workflows/promote-beta.yml`
 
 Expected: Matches show the new readiness guard, self-hosted execution jobs, and
 actionable operator guidance.

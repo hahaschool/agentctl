@@ -88,14 +88,20 @@ Use Approach B.
 - If that variable is not `true`, the workflow fails immediately with a message
   that the repository still expects local/manual beta promotion via
   `./scripts/env-promote.sh --from dev-1|dev-2`.
-- Move the actual `promote` and `rollback` jobs onto `self-hosted` so the YAML
-  matches the script's real operating assumptions once the runner exists.
+- Move the actual `promote` and `rollback` jobs onto a dedicated
+  `agentctl-beta` self-hosted runner so the YAML encodes the beta-host
+  requirement instead of relying on prose alone.
+- Mirror `env-promote.sh`'s preconditions in the workflow before execution:
+  exact version-tagged `HEAD`, non-empty `DATABASE_URL` entries in the source
+  and beta env files, and required local binaries including `python3` and
+  `psql`.
 
 ### Documentation Semantics
 
-- Update `docs/ROADMAP.md` section 12.6 to say the gate scaffold exists, but
-  self-hosted runner bring-up is still the blocking prerequisite for live
-  GitHub-triggered beta promotion.
+- Update `docs/ROADMAP.md` section 12.6 to say the gate scaffold exists, but a
+  dedicated `agentctl-beta` self-hosted runner plus readiness-variable bring-up
+  are still the blocking prerequisites for live GitHub-triggered beta
+  promotion.
 - Update `docs/USER-SETUP-CD-TIERS.md` to say the current production-safe path
   is still local/manual promotion, and that the GitHub workflow only becomes
   live after the self-hosted runner plus readiness variable are configured.
