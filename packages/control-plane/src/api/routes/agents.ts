@@ -874,6 +874,28 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
               tokensOut: tokensOut ?? undefined,
               sessionId: sessionId ?? undefined,
             });
+
+            // Auto-create rc_session if sessionId is provided but doesn't exist yet.
+            // This happens when the SDK runner reports the Claude session ID early.
+            if (sessionId) {
+              try {
+                const run = await dbRegistry.getRun(runId);
+                if (run) {
+                  const agent = await dbRegistry.getAgent(run.agentId);
+                  await dbRegistry.createSessionFromRun({
+                    sessionId,
+                    agentId: run.agentId,
+                    machineId: agent?.machineId ?? 'unknown',
+                    model: agent?.config?.model ?? null,
+                    projectPath: agent?.projectPath ?? null,
+                    status: 'active',
+                    startedAt: new Date(),
+                  });
+                }
+              } catch {
+                // Best effort — session may already exist
+              }
+            }
           }
 
           app.log.info(
