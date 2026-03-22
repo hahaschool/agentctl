@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-22 (PR #355 is now on `main` at `573e0aec`, so section 12.6's beta-promotion wording is reality-synced without changing the remaining requirement for a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY`; direct `main` commits `58d8b840`, `e5f07913`, and `73145841` then hardened the existing runtime-session/session-lifecycle surfaces by reaping stale `claudeSessionId` sessions after 30 minutes without heartbeats, auto-creating `rc_session` rows when the SDK reports a session ID early, and restoring explicit empty-body takeover/release POSTs from the web client; section 27.3 remains fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, section 30 remains delivered with `7a2ae06` + `d1b7a77` plus the early-session-link hardening in `e5f07913`, open PRs are `0`, and explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-22)
+> Last updated: 2026-03-22 (PR #355 is now on `main` at `573e0aec`, so section 12.6's beta-promotion wording is reality-synced without changing the remaining requirement for a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY`; direct `main` commits `58d8b840`, `e5f07913`, and `73145841` then hardened the existing runtime-session/session-lifecycle surfaces by reaping stale `claudeSessionId` sessions after 30 minutes without heartbeats, auto-creating `rc_session` rows when the SDK reports a session ID early, and restoring explicit empty-body takeover/release POSTs from the web client; PR #359 is now on `main` at `d4155209` to remove the last remaining `actions/cache/save@v4` use from `ci.yml`, and the merge-triggered `CI`, `Security Audit`, and `Build` workflows for `d4155209` are now confirmed green; section 27.3 remains fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, section 30 remains delivered with `7a2ae06` + `d1b7a77` plus the early-session-link hardening in `e5f07913`, open PRs are `0`, and explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-22)
 
 ## Current State
 
@@ -42,8 +42,10 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > already-active Trivy remediation branch. PR #352 then re-stabilized the
 > control-plane dispatch test suite after the MCP discovery preflight landed,
 > and PR #353 then ignored the historical gitleaks fingerprints that only
-> resurfaced on scheduled full-history security scans. As of this update,
-> `6b4792e` is the latest `main` commit where the merge-triggered `CI`,
+> resurfaced on scheduled full-history security scans. PR #359 then finished
+> the last leftover `ci.yml` Node24 cache-action follow-through by bumping the
+> install job's `actions/cache/save` step from `v4` to `v5`. As of this update,
+> `d4155209` is the latest `main` commit where the merge-triggered `CI`,
 > `Security Audit`, and `Build` workflows are all confirmed green.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
