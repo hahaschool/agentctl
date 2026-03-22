@@ -466,6 +466,14 @@ export class DbAgentRegistry {
     this.logger.debug({ runId, phase }, 'Agent run phase updated');
   }
 
+  /** Refresh a session's heartbeat to prevent reaper from marking it stale. */
+  async refreshSessionHeartbeat(sessionId: string): Promise<void> {
+    await this.db
+      .update(rcSessions)
+      .set({ lastHeartbeat: new Date(), status: 'active' })
+      .where(eq(rcSessions.id, sessionId));
+  }
+
   /** Update cost, tokens, and sessionId on a running run without changing status/phase. */
   async updateRunProgress(
     runId: string,

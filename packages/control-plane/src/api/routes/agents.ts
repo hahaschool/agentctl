@@ -896,6 +896,16 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
                 // Best effort — session may already exist
               }
             }
+
+            // Keep the session's heartbeat fresh so the reaper doesn't kill it
+            // while the SDK run is still in progress.
+            if (sessionId) {
+              try {
+                await dbRegistry.refreshSessionHeartbeat(sessionId);
+              } catch {
+                // Best effort
+              }
+            }
           }
 
           app.log.info(
