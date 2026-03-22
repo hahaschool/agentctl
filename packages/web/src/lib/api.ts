@@ -825,12 +825,15 @@ export const api = {
       takeoverToken: string;
       claudeSessionId: string;
       machineId?: string;
-    }>(`/api/sessions/${encodeURIComponent(sessionId)}/takeover`, { method: 'POST' }),
+    }>(`/api/sessions/${encodeURIComponent(sessionId)}/takeover`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
   sessionRelease: (sessionId: string, options?: { resume?: boolean }) => {
     const qs = options?.resume ? '?resume=true' : '';
     return request<{ ok: true; released: true }>(
       `/api/sessions/${encodeURIComponent(sessionId)}/release${qs}`,
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify({}) },
     );
   },
   sessionTakeoverStatus: (sessionId: string) =>
