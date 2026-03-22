@@ -7,3 +7,9 @@
 173dfef4a96597ac47f84011805c0c38f5c81ddd:packages/control-plane/src/audit/security-audit-agent.test.ts:generic-api-key:25
 614a193785a878b368da7820ec5614719f522304:packages/control-plane/src/audit/audit-scheduler.test.ts:generic-api-key:56
 cfd3ce49d06a256479db3caf1b47fb41b236e32e:packages/control-plane/src/memory/memory-security.test.ts:private-key:204
+
+# Historical PM2 dispatch-signing literals from commit 4c82efb.
+# The current source derives stable non-secret key material locally, but nightly
+# full-history scans still traverse this old commit.
+4c82efba9afa27d930e6855aea9924a48dba8ffc:infra/pm2/ecosystem.beta.config.cjs:generic-api-key:32
+4c82efba9afa27d930e6855aea9924a48dba8ffc:infra/pm2/ecosystem.dev1.config.cjs:generic-api-key:18
