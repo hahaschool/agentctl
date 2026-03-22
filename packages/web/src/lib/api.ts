@@ -769,6 +769,7 @@ export const api = {
       machineId?: string;
     }>(`/api/sessions/${encodeURIComponent(id)}/takeover`, {
       method: 'POST',
+      body: JSON.stringify({}),
     }),
   stopRuntimeSessionTerminalTakeover: (id: string, options?: { resume?: boolean }) => {
     const qs = new URLSearchParams();
@@ -780,6 +781,7 @@ export const api = {
       `/api/sessions/${encodeURIComponent(id)}/release${suffix}`,
       {
         method: 'POST',
+        body: JSON.stringify({}),
       },
     );
   },
