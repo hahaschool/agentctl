@@ -6,6 +6,8 @@
 # Current status:
 #   - the GitHub Environment approval path stays in place
 #   - the workflow fails fast until BETA_SELF_HOSTED_RUNNER_READY=true
+#   - zero-side-effect host readiness checks run before approval on the
+#     dedicated self-hosted runner
 #   - until then, operators must continue using:
 #       ./scripts/env-promote.sh --from dev-1
 #       ./scripts/env-promote.sh --from dev-2
@@ -108,40 +110,15 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
-  # Approval — preserve the beta environment gate after readiness passes
+  # Beta host verification — zero-side-effect checks on the dedicated runner
+  # before consuming the beta environment approval gate
   # ---------------------------------------------------------------------------
-  await-beta-approval:
-    name: Await beta approval
-    runs-on: ubuntu-latest
-    needs: validate-inputs
-    environment: beta
-
-    steps:
-      - name: Record approved request
-        run: |
-          {
-            echo "### Beta approval granted"
-            echo
-            echo "- Source tier: \`${{ needs.validate-inputs.outputs.source_tier }}\`"
-            echo "- Dry run: \`${{ inputs.dry_run }}\`"
-            echo "- Execution target: self-hosted runner labeled \`agentctl-beta\` on the beta deployment host"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # ---------------------------------------------------------------------------
-  # Promote — run env-promote.sh locally on the beta self-hosted runner
-  # ---------------------------------------------------------------------------
-  promote:
-    name: Promote ${{ needs.validate-inputs.outputs.source_tier }} to beta
+  verify-beta-host:
+    name: Verify beta host readiness
     runs-on:
       - self-hosted
       - agentctl-beta
-    timeout-minutes: 20
-    needs:
-      - validate-inputs
-      - await-beta-approval
-    outputs:
-      promotion_step_outcome: ${{ steps.promote.outcome }}
-      health_step_outcome: ${{ steps.health.outcome }}
+    needs: validate-inputs
 
     steps:
       # Preserve local .env.* files on the beta host worktree.
@@ -149,16 +126,6 @@ jobs:
         with:
           clean: false
           fetch-depth: 0
-
-      # ── Setup Node.js + pnpm ───────────────────────────────────────────
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.PRIMARY_NODE }}
-          cache: pnpm
 
       - name: Verify local beta promotion prerequisites
         run: |
@@ -190,9 +157,70 @@ jobs:
           if [ "${#missing[@]}" -gt 0 ]; then
             missing_csv="$(printf '%s, ' "${missing[@]}")"
             missing_csv="${missing_csv%, }"
-            echo "::error::Self-hosted runner '${{ runner.name }}' is missing local beta promotion prerequisites: $missing_csv. Until the agentctl-beta runner mirrors the beta deployment host assumptions used by scripts/env-promote.sh, keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
+            echo "::error::Self-hosted runner '${{ runner.name }}' is missing zero-side-effect beta promotion prerequisites: $missing_csv. Approval is intentionally blocked until the agentctl-beta runner mirrors the beta deployment host assumptions used by scripts/env-promote.sh. Until then, keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
             exit 1
           fi
+
+          {
+            echo "### Beta host readiness confirmed"
+            echo
+            echo "- Source tier: \`${{ needs.validate-inputs.outputs.source_tier }}\`"
+            echo "- Runner: \`${{ runner.name }}\`"
+            echo "- Dry run: \`${{ inputs.dry_run }}\`"
+            echo "- Zero-side-effect checks passed before approval"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Approval — preserve the beta environment gate after readiness passes
+  # ---------------------------------------------------------------------------
+  await-beta-approval:
+    name: Await beta approval
+    runs-on: ubuntu-latest
+    needs:
+      - validate-inputs
+      - verify-beta-host
+    environment: beta
+
+    steps:
+      - name: Record approved request
+        run: |
+          {
+            echo "### Beta approval granted"
+            echo
+            echo "- Source tier: \`${{ needs.validate-inputs.outputs.source_tier }}\`"
+            echo "- Dry run: \`${{ inputs.dry_run }}\`"
+            echo "- Execution target: self-hosted runner labeled \`agentctl-beta\` on the beta deployment host"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Promote — run env-promote.sh locally on the beta self-hosted runner
+  # ---------------------------------------------------------------------------
+  promote:
+    name: Promote ${{ needs.validate-inputs.outputs.source_tier }} to beta
+    runs-on:
+      - self-hosted
+      - agentctl-beta
+    timeout-minutes: 20
+    needs:
+      - validate-inputs
+      - await-beta-approval
+
+    steps:
+      # Preserve local .env.* files on the beta host worktree.
+      - uses: actions/checkout@v5
+        with:
+          clean: false
+          fetch-depth: 0
+
+      # ── Setup Node.js + pnpm ───────────────────────────────────────────
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.PRIMARY_NODE }}
+          cache: pnpm
 
       - name: Install dependencies
         if: inputs.dry_run == false
@@ -268,99 +296,4 @@ jobs:
       - name: Report promotion failure
         if: failure()
         run: |
-          echo "::error title=Beta Promotion Failed::Promotion of tier '${{ needs.validate-inputs.outputs.source_tier || inputs.source_tier }}' failed on self-hosted runner '${{ runner.name }}'. If scripts/env-promote.sh already reached a state-changing phase, the follow-up rollback job will attempt local PM2 recovery. If this runner is not actually the beta deployment host labeled agentctl-beta, disable BETA_SELF_HOSTED_RUNNER_READY and keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally."
-
-  # ---------------------------------------------------------------------------
-  # Rollback — best-effort local PM2 recovery on the beta self-hosted runner
-  # ---------------------------------------------------------------------------
-  rollback:
-    name: Rollback beta
-    runs-on:
-      - self-hosted
-      - agentctl-beta
-    timeout-minutes: 15
-    needs:
-      - validate-inputs
-      - promote
-    if: inputs.dry_run == false && needs.promote.result == 'failure' && (needs.promote.outputs.promotion_step_outcome == 'failure' || needs.promote.outputs.health_step_outcome == 'failure')
-
-    steps:
-      # Preserve local .env.* files on the beta host worktree.
-      - uses: actions/checkout@v5
-        with:
-          clean: false
-          fetch-depth: 0
-
-      - name: Verify local rollback prerequisites
-        run: |
-          set -euo pipefail
-
-          missing=()
-          if [ ! -f "infra/pm2/ecosystem.beta.config.cjs" ]; then
-            missing+=("infra/pm2/ecosystem.beta.config.cjs")
-          fi
-
-          for bin in pm2 curl; do
-            if ! command -v "$bin" >/dev/null 2>&1; then
-              missing+=("$bin (binary)")
-            fi
-          done
-
-          if [ "${#missing[@]}" -gt 0 ]; then
-            missing_csv="$(printf '%s, ' "${missing[@]}")"
-            missing_csv="${missing_csv%, }"
-            echo "::error::Self-hosted runner '${{ runner.name }}' cannot perform local beta rollback because these prerequisites are missing: $missing_csv. Until the agentctl-beta runner is configured correctly, use ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
-            exit 1
-          fi
-
-      # ── Restart beta services with previous build ──────────────────────
-      - name: Restart beta services (previous build)
-        run: |
-          set -euo pipefail
-
-          echo "::warning::Promote job failed. Attempting best-effort local PM2 restart on self-hosted runner '${{ runner.name }}'..."
-
-          pm2 restart agentctl-cp-beta agentctl-worker-beta agentctl-web-beta 2>/dev/null || {
-            echo "::warning::Direct PM2 restart failed. Attempting full start with beta ecosystem config..."
-            pm2 start infra/pm2/ecosystem.beta.config.cjs 2>/dev/null || {
-              echo "::error::Could not restart beta services locally. Manual intervention required. Until GitHub Actions beta promotion is fully ready, use ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
-              exit 1
-            }
-          }
-
-          echo "Beta services restarted"
-          pm2 list
-
-      # ── Post-rollback health check ─────────────────────────────────────
-      - name: Health check (post-rollback)
-        run: |
-          set -euo pipefail
-
-          ATTEMPT=0
-          MAX_ATTEMPTS=5
-          INTERVAL=10
-
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            ATTEMPT=$((ATTEMPT + 1))
-            echo "Rollback health check attempt $ATTEMPT/$MAX_ATTEMPTS..."
-
-            STATUS="$(curl -sf -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health || echo "000")"
-
-            if [ "$STATUS" = "200" ]; then
-              echo "Rollback health check passed (HTTP $STATUS)"
-              echo "Beta is running the previous build."
-              exit 0
-            fi
-
-            echo "Health check returned HTTP $STATUS, retrying in ${INTERVAL}s..."
-            sleep $INTERVAL
-          done
-
-          echo "::error title=Rollback Health Check Failed::Beta rollback completed but health check failed after $MAX_ATTEMPTS attempts. Manual intervention required."
-          exit 1
-
-      # ── Report rollback result ─────────────────────────────────────────
-      - name: Report rollback failure
-        if: failure()
-        run: |
-          echo "::error title=Beta Rollback Failed::Promotion failed and the self-hosted rollback recovery did not restore beta health on runner '${{ runner.name }}'. Manual intervention required. Until the self-hosted beta path is verified, use ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally on the beta host."
+          echo "::error title=Beta Promotion Failed::Promotion of tier '${{ needs.validate-inputs.outputs.source_tier || inputs.source_tier }}' failed on self-hosted runner '${{ runner.name }}'. scripts/env-promote.sh owns any state-changing rollback inside the beta host workflow itself. If this runner is not actually the beta deployment host labeled agentctl-beta, disable BETA_SELF_HOSTED_RUNNER_READY and keep using ./scripts/env-promote.sh --from dev-1 or ./scripts/env-promote.sh --from dev-2 locally."

@@ -4,7 +4,7 @@
 
 **Goal:** Make section 12.6 honest by failing `promote-beta.yml` before approval unless a self-hosted beta runner is explicitly marked ready, and sync the roadmap/setup docs to that behavior.
 
-**Architecture:** Keep the existing beta promotion shape, but split it into a no-side-effects readiness preflight plus self-hosted-only promote/rollback jobs. Update the roadmap and operator guide so the current supported path remains local `env-promote.sh` promotion until self-hosted runner infrastructure exists.
+**Architecture:** Keep the existing beta promotion shape, but split it into an `ubuntu-latest` readiness gate, a dedicated `agentctl-beta` zero-side-effect host-verification job before approval, and a self-hosted-only promote job. Rely on `env-promote.sh` for any state-changing rollback instead of adding a second workflow-level PM2 restart path. Update the roadmap and operator guide so the current supported path remains local `env-promote.sh` promotion until self-hosted runner infrastructure exists.
 
 **Tech Stack:** GitHub Actions workflow YAML, shell preflight guards, Markdown docs
 
@@ -27,13 +27,15 @@ Add a preflight job that:
   `DATABASE_URL`s, and required local binaries
 - fails with actionable guidance when the runner is not ready
 
-**Step 2: Move execution jobs onto self-hosted runners**
+**Step 2: Verify the beta host before approval, then run promote on self-hosted**
 
-Update `promote` and `rollback` so they:
+Update the workflow so it:
 
-- depend on the preflight job
+- adds a dedicated `agentctl-beta` host-verification job before approval
 - use `runs-on: [self-hosted, agentctl-beta]`
-- preserve the existing beta environment gate only after readiness passes
+- preserves the existing beta environment gate only after readiness passes
+- keeps state-changing rollback inside `env-promote.sh` instead of a second
+  workflow-level rollback job
 
 **Step 3: Keep failure messaging operator-focused**
 

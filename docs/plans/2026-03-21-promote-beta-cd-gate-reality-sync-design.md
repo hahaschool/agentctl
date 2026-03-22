@@ -88,13 +88,19 @@ Use Approach B.
 - If that variable is not `true`, the workflow fails immediately with a message
   that the repository still expects local/manual beta promotion via
   `./scripts/env-promote.sh --from dev-1|dev-2`.
-- Move the actual `promote` and `rollback` jobs onto a dedicated
-  `agentctl-beta` self-hosted runner so the YAML encodes the beta-host
-  requirement instead of relying on prose alone.
+- Add a zero-side-effect host-verification job on a dedicated `agentctl-beta`
+  self-hosted runner before the approval gate so GitHub approvals are not
+  consumed on missing local prerequisites.
+- Move the actual `promote` job onto the same dedicated `agentctl-beta`
+  self-hosted runner so the YAML encodes the beta-host requirement instead of
+  relying on prose alone.
 - Mirror `env-promote.sh`'s preconditions in the workflow before execution:
   exact version-tagged `HEAD`, non-empty `DATABASE_URL` entries in the source
   and beta env files, and required local binaries including `python3` and
   `psql`.
+- Do not add a second workflow-level rollback job. `env-promote.sh` already owns
+  local rollback when it reaches a state-changing phase; adding another GitHub
+  Actions PM2 restart path creates unnecessary beta restarts on setup failures.
 
 ### Documentation Semantics
 
