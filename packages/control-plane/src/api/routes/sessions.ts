@@ -92,13 +92,16 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         );
 
       if (staleRows.length > 0) {
-        // Exclude sessions that have a claudeSessionId — these may be externally
-        // managed CLI sessions whose JSONL is still being written to. The reaper
-        // should only time out sessions that the worker started and then lost.
+        // Sessions with a claudeSessionId that had a recent heartbeat (within 30 min)
+        // are excluded — they may be externally managed CLI sessions still running.
+        // Sessions with claudeSessionId but NO recent heartbeat are stale and should be reaped.
+        const EXTERNAL_SESSION_GRACE_MS = 30 * 60 * 1000;
+        const externalGraceCutoff = new Date(Date.now() - EXTERNAL_SESSION_GRACE_MS);
         const fullRows = await db
           .select({
             id: rcSessions.id,
             claudeSessionId: rcSessions.claudeSessionId,
+            lastHeartbeat: rcSessions.lastHeartbeat,
           })
           .from(rcSessions)
           .where(
@@ -108,7 +111,16 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             ),
           );
 
-        const ids = fullRows.filter((r) => !r.claudeSessionId).map((r) => r.id);
+        const ids = fullRows
+          .filter((r) => {
+            // No claudeSessionId → always reap
+            if (!r.claudeSessionId) return true;
+            // Has claudeSessionId but heartbeat is stale → reap
+            if (!r.lastHeartbeat || r.lastHeartbeat < externalGraceCutoff) return true;
+            // Has claudeSessionId with recent heartbeat → skip
+            return false;
+          })
+          .map((r) => r.id);
 
         if (ids.length > 0) {
           await db
