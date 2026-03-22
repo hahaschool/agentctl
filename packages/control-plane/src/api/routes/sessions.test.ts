@@ -63,6 +63,7 @@ function makeSession(overrides: Record<string, unknown> = {}) {
  */
 function createMockDb() {
   let rows: unknown[] = [];
+  let queuedResults: unknown[][] = [];
 
   const chain: Record<string, unknown> = {};
 
@@ -89,6 +90,11 @@ function createMockDb() {
   // When the chain is awaited, resolve with the configured rows.
   // biome-ignore lint/suspicious/noThenProperty: Drizzle query builder mock requires a thenable
   chain.then = (resolve: (value: unknown) => void) => {
+    if (queuedResults.length > 0) {
+      resolve(queuedResults.shift() ?? []);
+      return chain;
+    }
+
     resolve(rows);
     return chain;
   };
@@ -98,7 +104,19 @@ function createMockDb() {
     setRows: (newRows: unknown[]) => {
       rows = newRows;
     },
+    queueRows: (...nextRows: unknown[][]) => {
+      queuedResults = [...queuedResults, ...nextRows];
+    },
+    clearQueuedRows: () => {
+      queuedResults = [];
+    },
   };
+}
+
+async function flushAsync(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +197,104 @@ async function buildApp(
 // =============================================================================
 // Tests
 // =============================================================================
+
+describe('Session routes startup reaper', () => {
+  let app: FastifyInstance;
+  let mockDb: ReturnType<typeof createMockDb>;
+  let mockDbRegistry: DbAgentRegistry;
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    if (app) {
+      await app.close();
+    }
+  });
+
+  it('reaps stale claudeSessionId sessions once their heartbeat is older than the 30-minute grace window', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+
+    mockDb = createMockDb();
+    mockDbRegistry = createMockDbRegistry();
+    mockDb.queueRows(
+      [
+        { id: 'sess-stale-external', status: 'active' },
+        { id: 'sess-protected-external', status: 'active' },
+      ],
+      [
+        {
+          id: 'sess-stale-external',
+          claudeSessionId: 'claude-stale-1',
+          lastHeartbeat: new Date('2026-03-03T11:20:00Z'),
+        },
+        {
+          id: 'sess-protected-external',
+          claudeSessionId: 'claude-recent-1',
+          lastHeartbeat: new Date('2026-03-03T11:45:00Z'),
+        },
+      ],
+    );
+
+    app = Fastify({ logger: false });
+    const warnSpy = vi.spyOn(app.log, 'warn');
+
+    await app.register(sessionRoutes, {
+      prefix: '/api/sessions',
+      db: mockDb.db as never,
+      dbRegistry: mockDbRegistry,
+      workerPort: 9000,
+    });
+    await app.ready();
+    await flushAsync();
+
+    expect(mockDb.db.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.db.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'error',
+        endedAt: expect.any(Date),
+        metadata: expect.anything(),
+      }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        count: 1,
+        sessionIds: ['sess-stale-external'],
+      }),
+      'Reaped stale sessions with no heartbeat',
+    );
+  });
+
+  it('keeps recently heartbeating claudeSessionId sessions out of the stale-session update', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+
+    mockDb = createMockDb();
+    mockDbRegistry = createMockDbRegistry();
+    mockDb.queueRows(
+      [{ id: 'sess-protected-external', status: 'active' }],
+      [
+        {
+          id: 'sess-protected-external',
+          claudeSessionId: 'claude-recent-1',
+          lastHeartbeat: new Date('2026-03-03T11:45:00Z'),
+        },
+      ],
+    );
+
+    app = Fastify({ logger: false });
+    const warnSpy = vi.spyOn(app.log, 'warn');
+
+    await app.register(sessionRoutes, {
+      prefix: '/api/sessions',
+      db: mockDb.db as never,
+      dbRegistry: mockDbRegistry,
+      workerPort: 9000,
+    });
+    await app.ready();
+    await flushAsync();
+
+    expect(mockDb.db.update).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
 
 describe('Session routes — /api/sessions', () => {
   let app: FastifyInstance;
