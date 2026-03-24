@@ -66,28 +66,33 @@ export async function sessionTakeoverRoutes(
 
   app.post<{ Params: SessionIdParams }>('/:sessionId/takeover', async (request, reply) => {
     const { sessionId } = request.params;
+    const { agentPool } = options;
 
-    // Look up session by manager ID or Claude session ID
-    const session =
+    // --- Resolve session from CLI manager OR SDK agent pool ---
+    const cliSession =
       sessionManager.getSession(sessionId) ?? sessionManager.getSessionByClaudeId(sessionId);
+    const sdkAgent = !cliSession ? agentPool.findAgentBySessionId(sessionId) : undefined;
 
-    if (!session) {
+    if (!cliSession && !sdkAgent) {
       return reply.status(404).send({
         error: 'SESSION_NOT_FOUND',
-        message: `Session '${sessionId}' not found`,
+        message: `Session '${sessionId}' not found (checked CLI manager and agent pool)`,
       });
     }
 
-    if (!session.claudeSessionId) {
+    const claudeSessionId = cliSession?.claudeSessionId ?? (sdkAgent ? sessionId : undefined);
+    const projectPath = cliSession?.projectPath ?? process.cwd();
+    const effectiveId = cliSession?.id ?? sessionId;
+
+    if (!claudeSessionId) {
       return reply.status(400).send({
         error: 'SESSION_NOT_RESUMABLE',
         message: 'Session has no Claude session ID — cannot takeover',
       });
     }
 
-    // Check if already under takeover
-    if (takeoverManager.isUnderTakeover(session.id)) {
-      const existing = takeoverManager.getTakeoverState(session.id);
+    if (takeoverManager.isUnderTakeover(effectiveId)) {
+      const existing = takeoverManager.getTakeoverState(effectiveId);
       return reply.status(409).send({
         error: 'TAKEOVER_ALREADY_ACTIVE',
         message: `Session '${sessionId}' is already under takeover`,
@@ -95,21 +100,28 @@ export async function sessionTakeoverRoutes(
       });
     }
 
-    // Stop the managed session and wait for its process to actually close.
-    // stopSession sends SIGTERM, but we also need to wait for the 'close'
-    // event to ensure the process is fully terminated before spawning PTY.
-    if (session.status === 'running' || session.status === 'starting') {
+    // Stop the running session/agent before spawning PTY
+    const isRunning =
+      (cliSession && (cliSession.status === 'running' || cliSession.status === 'starting')) ||
+      (sdkAgent && (sdkAgent.getStatus() === 'running' || sdkAgent.getStatus() === 'starting'));
+
+    if (isRunning) {
       try {
-        await waitForSessionClose(sessionManager, session.id);
+        if (cliSession) {
+          await waitForSessionClose(sessionManager, cliSession.id);
+        } else if (sdkAgent) {
+          await sdkAgent.stop(true);
+          await new Promise((r) => setTimeout(r, 1000));
+        }
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         logger.error(
-          { sessionId: session.id, error: detail },
-          'Failed to stop managed session for takeover',
+          { sessionId: effectiveId, error: detail },
+          'Failed to stop session for takeover',
         );
         return reply.status(500).send({
           error: 'SESSION_STOP_FAILED',
-          message: `Failed to stop managed session: ${detail}`,
+          message: `Failed to stop session: ${detail}`,
         });
       }
     }
@@ -117,9 +129,9 @@ export async function sessionTakeoverRoutes(
     // Spawn interactive PTY
     try {
       const result = await takeoverManager.initiateTakeover({
-        sessionId: session.id,
-        claudeSessionId: session.claudeSessionId,
-        projectPath: session.projectPath,
+        sessionId: effectiveId,
+        claudeSessionId,
+        projectPath,
         controlPlaneUrl,
       });
 
@@ -127,21 +139,15 @@ export async function sessionTakeoverRoutes(
         ok: true,
         terminalId: result.terminalId,
         takeoverToken: result.takeoverToken,
-        claudeSessionId: session.claudeSessionId,
+        claudeSessionId,
       });
     } catch (err) {
       if (err instanceof WorkerError) {
         const statusCode = err.code === 'TAKEOVER_ALREADY_ACTIVE' ? 409 : 500;
-        return reply.status(statusCode).send({
-          error: err.code,
-          message: err.message,
-        });
+        return reply.status(statusCode).send({ error: err.code, message: err.message });
       }
       const detail = err instanceof Error ? err.message : String(err);
-      return reply.status(500).send({
-        error: 'TAKEOVER_FAILED',
-        message: detail,
-      });
+      return reply.status(500).send({ error: 'TAKEOVER_FAILED', message: detail });
     }
   });
 

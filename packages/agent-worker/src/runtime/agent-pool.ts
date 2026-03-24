@@ -140,6 +140,16 @@ export class AgentPool extends EventEmitter {
     return this.agents.get(agentId);
   }
 
+  /** Find an agent instance by its current session ID. */
+  findAgentBySessionId(sessionId: string): AgentInstance | undefined {
+    for (const instance of this.agents.values()) {
+      if (instance.getSessionId() === sessionId) {
+        return instance;
+      }
+    }
+    return undefined;
+  }
+
   async stopAgent(agentId: string, graceful: boolean): Promise<void> {
     const instance = this.agents.get(agentId);
 
