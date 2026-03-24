@@ -601,13 +601,22 @@ export async function sessionRoutes(
         const lines = raw.split('\n').filter((line) => line.trim().length > 0);
 
         const allMessages: ContentMessage[] = [];
+        let tokensIn = 0;
+        let tokensOut = 0;
 
         for (const line of lines) {
           try {
-            const parsed: unknown = JSON.parse(line);
+            const parsed = JSON.parse(line) as Record<string, unknown>;
             const msgs = parseJsonlEntry(parsed);
             for (const msg of msgs) {
               allMessages.push(msg);
+            }
+            // Accumulate token usage from assistant messages
+            const msg = (parsed.message ?? parsed) as Record<string, unknown>;
+            const usage = msg.usage as Record<string, number> | undefined;
+            if (usage) {
+              tokensIn += usage.input_tokens ?? 0;
+              tokensOut += usage.output_tokens ?? 0;
             }
           } catch {
             // Skip unparseable lines — partial results are acceptable
@@ -624,6 +633,8 @@ export async function sessionRoutes(
           messages,
           sessionId: claudeSessionId,
           totalMessages,
+          tokensIn,
+          tokensOut,
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

@@ -296,8 +296,20 @@ export function SessionDetailView(): React.JSX.Element {
       {s && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 pt-3 shrink-0">
           <MetricCard label="Model" value={s.model ?? 'unknown'} />
-          <MetricCard label="Input Tokens" value={formatNumber(s.metadata?.inputTokens)} />
-          <MetricCard label="Output Tokens" value={formatNumber(s.metadata?.outputTokens)} />
+          <MetricCard
+            label="Input Tokens"
+            value={formatNumber(
+              s.metadata?.inputTokens ??
+                ((content.data as { tokensIn?: number } | undefined)?.tokensIn ?? undefined),
+            )}
+          />
+          <MetricCard
+            label="Output Tokens"
+            value={formatNumber(
+              s.metadata?.outputTokens ??
+                ((content.data as { tokensOut?: number } | undefined)?.tokensOut ?? undefined),
+            )}
+          />
           <MetricCard label="Cost" value={formatCost(s.metadata?.costUsd)} />
         </div>
       )}
