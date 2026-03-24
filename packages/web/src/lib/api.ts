@@ -759,7 +759,7 @@ export const api = {
       },
     ),
   getRuntimeSessionTerminalTakeover: (id: string) =>
-    request<SessionTakeoverState>(`/api/sessions/${encodeURIComponent(id)}/takeover`),
+    request<SessionTakeoverState>(`/api/session-takeover/${encodeURIComponent(id)}/takeover`),
   startRuntimeSessionTerminalTakeover: (id: string) =>
     request<{
       ok: true;
@@ -767,7 +767,7 @@ export const api = {
       takeoverToken: string;
       claudeSessionId: string;
       machineId?: string;
-    }>(`/api/sessions/${encodeURIComponent(id)}/takeover`, {
+    }>(`/api/session-takeover/${encodeURIComponent(id)}/takeover`, {
       method: 'POST',
       body: JSON.stringify({}),
     }),
@@ -778,7 +778,7 @@ export const api = {
     }
     const suffix = qs.toString() ? `?${qs}` : '';
     return request<{ ok: true; resumed: boolean }>(
-      `/api/sessions/${encodeURIComponent(id)}/release${suffix}`,
+      `/api/session-takeover/${encodeURIComponent(id)}/release${suffix}`,
       {
         method: 'POST',
         body: JSON.stringify({}),
@@ -827,20 +827,19 @@ export const api = {
       takeoverToken: string;
       claudeSessionId: string;
       machineId?: string;
-    }>(`/api/sessions/${encodeURIComponent(sessionId)}/takeover`, {
+    }>(`/api/session-takeover/${encodeURIComponent(sessionId)}/takeover`, {
       method: 'POST',
-      body: JSON.stringify({}),
     }),
   sessionRelease: (sessionId: string, options?: { resume?: boolean }) => {
     const qs = options?.resume ? '?resume=true' : '';
     return request<{ ok: true; released: true }>(
-      `/api/sessions/${encodeURIComponent(sessionId)}/release${qs}`,
-      { method: 'POST', body: JSON.stringify({}) },
+      `/api/session-takeover/${encodeURIComponent(sessionId)}/release${qs}`,
+      { method: 'POST' },
     );
   },
   sessionTakeoverStatus: (sessionId: string) =>
     request<{ active: boolean; terminalId?: string; observerCount?: number }>(
-      `/api/sessions/${encodeURIComponent(sessionId)}/takeover`,
+      `/api/session-takeover/${encodeURIComponent(sessionId)}/takeover`,
     ),
   forkSession: (
     id: string,

@@ -1151,7 +1151,7 @@ async function cmdTakeover(sessionId: string, yolo: boolean, observer: boolean):
 
   const takeoverData = (await request(
     'POST',
-    `/api/sessions/${encodeURIComponent(sessionId)}/takeover`,
+    `/api/session-takeover/${encodeURIComponent(sessionId)}/takeover`,
   )) as TakeoverResponse;
 
   if (!takeoverData.ok) {
@@ -1196,7 +1196,7 @@ async function cmdTakeover(sessionId: string, yolo: boolean, observer: boolean):
     if (shouldRelease && !released) {
       released = true;
       // Fire-and-forget release — best effort
-      request('POST', `/api/sessions/${encodeURIComponent(sessionId)}/release`).catch(() => {
+      request('POST', `/api/session-takeover/${encodeURIComponent(sessionId)}/release`).catch(() => {
         // Ignore errors during cleanup
       });
     }

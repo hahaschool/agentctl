@@ -154,13 +154,17 @@ export async function proxyWorkerRequest(
     };
   }
 
+  const hasBody = body !== undefined && method !== 'GET' && method !== 'DELETE';
+
   const fetchOptions: RequestInit = {
     method,
     signal: AbortSignal.timeout(timeoutMs),
-    headers: { 'Content-Type': 'application/json' },
+    // Only set Content-Type when there's a body — Fastify rejects
+    // application/json with empty body.
+    ...(hasBody ? { headers: { 'Content-Type': 'application/json' } } : {}),
   };
 
-  if (body !== undefined && method !== 'GET' && method !== 'DELETE') {
+  if (hasBody) {
     fetchOptions.body = JSON.stringify(body);
   }
 

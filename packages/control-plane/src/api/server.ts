@@ -575,7 +575,7 @@ export async function createServer({
     });
 
     await app.register(sessionTakeoverRoutes, {
-      prefix: '/api/sessions',
+      prefix: '/api/session-takeover',
       db,
       dbRegistry,
       workerPort,
