@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-22 (PR #355 is now on `main` at `573e0aec`, so section 12.6's beta-promotion wording is reality-synced without changing the remaining requirement for a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY`; direct `main` commits `58d8b840`, `e5f07913`, and `73145841` then hardened the existing runtime-session/session-lifecycle surfaces by reaping stale `claudeSessionId` sessions after 30 minutes without heartbeats, auto-creating `rc_session` rows when the SDK reports a session ID early, and restoring explicit empty-body takeover/release POSTs from the web client; PR #359 is now on `main` at `d4155209` to remove the last remaining `actions/cache/save@v4` use from `ci.yml`, and the merge-triggered `CI`, `Security Audit`, and `Build` workflows for `d4155209` are now confirmed green; section 27.3 remains fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, section 30 remains delivered with `7a2ae06` + `d1b7a77` plus the early-session-link hardening in `e5f07913`, open PRs are `0`, and explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-22)
+> Last updated: 2026-03-22 (PR #355 is now on `main` at `573e0aec`, so section 12.6's beta-promotion wording is reality-synced without changing the remaining requirement for a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY`; direct `main` commits `58d8b840`, `e5f07913`, and `73145841` then hardened the existing runtime-session/session-lifecycle surfaces by reaping stale `claudeSessionId` sessions after 30 minutes without heartbeats, auto-creating `rc_session` rows when the SDK reports a session ID early, and restoring explicit empty-body takeover/release POSTs from the web client; PR #359 is now on `main` at `d4155209` to remove the last remaining `actions/cache/save@v4` use from `ci.yml`, and the merge-triggered `CI`, `Security Audit`, and `Build` workflows for `d4155209` are now confirmed green; direct `main` commit `bf899eb0` then refreshed managed-session heartbeats during live cost/progress updates so the reaper does not kill active sessions, and PR #361 is now on `main` at `a53c242f` with focused control-plane regression coverage for that path while the merge-triggered `CI`, `Security Audit`, and `Build` workflows for `a53c242f` are now confirmed green; section 27.3 remains fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, section 30 remains delivered with `7a2ae06` + `d1b7a77` plus the early-session-link hardening in `e5f07913`, open PRs are `0`, and explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-22)
 
 ## Current State
 
@@ -45,7 +45,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > resurfaced on scheduled full-history security scans. PR #359 then finished
 > the last leftover `ci.yml` Node24 cache-action follow-through by bumping the
 > install job's `actions/cache/save` step from `v4` to `v5`. As of this update,
-> `d4155209` is the latest `main` commit where the merge-triggered `CI`,
+> `a53c242f` is the latest `main` commit where the merge-triggered `CI`,
 > `Security Audit`, and `Build` workflows are all confirmed green.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
@@ -1690,7 +1690,10 @@ Agent run lifecycle has hidden intermediate states users can't see:
 > Status note: direct `main` commit `d1b7a77` completed the remaining
 > observability slice by forwarding periodic cost/token deltas through the
 > control plane and surfacing token counts alongside cost in run history while
-> runs are still active.
+> runs are still active. Direct `main` commit `bf899eb0` then refreshed
+> managed-session heartbeats during those live progress updates so the reaper
+> does not kill active sessions, and PR #361 added focused control-plane
+> regression coverage for that follow-through on `main`.
 
 - [x] SDK runner reports cost/token increments during run via CP callback
 - [x] Run history shows live-updating cost and token counts for running agents
@@ -1716,7 +1719,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
-| **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, and `e5f07913` hardened the early `rc_session` bookkeeping on current `main` |
+| **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, `e5f07913` hardened the early `rc_session` bookkeeping, and `bf899eb0` plus PR #361 now keep heartbeat refresh on live progress updates covered on current `main` |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
