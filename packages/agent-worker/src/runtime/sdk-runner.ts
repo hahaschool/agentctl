@@ -462,6 +462,26 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     logger,
   });
 
+  // Write .mcp.json to project directory before starting SDK run.
+  // The SDK wraps Claude CLI which reads .mcp.json from cwd for MCP server discovery.
+  // Without this, MCP tools (Slack, Notion, etc.) are not available to the agent.
+  if (config.mcpServers && Object.keys(config.mcpServers).length > 0) {
+    try {
+      const mcpPath = `${projectPath}/.mcp.json`;
+      const { writeFileSync } = await import('node:fs');
+      writeFileSync(mcpPath, JSON.stringify({ mcpServers: config.mcpServers }, null, 2));
+      logger.info(
+        { serverCount: Object.keys(config.mcpServers).length, mcpPath },
+        'Wrote .mcp.json for SDK session',
+      );
+    } catch (mcpErr) {
+      logger.warn(
+        { err: mcpErr instanceof Error ? mcpErr.message : String(mcpErr) },
+        'Failed to write .mcp.json for SDK session',
+      );
+    }
+  }
+
   const sdkOptions = buildSdkOptions(config, projectPath, resumeSessionId, canUseTool);
 
   logger.info(
