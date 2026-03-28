@@ -1756,6 +1756,57 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       }
     },
   );
+
+  // ---------------------------------------------------------------------------
+  // Dispatch config — read the config snapshot from the latest agent run
+  // ---------------------------------------------------------------------------
+
+  app.get<{ Params: { sessionId: string } }>(
+    '/:sessionId/dispatch-config',
+    {
+      schema: {
+        tags: ['sessions'],
+        summary: 'Get dispatch config for a session',
+        description:
+          'Returns the dispatch config from the latest agent run linked to this session.',
+      },
+    },
+    async (request, reply) => {
+      const { sessionId } = request.params;
+
+      // Verify session exists (query rc_sessions directly)
+      const [session] = await db
+        .select({ id: rcSessions.id })
+        .from(rcSessions)
+        .where(eq(rcSessions.id, sessionId))
+        .limit(1);
+
+      if (!session) {
+        return reply.code(404).send({
+          error: 'SESSION_NOT_FOUND',
+          message: `Session '${sessionId}' does not exist`,
+        });
+      }
+
+      // Query agent_runs by sessionId directly (not via agentId)
+      const runCount = await dbRegistry.countRunsForSession(sessionId);
+
+      if (runCount === 0) {
+        return { runId: null, runCount: 0, config: null };
+      }
+
+      const latestRun = await dbRegistry.getLatestRunForSession(sessionId);
+      const config = latestRun
+        ? await dbRegistry.getRunDispatchConfig(latestRun.id)
+        : null;
+
+      return {
+        runId: latestRun?.id ?? null,
+        runCount,
+        config,
+      };
+    },
+  );
 };
 
 // ---------------------------------------------------------------------------
