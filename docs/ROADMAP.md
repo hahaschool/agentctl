@@ -1721,26 +1721,26 @@ Agent run lifecycle has hidden intermediate states users can't see:
 **Spec:** `docs/superpowers/specs/2026-03-28-runtime-config-visibility-design.md`
 **Plan:** `docs/superpowers/plans/2026-03-28-runtime-config-visibility.md`
 
-### 31.1 Database + Shared Types — P0
+### 31.1 Database + Shared Types — Delivered
 
-- [ ] Add `dispatch_config` JSONB column to `agent_runs` table (migration `0004_dispatch_config.sql`)
-- [ ] Add `DispatchConfigSnapshot` and `McpServerConfigRedacted` types in `packages/shared`
-- [ ] Add `redactMcpServers()` utility with MCP env/command/arg redaction
-- [ ] Add `updateRunDispatchConfig()`, `getRunDispatchConfig()`, `getLatestRunForSession()`, `countRunsForSession()` to DbRegistry
-- [ ] Exclude `dispatch_config` from all run list queries (`runColumnsSlim` getter)
+- [x] Add `dispatch_config` JSONB column to `agent_runs` table (migration `0004_dispatch_config.sql`)
+- [x] Add `DispatchConfigSnapshot` and `McpServerConfigRedacted` types in `packages/shared`
+- [x] Add `redactMcpServers()` utility with MCP env/command/arg redaction (9 tests)
+- [x] Add `updateRunDispatchConfig()`, `getRunDispatchConfig()`, `getLatestRunForSession()`, `countRunsForSession()` to DbRegistry
+- [x] Exclude `dispatch_config` from all run list queries (`runColumnsSlim` getter)
 
-### 31.2 Backend Persistence + API — P0
+### 31.2 Backend Persistence + API — Delivered
 
-- [ ] Persist redacted config snapshot in `task-worker.ts` after dispatch payload assembly
-- [ ] Add `GET /api/sessions/:sessionId/dispatch-config` endpoint returning `{ runId, runCount, config }`
-- [ ] 404 for nonexistent session, `{ runId: null, runCount: 0, config: null }` for sessions without runs
+- [x] Persist redacted config snapshot in `task-worker.ts` after dispatch payload assembly
+- [x] Add `GET /api/sessions/:sessionId/dispatch-config` endpoint returning `{ runId, runCount, config }`
+- [x] 404 for nonexistent session, `{ runId: null, runCount: 0, config: null }` for sessions without runs
 
-### 31.3 Frontend — Config Tab — P1
+### 31.3 Frontend — Config Tab — Delivered
 
-- [ ] Add `SessionConfigTab` component with General / MCP Servers / Tool Restrictions / Prompts sections
-- [ ] Add "Config" tab to `SessionDetailView` tab bar
-- [ ] Empty states: no runs, pre-feature data, multi-run indicator
-- [ ] API client method + React Query hook (`sessionDispatchConfigQuery`)
+- [x] Add `SessionConfigTab` component with General / MCP Servers / Tool Restrictions / Prompts sections (4 tests)
+- [x] Add "Config" tab to `SessionDetailView` tab bar
+- [x] Empty states: no runs, pre-feature data, multi-run indicator
+- [x] API client method + React Query hook (`sessionDispatchConfigQuery`)
 
 ---
 
@@ -1751,7 +1751,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
-| **P0** | Runtime Config Visibility | 31.1-31.2 | 🔧 Planned — spec + plan reviewed, ready for implementation |
+| **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend) and #368 (frontend) on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, Config tab on session detail page |
 | **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, `e5f07913` hardened the early `rc_session` bookkeeping, and `bf899eb0` plus PR #361 now keep heartbeat refresh on live progress updates covered on current `main` |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
