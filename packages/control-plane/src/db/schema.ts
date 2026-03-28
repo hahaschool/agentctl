@@ -1,4 +1,4 @@
-import type { ExecutionSummary } from '@agentctl/shared';
+import type { DispatchConfigSnapshot, ExecutionSummary } from '@agentctl/shared';
 import {
   type AnyPgColumn,
   bigint,
@@ -80,6 +80,8 @@ export const agentRuns = pgTable(
     retryOf: uuid('retry_of'),
     /** 1-based retry attempt number (null for first attempts). */
     retryIndex: integer('retry_index'),
+    /** Dispatch config snapshot captured at dispatch time. Excluded from list queries. */
+    dispatchConfig: jsonb('dispatch_config').$type<DispatchConfigSnapshot | null>(),
   },
   (table) => [
     index('idx_agent_runs_agent_id_status').on(table.agentId, table.status),
