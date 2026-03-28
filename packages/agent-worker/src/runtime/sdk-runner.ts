@@ -296,6 +296,9 @@ function buildSdkOptions(
     ...(config.systemPrompt ? { systemPrompt: config.systemPrompt } : {}),
     ...(canUseTool ? { canUseTool } : {}),
     ...(resumeSessionId ? { resume: resumeSessionId } : {}),
+    ...(config.mcpServers && Object.keys(config.mcpServers).length > 0
+      ? { mcpServers: config.mcpServers }
+      : {}),
     cwd: projectPath,
   };
 }
@@ -462,25 +465,9 @@ export async function runWithSdk(options: SdkRunnerOptions): Promise<SdkRunResul
     logger,
   });
 
-  // Write .mcp.json to project directory before starting SDK run.
-  // The SDK wraps Claude CLI which reads .mcp.json from cwd for MCP server discovery.
-  // Without this, MCP tools (Slack, Notion, etc.) are not available to the agent.
-  if (config.mcpServers && Object.keys(config.mcpServers).length > 0) {
-    try {
-      const mcpPath = `${projectPath}/.mcp.json`;
-      const { writeFileSync } = await import('node:fs');
-      writeFileSync(mcpPath, JSON.stringify({ mcpServers: config.mcpServers }, null, 2));
-      logger.info(
-        { serverCount: Object.keys(config.mcpServers).length, mcpPath },
-        'Wrote .mcp.json for SDK session',
-      );
-    } catch (mcpErr) {
-      logger.warn(
-        { err: mcpErr instanceof Error ? mcpErr.message : String(mcpErr) },
-        'Failed to write .mcp.json for SDK session',
-      );
-    }
-  }
+  // MCP servers are passed through buildSdkOptions() so the SDK handles
+  // server discovery natively. Writing .mcp.json to disk is no longer needed
+  // (and was flagged by CodeQL as insecure file write of network data).
 
   const sdkOptions = buildSdkOptions(config, projectPath, resumeSessionId, canUseTool);
 
