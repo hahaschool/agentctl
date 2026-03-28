@@ -32,6 +32,7 @@ type HealthResponse = {
     redis: DependencyStatus;
     mem0: DependencyStatus;
     litellm: DependencyStatus;
+    worker: DependencyStatus;
   };
 };
 
