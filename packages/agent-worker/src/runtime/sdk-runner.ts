@@ -294,6 +294,9 @@ function buildSdkOptions(
     ...(config.allowedTools ? { allowedTools: config.allowedTools } : {}),
     ...(config.disallowedTools ? { disallowedTools: config.disallowedTools } : {}),
     ...(config.systemPrompt ? { systemPrompt: config.systemPrompt } : {}),
+    ...(config.mcpServers && Object.keys(config.mcpServers).length > 0
+      ? { mcpServers: config.mcpServers }
+      : {}),
     ...(canUseTool ? { canUseTool } : {}),
     ...(resumeSessionId ? { resume: resumeSessionId } : {}),
     ...(config.mcpServers && Object.keys(config.mcpServers).length > 0

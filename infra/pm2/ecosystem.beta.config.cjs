@@ -10,9 +10,25 @@
 //
 // See docs/plans/2026-03-12-dev-environment-cd-strategy.md for full context.
 
+const fs = require('node:fs');
 const path = require('node:path');
 const { deriveStableDispatchSigningSecretKey } = require('./dispatch-signing-key.cjs');
 const REPO_ROOT = path.resolve(__dirname, '../..');
+
+// Load .env.beta so secrets (e.g. CREDENTIAL_ENCRYPTION_KEY) are available to PM2
+const envBetaPath = path.join(REPO_ROOT, '.env.beta');
+try {
+  const envContent = fs.readFileSync(envBetaPath, 'utf8');
+  for (const line of envContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx < 0) continue;
+    const key = trimmed.slice(0, eqIdx);
+    const value = trimmed.slice(eqIdx + 1);
+    if (!process.env[key]) process.env[key] = value;
+  }
+} catch { /* .env.beta is optional */ }
 
 module.exports = {
   apps: [

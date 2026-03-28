@@ -501,7 +501,14 @@ function RunStatusBadge({ status }: { status: string }): React.JSX.Element {
   );
 }
 
-function RunPhaseIndicator({ run }: { run: RunWithRetryMeta }): React.JSX.Element {
+const TERMINAL_STATUSES = new Set(['success', 'failure', 'error', 'timeout', 'empty', 'cancelled']);
+
+function RunPhaseIndicator({ run }: { run: RunWithRetryMeta }): React.JSX.Element | null {
+  // Hide phase when status is terminal — the status badge already tells the story
+  if (TERMINAL_STATUSES.has(run.status)) {
+    return null;
+  }
+
   const phase = resolveRunPhase(run);
   const tone = getRunPhaseTone(phase);
 
@@ -921,24 +928,26 @@ function getRunStatusTone(status: string): {
 }
 
 function resolveRunPhase(run: RunWithRetryMeta): RunPhase {
-  if (run.phase) {
-    return run.phase;
-  }
-
-  if (run.status === 'running') {
-    return 'running';
-  }
-
+  // Terminal statuses always override the raw phase (handles stale data like
+  // status='failure' + phase='running')
   if (run.status === 'success') {
     return 'completed';
+  }
+
+  if (FAILURE_STATUSES.has(run.status)) {
+    return 'failed';
   }
 
   if (run.status === 'empty') {
     return 'empty';
   }
 
-  if (FAILURE_STATUSES.has(run.status)) {
-    return 'failed';
+  if (run.phase) {
+    return run.phase;
+  }
+
+  if (run.status === 'running') {
+    return 'running';
   }
 
   return 'queued';
