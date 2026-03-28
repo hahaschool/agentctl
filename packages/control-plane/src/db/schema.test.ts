@@ -396,8 +396,8 @@ describe('agents table columns', () => {
 describe('agentRuns table columns', () => {
   const meta = getColumnMeta(agentRuns);
 
-  it('has exactly 19 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(19);
+  it('has exactly 20 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(20);
   });
 
   it('has all expected column keys', () => {
@@ -421,6 +421,7 @@ describe('agentRuns table columns', () => {
       'parentRunId',
       'retryOf',
       'retryIndex',
+      'dispatchConfig',
     ];
     expect(Object.keys(meta)).toEqual(expectedKeys);
   });
@@ -549,6 +550,7 @@ describe('agentRuns table columns', () => {
       'parent_run_id',
       'retry_of',
       'retry_index',
+      'dispatch_config',
     ]);
   });
 });
@@ -751,6 +753,7 @@ describe('Required (NOT NULL) vs nullable columns', () => {
       'parentRunId',
       'retryOf',
       'retryIndex',
+      'dispatchConfig',
     ]);
   });
 

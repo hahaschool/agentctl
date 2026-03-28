@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentRun,
+  DispatchConfigSnapshot,
   ExecutionSummary,
   Machine,
   RegisterWorkerRequest,
@@ -112,6 +113,31 @@ export class DbAgentRegistry {
     private readonly db: Database,
     private readonly logger: Logger,
   ) {}
+
+  /** All agent_runs columns except the heavy dispatchConfig JSONB blob. */
+  private get runColumnsSlim() {
+    return {
+      id: agentRuns.id,
+      agentId: agentRuns.agentId,
+      trigger: agentRuns.trigger,
+      status: agentRuns.status,
+      phase: agentRuns.phase,
+      startedAt: agentRuns.startedAt,
+      finishedAt: agentRuns.finishedAt,
+      costUsd: agentRuns.costUsd,
+      tokensIn: agentRuns.tokensIn,
+      tokensOut: agentRuns.tokensOut,
+      model: agentRuns.model,
+      provider: agentRuns.provider,
+      sessionId: agentRuns.sessionId,
+      errorMessage: agentRuns.errorMessage,
+      resultSummary: agentRuns.resultSummary,
+      loopIteration: agentRuns.loopIteration,
+      parentRunId: agentRuns.parentRunId,
+      retryOf: agentRuns.retryOf,
+      retryIndex: agentRuns.retryIndex,
+    } as const;
+  }
 
   // ---------------------------------------------------------------------------
   // Machine CRUD
@@ -516,24 +542,68 @@ export class DbAgentRegistry {
   }
 
   async getRun(runId: string): Promise<AgentRun | undefined> {
-    const rows = await this.db.select().from(agentRuns).where(eq(agentRuns.id, runId));
+    const rows = await this.db
+      .select(this.runColumnsSlim)
+      .from(agentRuns)
+      .where(eq(agentRuns.id, runId));
 
     if (rows.length === 0) {
       return undefined;
     }
 
-    return this.toRun(rows[0]);
+    return this.toRun(rows[0] as typeof agentRuns.$inferSelect);
+  }
+
+  async updateRunDispatchConfig(
+    runId: string,
+    config: DispatchConfigSnapshot,
+  ): Promise<void> {
+    await this.db
+      .update(agentRuns)
+      .set({ dispatchConfig: config })
+      .where(eq(agentRuns.id, runId));
+  }
+
+  async getRunDispatchConfig(
+    runId: string,
+  ): Promise<DispatchConfigSnapshot | null> {
+    const [row] = await this.db
+      .select({ dispatchConfig: agentRuns.dispatchConfig })
+      .from(agentRuns)
+      .where(eq(agentRuns.id, runId))
+      .limit(1);
+    return (row?.dispatchConfig as DispatchConfigSnapshot) ?? null;
+  }
+
+  async getLatestRunForSession(sessionId: string): Promise<AgentRun | undefined> {
+    const rows = await this.db
+      .select(this.runColumnsSlim)
+      .from(agentRuns)
+      .where(eq(agentRuns.sessionId, sessionId))
+      .orderBy(desc(agentRuns.startedAt))
+      .limit(1);
+
+    if (rows.length === 0) return undefined;
+    return this.toRun(rows[0] as typeof agentRuns.$inferSelect);
+  }
+
+  async countRunsForSession(sessionId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(agentRuns)
+      .where(eq(agentRuns.sessionId, sessionId));
+    return row?.count ?? 0;
   }
 
   async getRecentRuns(agentId: string, limit = 20): Promise<AgentRun[]> {
     const rows = await this.db
-      .select()
+      .select(this.runColumnsSlim)
       .from(agentRuns)
       .where(eq(agentRuns.agentId, agentId))
       .orderBy(desc(agentRuns.startedAt))
       .limit(limit);
 
-    return rows.map((row) => this.toRun(row));
+    return rows.map((row) => this.toRun(row as typeof agentRuns.$inferSelect));
   }
 
   async getAgentHealth(
