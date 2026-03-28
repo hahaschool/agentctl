@@ -6,7 +6,6 @@ import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { mcpTemplateRoutes } from './mcp-templates.js';
 import {
   createMockDbRegistry,
-  makeMachine,
   mockFetchOk,
   mockFetchThrow,
   saveOriginalFetch,

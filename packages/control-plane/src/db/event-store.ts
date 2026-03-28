@@ -88,14 +88,14 @@ export function createEventStore(db: Database): EventStore {
 
       const insertedRows = extractRows<SpaceEventRecord>(result);
       if (insertedRows.length > 0) {
-        return insertedRows[0]!;
+        return insertedRows[0] as SpaceEventRecord;
       }
 
       const existing = await db
         .select()
         .from(spaceEvents)
         .where(eq(spaceEvents.idempotencyKey, input.idempotencyKey));
-      return toSpaceEventRecord(existing[0]!);
+      return toSpaceEventRecord(existing[0] as (typeof existing)[0]);
     },
 
     async listEvents(threadId, opts) {
