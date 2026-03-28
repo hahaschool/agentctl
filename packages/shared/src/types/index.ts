@@ -66,6 +66,10 @@ export type {
   RunTrigger,
 } from './agent-run.js';
 export type {
+  DispatchConfigSnapshot,
+  McpServerConfigRedacted,
+} from './dispatch-config.js';
+export type {
   ApprovalDecision,
   ApprovalDecisionAction,
   ApprovalGate,

@@ -14,4 +14,5 @@ export type { NativeImportAttempt, NativeImportAttemptReason } from './protocol/
 export * from './protocol/index.js';
 export * from './runtime/index.js';
 export * from './templates/index.js';
+export { redactMcpServers } from './redact-mcp.js';
 export * from './types/index.js';
