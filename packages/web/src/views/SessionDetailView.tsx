@@ -300,14 +300,16 @@ export function SessionDetailView(): React.JSX.Element {
             label="Input Tokens"
             value={formatNumber(
               s.metadata?.inputTokens ??
-                ((content.data as { tokensIn?: number } | undefined)?.tokensIn ?? undefined),
+                (content.data as { tokensIn?: number } | undefined)?.tokensIn ??
+                undefined,
             )}
           />
           <MetricCard
             label="Output Tokens"
             value={formatNumber(
               s.metadata?.outputTokens ??
-                ((content.data as { tokensOut?: number } | undefined)?.tokensOut ?? undefined),
+                (content.data as { tokensOut?: number } | undefined)?.tokensOut ??
+                undefined,
             )}
           />
           <MetricCard label="Cost" value={formatCost(s.metadata?.costUsd)} />

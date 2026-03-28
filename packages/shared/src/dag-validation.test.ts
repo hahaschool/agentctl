@@ -29,7 +29,7 @@ describe('detectCycles', () => {
     const edges = [edge('a', 'b'), edge('b', 'a')];
     const cycle = detectCycles(nodes, edges);
     expect(cycle).not.toBeNull();
-    expect(cycle!.length).toBeGreaterThanOrEqual(2);
+    expect(cycle?.length).toBeGreaterThanOrEqual(2);
   });
 
   it('detects a three-node cycle', () => {

@@ -6,7 +6,6 @@ import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { skillDiscoverRoutes } from './skill-discover.js';
 import {
   createMockDbRegistry,
-  makeMachine,
   mockFetchError,
   mockFetchOk,
   mockFetchThrow,

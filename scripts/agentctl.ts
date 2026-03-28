@@ -1196,9 +1196,11 @@ async function cmdTakeover(sessionId: string, yolo: boolean, observer: boolean):
     if (shouldRelease && !released) {
       released = true;
       // Fire-and-forget release — best effort
-      request('POST', `/api/session-takeover/${encodeURIComponent(sessionId)}/release`).catch(() => {
-        // Ignore errors during cleanup
-      });
+      request('POST', `/api/session-takeover/${encodeURIComponent(sessionId)}/release`).catch(
+        () => {
+          // Ignore errors during cleanup
+        },
+      );
     }
   };
 
