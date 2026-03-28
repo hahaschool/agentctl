@@ -1,10 +1,12 @@
 import {
   ControlPlaneError,
   DEFAULT_WORKER_PORT,
+  type DispatchConfigSnapshot,
   type DispatchSignature,
   type DispatchSigningKeyPair,
   generateDispatchSigningKeyPair,
   type McpServerConfig,
+  redactMcpServers,
   type RunPhase,
   signDispatchPayload,
 } from '@agentctl/shared';
@@ -502,6 +504,28 @@ export function createTaskWorker({
           accountCredential,
           accountProvider,
         };
+
+        // Persist dispatch config snapshot for audit trail
+        const dispatchConfig: DispatchConfigSnapshot = {
+          model,
+          permissionMode: agent.config?.permissionMode ?? null,
+          allowedTools,
+          mcpServers: mcpServers ? redactMcpServers(mcpServers) : null,
+          systemPrompt: agent.config?.systemPrompt?.slice(0, 500) ?? null,
+          defaultPrompt: agent.config?.defaultPrompt?.slice(0, 500) ?? null,
+          instructionsStrategy: agent.config?.instructionsStrategy ?? null,
+          mcpServerCount: mcpServers ? Object.keys(mcpServers).length : 0,
+          accountProvider: accountProvider ?? null,
+        };
+
+        try {
+          await registry.updateRunDispatchConfig(runId, dispatchConfig);
+        } catch (configErr) {
+          jobLogger.warn(
+            { err: configErr instanceof Error ? configErr.message : String(configErr) },
+            'Failed to persist dispatch config (non-fatal)',
+          );
+        }
 
         const payload: DispatchPayload = {
           ...unsignedPayload,
