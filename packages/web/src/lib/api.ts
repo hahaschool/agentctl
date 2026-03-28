@@ -24,6 +24,7 @@ import type {
   CrossSpaceSubscription,
   DiscoveredMcpServer,
   DiscoveredSkill,
+  DispatchConfigSnapshot,
   EntityType,
   EventSenderType,
   EventVisibility,
@@ -670,6 +671,12 @@ export const api = {
     return request<SessionsPage>(`/api/sessions${suffix}`);
   },
   getSession: (id: string) => request<Session>(`/api/sessions/${id}`),
+  getSessionDispatchConfig: (sessionId: string) =>
+    request<{
+      runId: string | null;
+      runCount: number;
+      config: DispatchConfigSnapshot | null;
+    }>(`/api/sessions/${sessionId}/dispatch-config`),
   listRuntimeSessions: (params?: {
     machineId?: string;
     runtime?: ManagedRuntime;

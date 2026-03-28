@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { SessionMemoryTab } from '@/components/memory/SessionMemoryTab';
+import { SessionConfigTab } from '@/components/SessionConfigTab';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -228,7 +229,7 @@ export function SessionDetailView(): React.JSX.Element {
   const toggleFiles = useCallback(() => setShowFiles((prev) => !prev), []);
 
   // Primary tab — session content vs memory facts
-  const [primaryTab, setPrimaryTab] = useState<'session' | 'memory'>('session');
+  const [primaryTab, setPrimaryTab] = useState<'session' | 'memory' | 'config'>('session');
 
   // Escape handler ref — SessionHeader populates this to close its menus
   const escapeRef = useRef<() => void>(() => {});
@@ -326,7 +327,7 @@ export function SessionDetailView(): React.JSX.Element {
 
       {/* Primary tab bar — Session | Memory */}
       <div className="flex gap-1 px-5 pt-3 pb-0 shrink-0 border-b border-border">
-        {(['session', 'memory'] as const).map((tab) => (
+        {(['session', 'memory', 'config'] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -338,7 +339,7 @@ export function SessionDetailView(): React.JSX.Element {
                 : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
-            {tab === 'session' ? 'Session' : 'Memory'}
+            {tab === 'session' ? 'Session' : tab === 'memory' ? 'Memory' : 'Config'}
           </button>
         ))}
       </div>
@@ -346,6 +347,12 @@ export function SessionDetailView(): React.JSX.Element {
       {primaryTab === 'memory' && (
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <SessionMemoryTab sessionId={sessionId} />
+        </div>
+      )}
+
+      {primaryTab === 'config' && (
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <SessionConfigTab sessionId={sessionId} />
         </div>
       )}
 

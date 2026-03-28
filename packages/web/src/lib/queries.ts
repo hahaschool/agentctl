@@ -68,6 +68,7 @@ export const queryKeys = {
     limit?: number;
   }) => (params ? (['sessions', params] as const) : (['sessions'] as const)),
   session: (id: string) => ['sessions', id] as const,
+  sessionDispatchConfig: (id: string) => ['sessions', id, 'dispatch-config'] as const,
   runtimeSessions: (params?: RuntimeSessionsQueryParams) =>
     params ? (['runtime-sessions', params] as const) : (['runtime-sessions'] as const),
   runtimeHandoffSummary: (limit?: number) =>
@@ -308,6 +309,15 @@ export function sessionQuery(id: string) {
     enabled: !!id,
     refetchInterval: 5_000, // Poll session status to detect worker restarts / status changes
     refetchOnWindowFocus: true,
+  });
+}
+
+export function sessionDispatchConfigQuery(sessionId: string) {
+  return queryOptions({
+    queryKey: queryKeys.sessionDispatchConfig(sessionId),
+    queryFn: () => api.getSessionDispatchConfig(sessionId),
+    enabled: !!sessionId,
+    staleTime: 60_000, // Config doesn't change after dispatch
   });
 }
 
