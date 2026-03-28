@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 export function DashboardQuickActions(): React.JSX.Element {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button asChild size="sm" className="gap-1.5">
+      <Button asChild size="sm" variant="outline" className="gap-1.5">
         <Link href="/agents?new=1">
           <Play className="w-3.5 h-3.5" aria-hidden="true" />
           Start Agent

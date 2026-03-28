@@ -131,6 +131,30 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
 
       const [pgResult, redisResult, mem0Result, litellmResult] = await runHealthChecks();
 
+      // Worker health: try to reach the local worker
+      const workerPort = process.env.WORKER_PORT ?? '9000';
+      const workerResult: PromiseSettledResult<DependencyStatus> = await (async () => {
+        const start = Date.now();
+        try {
+          const resp = await fetch(`http://127.0.0.1:${workerPort}/health`, {
+            signal: AbortSignal.timeout(3_000),
+          });
+          const latencyMs = Date.now() - start;
+          return {
+            status: 'fulfilled' as const,
+            value: {
+              status: resp.ok ? ('ok' as const) : ('error' as const),
+              latencyMs,
+            },
+          };
+        } catch {
+          return {
+            status: 'fulfilled' as const,
+            value: { status: 'error' as const, latencyMs: 0, error: 'Worker unreachable' },
+          };
+        }
+      })();
+
       const toDepStatus = (result: PromiseSettledResult<DependencyStatus>): DependencyStatus => {
         if (result.status === 'fulfilled') return result.value;
         const message =
@@ -162,6 +186,7 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
           redis: toDepStatus(redisResult),
           mem0: toDepStatus(mem0Result),
           litellm: toDepStatus(litellmResult),
+          worker: toDepStatus(workerResult),
         },
       } satisfies HealthResponse;
     },

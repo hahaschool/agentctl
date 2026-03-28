@@ -48,7 +48,7 @@ import {
 
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
 type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
-type StartDialogAgent = { id: string; name: string };
+type StartDialogAgent = { id: string; name: string; defaultPrompt?: string };
 type AgentTemplateCard = { title: string; description: string };
 
 const FALLBACK_AGENT_TEMPLATES: readonly AgentTemplateCard[] = [
@@ -202,10 +202,11 @@ export function AgentsPage(): React.JSX.Element {
 
   // -- Start agent handler --
   const handleStart = (): void => {
-    if (!startDialogAgent || !startPrompt.trim() || isStarting) return;
+    const effectivePrompt = startPrompt.trim() || startDialogAgent?.defaultPrompt || '';
+    if (!startDialogAgent || !effectivePrompt || isStarting) return;
     setIsStarting(true);
     startAgent.mutate(
-      { id: startDialogAgent.id, prompt: startPrompt.trim() },
+      { id: startDialogAgent.id, prompt: effectivePrompt },
       {
         onSuccess: () => {
           setIsStarting(false);
@@ -336,10 +337,19 @@ export function AgentsPage(): React.JSX.Element {
                   handleStart();
                 }
               }}
-              placeholder="Enter prompt..."
+              placeholder={
+                startDialogAgent?.defaultPrompt ? 'Use default prompt' : 'Enter prompt...'
+              }
               disabled={isStarting}
               autoFocus
             />
+            {startDialogAgent?.defaultPrompt && !startPrompt.trim() && (
+              <p className="text-xs text-muted-foreground">
+                Default: {startDialogAgent.defaultPrompt.length > 120
+                  ? `${startDialogAgent.defaultPrompt.slice(0, 120)}...`
+                  : startDialogAgent.defaultPrompt}
+              </p>
+            )}
           </div>
           <DialogFooter className="gap-2 sm:justify-end">
             <Button
@@ -358,7 +368,7 @@ export function AgentsPage(): React.JSX.Element {
               type="button"
               variant="secondary"
               onClick={handleStart}
-              disabled={!startPrompt.trim() || isStarting}
+              disabled={(!startPrompt.trim() && !startDialogAgent?.defaultPrompt) || isStarting}
             >
               {isStarting ? 'Starting...' : 'Start'}
             </Button>
@@ -601,7 +611,11 @@ export function AgentsPage(): React.JSX.Element {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setStartDialogAgent({ id: agent.id, name: agent.name });
+                      setStartDialogAgent({
+                        id: agent.id,
+                        name: agent.name,
+                        defaultPrompt: agent.config?.defaultPrompt,
+                      });
                       setStartPrompt('');
                     }}
                     disabled={
