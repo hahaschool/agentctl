@@ -1,4 +1,4 @@
-# Mesh P1: Change Log + Vector Clock — Implementation Plan (v3)
+# Mesh P1: Change Log + Vector Clock — Implementation Plan (v4)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -10,11 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-30-mesh-p1-change-log-vector-clock-design.md`
 
-**Review history:** Codex (GPT 5.4 xhigh) adversarial review — 3 rounds to parity. Key fixes:
+**Review history:** Codex (GPT 5.4 xhigh) adversarial review — ongoing. Key fixes applied:
 - Migration in `drizzle/0021_*` (repo uses `drizzle/` dir, latest is `0020`)
 - Trigger PK via `TG_ARGV[0]` (`settings.key`, `memory_scopes.scope` don't have `id`)
 - `pool.on('connect')` for `app.node_id` (connection pooling makes per-request SET useless)
-- Advisory lock `pg_advisory_xact_lock(hashtextextended(...))` for concurrent vclock safety
+- Advisory lock `pg_advisory_xact_lock(hashtext(table||row)::bigint)` for concurrent vclock safety
 - `agent_actions` gets `sync_id UUID` column (its PK is `bigserial`, not globally unique)
 - Sync-apply guard is a P2 transaction helper contract, not delivered runtime behavior
 
@@ -501,7 +501,7 @@ export type CreateDbOptions = {
 
 - [ ] **Step 2: Wire pool.on('connect') in createDb**
 
-Replace the `createDb` function (line 19-28):
+Replace the `createDb` function body (starts at line 19). Keep the function signature and return type, only change the body:
 
 ```typescript
 export function createDb(databaseUrl: string, options: CreateDbOptions = {}) {
@@ -529,22 +529,48 @@ export function createDb(databaseUrl: string, options: CreateDbOptions = {}) {
 }
 ```
 
-- [ ] **Step 3: Add test for sessionNodeId**
+- [ ] **Step 3: Add `on` to mock pool and write test for sessionNodeId**
 
-In `packages/control-plane/src/db/connection.test.ts`, add after the existing tests:
+In `packages/control-plane/src/db/connection.test.ts`:
+
+First, add `on` to the `mockPool` object at line 7:
+
+```typescript
+const mockPool = { connect: vi.fn(), query: vi.fn(), end: vi.fn(), on: vi.fn() };
+```
+
+Then add a new test after the existing test suite:
 
 ```typescript
 describe('sessionNodeId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('registers a connect listener when sessionNodeId is provided', () => {
     createDb('postgresql://test:test@localhost/test', { sessionNodeId: 'node-test-abcd' });
-    const PoolCtor = pg.Pool as unknown as ReturnType<typeof vi.fn>;
-    const poolInstance = PoolCtor.mock.results[PoolCtor.mock.results.length - 1].value;
-    expect(poolInstance.on).toBeDefined();
+    expect(mockPool.on).toHaveBeenCalledWith('connect', expect.any(Function));
+  });
+
+  it('does not register a connect listener when sessionNodeId is omitted', () => {
+    createDb('postgresql://test:test@localhost/test');
+    expect(mockPool.on).not.toHaveBeenCalled();
+  });
+
+  it('connect listener calls set_config with the node ID', async () => {
+    createDb('postgresql://test:test@localhost/test', { sessionNodeId: 'node-test-abcd' });
+
+    // Get the registered callback and invoke it with a mock client
+    const connectCallback = mockPool.on.mock.calls[0][1];
+    const mockClient = { query: vi.fn().mockResolvedValue(undefined) };
+    await connectCallback(mockClient);
+
+    expect(mockClient.query).toHaveBeenCalledWith(
+      expect.stringContaining("set_config('app.node_id', 'node-test-abcd'"),
+    );
   });
 });
 ```
-
-Note: The exact test shape depends on how `connection.test.ts` mocks `pg.Pool`. Read the existing test file's mock pattern and adapt. The `mockPool` object (line 7) may need `on: vi.fn()` added to it.
 
 - [ ] **Step 4: Run tests**
 
@@ -589,7 +615,7 @@ In the `main()` function, before the `if (DATABASE_URL)` block (~line 220), add:
   logger.info({ nodeId, configDir: agentctlConfigDir }, 'Mesh node identity initialized');
 ```
 
-Note: `join` is already imported from `node:path` in this file. Verify.
+Note: `join` from `node:path` is already imported at the top of `index.ts` (line 3). No new import needed.
 
 - [ ] **Step 3: Pass nodeId to createDb**
 
@@ -671,8 +697,11 @@ export const syncChangeLog = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     synced: boolean('synced').notNull().default(false),
   },
+  // NOTE: The migration creates partial indexes (WHERE synced = false, WHERE status = 'pending')
+  // which Drizzle's schema API does not natively support. The indexes below are plain (non-partial)
+  // in the Drizzle schema for type-safety only — the actual partial indexes come from the SQL migration.
+  // This intentional divergence is acceptable; drizzle-kit push/pull is not used for migrations.
   (table) => [
-    index('idx_change_log_unsynced').on(table.synced, table.createdAt),
     index('idx_change_log_table_row').on(table.tableName, table.rowId),
   ],
 );
@@ -809,11 +838,9 @@ BEGIN
     v_payload := to_jsonb(NEW);
   END IF;
 
-  -- Serialize concurrent vclock increments for the same logical row
-  PERFORM pg_advisory_xact_lock(
-    hashtextextended(TG_TABLE_NAME, 0),
-    hashtextextended(v_row_id, 0)
-  );
+  -- Serialize concurrent vclock increments for the same logical row.
+  -- hashtext() returns int4, cast to bigint for the single-key overload.
+  PERFORM pg_advisory_xact_lock(hashtext(TG_TABLE_NAME || ':' || v_row_id)::bigint);
 
   -- Read latest vector clock for this row
   SELECT vclock INTO v_prev_vclock
@@ -1003,12 +1030,14 @@ git commit -m "feat(mesh): add withSyncApplyGuard transaction helper (P2 contrac
 
 ---
 
-### Task 8: Change Log Cleanup Job
+### Task 8: Change Log Cleanup Job (Separate Queue)
+
+The existing `agent-tasks` queue is typed to `AgentTaskJobData` / `AgentTaskJobName` and cannot accept foreign job types without polluting the union. Instead, create a lightweight **separate BullMQ queue** for sync maintenance.
 
 **Files:**
 - Create: `packages/control-plane/src/sync/change-log-cleanup.ts`
-- Modify: `packages/control-plane/src/scheduler/task-worker.ts` (add job handler)
-- Modify: `packages/control-plane/src/index.ts` (register repeatable job)
+- Create: `packages/control-plane/src/sync/sync-maintenance-worker.ts`
+- Modify: `packages/control-plane/src/index.ts`
 
 - [ ] **Step 1: Create cleanup function**
 
@@ -1049,53 +1078,239 @@ export async function cleanupSyncedChanges(
 }
 ```
 
-- [ ] **Step 2: Register BullMQ repeatable job**
+- [ ] **Step 2: Create sync maintenance worker**
 
-In `packages/control-plane/src/index.ts`, after the task queue is created (search for `new Worker` or `taskQueue.add`), add:
+Create `packages/control-plane/src/sync/sync-maintenance-worker.ts`:
 
 ```typescript
-    // Schedule daily sync cleanup (3 AM)
-    try {
-      await taskQueue.add('sync-cleanup', {}, {
-        repeat: { pattern: '0 3 * * *' },
-        removeOnComplete: true,
-        removeOnFail: 5,
-      });
-    } catch {
-      logger.debug('Failed to register sync-cleanup repeatable job (may already exist)');
+import type { ConnectionOptions } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
+import type { Logger } from 'pino';
+
+import type { Database } from '../db/index.js';
+
+import { cleanupSyncedChanges } from './change-log-cleanup.js';
+
+export const SYNC_MAINTENANCE_QUEUE = 'sync-maintenance';
+
+type SyncMaintenanceJobData = Record<string, never>;
+type SyncMaintenanceJobName = 'sync:cleanup';
+
+/**
+ * Register the daily sync cleanup repeatable job.
+ * Safe to call multiple times — BullMQ deduplicates by repeat key.
+ */
+export async function registerSyncMaintenanceJobs(
+  connection: ConnectionOptions,
+): Promise<Queue<SyncMaintenanceJobData, void, SyncMaintenanceJobName>> {
+  const queue = new Queue<SyncMaintenanceJobData, void, SyncMaintenanceJobName>(
+    SYNC_MAINTENANCE_QUEUE,
+    { connection },
+  );
+
+  await queue.add('sync:cleanup', {}, {
+    repeat: { pattern: '0 3 * * *' },
+    removeOnComplete: true,
+    removeOnFail: 5,
+  });
+
+  return queue;
+}
+
+/**
+ * Create a BullMQ worker that processes sync maintenance jobs.
+ */
+export function createSyncMaintenanceWorker(opts: {
+  connection: ConnectionOptions;
+  db: Database;
+  logger: Logger;
+}): Worker<SyncMaintenanceJobData, void, SyncMaintenanceJobName> {
+  const { connection, db, logger } = opts;
+
+  return new Worker<SyncMaintenanceJobData, void, SyncMaintenanceJobName>(
+    SYNC_MAINTENANCE_QUEUE,
+    async (job) => {
+      if (job.name === 'sync:cleanup') {
+        await cleanupSyncedChanges(db, logger);
+      }
+    },
+    { connection, concurrency: 1 },
+  );
+}
+```
+
+- [ ] **Step 3: Wire into index.ts**
+
+In `packages/control-plane/src/index.ts`, add import:
+
+```typescript
+import { createSyncMaintenanceWorker, registerSyncMaintenanceJobs } from './sync/sync-maintenance-worker.js';
+```
+
+After the existing task worker creation block (~line 270, after `createTaskWorker({...})`), add:
+
+```typescript
+    // --- Sync maintenance (separate queue, not on the agent-tasks type) ---
+    if (db && redisConnection) {
+      try {
+        await registerSyncMaintenanceJobs(redisConnection);
+        createSyncMaintenanceWorker({ connection: redisConnection, db, logger });
+        logger.info('Sync maintenance worker started (daily cleanup at 3 AM)');
+      } catch (err) {
+        logger.debug({ err }, 'Sync maintenance worker not started (sync tables may not exist)');
+      }
     }
 ```
 
-- [ ] **Step 3: Add job handler in task worker**
-
-In `packages/control-plane/src/scheduler/task-worker.ts`, at the beginning of the job processing function (after the `job.name === 'agent:signal'` check at ~line 173), add:
-
-```typescript
-      if (job.name === 'sync-cleanup') {
-        if (db) {
-          const { cleanupSyncedChanges } = await import('../sync/change-log-cleanup.js');
-          await cleanupSyncedChanges(db, jobLogger);
-        }
-        return;
-      }
-```
-
-Import `db` may need to be threaded from the worker setup. Check how the existing task worker accesses the database and follow the same pattern.
+The variable is `redisConnection` (line 204 of `index.ts`) — the same `IORedis` instance passed to `createTaskQueue(redisConnection)` at line 403.
 
 - [ ] **Step 4: Build**
 
 Run: `pnpm --filter @agentctl/control-plane build`
+Expected: clean build
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/control-plane/src/sync/change-log-cleanup.ts packages/control-plane/src/scheduler/task-worker.ts packages/control-plane/src/index.ts
-git commit -m "feat(mesh): add daily sync change log cleanup job (BullMQ, 30-day retention)"
+git add packages/control-plane/src/sync/change-log-cleanup.ts packages/control-plane/src/sync/sync-maintenance-worker.ts packages/control-plane/src/index.ts
+git commit -m "feat(mesh): add sync maintenance queue with daily change log cleanup"
 ```
 
 ---
 
-### Task 9: Push Branch + Create PR
+### Task 9: Integration Tests (Trigger Verification)
+
+**Files:**
+- Create: `packages/control-plane/src/sync/change-log.integration.test.ts`
+
+These tests require a real PostgreSQL database with migration `drizzle/0021` applied. They are skipped in CI if `DATABASE_URL` is not set.
+
+- [ ] **Step 1: Write integration tests**
+
+Create `packages/control-plane/src/sync/change-log.integration.test.ts`:
+
+```typescript
+import { sql } from 'drizzle-orm';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { createDb, type Database } from '../db/connection.js';
+
+/**
+ * Integration tests for the sync_change_log trigger.
+ * Requires a real PostgreSQL database with migration drizzle/0021 applied.
+ * Set DATABASE_URL env var to run. Skipped if not available.
+ */
+const DATABASE_URL = process.env.DATABASE_URL;
+
+describe.skipIf(!DATABASE_URL)('sync_change_log trigger (integration)', () => {
+  let db: ReturnType<typeof createDb>;
+
+  beforeAll(() => {
+    db = createDb(DATABASE_URL!, { sessionNodeId: 'node-test-0001' });
+  });
+
+  beforeEach(async () => {
+    await db.execute(sql`DELETE FROM sync_change_log WHERE node_id = 'node-test-0001'`);
+  });
+
+  afterAll(async () => {
+    await db.execute(sql`DELETE FROM sync_change_log WHERE node_id = 'node-test-0001'`);
+  });
+
+  it('captures INSERT into agents table with correct vclock', async () => {
+    const agentId = crypto.randomUUID();
+    await db.execute(
+      sql`INSERT INTO agents (id, machine_id, name, type, trigger, status, project_path)
+          VALUES (${agentId}, 'test-machine', 'test-agent', 'autonomous', 'manual', 'registered', '/tmp/test')`,
+    );
+
+    const rows = await db.execute(
+      sql`SELECT node_id, table_name, row_id, operation, vclock, payload
+          FROM sync_change_log
+          WHERE table_name = 'agents' AND row_id = ${agentId}
+          ORDER BY id DESC LIMIT 1`,
+    );
+
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    const log = rows[0];
+    expect(log.node_id).toBe('node-test-0001');
+    expect(log.operation).toBe('INSERT');
+    expect(log.vclock).toEqual({ 'node-test-0001': 1 });
+    expect(log.payload).toBeDefined();
+
+    // Cleanup
+    await db.execute(sql`DELETE FROM agents WHERE id = ${agentId}`);
+  });
+
+  it('increments vclock on UPDATE', async () => {
+    const agentId = crypto.randomUUID();
+    await db.execute(
+      sql`INSERT INTO agents (id, machine_id, name, type, trigger, status, project_path)
+          VALUES (${agentId}, 'test-machine', 'test-agent', 'autonomous', 'manual', 'registered', '/tmp/test')`,
+    );
+    await db.execute(
+      sql`UPDATE agents SET name = 'updated-agent' WHERE id = ${agentId}`,
+    );
+
+    const rows = await db.execute(
+      sql`SELECT operation, vclock FROM sync_change_log
+          WHERE table_name = 'agents' AND row_id = ${agentId}
+          ORDER BY id ASC`,
+    );
+
+    expect(rows.length).toBe(2);
+    expect(rows[0].vclock).toEqual({ 'node-test-0001': 1 });
+    expect(rows[1].vclock).toEqual({ 'node-test-0001': 2 });
+    expect(rows[1].operation).toBe('UPDATE');
+
+    // Cleanup
+    await db.execute(sql`DELETE FROM agents WHERE id = ${agentId}`);
+  });
+
+  it('skips change log when sync_applying is true', async () => {
+    const agentId = crypto.randomUUID();
+
+    // Run inside a transaction so SET LOCAL scoping works
+    await db.transaction(async (tx) => {
+      await tx.execute(sql.raw(`SET LOCAL app.sync_applying = 'true'`));
+      await tx.execute(
+        sql`INSERT INTO agents (id, machine_id, name, type, trigger, status, project_path)
+            VALUES (${agentId}, 'test-machine', 'sync-guard-test', 'autonomous', 'manual', 'registered', '/tmp/test')`,
+      );
+    });
+
+    const rows = await db.execute(
+      sql`SELECT * FROM sync_change_log
+          WHERE table_name = 'agents' AND row_id = ${agentId} AND node_id = 'node-test-0001'`,
+    );
+
+    expect(rows.length).toBe(0);
+
+    // Cleanup
+    await db.execute(sql`DELETE FROM agents WHERE id = ${agentId}`);
+  });
+});
+```
+
+- [ ] **Step 2: Apply migration to dev-1 and run tests**
+
+```bash
+psql "postgresql://hahaschool@127.0.0.1:5433/agentctl_dev1" -f packages/control-plane/drizzle/0021_mesh_change_log.sql
+DATABASE_URL="postgresql://hahaschool@127.0.0.1:5433/agentctl_dev1" pnpm --filter @agentctl/control-plane vitest run src/sync/change-log.integration.test.ts
+```
+
+Expected: 3 tests PASS (or skipped if no DATABASE_URL)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add packages/control-plane/src/sync/change-log.integration.test.ts
+git commit -m "test(mesh): add integration tests for sync trigger — capture, vclock, sync-apply guard"
+```
+
+---
+
+### Task 10: Push Branch + Create PR
 
 - [ ] **Step 1: Final build check**
 
@@ -1134,6 +1349,9 @@ Review: 3 rounds Codex (GPT 5.4 xhigh) adversarial review to parity
 - [ ] 4 node identity unit tests pass
 - [ ] 1 apply-guard unit test passes
 - [ ] `pnpm --filter @agentctl/shared build` clean
+- [ ] 3 pool connection tests pass (connect listener, no listener, set_config call)
+- [ ] 1 apply-guard unit test passes
+- [ ] 3 integration tests pass (trigger capture, vclock increment, sync-apply guard)
 - [ ] `pnpm --filter @agentctl/control-plane build` clean
 - [ ] Migration runs cleanly on dev DB
 

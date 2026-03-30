@@ -13,7 +13,7 @@ This spec defines the **change log** and **vector clock** infrastructure that al
 
 ## Goals
 
-1. Track all data mutations across 17 synced tables via PostgreSQL triggers
+1. Track all data mutations across 16 synced tables via PostgreSQL triggers
 2. Assign each mutation a vector clock for causal ordering and conflict detection
 3. Establish node identity (persistent `nodeId` per machine)
 4. Classify tables into append-only (auto-merge) vs mutable (conflict-detect)
