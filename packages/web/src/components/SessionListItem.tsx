@@ -7,6 +7,7 @@ import { formatCost, formatDuration } from '../lib/format-utils';
 import { CopyableText } from './CopyableText';
 import { LiveTimeAgo } from './LiveTimeAgo';
 import { PathBadge } from './PathBadge';
+import { SimpleTooltip } from './SimpleTooltip';
 import { StatusBadge } from './StatusBadge';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +23,8 @@ export type SessionListItemProps = {
   onToggleCheck: (id: string) => void;
   /** Called with the native click event so the parent can handle shift/cmd */
   onItemClick?: (id: string, e: React.MouseEvent) => void;
+  /** Resolved machine hostname; falls back to truncated machineId when absent */
+  machineName?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -132,6 +135,7 @@ function SessionListItemBase({
   isChecked,
   onToggleCheck,
   onItemClick,
+  machineName,
 }: SessionListItemProps): React.JSX.Element {
   const meta = s.metadata;
   const errorMsg = meta?.errorMessage;
@@ -248,7 +252,9 @@ function SessionListItemBase({
             className="font-mono text-[11px] text-muted-foreground/80"
           />
           <span className="text-muted-foreground/50">|</span>
-          <span>{s.machineId}</span>
+          <SimpleTooltip content={s.machineId}>
+            <span>{machineName ?? s.machineId.slice(0, 8)}</span>
+          </SimpleTooltip>
           <span className="text-purple-600/70 dark:text-purple-400/70 text-[11px]">
             {s.model ? s.model.replace('claude-', '').replace(/-\d{8}$/, '') : 'default'}
           </span>

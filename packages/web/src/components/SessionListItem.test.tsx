@@ -49,6 +49,14 @@ vi.mock('./PathBadge', () => ({
   ),
 }));
 
+vi.mock('./SimpleTooltip', () => ({
+  SimpleTooltip: ({ content, children }: { content: string; children: unknown }) => (
+    <span data-testid="simple-tooltip" title={content}>
+      {children}
+    </span>
+  ),
+}));
+
 vi.mock('./StatusBadge', () => ({
   StatusBadge: ({ status }: { status: string }) => <span data-testid="status-badge">{status}</span>,
 }));
@@ -143,9 +151,26 @@ describe('SessionListItem', () => {
       expect(screen.getByText('agent-abc12345')).toBeDefined();
     });
 
-    it('renders machineId', () => {
+    it('renders truncated machineId when no machineName is provided', () => {
       renderItem({ session: makeSession({ machineId: 'machine-xyz' }) });
-      expect(screen.getByText('machine-xyz')).toBeDefined();
+      expect(screen.getByText('machine-')).toBeDefined();
+    });
+
+    it('renders machineName when provided', () => {
+      renderItem({
+        session: makeSession({ machineId: 'machine-xyz' }),
+        machineName: 'my-laptop',
+      });
+      expect(screen.getByText('my-laptop')).toBeDefined();
+    });
+
+    it('shows raw machineId as tooltip', () => {
+      renderItem({
+        session: makeSession({ machineId: 'machine-xyz-long-uuid' }),
+        machineName: 'my-laptop',
+      });
+      const tooltip = screen.getByTitle('machine-xyz-long-uuid');
+      expect(tooltip).toBeDefined();
     });
 
     it('renders the status badge with correct status', () => {

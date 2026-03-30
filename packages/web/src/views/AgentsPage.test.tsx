@@ -442,7 +442,7 @@ describe('AgentsPage', () => {
   it('renders agent machine, project, and cost info', async () => {
     renderAgentsPage();
     await waitFor(() => {
-      expect(screen.getByText('machine-1')).toBeDefined();
+      expect(screen.getByText('test-machine')).toBeDefined();
       expect(screen.getByText('/tmp/project')).toBeDefined();
       expect(screen.getByText('$1.50')).toBeDefined();
     });
