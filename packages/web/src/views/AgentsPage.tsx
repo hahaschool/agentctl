@@ -109,6 +109,11 @@ export function AgentsPage(): React.JSX.Element {
 
   const machineList = machines.data ?? [];
 
+  const machineNames = useMemo(
+    () => new Map(machineList.map((m) => [m.id, m.hostname] as const)),
+    [machineList],
+  );
+
   // -- Filter / Sort state --
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<AgentStatusFilter>('all');
@@ -570,7 +575,13 @@ export function AgentsPage(): React.JSX.Element {
                 <div className="space-y-2 text-xs">
                   <CardInfoRow
                     label="Machine"
-                    value={<span className="font-mono text-[11px]">{agent.machineId}</span>}
+                    value={
+                      <SimpleTooltip content={agent.machineId}>
+                        <span className="font-mono text-[11px]">
+                          {machineNames.get(agent.machineId) ?? agent.machineId.slice(0, 8)}
+                        </span>
+                      </SimpleTooltip>
+                    }
                   />
                   <CardInfoRow
                     label="Project"

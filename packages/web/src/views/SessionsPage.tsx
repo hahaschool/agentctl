@@ -31,6 +31,7 @@ import {
 import type { AgentRuntime } from '../lib/model-options';
 import {
   accountsQuery,
+  machinesQuery,
   queryKeys,
   runtimeSessionsQuery,
   sessionsQuery,
@@ -133,6 +134,7 @@ type RuntimeSessionListItemProps = {
   isSelected: boolean;
   isFocused: boolean;
   onSelect: (id: string) => void;
+  machineName?: string;
 };
 
 const RuntimeSessionListItem = React.memo(function RuntimeSessionListItem({
@@ -140,6 +142,7 @@ const RuntimeSessionListItem = React.memo(function RuntimeSessionListItem({
   isSelected,
   isFocused,
   onSelect,
+  machineName,
 }: RuntimeSessionListItemProps): React.JSX.Element {
   const model =
     typeof row.session.metadata?.model === 'string' ? row.session.metadata.model : 'default';
@@ -174,7 +177,11 @@ const RuntimeSessionListItem = React.memo(function RuntimeSessionListItem({
           </span>
         </div>
         <div className="text-xs text-muted-foreground flex gap-2 items-center flex-wrap">
-          <span className="font-medium text-foreground/70">{row.machineId}</span>
+          <SimpleTooltip content={row.machineId}>
+            <span className="font-medium text-foreground/70">
+              {machineName ?? row.machineId.slice(0, 8)}
+            </span>
+          </SimpleTooltip>
           <span className="text-muted-foreground/50">|</span>
           <span>{model}</span>
           {row.runtime && (
@@ -211,6 +218,12 @@ export function SessionsPage(): React.JSX.Element {
 
   const sessions = useQuery(sessionsQuery({ offset, limit: PAGE_SIZE }));
   const runtimeSessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
+  const machines = useQuery(machinesQuery());
+
+  const machineNames = useMemo(
+    () => new Map((machines.data ?? []).map((m) => [m.id, m.hostname] as const)),
+    [machines.data],
+  );
 
   // When fresh data arrives, append to (or replace) the accumulated list.
   // If offset is 0 it's a fresh load/reset, so we replace.
@@ -1235,6 +1248,7 @@ export function SessionsPage(): React.JSX.Element {
                           isChecked={checkedIds.has(s.id)}
                           onToggleCheck={toggleChecked}
                           onItemClick={handleItemClick}
+                          machineName={machineNames.get(s.machineId)}
                         />
                       ) : (
                         <RuntimeSessionListItem
@@ -1245,6 +1259,7 @@ export function SessionsPage(): React.JSX.Element {
                             focusedIndex >= 0 && filteredSessions[focusedIndex]?.id === s.id
                           }
                           onSelect={setSelectedId}
+                          machineName={machineNames.get(s.machineId)}
                         />
                       ),
                     )}
@@ -1263,6 +1278,7 @@ export function SessionsPage(): React.JSX.Element {
                   isChecked={checkedIds.has(s.id)}
                   onToggleCheck={toggleChecked}
                   onItemClick={handleItemClick}
+                  machineName={machineNames.get(s.machineId)}
                 />
               ) : (
                 <RuntimeSessionListItem
@@ -1271,6 +1287,7 @@ export function SessionsPage(): React.JSX.Element {
                   isSelected={selectedId === s.id}
                   isFocused={focusedIndex === i}
                   onSelect={setSelectedId}
+                  machineName={machineNames.get(s.machineId)}
                 />
               ),
             )
