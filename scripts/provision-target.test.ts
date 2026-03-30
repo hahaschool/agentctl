@@ -8,12 +8,15 @@ const mocks = vi.hoisted(() => {
   return {
     mockExecFile: vi.fn(),
     mockFsAccess: vi.fn(),
+    mockFsMkdtemp: vi.fn(),
     mockFsReadFile: vi.fn(),
+    mockFsRm: vi.fn(),
     mockFsWriteFile: vi.fn(),
     mockFsUnlink: vi.fn(),
     mockOsPlatform: vi.fn(),
     mockOsHostname: vi.fn(),
     mockOsArch: vi.fn(),
+    mockOsTmpdir: vi.fn(),
   };
 });
 
@@ -23,7 +26,9 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('node:fs/promises', () => ({
   access: mocks.mockFsAccess,
+  mkdtemp: mocks.mockFsMkdtemp,
   readFile: mocks.mockFsReadFile,
+  rm: mocks.mockFsRm,
   writeFile: mocks.mockFsWriteFile,
   unlink: mocks.mockFsUnlink,
 }));
@@ -32,18 +37,22 @@ vi.mock('node:os', () => ({
   platform: () => mocks.mockOsPlatform(),
   hostname: () => mocks.mockOsHostname(),
   arch: () => mocks.mockOsArch(),
+  tmpdir: () => mocks.mockOsTmpdir(),
 }));
 
 // Destructure for convenient access in tests (after vi.mock hoisting is resolved)
 const {
   mockExecFile,
   mockFsAccess,
+  mockFsMkdtemp,
   mockFsReadFile,
+  mockFsRm,
   mockFsWriteFile,
   mockFsUnlink,
   mockOsPlatform,
   mockOsHostname,
   mockOsArch,
+  mockOsTmpdir,
 } = mocks;
 
 import type { ProvisionConfig, ProvisionResult } from './provision-target.js';
@@ -139,6 +148,9 @@ beforeEach(() => {
   mockOsPlatform.mockReturnValue('linux');
   mockOsHostname.mockReturnValue('test-machine');
   mockOsArch.mockReturnValue('x64');
+  mockOsTmpdir.mockReturnValue('/tmp');
+  mockFsMkdtemp.mockResolvedValue('/tmp/agentctl-temp');
+  mockFsRm.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -579,7 +591,7 @@ describe('configureSudoDocker', () => {
 
   it('writes sudoers file on Linux', async () => {
     mockFsWriteFile.mockResolvedValue(undefined);
-    mockFsUnlink.mockResolvedValue(undefined);
+    mockFsRm.mockResolvedValue(undefined);
     setupExecFile({
       'sudo visudo': '',
       'sudo cp': '',
@@ -594,6 +606,26 @@ describe('configureSudoDocker', () => {
       (c: unknown[]) => c[0] === 'sudo' && (c[1] as string[])[0] === 'visudo',
     );
     expect(visudoCall).toBeDefined();
+  });
+
+  it('uses a secure temp dir for sudoers validation', async () => {
+    mockFsMkdtemp.mockResolvedValue('/tmp/agentctl-sudoers-temp');
+    mockFsWriteFile.mockResolvedValue(undefined);
+    mockFsRm.mockResolvedValue(undefined);
+    setupExecFile({
+      'sudo visudo': '',
+      'sudo cp': '',
+      'sudo chmod': '',
+      'sudo usermod': '',
+    });
+
+    await configureSudoDocker(makeConfig(), 'ubuntu');
+
+    expect(mockFsMkdtemp).toHaveBeenCalledWith('/tmp/agentctl-sudoers-');
+    expect(mockFsRm).toHaveBeenCalledWith('/tmp/agentctl-sudoers-temp', {
+      force: true,
+      recursive: true,
+    });
   });
 
   it('adds user to docker group on macOS', async () => {
@@ -615,12 +647,12 @@ describe('configureSudoDocker', () => {
 
   it('cleans up temp file even on error', async () => {
     mockFsWriteFile.mockResolvedValue(undefined);
-    mockFsUnlink.mockResolvedValue(undefined);
+    mockFsRm.mockResolvedValue(undefined);
     setupExecFile({
       'sudo visudo': new Error('syntax error'),
     });
     await expect(configureSudoDocker(makeConfig(), 'debian')).rejects.toThrow();
-    expect(mockFsUnlink).toHaveBeenCalled();
+    expect(mockFsRm).toHaveBeenCalled();
   });
 
   it('uses correct step name', async () => {
@@ -769,6 +801,59 @@ describe('installDocker', () => {
     const result = await installDocker(makeConfig(), 'ubuntu');
     expect(result.name).toBe('install-docker');
   });
+
+  it('uses secure temp dirs for Linux apt artifacts', async () => {
+    mockFsMkdtemp
+      .mockResolvedValueOnce('/tmp/docker-gpg-temp')
+      .mockResolvedValueOnce('/tmp/docker-repo-temp');
+    mockFsWriteFile.mockResolvedValue(undefined);
+    mockFsRm.mockResolvedValue(undefined);
+    const callTracker: string[] = [];
+    mockExecFile.mockImplementation(
+      (
+        cmd: string,
+        args: string[],
+        _opts: unknown,
+        cb: (err: Error | null, result?: { stdout: string }) => void,
+      ) => {
+        const key = `${cmd} ${(args ?? []).join(' ')}`;
+        callTracker.push(key);
+        if (
+          key.includes('docker --version') &&
+          callTracker.filter((entry) => entry.includes('docker --version')).length === 1
+        ) {
+          cb(new Error('not found'));
+          return;
+        }
+        if (key.includes('docker --version')) {
+          cb(null, { stdout: 'Docker version 24.0.7' });
+          return;
+        }
+        if (key.includes('curl -fsSL https://download.docker.com/linux/ubuntu/gpg')) {
+          cb(null, { stdout: 'gpg-key' });
+          return;
+        }
+        if (key.includes('lsb_release -cs')) {
+          cb(null, { stdout: 'jammy' });
+          return;
+        }
+        cb(null, { stdout: '' });
+      },
+    );
+
+    await installDocker(makeConfig(), 'ubuntu');
+
+    expect(mockFsMkdtemp).toHaveBeenNthCalledWith(1, '/tmp/docker-gpg-');
+    expect(mockFsMkdtemp).toHaveBeenNthCalledWith(2, '/tmp/docker-repo-');
+    expect(mockFsRm).toHaveBeenCalledWith('/tmp/docker-gpg-temp', {
+      force: true,
+      recursive: true,
+    });
+    expect(mockFsRm).toHaveBeenCalledWith('/tmp/docker-repo-temp', {
+      force: true,
+      recursive: true,
+    });
+  });
 });
 
 // ===========================================================================
@@ -847,7 +932,7 @@ describe('installTailscale', () => {
 
   it('installs Tailscale via official script', async () => {
     mockFsWriteFile.mockResolvedValue(undefined);
-    mockFsUnlink.mockResolvedValue(undefined);
+    mockFsRm.mockResolvedValue(undefined);
     const callTracker: string[] = [];
     mockExecFile.mockImplementation(
       (
@@ -881,9 +966,51 @@ describe('installTailscale', () => {
     expect(result.message).toContain('1.54.0');
   });
 
+  it('uses a secure temp dir for the install script', async () => {
+    mockFsMkdtemp.mockResolvedValue('/tmp/tailscale-install-temp');
+    mockFsWriteFile.mockResolvedValue(undefined);
+    mockFsRm.mockResolvedValue(undefined);
+    const callTracker: string[] = [];
+    mockExecFile.mockImplementation(
+      (
+        cmd: string,
+        args: string[],
+        _opts: unknown,
+        cb: (err: Error | null, result?: { stdout: string }) => void,
+      ) => {
+        const key = `${cmd} ${(args ?? []).join(' ')}`;
+        callTracker.push(key);
+        if (
+          key.includes('tailscale --version') &&
+          callTracker.filter((entry) => entry.includes('tailscale --version')).length === 1
+        ) {
+          cb(new Error('not found'));
+          return;
+        }
+        if (key.includes('tailscale --version')) {
+          cb(null, { stdout: '1.54.0' });
+          return;
+        }
+        if (key.includes('curl')) {
+          cb(null, { stdout: '#!/bin/bash\necho install' });
+          return;
+        }
+        cb(null, { stdout: '' });
+      },
+    );
+
+    await installTailscale(makeConfig(), 'ubuntu');
+
+    expect(mockFsMkdtemp).toHaveBeenCalledWith('/tmp/tailscale-install-');
+    expect(mockFsRm).toHaveBeenCalledWith('/tmp/tailscale-install-temp', {
+      force: true,
+      recursive: true,
+    });
+  });
+
   it('cleans up install script even on error', async () => {
     mockFsWriteFile.mockResolvedValue(undefined);
-    mockFsUnlink.mockResolvedValue(undefined);
+    mockFsRm.mockResolvedValue(undefined);
     const callCount = { tailscale: 0 };
     mockExecFile.mockImplementation(
       (
@@ -910,7 +1037,7 @@ describe('installTailscale', () => {
       },
     );
     await expect(installTailscale(makeConfig(), 'ubuntu')).rejects.toThrow();
-    expect(mockFsUnlink).toHaveBeenCalled();
+    expect(mockFsRm).toHaveBeenCalled();
   });
 
   it('uses correct step name', async () => {
@@ -1057,7 +1184,6 @@ describe('createTargetDirectory', () => {
 
 describe('copyComposeFile', () => {
   it('copies file to target directory', async () => {
-    mockFsAccess.mockResolvedValue(undefined);
     mockFsReadFile.mockResolvedValue('services:\n  web:\n    image: nginx\n');
     mockFsWriteFile.mockResolvedValue(undefined);
     mockFsUnlink.mockResolvedValue(undefined);
@@ -1071,20 +1197,20 @@ describe('copyComposeFile', () => {
   });
 
   it('skips in dry-run', async () => {
-    mockFsAccess.mockResolvedValue(undefined);
+    mockFsReadFile.mockResolvedValue('services:\n  web:\n    image: nginx\n');
     const result = await copyComposeFile(makeConfig({ dryRun: true }));
     expect(result.status).toBe('skipped');
     expect(result.message).toContain('dry-run');
   });
 
   it('throws when source file is missing', async () => {
-    mockFsAccess.mockRejectedValue(new Error('ENOENT'));
+    mockFsReadFile.mockRejectedValue(new Error('ENOENT'));
     await expect(copyComposeFile(makeConfig())).rejects.toThrow(ProvisionError);
     await expect(copyComposeFile(makeConfig())).rejects.toThrow('Compose file not found');
   });
 
   it('includes composeFile in error context', async () => {
-    mockFsAccess.mockRejectedValue(new Error('ENOENT'));
+    mockFsReadFile.mockRejectedValue(new Error('ENOENT'));
     try {
       await copyComposeFile(makeConfig({ composeFile: '/no/such/file.yml' }));
       expect.unreachable('should have thrown');
@@ -1093,8 +1219,7 @@ describe('copyComposeFile', () => {
     }
   });
 
-  it('cleans up temp file after copy', async () => {
-    mockFsAccess.mockResolvedValue(undefined);
+  it('reads the compose file directly without a preflight access check', async () => {
     mockFsReadFile.mockResolvedValue('services: {}');
     mockFsWriteFile.mockResolvedValue(undefined);
     mockFsUnlink.mockResolvedValue(undefined);
@@ -1102,12 +1227,27 @@ describe('copyComposeFile', () => {
       'sudo cp': '',
       'sudo chmod': '',
     });
+
+    const result = await copyComposeFile(makeConfig());
+
+    expect(result.status).toBe('success');
+    expect(mockFsAccess).not.toHaveBeenCalled();
+  });
+
+  it('cleans up temp file after copy', async () => {
+    mockFsReadFile.mockResolvedValue('services: {}');
+    mockFsWriteFile.mockResolvedValue(undefined);
+    mockFsRm.mockResolvedValue(undefined);
+    setupExecFile({
+      'sudo cp': '',
+      'sudo chmod': '',
+    });
     await copyComposeFile(makeConfig());
-    expect(mockFsUnlink).toHaveBeenCalled();
+    expect(mockFsRm).toHaveBeenCalled();
   });
 
   it('uses correct step name', async () => {
-    mockFsAccess.mockResolvedValue(undefined);
+    mockFsReadFile.mockResolvedValue('services: {}');
     const result = await copyComposeFile(makeConfig({ dryRun: true }));
     expect(result.name).toBe('copy-compose-file');
   });
@@ -1201,7 +1341,6 @@ describe('generateEnvContent', () => {
 
 describe('generateEnvFile', () => {
   it('generates .env from template', async () => {
-    mockFsAccess.mockResolvedValue(undefined);
     mockFsReadFile.mockResolvedValue('MACHINE_ID=placeholder\nNODE_ENV=development\n');
     mockFsWriteFile.mockResolvedValue(undefined);
     mockFsUnlink.mockResolvedValue(undefined);
@@ -1216,14 +1355,14 @@ describe('generateEnvFile', () => {
   });
 
   it('skips in dry-run', async () => {
-    mockFsAccess.mockResolvedValue(undefined);
+    mockFsReadFile.mockResolvedValue('MACHINE_ID=placeholder\nNODE_ENV=development\n');
     const result = await generateEnvFile(makeConfig({ dryRun: true }));
     expect(result.status).toBe('skipped');
     expect(result.message).toContain('dry-run');
   });
 
   it('throws when template is missing', async () => {
-    mockFsAccess.mockRejectedValue(new Error('ENOENT'));
+    mockFsReadFile.mockRejectedValue(new Error('ENOENT'));
     await expect(generateEnvFile(makeConfig())).rejects.toThrow(ProvisionError);
     await expect(generateEnvFile(makeConfig())).rejects.toThrow('Environment template not found');
   });
@@ -1232,7 +1371,6 @@ describe('generateEnvFile', () => {
     const originalEnv = process.env.MACHINE_ID;
     process.env.MACHINE_ID = 'env-machine-id';
     try {
-      mockFsAccess.mockResolvedValue(undefined);
       mockFsReadFile.mockResolvedValue('MACHINE_ID=placeholder\nNODE_ENV=development\n');
       mockFsWriteFile.mockResolvedValue(undefined);
       mockFsUnlink.mockResolvedValue(undefined);
@@ -1256,7 +1394,6 @@ describe('generateEnvFile', () => {
     delete process.env.MACHINE_ID;
     mockOsHostname.mockReturnValue('my-host');
     try {
-      mockFsAccess.mockResolvedValue(undefined);
       mockFsReadFile.mockResolvedValue('MACHINE_ID=placeholder\nNODE_ENV=development\n');
       mockFsWriteFile.mockResolvedValue(undefined);
       mockFsUnlink.mockResolvedValue(undefined);
@@ -1273,8 +1410,23 @@ describe('generateEnvFile', () => {
     }
   });
 
+  it('reads the env template directly without a preflight access check', async () => {
+    mockFsReadFile.mockResolvedValue('MACHINE_ID=placeholder\nNODE_ENV=development\n');
+    mockFsWriteFile.mockResolvedValue(undefined);
+    mockFsUnlink.mockResolvedValue(undefined);
+    setupExecFile({
+      'sudo cp': '',
+      'sudo chmod': '',
+    });
+
+    const result = await generateEnvFile(makeConfig());
+
+    expect(result.status).toBe('success');
+    expect(mockFsAccess).not.toHaveBeenCalled();
+  });
+
   it('uses correct step name', async () => {
-    mockFsAccess.mockResolvedValue(undefined);
+    mockFsReadFile.mockResolvedValue('MACHINE_ID=placeholder\nNODE_ENV=development\n');
     const result = await generateEnvFile(makeConfig({ dryRun: true }));
     expect(result.name).toBe('generate-env-file');
   });
