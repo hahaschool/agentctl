@@ -1754,11 +1754,11 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [ ] Fix TOCTOU race conditions in `scripts/provision-target.ts` (3 locations)
 - [ ] Fix insecure temp file creation in `scripts/provision-target.ts` (4 locations) and `scripts/deploy.ts`
 
-### 32.2 Machine ID → Hostname Resolution — P1
+### 32.2 Machine ID → Hostname Resolution — Delivered
 
-- [ ] Replace raw machine UUID with hostname in `SessionsPage.tsx`
-- [ ] Replace raw machine UUID with hostname in `AgentsPage.tsx`
-- [ ] Replace raw machine UUID with hostname in `RuntimeSessionPanel.tsx`
+- [x] Replace raw machine UUID with hostname in `SessionsPage.tsx` (PR #370)
+- [x] Replace raw machine UUID with hostname in `AgentsPage.tsx` (PR #370)
+- [x] `RuntimeSessionPanel.tsx` already resolved hostnames correctly — no changes needed
 
 ### 32.3 CI Stability — Delivered
 
@@ -1774,7 +1774,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
 | **P0** | CodeQL Scripts Alerts | 32.1 | 🔧 In progress — Codex agent working |
-| **P1** | Machine ID → Hostname | 32.2 | 🔧 In progress — subagent working |
+| **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 pinned brace-expansion <5 |
 | **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend) and #368 (frontend) on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, Config tab on session detail page |
 | **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, `e5f07913` hardened the early `rc_session` bookkeeping, and `bf899eb0` plus PR #361 now keep heartbeat refresh on live progress updates covered on current `main` |
