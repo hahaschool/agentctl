@@ -1766,6 +1766,64 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ---
 
+## 33. Mesh Architecture — Multi-Master Offline-First Sync
+
+> Transform agentctl from hub-spoke to full mesh: every machine (EC2, Mac Mini, laptop) runs a complete CP + Worker, operates independently offline, and syncs via application-layer change tracking over Tailscale HTTP.
+
+**Fleet:** EC2 (always-on), Mac Mini (always-on), Laptop (intermittent)
+**Sync model:** Append-only data auto-merges, mutable config uses vector clocks with user-resolved conflicts
+**Transport:** Tailscale + HTTP API, adaptive poll frequency (30s for always-on, catch-up on reconnect)
+
+**Spec (P1):** `docs/superpowers/specs/2026-03-30-mesh-p1-change-log-vector-clock-design.md`
+**Plan (P1):** `docs/superpowers/plans/2026-03-30-mesh-p1-change-log-vector-clock.md`
+
+### 33.1 Change Log + Vector Clock (P1) — P0
+
+- [ ] Node identity (`~/.agentctl/node-id` + `sync_nodes` table)
+- [ ] `sync_change_log` table with vector clocks
+- [ ] `sync_conflicts` table for mutable-table conflicts
+- [ ] Generic PG trigger function `sync_capture_change()` on 16 synced tables
+- [ ] Sync-apply guard (`app.sync_applying` session variable)
+- [ ] `VectorClock` type + `vcDominates`/`vcMerge`/`vcCompare` utilities
+- [ ] Change log cleanup job (30-day retention)
+
+### 33.2 Sync Protocol + API (P2) — P0
+
+- [ ] `GET /sync/changes?since=<cursor>&limit=N` — pull changes from a peer
+- [ ] `POST /sync/push` — push local changes to a peer
+- [ ] Append-only auto-merge logic (deduplicate by PK)
+- [ ] Mutable conflict detection + `sync_conflicts` insertion
+- [ ] Sync scheduler: 30s poll for always-on peers, catch-up on reconnect
+
+### 33.3 Conflict Resolution UI (P3) — P1
+
+- [ ] `/conflicts` page listing pending conflicts
+- [ ] Side-by-side diff view (local vs remote payload)
+- [ ] Resolve actions: keep local / keep remote / manual merge
+- [ ] Conflict count badge in sidebar navigation
+
+### 33.4 Node Discovery + Peer Registry (P4) — P0
+
+- [ ] `sync_nodes` peer management (add/remove/status)
+- [ ] Tailscale-based auto-discovery (query `tailscale status --json`)
+- [ ] Peer health check + adaptive poll interval
+- [ ] Settings page: "Mesh Peers" section
+
+### 33.5 Unified CP + Worker per Machine (P5) — P1
+
+- [ ] Single process mode: CP + Worker in one Fastify instance
+- [ ] Local PostgreSQL bootstrap script (per-machine)
+- [ ] PM2 ecosystem config for mesh node (`ecosystem.mesh.config.cjs`)
+- [ ] `scripts/setup-mesh-node.sh` — one-command new machine setup
+
+### 33.6 Tailscale ACL Update (P6) — P1
+
+- [ ] Open peer-to-peer `:8080` between all mesh nodes
+- [ ] Update `infra/tailscale/acl-policy.json` with `tag:mesh-node`
+- [ ] Documentation for ACL deployment
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -1773,6 +1831,12 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
+| **P0** | Mesh: Change Log + Vector Clock | 33.1 | 🔧 Spec approved, plan in progress |
+| **P0** | Mesh: Sync Protocol + API | 33.2 | Planned — depends on 33.1 |
+| **P0** | Mesh: Node Discovery + Peer Registry | 33.4 | Planned — parallelizable with 33.1 |
+| **P1** | Mesh: Conflict Resolution UI | 33.3 | Planned — depends on 33.2 |
+| **P1** | Mesh: Unified CP + Worker | 33.5 | Planned — depends on 33.4 |
+| **P1** | Mesh: Tailscale ACL Update | 33.6 | Planned — depends on 33.4 |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 fixed all 8 alerts (log injection, TOCTOU, temp files) |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 pinned brace-expansion <5 |
