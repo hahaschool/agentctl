@@ -1744,6 +1744,28 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ---
 
+## 32. Frontend Gaps & UX Polish
+
+> Surface backend capabilities that lack frontend support and fix UX issues.
+
+### 32.1 CodeQL Scripts Alerts — P0
+
+- [ ] Fix log injection in `scripts/agentctl.ts:1342`
+- [ ] Fix TOCTOU race conditions in `scripts/provision-target.ts` (3 locations)
+- [ ] Fix insecure temp file creation in `scripts/provision-target.ts` (4 locations) and `scripts/deploy.ts`
+
+### 32.2 Machine ID → Hostname Resolution — P1
+
+- [ ] Replace raw machine UUID with hostname in `SessionsPage.tsx`
+- [ ] Replace raw machine UUID with hostname in `AgentsPage.tsx`
+- [ ] Replace raw machine UUID with hostname in `RuntimeSessionPanel.tsx`
+
+### 32.3 CI Stability — Delivered
+
+- [x] Fix brace-expansion v5 ESM-only override breaking CJS require() in test runners (PR #369)
+
+---
+
 ## Active Priorities
 
 | Priority | Item | Section | Status |
@@ -1751,6 +1773,9 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
+| **P0** | CodeQL Scripts Alerts | 32.1 | 🔧 In progress — Codex agent working |
+| **P1** | Machine ID → Hostname | 32.2 | 🔧 In progress — subagent working |
+| **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 pinned brace-expansion <5 |
 | **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend) and #368 (frontend) on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, Config tab on session detail page |
 | **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, `e5f07913` hardened the early `rc_session` bookkeeping, and `bf899eb0` plus PR #361 now keep heartbeat refresh on live progress updates covered on current `main` |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
