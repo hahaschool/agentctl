@@ -722,7 +722,9 @@ export const syncConflicts = pgTable(
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('idx_conflicts_pending').on(table.status)],
+  // NOTE: The migration creates idx_conflicts_pending as a partial index (WHERE status = 'pending').
+  // Drizzle schema API does not support partial index predicates, so no index is declared here.
+  // The actual index comes from the SQL migration only.
 );
 ```
 
@@ -1151,10 +1153,12 @@ After the existing task worker creation block (~line 270, after `createTaskWorke
 
 ```typescript
     // --- Sync maintenance (separate queue, not on the agent-tasks type) ---
+    let syncQueue: Awaited<ReturnType<typeof registerSyncMaintenanceJobs>> | null = null;
+    let syncWorker: ReturnType<typeof createSyncMaintenanceWorker> | null = null;
     if (db && redisConnection) {
       try {
-        await registerSyncMaintenanceJobs(redisConnection);
-        createSyncMaintenanceWorker({ connection: redisConnection, db, logger });
+        syncQueue = await registerSyncMaintenanceJobs(redisConnection);
+        syncWorker = createSyncMaintenanceWorker({ connection: redisConnection, db, logger });
         logger.info('Sync maintenance worker started (daily cleanup at 3 AM)');
       } catch (err) {
         logger.debug({ err }, 'Sync maintenance worker not started (sync tables may not exist)');
@@ -1163,6 +1167,13 @@ After the existing task worker creation block (~line 270, after `createTaskWorke
 ```
 
 The variable is `redisConnection` (line 204 of `index.ts`) — the same `IORedis` instance passed to `createTaskQueue(redisConnection)` at line 403.
+
+Then add cleanup to the graceful shutdown handler (after `taskQueue.close()` at ~line 473):
+
+```typescript
+      if (syncWorker) await syncWorker.close();
+      if (syncQueue) await syncQueue.close();
+```
 
 - [ ] **Step 4: Build**
 
@@ -1193,20 +1204,41 @@ Create `packages/control-plane/src/sync/change-log.integration.test.ts`:
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { createDb, type Database } from '../db/connection.js';
+import { createDb } from '../db/connection.js';
+import { extractRows } from '../db/index.js';
 
 /**
  * Integration tests for the sync_change_log trigger.
  * Requires a real PostgreSQL database with migration drizzle/0021 applied.
  * Set DATABASE_URL env var to run. Skipped if not available.
+ *
+ * NOTE: agents.machine_id is FK to machines.id, so we create a test machine first.
+ * agents table columns: id, machine_id, name, type, runtime, status, project_path, ...
+ * (NO 'trigger' column — that's the RunTrigger type in agent_runs, not agents.)
  */
 const DATABASE_URL = process.env.DATABASE_URL;
 
+type ChangeLogRow = {
+  node_id: string;
+  table_name: string;
+  row_id: string;
+  operation: string;
+  vclock: Record<string, number>;
+  payload: Record<string, unknown> | null;
+};
+
 describe.skipIf(!DATABASE_URL)('sync_change_log trigger (integration)', () => {
   let db: ReturnType<typeof createDb>;
+  const testMachineId = 'test-machine-sync';
 
-  beforeAll(() => {
+  beforeAll(async () => {
     db = createDb(DATABASE_URL!, { sessionNodeId: 'node-test-0001' });
+    // Create a test machine so agents FK constraint is satisfied
+    await db.execute(
+      sql`INSERT INTO machines (id, hostname, tailscale_ip, os, arch)
+          VALUES (${testMachineId}, 'test-host', '100.64.0.99', 'darwin', 'arm64')
+          ON CONFLICT (id) DO NOTHING`,
+    );
   });
 
   beforeEach(async () => {
@@ -1215,78 +1247,78 @@ describe.skipIf(!DATABASE_URL)('sync_change_log trigger (integration)', () => {
 
   afterAll(async () => {
     await db.execute(sql`DELETE FROM sync_change_log WHERE node_id = 'node-test-0001'`);
+    await db.execute(sql`DELETE FROM agents WHERE machine_id = ${testMachineId}`);
+    await db.execute(sql`DELETE FROM machines WHERE id = ${testMachineId}`);
   });
 
   it('captures INSERT into agents table with correct vclock', async () => {
     const agentId = crypto.randomUUID();
     await db.execute(
-      sql`INSERT INTO agents (id, machine_id, name, type, trigger, status, project_path)
-          VALUES (${agentId}, 'test-machine', 'test-agent', 'autonomous', 'manual', 'registered', '/tmp/test')`,
+      sql`INSERT INTO agents (id, machine_id, name, type, status, project_path)
+          VALUES (${agentId}, ${testMachineId}, 'test-agent', 'autonomous', 'registered', '/tmp/test')`,
     );
 
-    const rows = await db.execute(
+    const result = await db.execute(
       sql`SELECT node_id, table_name, row_id, operation, vclock, payload
           FROM sync_change_log
           WHERE table_name = 'agents' AND row_id = ${agentId}
           ORDER BY id DESC LIMIT 1`,
     );
+    const rows = extractRows<ChangeLogRow>(result);
 
     expect(rows.length).toBeGreaterThanOrEqual(1);
-    const log = rows[0];
-    expect(log.node_id).toBe('node-test-0001');
-    expect(log.operation).toBe('INSERT');
-    expect(log.vclock).toEqual({ 'node-test-0001': 1 });
-    expect(log.payload).toBeDefined();
+    expect(rows[0].node_id).toBe('node-test-0001');
+    expect(rows[0].operation).toBe('INSERT');
+    expect(rows[0].vclock).toEqual({ 'node-test-0001': 1 });
+    expect(rows[0].payload).toBeDefined();
 
-    // Cleanup
     await db.execute(sql`DELETE FROM agents WHERE id = ${agentId}`);
   });
 
   it('increments vclock on UPDATE', async () => {
     const agentId = crypto.randomUUID();
     await db.execute(
-      sql`INSERT INTO agents (id, machine_id, name, type, trigger, status, project_path)
-          VALUES (${agentId}, 'test-machine', 'test-agent', 'autonomous', 'manual', 'registered', '/tmp/test')`,
+      sql`INSERT INTO agents (id, machine_id, name, type, status, project_path)
+          VALUES (${agentId}, ${testMachineId}, 'test-agent', 'autonomous', 'registered', '/tmp/test')`,
     );
     await db.execute(
       sql`UPDATE agents SET name = 'updated-agent' WHERE id = ${agentId}`,
     );
 
-    const rows = await db.execute(
+    const result = await db.execute(
       sql`SELECT operation, vclock FROM sync_change_log
           WHERE table_name = 'agents' AND row_id = ${agentId}
           ORDER BY id ASC`,
     );
+    const rows = extractRows<ChangeLogRow>(result);
 
     expect(rows.length).toBe(2);
     expect(rows[0].vclock).toEqual({ 'node-test-0001': 1 });
     expect(rows[1].vclock).toEqual({ 'node-test-0001': 2 });
     expect(rows[1].operation).toBe('UPDATE');
 
-    // Cleanup
     await db.execute(sql`DELETE FROM agents WHERE id = ${agentId}`);
   });
 
   it('skips change log when sync_applying is true', async () => {
     const agentId = crypto.randomUUID();
 
-    // Run inside a transaction so SET LOCAL scoping works
     await db.transaction(async (tx) => {
       await tx.execute(sql.raw(`SET LOCAL app.sync_applying = 'true'`));
       await tx.execute(
-        sql`INSERT INTO agents (id, machine_id, name, type, trigger, status, project_path)
-            VALUES (${agentId}, 'test-machine', 'sync-guard-test', 'autonomous', 'manual', 'registered', '/tmp/test')`,
+        sql`INSERT INTO agents (id, machine_id, name, type, status, project_path)
+            VALUES (${agentId}, ${testMachineId}, 'sync-guard-test', 'autonomous', 'registered', '/tmp/test')`,
       );
     });
 
-    const rows = await db.execute(
+    const result = await db.execute(
       sql`SELECT * FROM sync_change_log
           WHERE table_name = 'agents' AND row_id = ${agentId} AND node_id = 'node-test-0001'`,
     );
+    const rows = extractRows<ChangeLogRow>(result);
 
     expect(rows.length).toBe(0);
 
-    // Cleanup
     await db.execute(sql`DELETE FROM agents WHERE id = ${agentId}`);
   });
 });
