@@ -80,6 +80,57 @@ function yellow(text: string): string {
   return `${ANSI.yellow}${text}${ANSI.reset}`;
 }
 
+export function sanitizeLogValue(value: unknown): string {
+  const input = String(value);
+  let sanitized = '';
+  let previousWasSpace = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const code = input.charCodeAt(i);
+
+    if (code === 0x1b) {
+      if (input[i + 1] === '[') {
+        i += 2;
+        while (i < input.length) {
+          const sequenceCode = input.charCodeAt(i);
+          if (sequenceCode >= 0x40 && sequenceCode <= 0x7e) {
+            break;
+          }
+          i++;
+        }
+      }
+      if (!previousWasSpace && sanitized.length > 0) {
+        sanitized += ' ';
+        previousWasSpace = true;
+      }
+      continue;
+    }
+
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+      if (!previousWasSpace && sanitized.length > 0) {
+        sanitized += ' ';
+        previousWasSpace = true;
+      }
+      continue;
+    }
+
+    const character = input[i];
+    if (character === ' ') {
+      if (!previousWasSpace) {
+        sanitized += ' ';
+        previousWasSpace = true;
+      }
+      continue;
+    }
+
+    sanitized += character;
+    previousWasSpace = false;
+  }
+
+  sanitized = sanitized.trim();
+  return sanitized || 'unknown';
+}
+
 // ---------------------------------------------------------------------------
 // Error handling
 // ---------------------------------------------------------------------------
@@ -1339,7 +1390,7 @@ async function cmdTakeover(sessionId: string, yolo: boolean, observer: boolean):
 
         case 'error':
           process.stdout.write('\r\n');
-          console.error(red(`Remote error: ${String(msg.message ?? 'unknown')}`));
+          console.error(red(`Remote error: ${sanitizeLogValue(msg.message ?? 'unknown')}`));
           break;
 
         case 'presence':

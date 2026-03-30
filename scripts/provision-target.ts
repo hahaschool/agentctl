@@ -60,6 +60,33 @@ const ENV_FILE_MODE = 0o600;
 const COMPOSE_FILE_MODE = 0o644;
 const DIR_MODE = 0o755;
 
+type SecureTempFile = {
+  path: string;
+  cleanup: () => Promise<void>;
+};
+
+async function writeSecureTempFile(
+  prefix: string,
+  fileName: string,
+  content: string,
+  options?: { mode?: number },
+): Promise<SecureTempFile> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  const tempFilePath = path.join(tempDir, fileName);
+  await fs.writeFile(tempFilePath, content, options?.mode === undefined ? undefined : options);
+
+  return {
+    path: tempFilePath,
+    cleanup: async () => {
+      try {
+        await fs.rm(tempDir, { force: true, recursive: true });
+      } catch {
+        // best-effort cleanup
+      }
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Error type
 // ---------------------------------------------------------------------------
@@ -420,22 +447,18 @@ export async function configureSudoDocker(
   }
 
   // Write via a temp file + visudo check
-  const tmpSudoers = `/tmp/agentctl-sudoers-${Date.now()}`;
-  await fs.writeFile(tmpSudoers, sudoersContent, { mode: 0o440 });
+  const tmpSudoers = await writeSecureTempFile('agentctl-sudoers-', 'sudoers', sudoersContent, {
+    mode: 0o440,
+  });
 
   try {
     // Validate with visudo
-    await run('sudo', ['visudo', '-c', '-f', tmpSudoers]);
+    await run('sudo', ['visudo', '-c', '-f', tmpSudoers.path]);
     // Move into place
-    await run('sudo', ['cp', tmpSudoers, sudoersPath]);
+    await run('sudo', ['cp', tmpSudoers.path, sudoersPath]);
     await run('sudo', ['chmod', '440', sudoersPath]);
   } finally {
-    // Clean up temp file
-    try {
-      await fs.unlink(tmpSudoers);
-    } catch {
-      // best-effort cleanup
-    }
+    await tmpSudoers.cleanup();
   }
 
   // Also add user to docker group for non-sudo docker access
@@ -538,16 +561,17 @@ export async function installDocker(
 
     // Download the GPG key
     const gpgKey = await run('curl', ['-fsSL', 'https://download.docker.com/linux/ubuntu/gpg']);
-    const tmpKeyFile = `/tmp/docker-gpg-${Date.now()}.key`;
-    await fs.writeFile(tmpKeyFile, gpgKey);
+    const tmpKeyFile = await writeSecureTempFile('docker-gpg-', 'docker.gpg.key', gpgKey);
     try {
-      await run('sudo', ['gpg', '--dearmor', '-o', '/etc/apt/keyrings/docker.gpg', tmpKeyFile]);
+      await run('sudo', [
+        'gpg',
+        '--dearmor',
+        '-o',
+        '/etc/apt/keyrings/docker.gpg',
+        tmpKeyFile.path,
+      ]);
     } finally {
-      try {
-        await fs.unlink(tmpKeyFile);
-      } catch {
-        // best-effort
-      }
+      await tmpKeyFile.cleanup();
     }
 
     // Determine distro for repo URL (use ubuntu for ubuntu derivatives, debian otherwise)
@@ -555,13 +579,11 @@ export async function installDocker(
     const codename = await run('lsb_release', ['-cs']);
 
     const repoLine = `deb [arch=${os.arch() === 'x64' ? 'amd64' : os.arch()} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${distro} ${codename} stable`;
-    const tmpRepoFile = `/tmp/docker-repo-${Date.now()}`;
-    await fs.writeFile(tmpRepoFile, `${repoLine}\n`);
-    await run('sudo', ['cp', tmpRepoFile, '/etc/apt/sources.list.d/docker.list']);
+    const tmpRepoFile = await writeSecureTempFile('docker-repo-', 'docker.list', `${repoLine}\n`);
     try {
-      await fs.unlink(tmpRepoFile);
-    } catch {
-      // best-effort
+      await run('sudo', ['cp', tmpRepoFile.path, '/etc/apt/sources.list.d/docker.list']);
+    } finally {
+      await tmpRepoFile.cleanup();
     }
 
     // Install Docker Engine + Compose plugin
@@ -673,16 +695,13 @@ export async function installTailscale(
 
   // Tailscale provides a cross-platform install script
   const installScript = await run('curl', ['-fsSL', 'https://tailscale.com/install.sh']);
-  const tmpScript = `/tmp/tailscale-install-${Date.now()}.sh`;
-  await fs.writeFile(tmpScript, installScript, { mode: 0o755 });
+  const tmpScript = await writeSecureTempFile('tailscale-install-', 'install.sh', installScript, {
+    mode: 0o755,
+  });
   try {
-    await run('sudo', ['bash', tmpScript]);
+    await run('sudo', ['bash', tmpScript.path]);
   } finally {
-    try {
-      await fs.unlink(tmpScript);
-    } catch {
-      // best-effort
-    }
+    await tmpScript.cleanup();
   }
 
   const version = await getTailscaleVersion();
@@ -777,9 +796,9 @@ export async function copyComposeFile(config: ProvisionConfig): Promise<StepResu
   const { targetDir, composeFile, dryRun } = config;
   const stepName = 'copy-compose-file';
 
-  // Validate source exists
+  let content: string;
   try {
-    await fs.access(composeFile);
+    content = await fs.readFile(composeFile, 'utf-8');
   } catch {
     throw new ProvisionError('FILE_NOT_FOUND', `Compose file not found: ${composeFile}`, {
       composeFile,
@@ -797,18 +816,19 @@ export async function copyComposeFile(config: ProvisionConfig): Promise<StepResu
   }
 
   // Read source, write to temp, then sudo copy to target
-  const content = await fs.readFile(composeFile, 'utf-8');
-  const tmpFile = `/tmp/agentctl-compose-${Date.now()}.yml`;
-  await fs.writeFile(tmpFile, content, { mode: COMPOSE_FILE_MODE });
+  const tmpFile = await writeSecureTempFile(
+    'agentctl-compose-',
+    'docker-compose.prod.yml',
+    content,
+    {
+      mode: COMPOSE_FILE_MODE,
+    },
+  );
   try {
-    await run('sudo', ['cp', tmpFile, destPath]);
+    await run('sudo', ['cp', tmpFile.path, destPath]);
     await run('sudo', ['chmod', '644', destPath]);
   } finally {
-    try {
-      await fs.unlink(tmpFile);
-    } catch {
-      // best-effort
-    }
+    await tmpFile.cleanup();
   }
 
   return {
@@ -878,9 +898,9 @@ export async function generateEnvFile(config: ProvisionConfig): Promise<StepResu
   const { targetDir, envTemplate, dryRun } = config;
   const stepName = 'generate-env-file';
 
-  // Validate template exists
+  let template: string;
   try {
-    await fs.access(envTemplate);
+    template = await fs.readFile(envTemplate, 'utf-8');
   } catch {
     throw new ProvisionError('FILE_NOT_FOUND', `Environment template not found: ${envTemplate}`, {
       envTemplate,
@@ -898,21 +918,17 @@ export async function generateEnvFile(config: ProvisionConfig): Promise<StepResu
     };
   }
 
-  const template = await fs.readFile(envTemplate, 'utf-8');
   const envContent = generateEnvContent(template, machineId);
 
   // Write via temp file + sudo copy for proper ownership
-  const tmpFile = `/tmp/agentctl-env-${Date.now()}`;
-  await fs.writeFile(tmpFile, envContent, { mode: ENV_FILE_MODE });
+  const tmpFile = await writeSecureTempFile('agentctl-env-', '.env', envContent, {
+    mode: ENV_FILE_MODE,
+  });
   try {
-    await run('sudo', ['cp', tmpFile, destPath]);
+    await run('sudo', ['cp', tmpFile.path, destPath]);
     await run('sudo', ['chmod', '600', destPath]);
   } finally {
-    try {
-      await fs.unlink(tmpFile);
-    } catch {
-      // best-effort
-    }
+    await tmpFile.cleanup();
   }
 
   return {

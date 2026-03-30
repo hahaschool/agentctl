@@ -59,6 +59,10 @@ function yellow(text: string): string {
   return `${ANSI.yellow}${text}${ANSI.reset}`;
 }
 
+export function writeFileSyncExclusive(filePath: string, content: string, mode = 0o600): void {
+  fs.writeFileSync(filePath, content, { encoding: 'utf-8', flag: 'wx', mode });
+}
+
 // ---------------------------------------------------------------------------
 // Error handling
 // ---------------------------------------------------------------------------
@@ -356,8 +360,20 @@ async function cmdInit(isProd: boolean): Promise<void> {
       );
     }
 
-    fs.writeFileSync(ENV_FILE, envContent, 'utf-8');
-    printCheck(true, '.env file created');
+    try {
+      writeFileSyncExclusive(ENV_FILE, envContent);
+      printCheck(true, '.env file created');
+    } catch (error) {
+      if (typeof error === 'object' && error !== null && 'code' in error) {
+        const { code } = error as NodeJS.ErrnoException;
+        if (code === 'EEXIST') {
+          printCheck(true, '.env file exists', 'skipping generation');
+          console.log();
+          return;
+        }
+      }
+      throw error;
+    }
   } else {
     printCheck(true, '.env file exists', 'skipping generation');
   }

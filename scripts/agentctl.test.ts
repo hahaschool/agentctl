@@ -119,6 +119,13 @@ async function execCli(args: string[]): Promise<{ logs: string[]; errors: string
   return output;
 }
 
+async function importCliModule(args: string[] = ['help']): Promise<Record<string, unknown>> {
+  capturedOutput();
+  process.argv = ['node', 'scripts/agentctl.ts', ...args];
+  vi.resetModules();
+  return (await import('./agentctl.js')) as Record<string, unknown>;
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -2178,5 +2185,16 @@ describe('pool-stats command', () => {
     const allText = output.logs.join('\n');
     expect(allText).toContain('Worker Pool Statistics');
     expect(allText).toContain('0');
+  });
+});
+
+describe('sanitizeLogValue', () => {
+  it('strips newlines and control characters from remote log text', async () => {
+    const mod = await importCliModule();
+    const sanitizeLogValue = mod.sanitizeLogValue as (value: unknown) => string;
+
+    expect(sanitizeLogValue('first line\r\nsecond line\u001b[31m alert\t')).toBe(
+      'first line second line alert',
+    );
   });
 });
