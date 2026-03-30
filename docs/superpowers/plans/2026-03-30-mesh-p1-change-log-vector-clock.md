@@ -1,22 +1,22 @@
-# Mesh P1: Change Log + Vector Clock — Implementation Plan (v2, post-Codex review)
+# Mesh P1: Change Log + Vector Clock — Implementation Plan (v3)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add trigger-based change tracking with vector clocks to 16 synced PostgreSQL tables, establishing the foundation for multi-master mesh sync.
 
-**Architecture:** PostgreSQL triggers capture every INSERT/UPDATE/DELETE into a `sync_change_log` table with vector clock metadata. A `sync_nodes` table tracks node identity. TypeScript utilities provide vector clock comparison/merge logic. Node identity is set per-connection via `pool.on('connect')` in `connection.ts`. Advisory locks serialize concurrent vector clock increments.
+**Architecture:** PostgreSQL triggers capture every INSERT/UPDATE/DELETE into a `sync_change_log` table with vector clock metadata. A `sync_nodes` table tracks node identity. TypeScript utilities provide vector clock comparison/merge logic. Node identity is set per-connection via `pool.on('connect')` in `connection.ts`. Advisory locks serialize concurrent vector clock increments. A `withSyncApplyGuard` transaction helper is prepared for P2's remote-apply path.
 
-**Tech Stack:** PostgreSQL triggers (PL/pgSQL), Drizzle ORM (schema), TypeScript (vector clock logic), Vitest (tests)
+**Tech Stack:** PostgreSQL 14+ triggers (PL/pgSQL), Drizzle ORM (schema), TypeScript (vector clock logic), Vitest (tests), BullMQ (cleanup scheduling)
 
 **Spec:** `docs/superpowers/specs/2026-03-30-mesh-p1-change-log-vector-clock-design.md`
 
-**Codex Review:** 3 rounds, all FAILs resolved. Key fixes from review:
-- Migration in `drizzle/0021_*` (not `src/db/migrations/0005_*`)
-- Trigger PK via `TG_ARGV[0]` (not hardcoded `id`)
-- `pool.on('connect')` for `app.node_id` (not per-request hook)
-- Advisory lock for concurrent vclock safety
-- `agent_actions` gets `sync_id UUID` column (not PK change)
-- Sync-apply transaction helper documented for P2
+**Review history:** Codex (GPT 5.4 xhigh) adversarial review — 3 rounds to parity. Key fixes:
+- Migration in `drizzle/0021_*` (repo uses `drizzle/` dir, latest is `0020`)
+- Trigger PK via `TG_ARGV[0]` (`settings.key`, `memory_scopes.scope` don't have `id`)
+- `pool.on('connect')` for `app.node_id` (connection pooling makes per-request SET useless)
+- Advisory lock `pg_advisory_xact_lock(hashtextextended(...))` for concurrent vclock safety
+- `agent_actions` gets `sync_id UUID` column (its PK is `bigserial`, not globally unique)
+- Sync-apply guard is a P2 transaction helper contract, not delivered runtime behavior
 
 ---
 
@@ -41,15 +41,19 @@ describe('vcDominates', () => {
   it('returns true when a strictly dominates b', () => {
     expect(vcDominates({ n1: 3, n2: 2 }, { n1: 2, n2: 1 })).toBe(true);
   });
+
   it('returns false when b has a higher component', () => {
     expect(vcDominates({ n1: 3, n2: 1 }, { n1: 2, n2: 2 })).toBe(false);
   });
+
   it('returns false when clocks are equal', () => {
     expect(vcDominates({ n1: 2 }, { n1: 2 })).toBe(false);
   });
+
   it('returns true when a has extra keys b does not', () => {
     expect(vcDominates({ n1: 2, n2: 1 }, { n1: 1 })).toBe(true);
   });
+
   it('handles empty clocks', () => {
     expect(vcDominates({}, {})).toBe(false);
     expect(vcDominates({ n1: 1 }, {})).toBe(true);
@@ -61,9 +65,11 @@ describe('vcMerge', () => {
   it('takes element-wise max', () => {
     expect(vcMerge({ n1: 3, n2: 1 }, { n1: 1, n2: 5 })).toEqual({ n1: 3, n2: 5 });
   });
+
   it('includes keys only in one clock', () => {
     expect(vcMerge({ n1: 2 }, { n2: 3 })).toEqual({ n1: 2, n2: 3 });
   });
+
   it('merges empty clocks', () => {
     expect(vcMerge({}, { n1: 1 })).toEqual({ n1: 1 });
     expect(vcMerge({}, {})).toEqual({});
@@ -74,27 +80,32 @@ describe('vcCompare', () => {
   it('detects a_dominates', () => {
     expect(vcCompare({ n1: 3 }, { n1: 1 })).toBe('a_dominates');
   });
+
   it('detects b_dominates', () => {
     expect(vcCompare({ n1: 1 }, { n1: 3 })).toBe('b_dominates');
   });
+
   it('detects equal', () => {
     expect(vcCompare({ n1: 2, n2: 3 }, { n1: 2, n2: 3 })).toBe('equal');
     expect(vcCompare({}, {})).toBe('equal');
   });
+
   it('detects conflict (concurrent edits)', () => {
     expect(vcCompare({ n1: 3, n2: 1 }, { n1: 1, n2: 3 })).toBe('conflict');
   });
+
   it('detects conflict with disjoint keys', () => {
     expect(vcCompare({ n1: 1 }, { n2: 1 })).toBe('conflict');
   });
 });
 ```
 
-- [ ] **Step 2: Run tests — expected FAIL**
+- [ ] **Step 2: Run tests to verify they fail**
 
 Run: `cd packages/shared && pnpm vitest run src/vector-clock.test.ts`
+Expected: FAIL — `Cannot find module './vector-clock.js'`
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement vector clock utilities**
 
 Create `packages/shared/src/vector-clock.ts`:
 
@@ -102,6 +113,7 @@ Create `packages/shared/src/vector-clock.ts`:
 /** Maps nodeId → logical counter. */
 export type VectorClock = Record<string, number>;
 
+/** Returns true if a causally dominates b (a happened strictly after b). */
 export function vcDominates(a: VectorClock, b: VectorClock): boolean {
   const allKeys = new Set([...Object.keys(a), ...Object.keys(b)]);
   let dominated = false;
@@ -114,6 +126,7 @@ export function vcDominates(a: VectorClock, b: VectorClock): boolean {
   return dominated;
 }
 
+/** Merge two vector clocks (element-wise max). */
 export function vcMerge(a: VectorClock, b: VectorClock): VectorClock {
   const result: VectorClock = { ...a };
   for (const [k, v] of Object.entries(b)) {
@@ -122,6 +135,7 @@ export function vcMerge(a: VectorClock, b: VectorClock): VectorClock {
   return result;
 }
 
+/** Compare two vector clocks for causal ordering. */
 export function vcCompare(
   a: VectorClock,
   b: VectorClock,
@@ -134,22 +148,37 @@ export function vcCompare(
 }
 ```
 
-- [ ] **Step 4: Re-export**
+- [ ] **Step 4: Re-export from shared package**
 
-In `packages/shared/src/types/index.ts` add:
+In `packages/shared/src/types/index.ts`, add after the `dispatch-config.js` exports (~line 71):
+
 ```typescript
 export type { VectorClock } from '../vector-clock.js';
 ```
 
-In `packages/shared/src/index.ts` add:
+In `packages/shared/src/index.ts`, add:
+
 ```typescript
 export { vcCompare, vcDominates, vcMerge } from './vector-clock.js';
 export type { VectorClock } from './vector-clock.js';
 ```
 
-- [ ] **Step 5: Run tests — expected PASS (12 tests)**
-- [ ] **Step 6: `pnpm --filter @agentctl/shared build`**
-- [ ] **Step 7: Commit** `feat(mesh): add VectorClock type and comparison utilities`
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd packages/shared && pnpm vitest run src/vector-clock.test.ts`
+Expected: 12 tests PASS
+
+- [ ] **Step 6: Build shared**
+
+Run: `pnpm --filter @agentctl/shared build`
+Expected: clean build, no errors
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/shared/src/vector-clock.ts packages/shared/src/vector-clock.test.ts packages/shared/src/types/index.ts packages/shared/src/index.ts
+git commit -m "feat(mesh): add VectorClock type and vcDominates/vcMerge/vcCompare utilities"
+```
 
 ---
 
@@ -161,71 +190,617 @@ export type { VectorClock } from './vector-clock.js';
 
 - [ ] **Step 1: Create sync types**
 
-Create `packages/shared/src/types/sync.ts` — same as v1 plan but with these fixes:
-- `TABLE_SYNC_CONFIG` includes `sync_change_log`, `sync_nodes`, `sync_conflicts` as `'local-only'`
-- `agent_actions` stays `'append-only'` (will use `sync_id` UUID column added in Task 3)
-- `SYNCED_TABLES` count is 16 (7 append-only + 9 mutable)
+Create `packages/shared/src/types/sync.ts`:
 
-- [ ] **Step 2: Re-export from `types/index.ts`**
+```typescript
+import type { VectorClock } from '../vector-clock.js';
+
+/** Which sync strategy applies to a table. */
+export type TableSyncType = 'append-only' | 'mutable' | 'local-only';
+
+/** A single change log entry as stored in sync_change_log. */
+export type ChangeLogEntry = {
+  id: number;
+  nodeId: string;
+  tableName: string;
+  rowId: string;
+  operation: 'INSERT' | 'UPDATE' | 'DELETE';
+  payload: Record<string, unknown> | null;
+  vclock: VectorClock;
+  createdAt: Date;
+  synced: boolean;
+};
+
+/** A detected conflict between local and remote changes. */
+export type SyncConflict = {
+  id: string;
+  tableName: string;
+  rowId: string;
+  localVclock: VectorClock;
+  localPayload: Record<string, unknown> | null;
+  remoteVclock: VectorClock;
+  remotePayload: Record<string, unknown> | null;
+  remoteNodeId: string;
+  status: 'pending' | 'resolved';
+  resolution: 'local' | 'remote' | 'merged' | null;
+  resolvedAt: Date | null;
+  createdAt: Date;
+};
+
+/** A node in the mesh network. */
+export type SyncNode = {
+  id: string;
+  hostname: string;
+  tailscaleIp: string | null;
+  role: 'full' | 'worker-only';
+  lastSeen: Date | null;
+  createdAt: Date;
+};
+
+/**
+ * Classification of all tables for sync purposes.
+ *
+ * - append-only: Records are created once, never updated across nodes.
+ *   PK must be globally unique (UUID). Auto-merge by deduplication.
+ * - mutable: Records can be updated. Uses vector clocks for conflict detection.
+ * - local-only: Not synced between nodes.
+ *
+ * NOTE: agent_actions has bigserial PK (not globally unique). The trigger uses
+ * its sync_id UUID column instead. See drizzle/0021 migration.
+ */
+export const TABLE_SYNC_CONFIG: Record<string, TableSyncType> = {
+  // Append-only (7 tables)
+  agent_runs: 'append-only',
+  agent_actions: 'append-only', // trigger uses sync_id UUID, not bigserial id
+  rc_sessions: 'append-only',
+  managed_sessions: 'append-only',
+  session_handoffs: 'append-only',
+  native_import_attempts: 'append-only',
+  run_handoff_decisions: 'append-only',
+  // Mutable (9 tables)
+  agents: 'mutable',
+  machines: 'mutable',
+  api_accounts: 'mutable',
+  project_account_mappings: 'mutable',
+  settings: 'mutable', // PK = 'key' (not 'id')
+  runtime_config_revisions: 'mutable',
+  memory_scopes: 'mutable', // PK = 'scope' (not 'id')
+  memory_facts: 'mutable',
+  memory_edges: 'mutable',
+  // Local-only (not synced)
+  machine_runtime_state: 'local-only',
+  sync_change_log: 'local-only',
+  sync_nodes: 'local-only',
+  sync_conflicts: 'local-only',
+} as const;
+
+/** List of table names that have sync triggers attached (16 tables). */
+export const SYNCED_TABLES = Object.entries(TABLE_SYNC_CONFIG)
+  .filter(([, type]) => type !== 'local-only')
+  .map(([name]) => name);
+
+/**
+ * Map of table name → PK column used by the sync trigger.
+ * Most tables use 'id', but settings uses 'key', memory_scopes uses 'scope',
+ * and agent_actions uses 'sync_id' (UUID, globally unique).
+ */
+export const TABLE_PK_COLUMN: Record<string, string> = {
+  settings: 'key',
+  memory_scopes: 'scope',
+  agent_actions: 'sync_id',
+};
+
+/** Get the PK column name for a synced table. Defaults to 'id'. */
+export function getTablePkColumn(tableName: string): string {
+  return TABLE_PK_COLUMN[tableName] ?? 'id';
+}
+```
+
+- [ ] **Step 2: Re-export from types/index.ts**
+
+In `packages/shared/src/types/index.ts`, add:
+
+```typescript
+export type {
+  ChangeLogEntry,
+  SyncConflict,
+  SyncNode,
+  TableSyncType,
+} from './sync.js';
+export {
+  getTablePkColumn,
+  SYNCED_TABLES,
+  TABLE_PK_COLUMN,
+  TABLE_SYNC_CONFIG,
+} from './sync.js';
+```
+
 - [ ] **Step 3: Build shared**
-- [ ] **Step 4: Commit** `feat(mesh): add sync types — ChangeLogEntry, SyncConflict, SyncNode, TABLE_SYNC_CONFIG`
+
+Run: `pnpm --filter @agentctl/shared build`
+Expected: clean build
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/shared/src/types/sync.ts packages/shared/src/types/index.ts
+git commit -m "feat(mesh): add sync types — ChangeLogEntry, SyncConflict, SyncNode, TABLE_SYNC_CONFIG"
+```
 
 ---
 
-### Task 3: Database Schema + Migration
+### Task 3: Node Identity Module
 
 **Files:**
-- Modify: `packages/control-plane/src/db/schema.ts`
+- Create: `packages/control-plane/src/sync/node-identity.ts`
+- Create: `packages/control-plane/src/sync/node-identity.test.ts`
+
+- [ ] **Step 1: Write failing tests**
+
+Create `packages/control-plane/src/sync/node-identity.test.ts`:
+
+```typescript
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { getOrCreateNodeId } from './node-identity.js';
+
+describe('getOrCreateNodeId', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-node-id-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates a new node ID file on first call', () => {
+    const nodeId = getOrCreateNodeId(tmpDir);
+    expect(nodeId).toMatch(/^node-.+-[a-f0-9]{4}$/);
+    expect(fs.existsSync(path.join(tmpDir, 'node-id'))).toBe(true);
+  });
+
+  it('returns the same ID on subsequent calls', () => {
+    const first = getOrCreateNodeId(tmpDir);
+    const second = getOrCreateNodeId(tmpDir);
+    expect(first).toBe(second);
+  });
+
+  it('reads existing node ID from file', () => {
+    const filePath = path.join(tmpDir, 'node-id');
+    fs.writeFileSync(filePath, 'node-custom-abcd', 'utf8');
+    const nodeId = getOrCreateNodeId(tmpDir);
+    expect(nodeId).toBe('node-custom-abcd');
+  });
+
+  it('creates the directory if it does not exist', () => {
+    const nestedDir = path.join(tmpDir, 'nested', 'dir');
+    const nodeId = getOrCreateNodeId(nestedDir);
+    expect(nodeId).toMatch(/^node-.+-[a-f0-9]{4}$/);
+  });
+});
+```
+
+- [ ] **Step 2: Run tests — expected FAIL**
+
+Run: `cd packages/control-plane && pnpm vitest run src/sync/node-identity.test.ts`
+Expected: FAIL — `Cannot find module './node-identity.js'`
+
+- [ ] **Step 3: Implement node identity**
+
+Create `packages/control-plane/src/sync/node-identity.ts`:
+
+```typescript
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { sql } from 'drizzle-orm';
+
+import type { Database } from '../db/index.js';
+
+const NODE_ID_FILE = 'node-id';
+
+/**
+ * Get or create the persistent node ID for this machine.
+ * Stored at `<configDir>/node-id`.
+ * Format: `node-<hostname-prefix>-<4-hex>`
+ */
+export function getOrCreateNodeId(configDir: string): string {
+  const filePath = path.join(configDir, NODE_ID_FILE);
+
+  try {
+    const existing = fs.readFileSync(filePath, 'utf8').trim();
+    if (existing) return existing;
+  } catch {
+    // File doesn't exist — generate below
+  }
+
+  const hostPrefix =
+    os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 16) || 'unknown';
+  const suffix = crypto.randomBytes(2).toString('hex');
+  const nodeId = `node-${hostPrefix}-${suffix}`;
+
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, nodeId, 'utf8');
+
+  return nodeId;
+}
+
+/**
+ * Upsert the current node into the sync_nodes registry.
+ * Safe to call before the sync tables exist (catches errors silently).
+ */
+export async function upsertSyncNode(
+  db: Database,
+  nodeId: string,
+  tailscaleIp?: string,
+): Promise<void> {
+  const hostname = os.hostname();
+  await db.execute(
+    sql`INSERT INTO sync_nodes (id, hostname, tailscale_ip, role, last_seen)
+        VALUES (${nodeId}, ${hostname}, ${tailscaleIp ?? null}, 'full', now())
+        ON CONFLICT (id) DO UPDATE SET
+          hostname = EXCLUDED.hostname,
+          tailscale_ip = EXCLUDED.tailscale_ip,
+          last_seen = now()`,
+  );
+}
+```
+
+- [ ] **Step 4: Run tests — expected PASS (4 tests)**
+
+Run: `cd packages/control-plane && pnpm vitest run src/sync/node-identity.test.ts`
+
+- [ ] **Step 5: Build**
+
+Run: `pnpm --filter @agentctl/control-plane build`
+Expected: clean build
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/control-plane/src/sync/node-identity.ts packages/control-plane/src/sync/node-identity.test.ts
+git commit -m "feat(mesh): add node identity — getOrCreateNodeId + upsertSyncNode"
+```
+
+---
+
+### Task 4: Pool Connection Hook for Node ID
+
+**Files:**
+- Modify: `packages/control-plane/src/db/connection.ts`
+- Modify: `packages/control-plane/src/db/connection.test.ts`
+
+This is the critical integration point. `app.node_id` must be set on every physical PG connection so triggers can read it. With `pg.Pool`, session variables are per-connection, not per-request. The correct approach: `pool.on('connect')`.
+
+- [ ] **Step 1: Add `sessionNodeId` option to `CreateDbOptions`**
+
+In `packages/control-plane/src/db/connection.ts`, modify `CreateDbOptions` (line 8-17):
+
+```typescript
+export type CreateDbOptions = {
+  /** Maximum number of connections in the pool. */
+  max?: number;
+  /** Minimum number of idle connections maintained. */
+  min?: number;
+  /** Time (ms) a client can sit idle before being closed. */
+  idleTimeoutMillis?: number;
+  /** Time (ms) to wait for a connection before throwing. */
+  connectionTimeoutMillis?: number;
+  /** Mesh node ID — set as app.node_id on every new pool connection for sync triggers. */
+  sessionNodeId?: string;
+};
+```
+
+- [ ] **Step 2: Wire pool.on('connect') in createDb**
+
+Replace the `createDb` function (line 19-28):
+
+```typescript
+export function createDb(databaseUrl: string, options: CreateDbOptions = {}) {
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: options.max ?? 20,
+    min: options.min ?? 2,
+    idleTimeoutMillis: options.idleTimeoutMillis ?? 30_000,
+    connectionTimeoutMillis: options.connectionTimeoutMillis ?? 10_000,
+  });
+
+  // Set mesh node ID on every new physical connection.
+  // This allows the sync_capture_change() trigger to identify which node
+  // produced each change. Safe to call before sync tables exist.
+  if (options.sessionNodeId) {
+    const sanitized = options.sessionNodeId.replace(/'/g, "''");
+    pool.on('connect', (client: pg.PoolClient) => {
+      client.query(`SELECT set_config('app.node_id', '${sanitized}', false)`).catch(() => {
+        // Non-fatal — sync triggers will skip if app.node_id is not set
+      });
+    });
+  }
+
+  return drizzle(pool, { schema });
+}
+```
+
+- [ ] **Step 3: Add test for sessionNodeId**
+
+In `packages/control-plane/src/db/connection.test.ts`, add after the existing tests:
+
+```typescript
+describe('sessionNodeId', () => {
+  it('registers a connect listener when sessionNodeId is provided', () => {
+    createDb('postgresql://test:test@localhost/test', { sessionNodeId: 'node-test-abcd' });
+    const PoolCtor = pg.Pool as unknown as ReturnType<typeof vi.fn>;
+    const poolInstance = PoolCtor.mock.results[PoolCtor.mock.results.length - 1].value;
+    expect(poolInstance.on).toBeDefined();
+  });
+});
+```
+
+Note: The exact test shape depends on how `connection.test.ts` mocks `pg.Pool`. Read the existing test file's mock pattern and adapt. The `mockPool` object (line 7) may need `on: vi.fn()` added to it.
+
+- [ ] **Step 4: Run tests**
+
+Run: `cd packages/control-plane && pnpm vitest run src/db/connection.test.ts`
+Expected: all existing + new tests PASS
+
+- [ ] **Step 5: Build**
+
+Run: `pnpm --filter @agentctl/control-plane build`
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/control-plane/src/db/connection.ts packages/control-plane/src/db/connection.test.ts
+git commit -m "feat(mesh): set app.node_id on every pool connection via pool.on('connect')"
+```
+
+---
+
+### Task 5: Wire Node ID into Startup
+
+**Files:**
+- Modify: `packages/control-plane/src/index.ts:203-222`
+
+- [ ] **Step 1: Import node identity functions**
+
+At the top of `packages/control-plane/src/index.ts`, add:
+
+```typescript
+import { getOrCreateNodeId, upsertSyncNode } from './sync/node-identity.js';
+```
+
+- [ ] **Step 2: Generate nodeId before createDb**
+
+In the `main()` function, before the `if (DATABASE_URL)` block (~line 220), add:
+
+```typescript
+  // --- Mesh node identity ---
+  const agentctlConfigDir = process.env.AGENTCTL_CONFIG_DIR
+    ?? join(process.env.HOME ?? '/tmp', '.agentctl');
+  const nodeId = getOrCreateNodeId(agentctlConfigDir);
+  logger.info({ nodeId, configDir: agentctlConfigDir }, 'Mesh node identity initialized');
+```
+
+Note: `join` is already imported from `node:path` in this file. Verify.
+
+- [ ] **Step 3: Pass nodeId to createDb**
+
+Change the `createDb` call at line 222 from:
+
+```typescript
+    db = createDb(DATABASE_URL);
+```
+
+to:
+
+```typescript
+    db = createDb(DATABASE_URL, { sessionNodeId: nodeId });
+```
+
+- [ ] **Step 4: Upsert sync node after DB is ready**
+
+After the migration block (~line 260, after migrations run or are skipped), add:
+
+```typescript
+    // Register this mesh node in the sync_nodes table (safe if table doesn't exist yet)
+    try {
+      await upsertSyncNode(db, nodeId, process.env.TAILSCALE_IP);
+    } catch {
+      logger.debug('sync_nodes table not available yet — skipping node registration');
+    }
+```
+
+- [ ] **Step 5: Build**
+
+Run: `pnpm --filter @agentctl/control-plane build`
+Expected: clean build
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/control-plane/src/index.ts
+git commit -m "feat(mesh): wire node identity into startup — nodeId generated before createDb"
+```
+
+---
+
+### Task 6: Database Schema + Migration
+
+**Files:**
+- Modify: `packages/control-plane/src/db/schema.ts` (add 3 new table definitions + sync_id column)
 - Create: `packages/control-plane/drizzle/0021_mesh_change_log.sql`
 
-**CRITICAL: Migration goes in `drizzle/` directory (numbered 0021), NOT `src/db/migrations/`.**
+**CRITICAL:** Migration goes in `packages/control-plane/drizzle/` (the repo's real migration directory). Numbered `0021` (after latest `0020_add_mobile_push_devices.sql`). All DDL uses IF NOT EXISTS / DROP IF EXISTS for idempotent replay-on-boot.
 
-- [ ] **Step 1: Add Drizzle schema for 3 new tables** (`syncNodes`, `syncChangeLog`, `syncConflicts`) in `schema.ts`
+- [ ] **Step 1: Add Drizzle schema definitions**
 
-- [ ] **Step 2: Create migration `drizzle/0021_mesh_change_log.sql`**
+At the end of `packages/control-plane/src/db/schema.ts` (after the `settings` table ~line 376):
 
-Key differences from v1:
-- Use `DROP TRIGGER IF EXISTS ... ; CREATE TRIGGER ...` for idempotency
-- Trigger function uses `TG_ARGV[0]` for PK column name
-- Advisory lock for concurrent safety
-- Add `sync_id UUID` column to `agent_actions`
+```typescript
+// ---------------------------------------------------------------------------
+// Mesh Sync — Change log, conflict tracking, and node registry
+// ---------------------------------------------------------------------------
+
+export const syncNodes = pgTable('sync_nodes', {
+  id: text('id').primaryKey(),
+  hostname: text('hostname').notNull(),
+  tailscaleIp: text('tailscale_ip'),
+  role: text('role').notNull().default('full'),
+  lastSeen: timestamp('last_seen', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const syncChangeLog = pgTable(
+  'sync_change_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    nodeId: text('node_id').notNull(),
+    tableName: text('table_name').notNull(),
+    rowId: text('row_id').notNull(),
+    operation: text('operation').notNull(),
+    payload: jsonb('payload'),
+    vclock: jsonb('vclock').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    synced: boolean('synced').notNull().default(false),
+  },
+  (table) => [
+    index('idx_change_log_unsynced').on(table.synced, table.createdAt),
+    index('idx_change_log_table_row').on(table.tableName, table.rowId),
+  ],
+);
+
+export const syncConflicts = pgTable(
+  'sync_conflicts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tableName: text('table_name').notNull(),
+    rowId: text('row_id').notNull(),
+    localVclock: jsonb('local_vclock').notNull(),
+    localPayload: jsonb('local_payload'),
+    remoteVclock: jsonb('remote_vclock').notNull(),
+    remotePayload: jsonb('remote_payload'),
+    remoteNodeId: text('remote_node_id').notNull(),
+    status: text('status').notNull().default('pending'),
+    resolution: text('resolution'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('idx_conflicts_pending').on(table.status)],
+);
+```
+
+Also add `sync_id` to the existing `agentActions` table definition (~line 322-335). Add after `approvedBy`:
+
+```typescript
+    /** Globally unique ID for mesh sync (bigserial PK is not globally unique). */
+    syncId: uuid('sync_id').defaultRandom(),
+```
+
+- [ ] **Step 2: Create migration**
+
+Create `packages/control-plane/drizzle/0021_mesh_change_log.sql`:
 
 ```sql
 -- Mesh P1: Change log + vector clock infrastructure
+-- All DDL is idempotent (IF NOT EXISTS / DROP IF EXISTS) for replay-on-boot safety.
 
--- 1. Tables (IF NOT EXISTS for idempotency)
-CREATE TABLE IF NOT EXISTS sync_nodes ( ... );
-CREATE TABLE IF NOT EXISTS sync_change_log ( ... );
-CREATE TABLE IF NOT EXISTS sync_conflicts ( ... );
+-- ============================================================================
+-- 1. New tables
+-- ============================================================================
 
--- 2. Add sync_id to agent_actions (bigserial PK is not globally unique)
+CREATE TABLE IF NOT EXISTS sync_nodes (
+  id          TEXT PRIMARY KEY,
+  hostname    TEXT NOT NULL,
+  tailscale_ip TEXT,
+  role        TEXT NOT NULL DEFAULT 'full',
+  last_seen   TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS sync_change_log (
+  id          BIGSERIAL PRIMARY KEY,
+  node_id     TEXT NOT NULL,
+  table_name  TEXT NOT NULL,
+  row_id      TEXT NOT NULL,
+  operation   TEXT NOT NULL,
+  payload     JSONB,
+  vclock      JSONB NOT NULL DEFAULT '{}',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  synced      BOOLEAN NOT NULL DEFAULT false
+);
+
+CREATE INDEX IF NOT EXISTS idx_change_log_unsynced
+  ON sync_change_log (synced, created_at) WHERE synced = false;
+CREATE INDEX IF NOT EXISTS idx_change_log_table_row
+  ON sync_change_log (table_name, row_id);
+
+CREATE TABLE IF NOT EXISTS sync_conflicts (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  table_name      TEXT NOT NULL,
+  row_id          TEXT NOT NULL,
+  local_vclock    JSONB NOT NULL,
+  local_payload   JSONB,
+  remote_vclock   JSONB NOT NULL,
+  remote_payload  JSONB,
+  remote_node_id  TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'pending',
+  resolution      TEXT,
+  resolved_at     TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conflicts_pending
+  ON sync_conflicts (status) WHERE status = 'pending';
+
+-- ============================================================================
+-- 2. Add sync_id UUID to agent_actions (bigserial PK is not globally unique)
+-- ============================================================================
+
 ALTER TABLE agent_actions ADD COLUMN IF NOT EXISTS
   sync_id UUID NOT NULL DEFAULT gen_random_uuid();
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_actions_sync_id
   ON agent_actions (sync_id);
 
--- 3. Trigger function — reads PK column from TG_ARGV[0]
+-- ============================================================================
+-- 3. Generic trigger function
+--    Reads PK column name from TG_ARGV[0].
+--    Uses advisory lock to serialize concurrent vclock increments.
+--    Skips if app.sync_applying = 'true' (prevents loops during remote apply).
+--    Skips if app.node_id is not set (graceful degradation).
+-- ============================================================================
+
 CREATE OR REPLACE FUNCTION sync_capture_change() RETURNS trigger AS $$
 DECLARE
-  v_node_id TEXT;
-  v_pk_col TEXT;
-  v_row_id TEXT;
-  v_payload JSONB;
-  v_vclock JSONB;
+  v_node_id     TEXT;
+  v_pk_col      TEXT;
+  v_row_id      TEXT;
+  v_payload     JSONB;
+  v_vclock      JSONB;
   v_prev_vclock JSONB;
 BEGIN
+  -- Guard: skip during remote-apply to prevent infinite sync loops
   IF current_setting('app.sync_applying', true) = 'true' THEN
     RETURN COALESCE(NEW, OLD);
   END IF;
 
+  -- Guard: skip if no node identity is set (trigger is a no-op before mesh init)
   v_node_id := current_setting('app.node_id', true);
   IF v_node_id IS NULL OR v_node_id = '' THEN
     RETURN COALESCE(NEW, OLD);
   END IF;
 
-  -- PK column name passed as trigger argument
+  -- Read PK column name from trigger argument
   v_pk_col := TG_ARGV[0];
 
+  -- Extract row ID and payload using dynamic column reference
   IF TG_OP = 'DELETE' THEN
     EXECUTE format('SELECT ($1).%I::text', v_pk_col) INTO v_row_id USING OLD;
     v_payload := NULL;
@@ -234,12 +809,13 @@ BEGIN
     v_payload := to_jsonb(NEW);
   END IF;
 
-  -- Advisory lock to serialize concurrent vclock increments for the same row
+  -- Serialize concurrent vclock increments for the same logical row
   PERFORM pg_advisory_xact_lock(
     hashtextextended(TG_TABLE_NAME, 0),
     hashtextextended(v_row_id, 0)
   );
 
+  -- Read latest vector clock for this row
   SELECT vclock INTO v_prev_vclock
     FROM sync_change_log
     WHERE table_name = TG_TABLE_NAME AND row_id = v_row_id
@@ -247,12 +823,14 @@ BEGIN
 
   v_prev_vclock := COALESCE(v_prev_vclock, '{}'::jsonb);
 
+  -- Increment this node's component
   v_vclock := jsonb_set(
     v_prev_vclock,
     ARRAY[v_node_id],
     to_jsonb(COALESCE((v_prev_vclock->>v_node_id)::int, 0) + 1)
   );
 
+  -- Record the change
   INSERT INTO sync_change_log (node_id, table_name, row_id, operation, payload, vclock)
   VALUES (v_node_id, TG_TABLE_NAME, v_row_id, TG_OP, v_payload, v_vclock);
 
@@ -260,13 +838,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 4. Attach triggers (DROP + CREATE for idempotency)
--- PK column name passed as argument
+-- ============================================================================
+-- 4. Attach triggers to all 16 synced tables
+--    DROP + CREATE for idempotent replay-on-boot.
+--    PK column name is passed as the trigger argument.
+-- ============================================================================
 
--- Append-only (PK = 'id')
+-- Append-only tables (PK = 'id' unless noted)
 DROP TRIGGER IF EXISTS sync_capture ON agent_runs;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON agent_runs FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+
+DROP TRIGGER IF EXISTS sync_capture ON agent_actions;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON agent_actions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('sync_id');
 
 DROP TRIGGER IF EXISTS sync_capture ON rc_sessions;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
@@ -288,12 +873,7 @@ DROP TRIGGER IF EXISTS sync_capture ON run_handoff_decisions;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON run_handoff_decisions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 
--- agent_actions uses sync_id (not bigserial id)
-DROP TRIGGER IF EXISTS sync_capture ON agent_actions;
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON agent_actions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('sync_id');
-
--- Mutable (PK = 'id' unless noted)
+-- Mutable tables
 DROP TRIGGER IF EXISTS sync_capture ON agents;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON agents FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
@@ -310,7 +890,6 @@ DROP TRIGGER IF EXISTS sync_capture ON project_account_mappings;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON project_account_mappings FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 
--- settings PK = 'key'
 DROP TRIGGER IF EXISTS sync_capture ON settings;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON settings FOR EACH ROW EXECUTE FUNCTION sync_capture_change('key');
@@ -319,7 +898,6 @@ DROP TRIGGER IF EXISTS sync_capture ON runtime_config_revisions;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON runtime_config_revisions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 
--- memory_scopes PK = 'scope'
 DROP TRIGGER IF EXISTS sync_capture ON memory_scopes;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON memory_scopes FOR EACH ROW EXECUTE FUNCTION sync_capture_change('scope');
@@ -334,70 +912,30 @@ CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
 ```
 
 - [ ] **Step 3: Build control-plane**
-- [ ] **Step 4: Commit** `feat(mesh): add sync tables schema + trigger migration (drizzle/0021)`
+
+Run: `pnpm --filter @agentctl/control-plane build`
+Expected: clean build
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/control-plane/src/db/schema.ts packages/control-plane/drizzle/0021_mesh_change_log.sql
+git commit -m "feat(mesh): add sync tables schema + trigger migration (drizzle/0021)"
+```
 
 ---
 
-### Task 4: Node Identity + Pool Integration
-
-**Files:**
-- Create: `packages/control-plane/src/sync/node-identity.ts`
-- Create: `packages/control-plane/src/sync/node-identity.test.ts`
-- Modify: `packages/control-plane/src/db/connection.ts`
-- Modify: `packages/control-plane/src/index.ts` (pass nodeId to createDb)
-
-- [ ] **Step 1: Write tests for getOrCreateNodeId** (same as v1 — 4 tests)
-- [ ] **Step 2: Implement `getOrCreateNodeId` and `upsertSyncNode`** (same as v1)
-
-- [ ] **Step 3: Modify `createDb` to accept `sessionNodeId` option**
-
-In `packages/control-plane/src/db/connection.ts`, add to `CreateDbOptions`:
-```typescript
-/** Mesh node ID — set as app.node_id on every new pool connection for sync triggers. */
-sessionNodeId?: string;
-```
-
-In `createDb`, after pool creation:
-```typescript
-if (options.sessionNodeId) {
-  const nodeId = options.sessionNodeId.replace(/'/g, "''");
-  pool.on('connect', (client) => {
-    client.query(`SELECT set_config('app.node_id', '${nodeId}', false)`);
-  });
-}
-```
-
-- [ ] **Step 4: Wire nodeId in `index.ts` before `createDb`**
-
-In `packages/control-plane/src/index.ts`, before the `createDb` call:
-```typescript
-import { getOrCreateNodeId, upsertSyncNode } from './sync/node-identity.js';
-
-const agentctlConfigDir = process.env.AGENTCTL_CONFIG_DIR
-  ?? path.join(process.env.HOME ?? '/tmp', '.agentctl');
-const nodeId = getOrCreateNodeId(agentctlConfigDir);
-logger.info({ nodeId }, 'Mesh node identity initialized');
-```
-
-Then pass `sessionNodeId: nodeId` to the `createDb` call.
-
-After DB is created, upsert the node:
-```typescript
-try { await upsertSyncNode(db, nodeId, process.env.TAILSCALE_IP); } catch { /* sync tables may not exist */ }
-```
-
-- [ ] **Step 5: Run tests — expected PASS**
-- [ ] **Step 6: Build control-plane**
-- [ ] **Step 7: Commit** `feat(mesh): wire node identity into pool connect + startup`
-
----
-
-### Task 5: Sync-Apply Transaction Helper (for P2)
+### Task 7: Sync-Apply Transaction Helper (P2 contract)
 
 **Files:**
 - Create: `packages/control-plane/src/sync/apply-guard.ts`
+- Create: `packages/control-plane/src/sync/apply-guard.test.ts`
+
+This is a **P2 contract** — it establishes the transaction pattern that P2's remote-apply path will use. P1 does not use it at runtime.
 
 - [ ] **Step 1: Create the helper**
+
+Create `packages/control-plane/src/sync/apply-guard.ts`:
 
 ```typescript
 import { sql } from 'drizzle-orm';
@@ -406,8 +944,13 @@ import type { Database } from '../db/index.js';
 
 /**
  * Execute a function within a transaction where sync triggers are disabled.
- * Used by P2 sync protocol to apply remote changes without re-triggering capture.
- * SET LOCAL scoping ensures the guard resets at transaction end even on error.
+ *
+ * Used by P2 sync protocol to apply remote changes without re-triggering
+ * the sync_capture_change() trigger. SET LOCAL scoping ensures the guard
+ * resets at transaction end even on error.
+ *
+ * This is a P2 contract — P1 establishes the pattern, P2 implements the
+ * actual remote-apply logic inside this wrapper.
  */
 export async function withSyncApplyGuard<T>(
   db: Database,
@@ -420,40 +963,181 @@ export async function withSyncApplyGuard<T>(
 }
 ```
 
-- [ ] **Step 2: Build + commit** `feat(mesh): add withSyncApplyGuard transaction helper for P2`
+- [ ] **Step 2: Write a basic test**
 
----
+Create `packages/control-plane/src/sync/apply-guard.test.ts`:
 
-### Task 6: Cleanup Job
-
-**Files:**
-- Create: `packages/control-plane/src/sync/change-log-cleanup.ts`
-
-- [ ] **Step 1: Create cleanup function** (same logic as v1)
-- [ ] **Step 2: Register as BullMQ repeatable job**
-
-In `packages/control-plane/src/index.ts` or the scheduler setup, add:
 ```typescript
-await taskQueue.add('sync-cleanup', {}, {
-  repeat: { pattern: '0 3 * * *' }, // daily at 3 AM
-  removeOnComplete: true,
-  removeOnFail: 5,
+import { describe, expect, it, vi } from 'vitest';
+
+import { withSyncApplyGuard } from './apply-guard.js';
+
+describe('withSyncApplyGuard', () => {
+  it('calls the function within a transaction', async () => {
+    const mockExecute = vi.fn().mockResolvedValue(undefined);
+    const mockTx = { execute: mockExecute } as unknown;
+    const mockDb = {
+      transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockTx)),
+    } as unknown;
+
+    const result = await withSyncApplyGuard(
+      mockDb as Parameters<typeof withSyncApplyGuard>[0],
+      async () => 'done',
+    );
+
+    expect(result).toBe('done');
+    expect(mockExecute).toHaveBeenCalledOnce();
+  });
 });
 ```
 
-And handle in the task worker:
-```typescript
-if (job.name === 'sync-cleanup') {
-  await cleanupSyncedChanges(db, logger);
-  return;
-}
-```
+- [ ] **Step 3: Run test, build, commit**
 
-- [ ] **Step 3: Build + commit** `feat(mesh): add daily sync change log cleanup job`
+Run: `cd packages/control-plane && pnpm vitest run src/sync/apply-guard.test.ts`
+Expected: PASS
+
+```bash
+git add packages/control-plane/src/sync/apply-guard.ts packages/control-plane/src/sync/apply-guard.test.ts
+git commit -m "feat(mesh): add withSyncApplyGuard transaction helper (P2 contract)"
+```
 
 ---
 
-### Task 7: Push Branch + Create PR
+### Task 8: Change Log Cleanup Job
 
-- [ ] **Step 1: Push** `git push -u origin agent/claude/feat/mesh-p1-change-log`
-- [ ] **Step 2: Create PR** with full summary referencing spec and Codex review rounds
+**Files:**
+- Create: `packages/control-plane/src/sync/change-log-cleanup.ts`
+- Modify: `packages/control-plane/src/scheduler/task-worker.ts` (add job handler)
+- Modify: `packages/control-plane/src/index.ts` (register repeatable job)
+
+- [ ] **Step 1: Create cleanup function**
+
+Create `packages/control-plane/src/sync/change-log-cleanup.ts`:
+
+```typescript
+import { and, eq, lt, sql } from 'drizzle-orm';
+import type { Logger } from 'pino';
+
+import type { Database } from '../db/index.js';
+import { syncChangeLog } from '../db/schema.js';
+
+const DEFAULT_RETENTION_DAYS = 30;
+
+/**
+ * Delete old synced change log entries beyond the retention period.
+ * Only deletes entries where synced = true (already pulled by all peers).
+ * Returns the number of deleted rows.
+ */
+export async function cleanupSyncedChanges(
+  db: Database,
+  logger: Logger,
+  retentionDays: number = DEFAULT_RETENTION_DAYS,
+): Promise<number> {
+  const cutoff = sql`now() - ${`${retentionDays} days`}::interval`;
+
+  const result = await db
+    .delete(syncChangeLog)
+    .where(and(eq(syncChangeLog.synced, true), lt(syncChangeLog.createdAt, cutoff)))
+    .returning({ id: syncChangeLog.id });
+
+  const count = result.length;
+  if (count > 0) {
+    logger.info({ deletedCount: count, retentionDays }, 'Cleaned up old sync change log entries');
+  }
+
+  return count;
+}
+```
+
+- [ ] **Step 2: Register BullMQ repeatable job**
+
+In `packages/control-plane/src/index.ts`, after the task queue is created (search for `new Worker` or `taskQueue.add`), add:
+
+```typescript
+    // Schedule daily sync cleanup (3 AM)
+    try {
+      await taskQueue.add('sync-cleanup', {}, {
+        repeat: { pattern: '0 3 * * *' },
+        removeOnComplete: true,
+        removeOnFail: 5,
+      });
+    } catch {
+      logger.debug('Failed to register sync-cleanup repeatable job (may already exist)');
+    }
+```
+
+- [ ] **Step 3: Add job handler in task worker**
+
+In `packages/control-plane/src/scheduler/task-worker.ts`, at the beginning of the job processing function (after the `job.name === 'agent:signal'` check at ~line 173), add:
+
+```typescript
+      if (job.name === 'sync-cleanup') {
+        if (db) {
+          const { cleanupSyncedChanges } = await import('../sync/change-log-cleanup.js');
+          await cleanupSyncedChanges(db, jobLogger);
+        }
+        return;
+      }
+```
+
+Import `db` may need to be threaded from the worker setup. Check how the existing task worker accesses the database and follow the same pattern.
+
+- [ ] **Step 4: Build**
+
+Run: `pnpm --filter @agentctl/control-plane build`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/control-plane/src/sync/change-log-cleanup.ts packages/control-plane/src/scheduler/task-worker.ts packages/control-plane/src/index.ts
+git commit -m "feat(mesh): add daily sync change log cleanup job (BullMQ, 30-day retention)"
+```
+
+---
+
+### Task 9: Push Branch + Create PR
+
+- [ ] **Step 1: Final build check**
+
+```bash
+pnpm --filter @agentctl/shared build && pnpm --filter @agentctl/control-plane build
+```
+
+- [ ] **Step 2: Push branch**
+
+```bash
+git push -u origin agent/claude/feat/mesh-p1-change-log
+```
+
+- [ ] **Step 3: Create PR**
+
+```bash
+gh pr create --base main --title "feat(mesh): P1 — change log + vector clock infrastructure (§33.1)" --body "$(cat <<'EOF'
+## Summary
+Foundation for mesh multi-master sync (§33.1):
+
+- **Vector clock utilities** — `vcDominates`, `vcMerge`, `vcCompare` (12 unit tests)
+- **Sync types** — `ChangeLogEntry`, `SyncConflict`, `SyncNode`, `TABLE_SYNC_CONFIG`, `TABLE_PK_COLUMN`
+- **Node identity** — persistent `~/.agentctl/node-id`, `pool.on('connect')` for `app.node_id` (4 unit tests)
+- **Database schema** — `sync_change_log`, `sync_conflicts`, `sync_nodes` + `agent_actions.sync_id`
+- **PG trigger** — `sync_capture_change()` with TG_ARGV[0] PK, advisory lock, sync-apply guard
+- **16 trigger attachments** — 7 append-only + 9 mutable (handles `settings.key`, `memory_scopes.scope`, `agent_actions.sync_id`)
+- **Sync-apply helper** — `withSyncApplyGuard()` transaction contract for P2
+- **Cleanup job** — daily BullMQ job, 30-day retention
+
+Spec: docs/superpowers/specs/2026-03-30-mesh-p1-change-log-vector-clock-design.md
+Plan: docs/superpowers/plans/2026-03-30-mesh-p1-change-log-vector-clock.md
+Review: 3 rounds Codex (GPT 5.4 xhigh) adversarial review to parity
+
+## Test plan
+- [ ] 12 vector clock unit tests pass
+- [ ] 4 node identity unit tests pass
+- [ ] 1 apply-guard unit test passes
+- [ ] `pnpm --filter @agentctl/shared build` clean
+- [ ] `pnpm --filter @agentctl/control-plane build` clean
+- [ ] Migration runs cleanly on dev DB
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
+```
