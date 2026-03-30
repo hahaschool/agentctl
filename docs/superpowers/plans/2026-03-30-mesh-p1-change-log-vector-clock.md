@@ -1249,6 +1249,8 @@ describe.skipIf(!DATABASE_URL)('sync_change_log trigger (integration)', () => {
     await db.execute(sql`DELETE FROM sync_change_log WHERE node_id = 'node-test-0001'`);
     await db.execute(sql`DELETE FROM agents WHERE machine_id = ${testMachineId}`);
     await db.execute(sql`DELETE FROM machines WHERE id = ${testMachineId}`);
+    // Close the pool to prevent Vitest from hanging on open handles
+    await (db as unknown as { $client: { end: () => Promise<void> } }).$client.end();
   });
 
   it('captures INSERT into agents table with correct vclock', async () => {
