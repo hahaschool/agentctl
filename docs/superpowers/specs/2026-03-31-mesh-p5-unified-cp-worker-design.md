@@ -1,4 +1,4 @@
-# Mesh P5: Unified CP + Worker per Machine — Design Spec (v2)
+# Mesh P5: Unified CP + Worker per Machine — Design Spec (v3)
 
 **Date:** 2026-03-31 (revised after Codex cross-review)
 **Parent:** §33 Mesh Architecture
@@ -71,10 +71,9 @@ TAILSCALE_IP=$TS_IP
 NODE_ENV=production
 EOF
 
-# 6. Run migrations (use the CP's built-in migration runner)
-DATABASE_URL="postgresql://$(whoami)@127.0.0.1:5432/$DBNAME" \
-  node packages/control-plane/dist/index.js --migrate-only 2>/dev/null || \
-  echo "Run 'pnpm build && pm2 start' to apply migrations on first boot"
+# 6. Migrations run automatically on first CP startup (index.ts reads drizzle/ dir).
+# Just start the CP and it will apply all migrations. SKIP_MIGRATIONS=true to skip.
+echo "Migrations will run automatically on first CP boot."
 
 # 7. Install PM2 config
 echo "Run: pm2 start infra/pm2/ecosystem.mesh.config.cjs"

@@ -15,7 +15,7 @@ This spec defines the **change log** and **vector clock** infrastructure that al
 
 1. Track all data mutations across 15 synced tables via PostgreSQL triggers
 2. Assign each mutation a vector clock for causal ordering and conflict detection
-3. Establish node identity (persistent `nodeId` per machine)
+3. Establish node identity (reuse existing `machineId`)
 4. Classify tables into append-only (auto-merge) vs mutable (conflict-detect)
 5. Prevent sync-apply loops (remote writes don't re-trigger change capture)
 
@@ -49,8 +49,6 @@ CREATE TABLE sync_nodes (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
-
-**Application startup:** On boot, the CP reads `MACHINE_ID` (or generates from hostname). Sets the PostgreSQL session variable `app.node_id` to this value on every pool connection.
 
 **Application startup:** On boot, CP reads `MACHINE_ID` env var (or derives from hostname). This value is set as `app.node_id` on every pool connection via `pool.on('connect')` so the trigger can read it.
 
@@ -123,7 +121,7 @@ CREATE INDEX idx_conflicts_pending ON sync_conflicts (status) WHERE status = 'pe
 ### Type definition (TypeScript)
 
 ```typescript
-/** Maps nodeId → logical counter */
+/** Maps machineId → logical counter */
 export type VectorClock = Record<string, number>;
 
 /** Returns true if a causally dominates b (a happened-after b) */
@@ -182,6 +180,7 @@ One generic trigger function for all synced tables:
 CREATE OR REPLACE FUNCTION sync_capture_change() RETURNS trigger AS $$
 DECLARE
   v_node_id TEXT;
+  v_pk_col TEXT;
   v_row_id TEXT;
   v_payload JSONB;
   v_vclock JSONB;
@@ -328,21 +327,23 @@ DELETE FROM sync_change_log
 
 | File | Change |
 |------|--------|
-| `packages/shared/src/types/vector-clock.ts` | New: `VectorClock` type, `vcDominates`, `vcMerge`, `vcCompare` |
+| `packages/shared/src/vector-clock.ts` | New: `VectorClock` type, `vcDominates`, `vcMerge`, `vcCompare` |
 | `packages/shared/src/vector-clock.test.ts` | New: unit tests for all VC operations |
-| `packages/shared/src/types/sync.ts` | New: `ChangeLogEntry`, `SyncConflict`, `SyncNode`, `TableSyncType` |
+| `packages/shared/src/types/sync.ts` | New: `ChangeLogEntry`, `SyncConflict`, `SyncNode`, `TABLE_SYNC_CONFIG`, `TABLE_PK_COLUMN` |
 | `packages/shared/src/types/index.ts` | Re-export new types |
-| `packages/control-plane/src/db/schema.ts` | Add `syncChangeLog`, `syncConflicts`, `syncNodes` tables |
-| `packages/control-plane/src/db/migrations/0005_mesh_change_log.sql` | Migration: tables + trigger function + all 16 trigger attachments |
-| `packages/control-plane/src/sync/node-identity.ts` | New: `getOrCreateNodeId()`, `setSessionNodeId()` |
-| `packages/control-plane/src/sync/node-identity.test.ts` | New: unit tests |
-| `packages/control-plane/src/api/server.ts` | Call `setSessionNodeId()` on Fastify `onRequest` hook |
+| `packages/control-plane/src/db/schema.ts` | Add `syncChangeLog`, `syncConflicts`, `syncNodes` tables + `agent_actions.sync_id` |
+| `packages/control-plane/drizzle/0021_mesh_change_log.sql` | Migration: 3 tables + trigger function + 15 trigger attachments |
+| `packages/control-plane/src/db/connection.ts` | Add `sessionNodeId` option, `pool.on('connect')` hook |
+| `packages/control-plane/src/index.ts` | Pass `machineId` to `createDb`, upsert sync node on startup |
+| `packages/control-plane/src/sync/apply-guard.ts` | New: `withSyncApplyGuard()` transaction helper (P2 contract) |
+| `packages/control-plane/src/sync/change-log-cleanup.ts` | New: daily cleanup job |
 
 ## 10. Testing
 
-- **Unit:** `vcDominates`, `vcMerge`, `vcCompare` — exhaustive cases including empty clocks, single-node, multi-node, equal, dominates, conflict
-- **Unit:** `getOrCreateNodeId` — creates file on first call, reads from file on second call
-- **Integration:** Write to `agents` table → verify `sync_change_log` entry created with correct node_id, table_name, row_id, operation, payload, vclock
-- **Integration:** Write twice → verify vclock increments correctly
-- **Integration:** Set `app.sync_applying = 'true'` → write → verify NO change_log entry created
-- **Integration:** Concurrent edits from two different node_ids → verify vcCompare returns 'conflict'
+- **Unit:** `vcDominates`, `vcMerge`, `vcCompare` — exhaustive cases (12 tests)
+- **Unit:** Pool connection `sessionNodeId` — connect listener registration + set_config call
+- **Unit:** `withSyncApplyGuard` — transaction wrapper
+- **Integration:** INSERT into `agents` → verify `sync_change_log` entry with correct machineId, vclock `{machineId: 1}`
+- **Integration:** UPDATE same row → verify vclock increments to `{machineId: 2}`
+- **Integration:** `SET LOCAL app.sync_applying = 'true'` inside transaction → verify NO change_log entry
+- **Integration:** Verify `settings` trigger uses `key` as row_id (non-`id` PK)

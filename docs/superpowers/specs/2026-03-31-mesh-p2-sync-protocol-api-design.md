@@ -1,4 +1,4 @@
-# Mesh P2: Sync Protocol + API — Design Spec (v2)
+# Mesh P2: Sync Protocol + API — Design Spec (v3)
 
 **Date:** 2026-03-31 (revised after Codex cross-review)
 **Parent:** §33 Mesh Architecture
@@ -21,7 +21,7 @@
 | **Mutable** | `agents`, `machines`, `agent_runs`, `rc_sessions`, `managed_sessions`, `project_account_mappings`, `settings`, `runtime_config_revisions`, `memory_scopes`, `memory_facts`, `memory_edges` | 11 |
 | **Local-only** | `machine_runtime_state`, `api_accounts`, `sync_change_log`, `sync_nodes`, `sync_conflicts`, `sync_peer_cursors` | 6 |
 
-**Total synced: 15** (4 append-only + 11 mutable). Changed from P1's 16 because `api_accounts` moved to local-only.
+**Total synced: 15** (4 append-only + 11 mutable). `api_accounts` is local-only (encrypted credentials don't auto-replicate).
 
 ---
 

@@ -1,4 +1,4 @@
-# Mesh P6: Tailscale ACL Update — Design Spec (v2)
+# Mesh P6: Tailscale ACL Update — Design Spec (v3)
 
 **Date:** 2026-03-31 (revised after Codex cross-review)
 **Parent:** §33 Mesh Architecture

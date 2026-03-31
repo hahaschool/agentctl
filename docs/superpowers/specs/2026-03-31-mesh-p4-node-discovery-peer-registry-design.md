@@ -1,4 +1,4 @@
-# Mesh P4: Node Discovery + Peer Registry — Design Spec (v2)
+# Mesh P4: Node Discovery + Peer Registry — Design Spec (v3)
 
 **Date:** 2026-03-31 (revised after Codex cross-review)
 **Parent:** §33 Mesh Architecture
@@ -7,7 +7,7 @@
 
 ## Key Design Decisions (from cross-review)
 
-1. **Unified identity:** `machineId` (already used everywhere) IS the node identity for sync. No separate `nodeId`. `sync_nodes.id = machines.id`. P1's `getOrCreateNodeId` returns `machineId` from env/hostname.
+1. **Unified identity:** `machineId` (already used everywhere) IS the node identity for sync. No separate `nodeId`. `sync_nodes.id = machines.id`. P1's `getMachineId` returns `machineId` from env/hostname.
 2. **Directional cursors:** Per-peer-pair cursor table `sync_peer_cursors` replaces single `sync_cursor` column.
 3. **Peer authentication:** Signed request envelope using dispatch signing keys (Ed25519). Peer public keys stored in `sync_nodes`.
 4. **Health endpoint exposes machineId:** `/health` response includes `machineId` so P4 discovery can resolve hostnames to IDs.
@@ -92,7 +92,7 @@ Accounts can be manually configured per-node via the Settings UI. A future P7 co
 
 ## 7. API Endpoints
 
-Same as v1: `GET/POST/DELETE /api/sync/peers`, `POST /:nodeId/ping`.
+Same as v1: `GET/POST/DELETE /api/sync/peers`, `POST /:machineId/ping`.
 
 ## 8. File Changes
 
