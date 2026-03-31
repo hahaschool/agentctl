@@ -616,7 +616,7 @@ Expected: clean build
 
 ```bash
 git add packages/control-plane/src/index.ts
-git commit -m "feat(mesh): wire node identity into startup — nodeId generated before createDb"
+git commit -m "feat(mesh): wire machine identity into startup — machineId passed to createDb"
 ```
 
 ---
@@ -1326,7 +1326,7 @@ Foundation for mesh multi-master sync (§33.1):
 
 - **Vector clock utilities** — `vcDominates`, `vcMerge`, `vcCompare` (12 unit tests)
 - **Sync types** — `ChangeLogEntry`, `SyncConflict`, `SyncNode`, `TABLE_SYNC_CONFIG`, `TABLE_PK_COLUMN`
-- **Node identity** — persistent `~/.agentctl/node-id`, `pool.on('connect')` for `app.node_id` (4 unit tests)
+- **Machine identity** — `getMachineId()` uses MACHINE_ID env, `pool.on('connect')` for `app.node_id` (3 unit tests)
 - **Database schema** — `sync_change_log`, `sync_conflicts`, `sync_nodes` + `agent_actions.sync_id`
 - **PG trigger** — `sync_capture_change()` with TG_ARGV[0] PK, advisory lock, sync-apply guard
 - **15 trigger attachments** — 4 append-only + 11 mutable (handles `settings.key`, `memory_scopes.scope`, `agent_actions.sync_id`)
@@ -1339,7 +1339,7 @@ Review: 3 rounds Codex (GPT 5.4 xhigh) adversarial review to parity
 
 ## Test plan
 - [ ] 12 vector clock unit tests pass
-- [ ] 4 node identity unit tests pass
+- [ ] 3 machine identity unit tests pass
 - [ ] 1 apply-guard unit test passes
 - [ ] `pnpm --filter @agentctl/shared build` clean
 - [ ] 3 pool connection tests pass (connect listener, no listener, set_config call)

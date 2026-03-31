@@ -371,6 +371,26 @@ describe('computeNextInterval', () => {
 
 ---
 
+### Task 5b: Peer Auth Foundation
+
+**Note on auth ownership:** P4 creates `peer-auth.ts` with the signing/verification primitives (reusing dispatch-signing Ed25519). P2 creates `sync-auth.ts` which wraps these primitives into HTTP middleware for sync routes. This split follows the spec: P4 establishes the auth infrastructure, P2 applies it to the sync protocol.
+
+**Files:**
+- Create: `packages/control-plane/src/sync/peer-auth.ts`
+
+- [ ] **Step 1: Create peer auth primitives**
+
+```typescript
+// createPeerSignedHeader(machineId, method, path, body, secretKey) → header string
+// verifyPeerSignature(header, method, path, body, knownPeers) → { valid, machineId }
+// Reuses Ed25519 from @agentctl/shared/crypto/dispatch-signing
+// Nonce replay: in-memory LRU Set (10,000 cap, 60s window)
+```
+
+- [ ] **Step 2: Build + commit**
+
+---
+
 ### Task 6: Wire into Startup + Frontend
 
 - [ ] **Step 1: Start discovery + health loops in index.ts** (with cleanup in shutdown handler)

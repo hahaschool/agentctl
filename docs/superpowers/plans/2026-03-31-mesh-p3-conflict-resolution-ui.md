@@ -46,10 +46,20 @@ For DELETE conflicts (one side's payload is null):
 // In resolve handler, after applying:
 const mergedVclock = vcMerge(conflict.localVclock, conflict.remoteVclock);
 await withSyncApplyGuard(db, async (tx) => {
-  // Apply chosen payload (if 'remote' or 'merged')
-  if (resolution !== 'local' && payload) {
+  // Apply chosen payload
+  if (resolution === 'local' && conflict.localPayload === null) {
+    // "Keep Local" where local side deleted → apply DELETE
+    const pkCol = getTablePkColumn(conflict.tableName);
+    await tx.execute(sql`DELETE FROM ${sql.identifier(conflict.tableName)} WHERE ${sql.identifier(pkCol)} = ${conflict.rowId}`);
+  } else if (resolution !== 'local' && payload === null) {
+    // "Keep Remote" where remote side deleted → apply DELETE
+    const pkCol = getTablePkColumn(conflict.tableName);
+    await tx.execute(sql`DELETE FROM ${sql.identifier(conflict.tableName)} WHERE ${sql.identifier(pkCol)} = ${conflict.rowId}`);
+  } else if (resolution !== 'local' && payload) {
+    // "Keep Remote" or "Merged" with actual payload → UPSERT
     await tx.execute(buildUpsertFromPayload(conflict.tableName, payload));
   }
+  // "Keep Local" with non-null local payload → no data change needed
   // Write provenance entry with merged vclock
   await tx.execute(sql`INSERT INTO sync_change_log
     (node_id, table_name, row_id, operation, payload, vclock)

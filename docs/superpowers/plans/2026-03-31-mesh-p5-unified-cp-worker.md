@@ -74,17 +74,22 @@ if (localMachineId && agent.machineId !== localMachineId) {
 
 - [ ] **Step 5: Force dispatch to localhost in task worker**
 
-In `task-worker.ts` (~line 425), after resolving the machine's Tailscale IP for the dispatch URL, add:
-
+In `task-worker.ts` (~line 425), the current dispatch URL is built as:
 ```typescript
-// In mesh mode (local Redis), dispatch to localhost worker, not remote IP
-const localMachineId = process.env.MACHINE_ID;
-if (localMachineId && machine.id === localMachineId) {
-  dispatchUrl = `http://127.0.0.1:${workerPort}`;
-}
+const dispatchUrl = `http://${machine.tailscaleIp ?? machine.hostname}:${workerPort}/api/agents/${agentId}/start`;
 ```
 
-This ensures local agents dispatch to the co-located worker, not via Tailscale IP.
+Add a localhost override for local agents:
+
+```typescript
+const localMachineId = process.env.MACHINE_ID;
+const dispatchHost = (localMachineId && machine.id === localMachineId)
+  ? '127.0.0.1'  // Mesh mode: dispatch to co-located worker
+  : (machine.tailscaleIp ?? machine.hostname);
+const dispatchUrl = `http://${dispatchHost}:${workerPort}/api/agents/${agentId}/start`;
+```
+
+This ensures local agents dispatch to the co-located worker via localhost, not via Tailscale IP round-trip.
 
 - [ ] **Step 6: Guard scheduler routes**
 
@@ -102,29 +107,28 @@ if (localMachineId && agent.machineId !== localMachineId) {
 
 - [ ] **Step 7: Pass machineId context to repeatable job manager**
 
-In `packages/control-plane/src/scheduler/repeatable-jobs.ts`, add a `machineId` option:
+In `packages/control-plane/src/scheduler/repeatable-jobs.ts`, the repo uses a `createRepeatableJobManager()` factory function (not a class constructor). Add `machineId` to the factory options:
 
 ```typescript
-export class RepeatableJobManager {
-  private readonly machineId: string | null;
+// In the factory function options type, add:
+machineId?: string;
 
-  constructor(opts: { queue: Queue; registry: DbAgentRegistry; logger: Logger; machineId?: string }) {
-    this.machineId = opts.machineId ?? null;
-    // ... existing constructor
-  }
-
-  async syncJobs(): Promise<void> {
-    const allAgents = await this.registry.listAgents();
-    // Only create jobs for local agents
-    const agents = this.machineId
-      ? allAgents.filter(a => a.machineId === this.machineId)
-      : allAgents;
-    // ... rest of sync logic
-  }
-}
+// In the syncJobs() method, filter agents:
+const allAgents = await registry.listAgents();
+const agents = machineId
+  ? allAgents.filter(a => a.machineId === machineId)
+  : allAgents;
+// Only create cron/heartbeat jobs for these filtered agents
 ```
 
-Wire `machineId: process.env.MACHINE_ID` when constructing RepeatableJobManager in `index.ts`.
+In `index.ts`, pass `machineId` when calling `createRepeatableJobManager()`:
+
+```typescript
+const repeatableJobs = createRepeatableJobManager({
+  // ... existing opts ...
+  machineId,  // from getMachineId() earlier in startup
+});
+```
 
 - [ ] **Step 8: Create .env.mesh.template and QUICKSTART-MESH.md**
 
