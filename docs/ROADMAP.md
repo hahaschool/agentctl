@@ -1768,77 +1768,105 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ## 33. Mesh Architecture — Multi-Master Offline-First Sync
 
-> Transform agentctl from hub-spoke to full mesh: every machine (EC2, Mac Mini, laptop) runs a complete CP + Worker, operates independently offline, and syncs via application-layer change tracking over Tailscale HTTP.
+> Transform agentctl from hub-spoke to full mesh: every machine (EC2, Mac Mini, laptop) runs a complete CP + Worker with local PG + Redis, operates independently offline, and syncs via pull-based change tracking over Tailscale HTTP.
 
 **Fleet:** EC2 (always-on), Mac Mini (always-on), Laptop (intermittent)
-**Sync model:** Append-only data auto-merges, mutable config uses vector clocks with user-resolved conflicts
-**Transport:** Tailscale + HTTP API, adaptive poll frequency (30s for always-on, catch-up on reconnect)
-
-**Spec (P1):** `docs/superpowers/specs/2026-03-30-mesh-p1-change-log-vector-clock-design.md`
-**Plan (P1):** `docs/superpowers/plans/2026-03-30-mesh-p1-change-log-vector-clock.md`
+**Identity:** Unified `machineId` (same as worker registration — no separate nodeId)
+**Sync model:** 4 append-only tables (auto-merge by PK dedup) + 11 mutable tables (vector clock conflict detection). `api_accounts` is local-only (encrypted credentials don't auto-replicate). Total: 15 synced tables.
+**Transport:** Tailscale + HTTP API, pull-based, adaptive poll (30s for always-on, catch-up on reconnect)
+**Auth:** Ed25519 signed request envelopes (reuses dispatch signing), nonce replay prevention
+**Review:** All 6 specs (v3) + 6 plans passed Codex (GPT 5.4 xhigh) adversarial review (6 rounds)
 
 ### 33.1 Change Log + Vector Clock (P1) — P0
 
-- [ ] Node identity (`~/.agentctl/node-id` + `sync_nodes` table)
-- [ ] `sync_change_log` table with vector clocks
+**Spec:** `docs/superpowers/specs/2026-03-30-mesh-p1-change-log-vector-clock-design.md` (v3)
+**Plan:** `docs/superpowers/plans/2026-03-30-mesh-p1-change-log-vector-clock.md` (v4.2, 5 rounds review)
+
+- [ ] Machine identity via `getMachineId()` (uses `MACHINE_ID` env, same as worker registration)
+- [ ] `sync_change_log` table with JSONB vector clocks
 - [ ] `sync_conflicts` table for mutable-table conflicts
-- [ ] Generic PG trigger function `sync_capture_change()` on 16 synced tables
-- [ ] Sync-apply guard (`app.sync_applying` session variable)
-- [ ] `VectorClock` type + `vcDominates`/`vcMerge`/`vcCompare` utilities
-- [ ] Change log cleanup job (30-day retention)
+- [ ] `sync_nodes` table (PK = machineId) for peer registry
+- [ ] Generic PG trigger `sync_capture_change()` with `TG_ARGV[0]` PK column on 15 synced tables
+- [ ] Advisory lock `pg_advisory_xact_lock(hashtext(table:row)::bigint)` for concurrent vclock safety
+- [ ] `agent_actions.sync_id` UUID column (bigserial PK is not globally unique)
+- [ ] `pool.on('connect')` sets `app.node_id` per physical connection (not per-request)
+- [ ] `withSyncApplyGuard()` transaction helper for P2 remote-apply path
+- [ ] `VectorClock` type + `vcDominates`/`vcMerge`/`vcCompare` utilities (12 unit tests)
+- [ ] Sync maintenance queue with daily cleanup job (30-day retention for synced entries)
 
 ### 33.2 Sync Protocol + API (P2) — P0
 
-**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p2-sync-protocol-api-design.md`
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p2-sync-protocol-api-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p2-sync-protocol-api.md`
+**Depends on:** P1 + P4
 
+- [ ] Sync auth middleware (`X-Sync-Auth` header, Ed25519 signed envelope with nonce replay LRU)
 - [ ] `GET /api/sync/changes?since=<cursor>&limit=500` — pull changes from a peer
-- [ ] `POST /api/sync/ack` — acknowledge cursor to mark entries synced
-- [ ] Append-only auto-merge (PK dedup, INSERT via withSyncApplyGuard)
-- [ ] Mutable conflict detection (vcCompare → sync_conflicts insertion)
-- [ ] Per-peer sync loop with adaptive interval (30s default, backoff on failure)
-- [ ] Catch-up on reconnect (immediate full sync when peer transitions to reachable)
+- [ ] `POST /api/sync/ack` — acknowledge cursor, update `sync_peer_cursors.acked_cursor`
+- [ ] Append-only apply: PK dedup check → INSERT via `withSyncApplyGuard`
+- [ ] Mutable apply: advisory lock inside transaction → `vcCompare(remote, local)` → apply/skip/conflict
+- [ ] DELETE handling for mutable tables (vclock comparison same as update)
+- [ ] Per-peer sync loop with cursor from `sync_peer_cursors.pulled_cursor`
+- [ ] Batch failure rule: cursor only advances to last successfully applied change
+- [ ] `markSyncedEntries()`: mark entries synced when ALL peers have ACKed past them
+- [ ] Catch-up on reconnect (immediate sync when peer transitions unreachable → reachable)
+- [ ] Verify `TABLE_SYNC_CONFIG` alignment (4 append-only + 11 mutable, api_accounts local-only)
 
 ### 33.3 Conflict Resolution UI (P3) — P1
 
-**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p3-conflict-resolution-ui-design.md`
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p3-conflict-resolution-ui-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p3-conflict-resolution-ui.md`
+**Depends on:** P2
 
-- [ ] `/conflicts` page with filter by table/peer/status
-- [ ] Side-by-side JSON diff view (local vs remote payload)
-- [ ] Resolve actions: keep local / keep remote / manual merge
-- [ ] Conflict count badge in sidebar navigation
-- [ ] Resolution flow: apply remote payload via withSyncApplyGuard + merge vclocks
+- [ ] Conflict resolution API: `GET /api/sync/conflicts` (filter by table/peer/status), `PUT /:id/resolve`
+- [ ] Convergence-safe resolve: every resolution writes merged vclock (`vcMerge`) to `sync_change_log`
+- [ ] Payload selection: `local` → localPayload, `remote` → remotePayload, `merged` → user body
+- [ ] DELETE conflicts: "Keep Deleted" / "Restore" actions when one payload is null
+- [ ] `/conflicts` page with list view showing both node IDs, table, row, timestamp
+- [ ] Side-by-side JSON diff with field-level highlighting (`ConflictDiffView` component)
+- [ ] Conflict count badge in sidebar navigation (polled every 60s)
 
 ### 33.4 Node Discovery + Peer Registry (P4) — P0
 
-**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p4-node-discovery-peer-registry-design.md`
-**Plan:** `docs/superpowers/plans/2026-03-31-mesh-p4-node-discovery-peer-registry.md`
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p4-node-discovery-peer-registry-design.md` (v3)
+**Plan:** `docs/superpowers/plans/2026-03-31-mesh-p4-node-discovery-peer-registry.md` (v2)
+**Parallelizable with:** P1
 
-- [ ] Extend sync_nodes with sync_url, sync_cursor, sync_status, sync_interval_ms, is_self
-- [ ] Tailscale auto-discovery via `tailscale status --json` (additive, 60s interval)
-- [ ] Per-peer health check with adaptive interval (30s → 5min on failure)
-- [ ] REST API: `GET/POST/DELETE /api/sync/peers`, `POST /:nodeId/ping`
-- [ ] Mesh Peers section on Machines page
+- [ ] Extend `sync_nodes` with `sync_url`, `sync_status`, `sync_interval_ms`, `is_self`, `public_key`
+- [ ] Add `sync_peer_cursors` table (bidirectional: `pulled_cursor` + `acked_cursor` per peer pair)
+- [ ] `/health` endpoint exposes `machineId` + `nodePublicKey` (threaded via `CreateServerOptions`)
+- [ ] Tailscale auto-discovery: `tailscale status --json` → `/health` to resolve hostname → machineId
+- [ ] Peer auth foundation: `peer-auth.ts` with Ed25519 signing/verification (reuses dispatch signing)
+- [ ] Per-peer health check with adaptive interval (30s default → 5min backoff on failure)
+- [ ] REST API: `GET/POST/DELETE /api/sync/peers`, `POST /:machineId/ping`
+- [ ] Mesh Peers section on Machines page with status indicators and ping/remove actions
 
 ### 33.5 Unified CP + Worker per Machine (P5) — P1
 
-**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p5-unified-cp-worker-design.md`
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p5-unified-cp-worker-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p5-unified-cp-worker.md`
+**Depends on:** P4
 
-- [ ] `packages/mesh-node/` — unified entry point (imports CP + Worker)
-- [ ] `scripts/setup-mesh-node.sh` — one-command bootstrap (PG + Redis + migrations + node-id)
-- [ ] `infra/pm2/ecosystem.mesh.config.cjs` — mesh node PM2 config
-- [ ] `docs/QUICKSTART-MESH.md` — setup guide
+- [ ] Machine-scoped task worker: skip jobs for agents where `machineId !== localMachineId`
+- [ ] Machine-scoped run reaper: only reap runs for local agents (JOIN to agents.machine_id)
+- [ ] Machine-scoped repeatable jobs: `createRepeatableJobManager()` filters by machineId
+- [ ] Machine-scoped audit scheduler: filter audit jobs to local agents
+- [ ] Agent start route guard: reject remote starts with `AGENT_ON_DIFFERENT_NODE` error
+- [ ] Dispatch to localhost: force `127.0.0.1:${workerPort}` for local agent dispatch
+- [ ] `scripts/setup-mesh-node.sh` — bootstrap (PG + Redis + .env.mesh + first boot auto-migration)
+- [ ] `infra/pm2/ecosystem.mesh.config.cjs` — mesh node PM2 config (loads .env.mesh)
+- [ ] `.env.mesh.template` + `docs/QUICKSTART-MESH.md`
 
 ### 33.6 Tailscale ACL Update (P6) — P1
 
-**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p6-tailscale-acl-update-design.md`
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p6-tailscale-acl-update-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p6-tailscale-acl-update.md`
+**Depends on:** P4
 
-- [ ] Add `tag:mesh-node` and peer-to-peer `:8080` ACL rule
-- [ ] Update `infra/tailscale/acl-policy.json`
-- [ ] Document ACL deployment procedure
+- [ ] Add `tag:mesh-node` tag owner + peer-to-peer `:8080` ACL rule
+- [ ] Mesh nodes triple-tagged: `tag:mesh-node` + `tag:control` + `tag:worker`
+- [ ] ACL tests embedded in `acl-policy.json` (5 test cases per repo convention)
+- [ ] Document mesh tagging procedure in `infra/tailscale/README.md`
 
 ---
 
@@ -1849,12 +1877,12 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
-| **P0** | Mesh: Change Log + Vector Clock | 33.1 | 🔧 Plan v4.2 approved (5 rounds Codex review), ready to implement |
-| **P0** | Mesh: Sync Protocol + API | 33.2 | 📋 Spec v3 + plan written — depends on 33.1+33.4 |
-| **P0** | Mesh: Node Discovery + Peer Registry | 33.4 | 📋 Spec v3 + plan v2 written — parallelizable with 33.1 |
-| **P1** | Mesh: Conflict Resolution UI | 33.3 | 📋 Spec v3 + plan written — depends on 33.2 |
-| **P1** | Mesh: Unified CP + Worker | 33.5 | 📋 Spec v3 + plan written — depends on 33.4 |
-| **P1** | Mesh: Tailscale ACL Update | 33.6 | 📋 Spec v3 + plan written — depends on 33.4 |
+| **P0** | Mesh: Change Log + Vector Clock | 33.1 | ✅ Plan v4.2 — Codex parity (5 rounds). Ready to implement. |
+| **P0** | Mesh: Node Discovery + Peer Registry | 33.4 | ✅ Plan v2 — Codex parity. Parallelizable with 33.1. |
+| **P0** | Mesh: Sync Protocol + API | 33.2 | ✅ Plan — Codex parity. Depends on 33.1 + 33.4. |
+| **P1** | Mesh: Conflict Resolution UI | 33.3 | ✅ Plan — Codex parity. Depends on 33.2. |
+| **P1** | Mesh: Unified CP + Worker | 33.5 | ✅ Plan — Codex parity. Depends on 33.4. |
+| **P1** | Mesh: Tailscale ACL Update | 33.6 | ✅ Plan — Codex parity. Depends on 33.4. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 fixed all 8 alerts (log injection, TOCTOU, temp files) |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 pinned brace-expansion <5 |
