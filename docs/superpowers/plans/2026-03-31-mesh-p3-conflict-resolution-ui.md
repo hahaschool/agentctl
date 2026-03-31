@@ -60,11 +60,17 @@ await withSyncApplyGuard(db, async (tx) => {
     await tx.execute(buildUpsertFromPayload(conflict.tableName, payload));
   }
   // "Keep Local" with non-null local payload → no data change needed
-  // Write provenance entry with merged vclock
+  // Write provenance entry with merged vclock.
+  // Payload depends on resolution: 'local' uses localPayload, 'remote' uses remotePayload,
+  // 'merged' uses the user-provided payload from the request body.
+  const chosenPayload = resolution === 'local' ? conflict.localPayload
+    : resolution === 'remote' ? conflict.remotePayload
+    : payload; // 'merged' — user-provided
+  const op = chosenPayload === null ? 'DELETE' : 'UPDATE';
   await tx.execute(sql`INSERT INTO sync_change_log
     (node_id, table_name, row_id, operation, payload, vclock)
     VALUES (${selfMachineId}, ${conflict.tableName}, ${conflict.rowId},
-            'UPDATE', ${JSON.stringify(payload)}::jsonb,
+            ${op}, ${chosenPayload ? JSON.stringify(chosenPayload) : null}::jsonb,
             ${JSON.stringify(mergedVclock)}::jsonb)`);
 });
 ```

@@ -130,6 +130,10 @@ const repeatableJobs = createRepeatableJobManager({
 });
 ```
 
+The manager's `addCronJob()`, `addHeartbeatJob()` methods should check `agent.machineId === machineId` before creating jobs. If the agent belongs to a different node, skip silently.
+
+**Also:** `packages/control-plane/src/audit/audit-scheduler.ts` creates repeatable jobs through the manager. The same machineId filter applies — audit jobs should only be created for local agents. Pass `machineId` to the audit scheduler constructor and filter there.
+
 - [ ] **Step 8: Create .env.mesh.template and QUICKSTART-MESH.md**
 
 Create `.env.mesh.template` (copy of the template in setup-mesh-node.sh output).
