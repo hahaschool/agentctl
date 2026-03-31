@@ -1329,7 +1329,7 @@ Foundation for mesh multi-master sync (§33.1):
 - **Node identity** — persistent `~/.agentctl/node-id`, `pool.on('connect')` for `app.node_id` (4 unit tests)
 - **Database schema** — `sync_change_log`, `sync_conflicts`, `sync_nodes` + `agent_actions.sync_id`
 - **PG trigger** — `sync_capture_change()` with TG_ARGV[0] PK, advisory lock, sync-apply guard
-- **16 trigger attachments** — 7 append-only + 9 mutable (handles `settings.key`, `memory_scopes.scope`, `agent_actions.sync_id`)
+- **15 trigger attachments** — 4 append-only + 11 mutable (handles `settings.key`, `memory_scopes.scope`, `agent_actions.sync_id`)
 - **Sync-apply helper** — `withSyncApplyGuard()` transaction contract for P2
 - **Cleanup job** — daily BullMQ job, 30-day retention
 

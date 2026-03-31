@@ -75,8 +75,8 @@ await withSyncApplyGuard(db, async (tx) => {
 - Modify: `packages/web/src/lib/queries.ts`
 
 - [ ] **Step 1: Add API methods** — listConflicts, getConflict, resolveConflict
-- [ ] **Step 2: Create ConflictsPage** — list view with status/table filters
-- [ ] **Step 3: Create ConflictDiffView** — side-by-side JSON with field-level diff highlighting. For delete conflicts, show "Record deleted on {node}" message.
+- [ ] **Step 2: Create ConflictsPage** — list view with filters for status, table, AND peer (remoteNodeId). Each row shows: table name, row ID, local node ID, remote node ID, timestamp, status. For delete conflicts (where one payload is null), show a "Deleted" badge instead of the missing payload.
+- [ ] **Step 3: Create ConflictDiffView** — side-by-side JSON with field-level diff highlighting. For delete conflicts (payload is null on one side): show "Record deleted on {nodeName}" instead of JSON. Actions change to "Keep Deleted" / "Restore" instead of "Keep Local" / "Keep Remote".
 - [ ] **Step 4: Add sidebar badge** — pending conflict count, polled every 60s
 - [ ] **Step 5: Build all, commit**
 

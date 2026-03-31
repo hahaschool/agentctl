@@ -72,7 +72,66 @@ if (localMachineId && agent.machineId !== localMachineId) {
 }
 ```
 
-- [ ] **Step 5: Build + commit**
+- [ ] **Step 5: Force dispatch to localhost in task worker**
+
+In `task-worker.ts` (~line 425), after resolving the machine's Tailscale IP for the dispatch URL, add:
+
+```typescript
+// In mesh mode (local Redis), dispatch to localhost worker, not remote IP
+const localMachineId = process.env.MACHINE_ID;
+if (localMachineId && machine.id === localMachineId) {
+  dispatchUrl = `http://127.0.0.1:${workerPort}`;
+}
+```
+
+This ensures local agents dispatch to the co-located worker, not via Tailscale IP.
+
+- [ ] **Step 6: Guard scheduler routes**
+
+In `packages/control-plane/src/api/routes/scheduler.ts`, the POST route that creates repeatable jobs should reject jobs for non-local agents:
+
+```typescript
+const localMachineId = process.env.MACHINE_ID;
+if (localMachineId && agent.machineId !== localMachineId) {
+  return reply.code(409).send({
+    error: 'AGENT_ON_DIFFERENT_NODE',
+    message: `Schedule agent '${agent.name}' from its home node '${agent.machineId}'.`,
+  });
+}
+```
+
+- [ ] **Step 7: Pass machineId context to repeatable job manager**
+
+In `packages/control-plane/src/scheduler/repeatable-jobs.ts`, add a `machineId` option:
+
+```typescript
+export class RepeatableJobManager {
+  private readonly machineId: string | null;
+
+  constructor(opts: { queue: Queue; registry: DbAgentRegistry; logger: Logger; machineId?: string }) {
+    this.machineId = opts.machineId ?? null;
+    // ... existing constructor
+  }
+
+  async syncJobs(): Promise<void> {
+    const allAgents = await this.registry.listAgents();
+    // Only create jobs for local agents
+    const agents = this.machineId
+      ? allAgents.filter(a => a.machineId === this.machineId)
+      : allAgents;
+    // ... rest of sync logic
+  }
+}
+```
+
+Wire `machineId: process.env.MACHINE_ID` when constructing RepeatableJobManager in `index.ts`.
+
+- [ ] **Step 8: Create .env.mesh.template and QUICKSTART-MESH.md**
+
+Create `.env.mesh.template` (copy of the template in setup-mesh-node.sh output).
+Create `docs/QUICKSTART-MESH.md` with step-by-step setup guide.
+
+- [ ] **Step 9: Build + commit**
 
 ---
 

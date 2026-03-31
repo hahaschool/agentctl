@@ -207,19 +207,26 @@ export async function syncFromPeer(opts: {
   let applied = 0, conflicts = 0, errors = 0;
 
   while (true) {
-    const authHeader = createSyncAuthHeader({
-      machineId: selfMachineId, method: 'GET',
-      path: `/api/sync/changes?since=${cursor}&limit=500`,
-      body: '', secretKey,
-    });
+    let data: { changes: ChangeLogEntry[]; cursor: number; hasMore: boolean };
+    try {
+      const authHeader = createSyncAuthHeader({
+        machineId: selfMachineId, method: 'GET',
+        path: `/api/sync/changes?since=${cursor}&limit=500`,
+        body: '', secretKey,
+      });
 
-    const resp = await fetch(`${peer.syncUrl}/api/sync/changes?since=${cursor}&limit=500`, {
-      headers: { 'X-Sync-Auth': authHeader.header },
-      signal: AbortSignal.timeout(30_000),
-    });
+      const resp = await fetch(`${peer.syncUrl}/api/sync/changes?since=${cursor}&limit=500`, {
+        headers: { 'X-Sync-Auth': authHeader.header },
+        signal: AbortSignal.timeout(30_000),
+      });
 
-    if (!resp.ok) { errors++; break; }
-    const data = await resp.json() as { changes: ChangeLogEntry[]; cursor: number; hasMore: boolean };
+      if (!resp.ok) { errors++; break; }
+      data = await resp.json() as typeof data;
+    } catch (err) {
+      logger.warn({ err: err instanceof Error ? err.message : String(err), peerId: peer.id }, 'Sync pull failed (network/timeout)');
+      errors++;
+      break; // Retry on next interval
+    }
 
     let batchFailed = false;
     let lastSuccessId = cursor; // track last successfully processed change
@@ -241,12 +248,21 @@ export async function syncFromPeer(opts: {
     cursor = batchFailed ? lastSuccessId : data.cursor;
     await updatePulledCursor(db, selfMachineId, peer.id, cursor);
 
-    // ACK to peer
-    await fetch(`${peer.syncUrl}/api/sync/ack`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Sync-Auth': /* signed */ '' },
-      body: JSON.stringify({ machineId: selfMachineId, cursor }),
-    });
+    // ACK to peer (non-fatal if fails — cursor is already saved locally)
+    try {
+      const ackAuth = createSyncAuthHeader({
+        machineId: selfMachineId, method: 'POST', path: '/api/sync/ack',
+        body: JSON.stringify({ machineId: selfMachineId, cursor }), secretKey,
+      });
+      await fetch(`${peer.syncUrl}/api/sync/ack`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Sync-Auth': ackAuth.header },
+        body: JSON.stringify({ machineId: selfMachineId, cursor }),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (err) {
+      logger.debug({ err: err instanceof Error ? err.message : String(err) }, 'Sync ACK failed (non-fatal)');
+    }
 
     if (!data.hasMore) break;
   }

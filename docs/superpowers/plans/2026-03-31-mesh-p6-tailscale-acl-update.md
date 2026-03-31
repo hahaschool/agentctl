@@ -67,10 +67,28 @@ Add to the existing `"tests"` array:
   "comment": "Mesh peer sync on :8080"
 },
 {
+  "src": "tag:mesh-node",
+  "dst": "tag:mesh-node:9000",
+  "allow": true,
+  "comment": "Mesh nodes also carry tag:control→tag:worker:9000"
+},
+{
+  "src": "tag:worker",
+  "dst": "tag:control:8080",
+  "allow": true,
+  "comment": "Existing: worker heartbeat to CP (unchanged)"
+},
+{
   "src": "tag:mobile",
   "dst": "tag:mesh-node:8080",
   "allow": false,
   "comment": "Mobile cannot reach mesh sync directly"
+},
+{
+  "src": "tag:ci",
+  "dst": "tag:mesh-node:8080",
+  "allow": false,
+  "comment": "CI runners cannot reach mesh sync"
 }
 ```
 

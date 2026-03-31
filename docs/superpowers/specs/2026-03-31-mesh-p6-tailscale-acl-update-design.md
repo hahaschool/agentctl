@@ -53,4 +53,4 @@ Add test cases per README policy:
 |------|--------|
 | `infra/tailscale/acl-policy.json` | Add mesh-node tag + peer ACL |
 | `infra/tailscale/README.md` | Document mesh ACL setup + tagging |
-| `infra/tailscale/acl-tests.json` | Test cases for mesh rules |
+| `infra/tailscale/acl-policy.json` | Add mesh test cases to embedded `tests` array |

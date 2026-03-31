@@ -44,8 +44,8 @@ export const syncPeerCursors = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    // Composite PK via unique index (Drizzle pgTable doesn't support composite PKs directly)
-    index('idx_peer_cursors_pk').on(table.localNodeId, table.remoteNodeId),
+    // Composite PK — Drizzle supports this via primaryKey() helper
+    primaryKey({ columns: [table.localNodeId, table.remoteNodeId] }),
   ],
 );
 ```
@@ -112,17 +112,34 @@ In the handler, add to the `base` response:
       };
 ```
 
-In `server.ts`, pass when registering health routes:
+In `server.ts`, `createServer` needs to accept `machineId` and `syncPublicKey` in its options and pass them to health routes. Add to `CreateServerOptions`:
+
+```typescript
+machineId?: string;
+syncPublicKey?: string;
+```
+
+Then in `createServer`, pass to health routes:
 
 ```typescript
 await app.register(healthRoutes, {
   // ... existing opts ...
-  machineId: process.env.MACHINE_ID,
-  syncPublicKey: dispatchSigningKeyPair?.publicKey
-    ? Buffer.from(dispatchSigningKeyPair.publicKey).toString('base64')
-    : undefined,
+  machineId,
+  syncPublicKey,
 });
 ```
+
+In `index.ts`, pass when calling `createServer`:
+
+```typescript
+const server = await createServer({
+  // ... existing opts ...
+  machineId,
+  syncPublicKey: dispatchSigningKeyPair?.publicKey, // already base64 string
+});
+```
+
+Note: `dispatchSigningKeyPair.publicKey` is already a base64 string (from `dispatch-signing.ts` line 52). Do NOT double-encode with `Buffer.from().toString('base64')`.
 
 Update `HealthResponse` type to include the new fields.
 
