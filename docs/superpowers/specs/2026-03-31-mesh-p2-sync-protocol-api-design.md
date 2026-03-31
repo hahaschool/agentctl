@@ -1,167 +1,143 @@
-# Mesh P2: Sync Protocol + API — Design Spec
+# Mesh P2: Sync Protocol + API — Design Spec (v2)
 
-**Date:** 2026-03-31
-**Status:** Draft
+**Date:** 2026-03-31 (revised after Codex cross-review)
 **Parent:** §33 Mesh Architecture
-**Depends on:** P1 (change log + vector clock), P4 (peer registry)
+**Depends on:** P1 (change log), P4 (peer registry + auth + cursors)
 
-## Context
+## Key Design Decisions (from cross-review)
 
-P1 captures all data mutations into `sync_change_log` with vector clocks. P4 establishes peer discovery and health checking. P2 implements the actual sync protocol: pulling changes from peers, applying them locally, handling conflicts for mutable tables, and auto-merging append-only data.
+1. **Directional cursors:** `sync_peer_cursors.pulled_cursor` / `acked_cursor` (from P4), not a single `sync_cursor`
+2. **Revised table classification:** `agent_runs`, `rc_sessions`, `managed_sessions` are MUTABLE (they receive status updates). Only truly insert-only tables are append-only.
+3. **Advisory locks during apply:** Same `hashtext(table:row)::bigint` pattern from P1 triggers
+4. **Peer auth:** Signed request envelope verified via Ed25519 public key (from P4)
+5. **Non-`id` PKs:** Apply logic uses `TABLE_PK_COLUMN` mapping from P1 shared types
+6. **api_accounts excluded:** Credentials are local-only (decided in P4 v2)
 
-## Goals
+## Revised Table Classification
 
-1. Pull-based sync: each node pulls changes from each reachable peer
-2. Append-only tables: auto-merge by PK deduplication (no conflicts possible)
-3. Mutable tables: vector clock comparison → apply if remote dominates, conflict if concurrent
-4. Idempotent: re-pulling the same changes is safe (deduplicated by table+rowId+vclock)
-5. Cursor-based incremental sync: each peer tracks `sync_cursor` (last pulled change_log.id)
+| Type | Tables | Count |
+|------|--------|-------|
+| **Append-only** | `agent_actions`, `session_handoffs`, `native_import_attempts`, `run_handoff_decisions` | 4 |
+| **Mutable** | `agents`, `machines`, `agent_runs`, `rc_sessions`, `managed_sessions`, `project_account_mappings`, `settings`, `runtime_config_revisions`, `memory_scopes`, `memory_facts`, `memory_edges` | 11 |
+| **Local-only** | `machine_runtime_state`, `api_accounts`, `sync_change_log`, `sync_nodes`, `sync_conflicts`, `sync_peer_cursors` | 6 |
 
-## Non-Goals
-
-- Push-based real-time sync (pull is sufficient for this fleet)
-- Conflict resolution (P3 — this spec just detects and records conflicts)
-- Schema migrations across nodes (all nodes must be on same version)
+**Total synced: 15** (4 append-only + 11 mutable). Changed from P1's 16 because `api_accounts` moved to local-only.
 
 ---
 
-## 1. Sync API Endpoints (on every mesh node)
+## 1. Sync API Endpoints
 
 ### `GET /api/sync/changes`
 
-Called by a remote peer to pull changes from this node.
+Pull changes from this node. **Requires signed request (P4 peer auth).**
 
-**Query params:**
-- `since` (required): `change_log.id` cursor — return changes with `id > since`
-- `limit` (optional, default 500, max 5000): batch size
+Query params: `since` (cursor), `limit` (default 500, max 5000)
 
-**Response:**
+Response:
 ```typescript
 {
-  changes: ChangeLogEntry[];   // ordered by id ASC
-  cursor: number;              // id of the last entry returned (for next pull)
-  hasMore: boolean;            // true if more changes exist beyond this batch
+  changes: ChangeLogEntry[];
+  cursor: number;        // last entry id
+  hasMore: boolean;
 }
 ```
-
-**Security:** Only accessible from Tailscale network (checked via request IP or auth token).
 
 ### `POST /api/sync/ack`
 
-Called by a remote peer to acknowledge they've processed changes up to a cursor.
+Acknowledge cursor. **Requires signed request.**
 
-**Body:** `{ nodeId: string; cursor: number }`
+Body: `{ machineId: string; cursor: number }`
 
-Updates `sync_nodes.sync_cursor` for the calling peer so the source knows what's been pulled. Used by cleanup to determine when entries are fully synced.
+Updates `sync_peer_cursors.acked_cursor` for the calling peer.
 
-## 2. Sync Loop (per peer)
+## 2. Sync Loop
 
-Each node runs a sync loop per reachable peer:
-
-```
-every sync_interval_ms:
-  if peer.sync_status != 'reachable': skip
-
-  cursor = peer.sync_cursor  (last processed id)
-
-  loop:
-    response = GET peer.sync_url/api/sync/changes?since=cursor&limit=500
-
-    for each change in response.changes:
-      apply_change(change)
-
-    cursor = response.cursor
-    POST peer.sync_url/api/sync/ack { nodeId: self, cursor }
-    update local sync_nodes.sync_cursor = cursor
-
-    if !response.hasMore: break
-```
-
-## 3. Change Application Logic
-
-```typescript
-async function applyChange(change: ChangeLogEntry, db: Database): Promise<void> {
-  const tableType = TABLE_SYNC_CONFIG[change.tableName];
-
-  if (tableType === 'append-only') {
-    return applyAppendOnly(change, db);
-  }
-
-  if (tableType === 'mutable') {
-    return applyMutable(change, db);
-  }
-
-  // local-only: skip
-}
-```
-
-### Append-Only Apply
+Per reachable peer, at `sync_interval_ms`:
 
 ```
-1. Check if row with this PK already exists in the target table
-2. If exists → skip (already synced or created locally)
-3. If not exists → INSERT using withSyncApplyGuard() to suppress triggers
-4. Write to local sync_change_log with the remote vclock (for tracking)
+cursor = sync_peer_cursors.pulled_cursor for this peer
+
+loop:
+  GET peer.sync_url/api/sync/changes?since=cursor&limit=500
+    (signed with local key)
+
+  for each change in response.changes:
+    applyChange(change)   // inside advisory lock + withSyncApplyGuard tx
+
+  cursor = response.cursor
+  UPDATE sync_peer_cursors SET pulled_cursor = cursor
+
+  POST peer.sync_url/api/sync/ack { machineId: self, cursor }
+
+  if !response.hasMore: break
 ```
 
-No conflict is possible — UUIDs are globally unique.
+**Batch failure rule:** If any change in a batch fails to apply, stop processing, record error, and retry the batch from the last successful cursor on next interval.
 
-### Mutable Apply
+## 3. Apply Logic
+
+### Append-Only
 
 ```
-1. Get latest local vclock for (tableName, rowId) from sync_change_log
-2. Compare remote vclock vs local vclock using vcCompare():
-   - 'b_dominates' (remote is newer) → apply change via withSyncApplyGuard()
-   - 'a_dominates' (local is newer) → skip
-   - 'equal' → skip (already have this version)
-   - 'conflict' → INSERT into sync_conflicts, do NOT apply
-3. If applied, write merged vclock to local sync_change_log
+1. Check if row exists by PK (using TABLE_PK_COLUMN mapping)
+2. If exists → skip
+3. If not → INSERT inside withSyncApplyGuard() transaction
+4. Write remote change to local sync_change_log with remote vclock
 ```
 
-## 4. Marking Entries as Synced
+### Mutable
 
-After a peer ACKs a cursor, the source node can mark those entries:
+```
+1. Acquire advisory lock: pg_advisory_xact_lock(hashtext(table:rowId)::bigint)
+2. Read latest local vclock from sync_change_log
+3. vcCompare(remote, local):
+   - b_dominates → apply (UPSERT inside withSyncApplyGuard)
+   - a_dominates → skip
+   - equal → skip
+   - conflict → INSERT into sync_conflicts, do NOT apply
+4. If applied, write merged vclock to local sync_change_log
+```
+
+### DELETE handling
+
+For `operation = 'DELETE'`:
+- Append-only: skip (deletes don't happen on these tables)
+- Mutable: same vclock comparison. If remote dominates, DELETE the row inside withSyncApplyGuard
+
+## 4. Synced Marker
+
+An entry is safe to mark `synced = true` when ALL known peers have ACKed past it:
 
 ```sql
 UPDATE sync_change_log SET synced = true
-  WHERE id <= {acked_cursor}
-  AND synced = false;
-```
-
-An entry is only safe to delete (by cleanup job) when ALL peers have ACKed past it. The cleanup job in P1 already handles this by only deleting `synced = true` entries older than 30 days.
-
-For multi-peer: `synced` should only be set to `true` when ALL peers have ACKed. Track per-peer cursors in `sync_nodes.sync_cursor` and compute the minimum:
-
-```sql
-UPDATE sync_change_log SET synced = true
-  WHERE id <= (SELECT MIN(sync_cursor) FROM sync_nodes WHERE NOT is_self AND sync_status != 'unknown')
+  WHERE id <= (
+    SELECT COALESCE(MIN(acked_cursor), 0)
+    FROM sync_peer_cursors
+    WHERE local_node_id = {selfId}
+  )
   AND synced = false;
 ```
 
 ## 5. Catch-Up on Reconnect
 
-When a peer transitions from `unreachable` → `reachable` (detected by P4 health check):
+When P4 health check detects `unreachable → reachable`:
 1. Reset `sync_interval_ms` to 30000
-2. Immediately trigger a full sync loop (don't wait for next interval)
-3. The cursor-based protocol handles catch-up naturally — it pulls all changes since the last known cursor
-
-For a laptop that was offline for days, the first sync may pull thousands of entries. The `limit=500` pagination prevents memory issues.
+2. Immediately trigger sync loop (don't wait for interval)
+3. Pagination handles large catch-ups (500 per batch)
 
 ## 6. File Changes
 
 | File | Change |
 |------|--------|
-| `packages/control-plane/src/api/routes/sync.ts` | New: `GET /changes`, `POST /ack` |
-| `packages/control-plane/src/sync/sync-loop.ts` | New: per-peer sync loop with cursor management |
-| `packages/control-plane/src/sync/apply-change.ts` | New: applyAppendOnly, applyMutable |
+| `packages/control-plane/src/api/routes/sync.ts` | GET /changes, POST /ack (with auth middleware) |
+| `packages/control-plane/src/sync/sync-loop.ts` | Per-peer loop with cursor management |
+| `packages/control-plane/src/sync/apply-change.ts` | applyAppendOnly, applyMutable, applyDelete |
 | `packages/control-plane/src/sync/apply-guard.ts` | Already exists from P1 |
+| `packages/shared/src/types/sync.ts` | Update TABLE_SYNC_CONFIG with revised classification |
 | `packages/control-plane/src/api/server.ts` | Register sync routes |
-| `packages/control-plane/src/index.ts` | Start sync loops for each peer |
 
 ## 7. Testing
 
-- **Unit:** applyAppendOnly — skip existing, insert new
-- **Unit:** applyMutable — dominates apply, dominated skip, conflict record
-- **Unit:** cursor management — increment, hasMore pagination
-- **Integration:** Two-node sync simulation — insert on node A, pull from node B, verify data appears
-- **Integration:** Conflict detection — concurrent edit on both nodes, verify sync_conflicts entry
+- **Unit:** applyAppendOnly skip/insert, applyMutable dominate/skip/conflict, DELETE handling
+- **Unit:** Cursor advancement, batch failure rules
+- **Integration:** Two-DB sync simulation, conflict detection

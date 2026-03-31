@@ -1,108 +1,108 @@
-# Mesh P4: Node Discovery + Peer Registry — Design Spec
+# Mesh P4: Node Discovery + Peer Registry — Design Spec (v2)
 
-**Date:** 2026-03-31
-**Status:** Draft
+**Date:** 2026-03-31 (revised after Codex cross-review)
 **Parent:** §33 Mesh Architecture
-**Depends on:** P1 (sync_nodes table exists)
-**Parallelizable with:** P1 implementation
+**Depends on:** P1 (sync tables exist)
+**Must be implemented before:** P2
 
-## Context
+## Key Design Decisions (from cross-review)
 
-P1 creates `sync_nodes` — a table where each node registers itself. P4 makes nodes aware of each other: discovering peers via Tailscale, maintaining a peer registry, and health-checking connections between mesh nodes.
-
-## Goals
-
-1. Auto-discover mesh peers via `tailscale status --json`
-2. Maintain a peer registry with health status and sync cursor
-3. Provide an API for listing/adding/removing peers
-4. Adaptive poll interval: 30s for always-on peers, catch-up on reconnect
-5. Surface mesh peer status on the Machines page
-
-## Non-Goals
-
-- Actual data sync between peers (P2)
-- Conflict resolution UI (P3)
-- Leader election or consensus (not needed — all nodes are equal)
+1. **Unified identity:** `machineId` (already used everywhere) IS the node identity for sync. No separate `nodeId`. `sync_nodes.id = machines.id`. P1's `getOrCreateNodeId` returns `machineId` from env/hostname.
+2. **Directional cursors:** Per-peer-pair cursor table `sync_peer_cursors` replaces single `sync_cursor` column.
+3. **Peer authentication:** Signed request envelope using dispatch signing keys (Ed25519). Peer public keys stored in `sync_nodes`.
+4. **Health endpoint exposes machineId:** `/health` response includes `machineId` so P4 discovery can resolve hostnames to IDs.
 
 ---
 
-## 1. Peer Registry (extends sync_nodes)
+## 1. sync_nodes Table (revised)
 
-Add columns to the existing `sync_nodes` table:
+Replaces P1's minimal definition. `id` = `machineId`.
 
 ```sql
-ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS
-  sync_url TEXT;                    -- e.g. http://100.64.0.2:8080
-ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS
-  sync_cursor BIGINT DEFAULT 0;    -- last change_log.id pulled from this peer
-ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS
-  sync_status TEXT DEFAULT 'unknown'; -- 'reachable' | 'unreachable' | 'unknown'
-ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS
-  sync_interval_ms INTEGER DEFAULT 30000; -- adaptive poll interval
-ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS
-  is_self BOOLEAN DEFAULT false;    -- true for this node's own row
+CREATE TABLE IF NOT EXISTS sync_nodes (
+  id              TEXT PRIMARY KEY,       -- machineId (same as machines.id)
+  hostname        TEXT NOT NULL,
+  tailscale_ip    TEXT,
+  sync_url        TEXT,                   -- http://{ip}:{port}
+  role            TEXT NOT NULL DEFAULT 'full',
+  sync_status     TEXT DEFAULT 'unknown', -- reachable | unreachable | unknown
+  sync_interval_ms INTEGER DEFAULT 30000,
+  is_self         BOOLEAN DEFAULT false,
+  public_key      TEXT,                   -- Ed25519 public key for peer auth
+  last_seen       TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
 
-## 2. Tailscale Auto-Discovery
+## 2. sync_peer_cursors Table (new)
 
-On CP startup and periodically (every 60s), run:
+Tracks bidirectional sync state per peer pair:
 
-```bash
-tailscale status --json
+```sql
+CREATE TABLE IF NOT EXISTS sync_peer_cursors (
+  local_node_id   TEXT NOT NULL,          -- this node's machineId
+  remote_node_id  TEXT NOT NULL,          -- peer's machineId
+  pulled_cursor   BIGINT DEFAULT 0,       -- last change_log.id we pulled FROM this peer
+  acked_cursor    BIGINT DEFAULT 0,       -- last change_log.id this peer pulled FROM us
+  updated_at      TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (local_node_id, remote_node_id)
+);
 ```
 
-Parse the output to find peers with `tag:mesh-node`. For each discovered peer:
-- Check if already in `sync_nodes`
-- If not, insert with `sync_status: 'unknown'`, `sync_url: http://{tailscaleIp}:8080`
-- If exists, update `tailscale_ip` if changed
+## 3. Health Endpoint Extension
 
-Discovery is **additive only** — never auto-removes a peer (manual removal via API).
+Add `machineId` and `nodePublicKey` to the `/health` response so discovery can map hostname → machineId:
 
-## 3. Peer Health Check
+```typescript
+// In health response:
+{
+  status: 'ok',
+  machineId: 'mac-local',
+  nodePublicKey: 'base64-encoded-ed25519-public-key',
+  // ... existing fields
+}
+```
 
-Every `sync_interval_ms` per peer, ping `GET {sync_url}/health`. Based on result:
+## 4. Discovery Flow
 
-| Condition | Action |
-|-----------|--------|
-| 200 OK | Set `sync_status = 'reachable'`, `last_seen = now()` |
-| Connection refused / timeout | Set `sync_status = 'unreachable'` |
-| 3+ consecutive unreachable | Double `sync_interval_ms` (max 300000 = 5min) |
-| Transition unreachable → reachable | Reset `sync_interval_ms` to 30000, trigger catch-up sync (P2) |
+1. Run `tailscale status --json` every 60s
+2. For each online peer with `tag:mesh-node`: GET `http://{ip}:8080/health`
+3. Extract `machineId` and `nodePublicKey` from response
+4. Upsert into `sync_nodes` using `machineId` as PK
+5. Discovery is additive — never auto-removes peers
 
-## 4. API Endpoints
+## 5. Peer Authentication
 
-All under `/api/sync/peers`:
+Sync requests (P2) must be authenticated. Reuse the existing Ed25519 dispatch signing infrastructure:
+- Each node generates a key pair on first boot (or reuses `DISPATCH_SIGNING_SECRET_KEY`)
+- Public key is advertised via `/health` and stored in `sync_nodes.public_key`
+- Every sync request includes a signed envelope: `{ machineId, method, path, bodyHash, issuedAt, nonce, signature }`
+- Receiver verifies signature against stored public key, rejects if `issuedAt` is >60s stale
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET /` | List all peers with status | Returns `SyncNode[]` with extended fields |
-| `POST /` | Add a peer manually | Body: `{ hostname, syncUrl, tailscaleIp? }` |
-| `DELETE /:nodeId` | Remove a peer | Removes from registry |
-| `POST /:nodeId/ping` | Manual health check | Returns latency + status |
+## 6. Secrets Policy
 
-## 5. Frontend: Mesh Peers on Machines Page
+**`api_accounts` is excluded from sync by default.** Credentials encrypted with `CREDENTIAL_ENCRYPTION_KEY` must not be replicated to laptops without explicit opt-in. Add to `TABLE_SYNC_CONFIG`:
 
-Add a "Mesh Peers" section to the existing Machines page showing:
-- Peer hostname, tailscale IP, sync status (reachable/unreachable)
-- Last seen timestamp
-- Sync cursor progress
-- "Add Peer" and "Remove" actions
+```typescript
+api_accounts: 'local-only',  // credentials must not auto-replicate
+```
 
-## 6. File Changes
+Accounts can be manually configured per-node via the Settings UI. A future P7 could add selective credential sharing with re-encryption per node.
+
+## 7. API Endpoints
+
+Same as v1: `GET/POST/DELETE /api/sync/peers`, `POST /:nodeId/ping`.
+
+## 8. File Changes
 
 | File | Change |
 |------|--------|
-| `packages/control-plane/drizzle/0022_mesh_peer_registry.sql` | Migration: add columns to sync_nodes |
-| `packages/control-plane/src/db/schema.ts` | Update syncNodes table definition |
-| `packages/control-plane/src/sync/peer-discovery.ts` | Tailscale discovery + health check loop |
+| `packages/control-plane/drizzle/0022_mesh_peer_registry.sql` | Migration: sync_nodes revision + sync_peer_cursors |
+| `packages/control-plane/src/db/schema.ts` | Update syncNodes, add syncPeerCursors |
+| `packages/control-plane/src/sync/peer-discovery.ts` | Discovery with /health machineId resolution |
+| `packages/control-plane/src/sync/peer-health.ts` | Health check loop |
+| `packages/control-plane/src/sync/peer-auth.ts` | Request signing/verification |
+| `packages/control-plane/src/api/routes/health.ts` | Add machineId + publicKey to response |
 | `packages/control-plane/src/api/routes/sync-peers.ts` | REST endpoints |
-| `packages/control-plane/src/index.ts` | Start discovery loop, register routes |
-| `packages/web/src/components/MeshPeersSection.tsx` | Frontend component |
-| `packages/web/src/views/MachinesPage.tsx` | Integrate MeshPeersSection |
-| `packages/web/src/lib/api.ts` | Add peer API methods |
-
-## 7. Testing
-
-- **Unit:** Tailscale JSON parsing, health check logic, interval adaptation
-- **Unit:** Peer API CRUD operations
-- **Integration:** Discovery loop finds peers and updates DB
+| `packages/web/src/components/MeshPeersSection.tsx` | Frontend |
+| P1 spec/plan update | Change nodeId → machineId throughout |

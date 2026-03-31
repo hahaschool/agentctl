@@ -31,17 +31,17 @@ This spec defines the **change log** and **vector clock** infrastructure that al
 
 ## 1. Node Identity
 
-Each agentctl instance has a permanent `nodeId`, generated once on first startup.
+Each agentctl instance uses its existing `machineId` (from `MACHINE_ID` env var or hostname) as the sync identity. **No separate nodeId** — unified with the worker registration system.
 
-**Format:** `node-<hostname-prefix>-<4-char-hex>` (e.g. `node-macbook-a1b2`, `node-ec2-3f4d`)
+**Format:** Same as `machines.id` (e.g. `mac-local`, `ec2-worker-1`)
 
 **Storage:**
-- **Local file:** `~/.agentctl/node-id` — survives DB rebuilds
-- **DB table:** `sync_nodes` — so the sync protocol knows all participating nodes
+- **Environment:** `MACHINE_ID` env var (already used by worker registration)
+- **DB table:** `sync_nodes` — mirrors `machines.id`, extended with sync-specific fields
 
 ```sql
 CREATE TABLE sync_nodes (
-  id          TEXT PRIMARY KEY,            -- nodeId
+  id          TEXT PRIMARY KEY,            -- machineId (same as machines.id)
   hostname    TEXT NOT NULL,
   tailscale_ip TEXT,
   role        TEXT NOT NULL DEFAULT 'full', -- 'full' (CP+Worker) | 'worker-only'
@@ -49,6 +49,8 @@ CREATE TABLE sync_nodes (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
+
+**Application startup:** On boot, the CP reads `MACHINE_ID` (or generates from hostname). Sets the PostgreSQL session variable `app.node_id` to this value on every pool connection.
 
 **Application startup:** On boot, the control plane reads `~/.agentctl/node-id`. If it doesn't exist, generates one, writes the file, and upserts into `sync_nodes`. Then sets the PostgreSQL session variable:
 

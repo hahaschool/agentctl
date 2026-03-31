@@ -1,65 +1,94 @@
-# Mesh P5: Unified CP + Worker per Machine — Design Spec
+# Mesh P5: Unified CP + Worker per Machine — Design Spec (v2)
 
-**Date:** 2026-03-31
-**Status:** Draft
+**Date:** 2026-03-31 (revised after Codex cross-review)
 **Parent:** §33 Mesh Architecture
-**Depends on:** P4 (peer discovery)
+**Depends on:** P4 (peer registry)
 
-## Goals
+## Key Design Decisions (from cross-review)
 
-1. Single process mode: CP + Worker in one Fastify instance
-2. Local PostgreSQL bootstrap script for new machines
-3. PM2 ecosystem config for mesh nodes
-4. `scripts/setup-mesh-node.sh` — one-command bootstrap
-
-## Non-Goals
-
-- Changing the existing separate CP/Worker deployment option (backward-compatible)
-- Docker-based deployment (PM2 direct for now)
+1. **NOT a single process.** Each mesh node runs separate CP + Worker processes via PM2, same as today. What's new is: every machine gets its own local PG + Redis + both processes.
+2. **Scheduler ownership:** Background jobs (cron, heartbeat, reaper) are machine-scoped. Each CP only processes jobs for agents registered on its `machineId`. This prevents duplicate execution across nodes.
+3. **No leader election needed** because tasks are machine-scoped, not global.
 
 ---
 
-## 1. Unified Process
+## 1. Machine-Scoped Job Processing
 
-Today CP and Worker are separate packages with separate entry points. For mesh, each machine runs both.
+Today's task worker processes ALL jobs from the global Redis queue. In mesh mode, each node runs its own Redis + BullMQ, so jobs are naturally scoped to the local node.
 
-**Approach:** A new entry point `packages/mesh-node/src/index.ts` that:
-1. Starts local PostgreSQL (if not running)
-2. Imports and starts the control plane server
-3. Imports and starts the worker server
-4. Both share the same database connection
-5. Worker registers against `localhost:8080` (its own CP)
+**Key change:** Each node's BullMQ queue is LOCAL (connected to local Redis), not shared. Cross-machine dispatch happens via HTTP sync (P2), not shared Redis.
 
-**Alternative considered:** Merge into a single Fastify server. Rejected — too much refactoring. Running both as co-processes under one Node.js instance is simpler.
+This means:
+- Cron/heartbeat jobs only trigger for agents on this machine
+- The stale-run reaper only reaps runs dispatched from this machine
+- No duplicate execution across nodes
 
-## 2. Local PostgreSQL Bootstrap
+## 2. Bootstrap Script
 
-Script: `scripts/setup-mesh-node.sh`
+`scripts/setup-mesh-node.sh`:
 
 ```bash
 #!/bin/bash
-# 1. Install PostgreSQL if not present (brew install postgresql@16)
-# 2. Create database: createdb agentctl_mesh
-# 3. Run all migrations: psql < drizzle/0001..0022
-# 4. Install Redis if not present (brew install redis)
-# 5. Generate node-id
-# 6. Write .env.mesh with local connection strings
-# 7. Install PM2 ecosystem config
+set -euo pipefail
+
+echo "=== AgentCTL Mesh Node Setup ==="
+
+# 1. Check prerequisites
+command -v psql >/dev/null || { echo "Install PostgreSQL first"; exit 1; }
+command -v redis-server >/dev/null || { echo "Install Redis first"; exit 1; }
+command -v node >/dev/null || { echo "Install Node.js 20+ first"; exit 1; }
+command -v tailscale >/dev/null || { echo "Install Tailscale first"; exit 1; }
+
+# 2. Create local database
+DBNAME=${AGENTCTL_DB:-agentctl_mesh}
+createdb "$DBNAME" 2>/dev/null || echo "Database $DBNAME already exists"
+
+# 3. Generate machine ID (reuse existing or create new)
+MACHINE_ID=${MACHINE_ID:-$(hostname | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')}
+echo "Machine ID: $MACHINE_ID"
+
+# 4. Get Tailscale IP
+TS_IP=$(tailscale ip -4 2>/dev/null || echo "127.0.0.1")
+echo "Tailscale IP: $TS_IP"
+
+# 5. Generate .env.mesh
+cat > .env.mesh << EOF
+TIER=mesh
+MACHINE_ID=$MACHINE_ID
+DATABASE_URL=postgresql://$(whoami)@127.0.0.1:5432/$DBNAME
+REDIS_URL=redis://localhost:6379/0
+PORT=8080
+WORKER_PORT=9000
+CONTROL_PLANE_URL=http://localhost:8080
+CONTROL_URL=http://localhost:8080
+TAILSCALE_IP=$TS_IP
+NODE_ENV=production
+EOF
+
+# 6. Run migrations
+for f in packages/control-plane/drizzle/*.sql; do
+  psql "postgresql://$(whoami)@127.0.0.1:5432/$DBNAME" -f "$f"
+done
+
+# 7. Install PM2 config
+echo "Run: pm2 start infra/pm2/ecosystem.mesh.config.cjs"
+echo "=== Setup complete ==="
 ```
 
 ## 3. PM2 Config
 
-`infra/pm2/ecosystem.mesh.config.cjs`:
-- Runs CP + Worker + Redis as 3 PM2 processes
-- CP listens on `:8080`, Worker on `:9000`
-- Both connect to local PostgreSQL and Redis
-- `CONTROL_PLANE_URL=http://localhost:8080`
+`infra/pm2/ecosystem.mesh.config.cjs` — runs CP + Worker reading from `.env.mesh`:
+
+```javascript
+// Loads .env.mesh the same way ecosystem.beta.config.cjs loads .env.beta
+// CP on :8080, Worker on :9000, both connect to local PG + Redis
+```
 
 ## 4. File Changes
 
 | File | Change |
 |------|--------|
-| `packages/mesh-node/` | New package: unified entry point |
 | `scripts/setup-mesh-node.sh` | Bootstrap script |
-| `infra/pm2/ecosystem.mesh.config.cjs` | PM2 config for mesh nodes |
+| `infra/pm2/ecosystem.mesh.config.cjs` | PM2 config |
+| `.env.mesh.template` | Template env file |
 | `docs/QUICKSTART-MESH.md` | Setup guide |
