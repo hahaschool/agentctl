@@ -1,4 +1,4 @@
-# Mesh P1: Change Log + Vector Clock — Design Spec
+# Mesh P1: Change Log + Vector Clock — Design Spec (v3)
 
 **Date:** 2026-03-30
 **Status:** Draft
@@ -86,6 +86,8 @@ CREATE INDEX idx_change_log_unsynced
 CREATE INDEX idx_change_log_table_row
   ON sync_change_log (table_name, row_id);
 ```
+
+**Naming note:** Column names `node_id`, `remote_node_id`, `local_node_id` store **machineId** values. The "node" prefix is a DB-level convention for the sync subsystem; the canonical identity is still `machineId` from `machines.id`.
 
 **Design decisions:**
 - `payload` is a **full row snapshot**, not a diff. Merge = apply latest snapshot. No need to replay incremental changes.
@@ -288,7 +290,7 @@ CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON memory_facts FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 DROP TRIGGER IF EXISTS sync_capture ON memory_edges;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON memory_edges FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON memory_edges FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 ```
 
 ## 7. Sync-Apply Guard
