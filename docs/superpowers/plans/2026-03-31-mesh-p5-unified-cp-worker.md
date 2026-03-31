@@ -1,0 +1,170 @@
+# Mesh P5: Unified CP + Worker per Machine — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Enable any machine to run a complete agentctl mesh node (CP + Worker + local PG + local Redis) via a one-command bootstrap script and PM2 config.
+
+**Architecture:** NOT a single process — each mesh node runs separate CP + Worker via PM2 (same as today). What's new: local PG + Redis per node, machine-scoped job processing, bootstrap script, and PM2 mesh config.
+
+**Tech Stack:** PostgreSQL, Redis, PM2, Bash (setup script)
+
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p5-unified-cp-worker-design.md` (v3)
+**Depends on:** P4 (peer discovery)
+
+---
+
+### Task 1: Machine-Scoped Job Processing
+
+**Files:**
+- Modify: `packages/control-plane/src/scheduler/task-worker.ts`
+- Modify: `packages/control-plane/src/api/routes/run-reaper.ts` (or equivalent)
+
+- [ ] **Step 1: Add machineId filter to task worker**
+
+In task-worker.ts, after resolving the agent (~line 201), add early exit:
+
+```typescript
+const localMachineId = process.env.MACHINE_ID;
+if (localMachineId && agent.machineId !== localMachineId) {
+  jobLogger.debug({ agentMachineId: agent.machineId, localMachineId }, 'Skipping job for non-local agent');
+  return; // This agent belongs to another node
+}
+```
+
+- [ ] **Step 2: Add machineId filter to run reaper**
+
+The stale-run reaper query should filter: `WHERE agents.machine_id = $machineId` so each node only reaps its own runs.
+
+- [ ] **Step 3: Build + commit**
+
+---
+
+### Task 2: Bootstrap Script
+
+**Files:**
+- Create: `scripts/setup-mesh-node.sh`
+
+- [ ] **Step 1: Write the script**
+
+```bash
+#!/bin/bash
+set -euo pipefail
+echo "=== AgentCTL Mesh Node Setup ==="
+
+# Check prerequisites
+for cmd in psql redis-server node pnpm tailscale; do
+  command -v "$cmd" >/dev/null || { echo "Missing: $cmd"; exit 1; }
+done
+
+DBNAME=${AGENTCTL_DB:-agentctl_mesh}
+MACHINE_ID=${MACHINE_ID:-$(hostname | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-')}
+TS_IP=$(tailscale ip -4 2>/dev/null || echo "127.0.0.1")
+
+echo "Machine ID: $MACHINE_ID"
+echo "Tailscale IP: $TS_IP"
+echo "Database: $DBNAME"
+
+# Create DB
+createdb "$DBNAME" 2>/dev/null || echo "Database already exists"
+
+# Write .env.mesh
+cat > .env.mesh << EOF
+TIER=mesh
+MACHINE_ID=$MACHINE_ID
+DATABASE_URL=postgresql://$(whoami)@127.0.0.1:5432/$DBNAME
+REDIS_URL=redis://localhost:6379/0
+PORT=8080
+WORKER_PORT=9000
+CONTROL_PLANE_URL=http://localhost:8080
+CONTROL_URL=http://localhost:8080
+TAILSCALE_IP=$TS_IP
+NODE_ENV=production
+EOF
+
+echo "Wrote .env.mesh"
+echo "Next: pnpm build && pm2 start infra/pm2/ecosystem.mesh.config.cjs"
+echo "Migrations will run automatically on first CP startup."
+```
+
+- [ ] **Step 2: chmod + commit**
+
+```bash
+chmod +x scripts/setup-mesh-node.sh
+git add scripts/setup-mesh-node.sh
+git commit -m "feat(mesh-p5): add setup-mesh-node.sh bootstrap script"
+```
+
+---
+
+### Task 3: PM2 Mesh Config
+
+**Files:**
+- Create: `infra/pm2/ecosystem.mesh.config.cjs`
+
+- [ ] **Step 1: Create config** (same pattern as `ecosystem.beta.config.cjs` but loads `.env.mesh`)
+
+```javascript
+const fs = require('node:fs');
+const path = require('node:path');
+const REPO_ROOT = path.resolve(__dirname, '../..');
+
+// Load .env.mesh
+const envPath = path.join(REPO_ROOT, '.env.mesh');
+try {
+  for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const eq = t.indexOf('=');
+    if (eq < 0) continue;
+    if (!process.env[t.slice(0, eq)]) process.env[t.slice(0, eq)] = t.slice(eq + 1);
+  }
+} catch { /* .env.mesh optional */ }
+
+module.exports = {
+  apps: [
+    {
+      name: 'agentctl-cp-mesh',
+      script: 'dist/index.js',
+      cwd: path.join(REPO_ROOT, 'packages/control-plane'),
+      env: {
+        NODE_ENV: 'production',
+        PORT: process.env.PORT || '8080',
+        HOST: '0.0.0.0',
+        REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379/0',
+        DATABASE_URL: process.env.DATABASE_URL || '',
+        MACHINE_ID: process.env.MACHINE_ID || '',
+        TAILSCALE_IP: process.env.TAILSCALE_IP || '',
+        TIER_LABEL: 'mesh',
+      },
+      autorestart: true,
+      max_restarts: 10,
+    },
+    {
+      name: 'agentctl-worker-mesh',
+      script: 'dist/index.js',
+      cwd: path.join(REPO_ROOT, 'packages/agent-worker'),
+      env: {
+        NODE_ENV: 'production',
+        WORKER_PORT: process.env.WORKER_PORT || '9000',
+        CONTROL_URL: 'http://localhost:8080',
+        CONTROL_PLANE_URL: 'http://localhost:8080',
+        MACHINE_ID: process.env.MACHINE_ID || '',
+        TIER_LABEL: 'mesh',
+      },
+      autorestart: true,
+      max_restarts: 10,
+    },
+  ],
+};
+```
+
+- [ ] **Step 2: Commit**
+
+---
+
+### Task 4: Push + PR
+
+```bash
+git push -u origin agent/claude/feat/mesh-p5-unified
+gh pr create --base main --title "feat(mesh): P5 — unified CP+Worker per machine (§33.5)"
+```
