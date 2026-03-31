@@ -33,6 +33,8 @@ Pull changes from this node. **Requires signed request (P4 peer auth).**
 
 Query params: `since` (cursor), `limit` (default 500, max 5000)
 
+**Auth:** Signed envelope in `X-Sync-Auth` header: `base64({ machineId, method, path, bodyHash, issuedAt, nonce, signature })`. For GET requests, `bodyHash` is empty string hash.
+
 Response:
 ```typescript
 {
@@ -91,11 +93,11 @@ loop:
 1. Acquire advisory lock: pg_advisory_xact_lock(hashtext(table:rowId)::bigint)
 2. Read latest local vclock from sync_change_log
 3. vcCompare(remote, local):
-   - b_dominates → apply (UPSERT inside withSyncApplyGuard)
-   - a_dominates → skip
-   - equal → skip
+   - a_dominates → remote is newer, apply (UPSERT inside withSyncApplyGuard)
+   - b_dominates → local is newer, skip
+   - equal → skip (already have it)
    - conflict → INSERT into sync_conflicts, do NOT apply
-4. If applied, write merged vclock to local sync_change_log
+4. If applied, write merged vclock (vcMerge) to local sync_change_log
 ```
 
 ### DELETE handling

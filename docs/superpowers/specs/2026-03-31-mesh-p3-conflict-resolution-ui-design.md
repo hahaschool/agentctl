@@ -49,6 +49,13 @@ Route: `/conflicts`
 - Vector clock display for debugging
 - Actions: "Keep Local" | "Keep Remote" | "Edit & Merge"
 
+### Delete Conflicts
+
+When one side's payload is `null` (a DELETE), the UI shows:
+- Left/Right panel: "Record deleted on {nodeName}" instead of JSON
+- Actions: "Keep Deleted" (apply the delete locally) | "Restore" (keep the non-null payload)
+- Both actions write merged vclock for convergence
+
 ## 4. Sidebar Badge
 
 Red badge on "Conflicts" nav item showing pending count. Polled every 60s.

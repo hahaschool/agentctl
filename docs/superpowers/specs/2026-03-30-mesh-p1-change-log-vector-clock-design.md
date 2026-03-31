@@ -13,7 +13,7 @@ This spec defines the **change log** and **vector clock** infrastructure that al
 
 ## Goals
 
-1. Track all data mutations across 16 synced tables via PostgreSQL triggers
+1. Track all data mutations across 15 synced tables via PostgreSQL triggers
 2. Assign each mutation a vector clock for causal ordering and conflict detection
 3. Establish node identity (persistent `nodeId` per machine)
 4. Classify tables into append-only (auto-merge) vs mutable (conflict-detect)
@@ -52,23 +52,21 @@ CREATE TABLE sync_nodes (
 
 **Application startup:** On boot, the CP reads `MACHINE_ID` (or generates from hostname). Sets the PostgreSQL session variable `app.node_id` to this value on every pool connection.
 
-**Application startup:** On boot, the control plane reads `~/.agentctl/node-id`. If it doesn't exist, generates one, writes the file, and upserts into `sync_nodes`. Then sets the PostgreSQL session variable:
+**Application startup:** On boot, CP reads `MACHINE_ID` env var (or derives from hostname). This value is set as `app.node_id` on every pool connection via `pool.on('connect')` so the trigger can read it.
 
-```sql
-SET app.node_id = 'node-macbook-a1b2';
-```
+## 2. Table Classification (revised in cross-review)
 
-This session variable is read by the change capture trigger.
-
-## 2. Table Classification
+`agent_runs`, `rc_sessions`, `managed_sessions` are **mutable** (they receive status updates like running→success, active→ended). `api_accounts` is **local-only** (encrypted credentials must not auto-replicate).
 
 | Type | Tables | Sync Strategy | Conflict? |
 |------|--------|---------------|-----------|
-| **Append-only** | `agent_runs`, `agent_actions`, `rc_sessions`, `managed_sessions`, `session_handoffs`, `native_import_attempts`, `run_handoff_decisions` | Auto-merge: both sides' records kept, deduplicate by PK | Never (PK is UUID, unique per node) |
-| **Mutable** | `agents`, `machines`, `api_accounts`, `project_account_mappings`, `settings`, `runtime_config_revisions`, `memory_scopes`, `memory_facts`, `memory_edges` | Vector clock comparison. Concurrent edits → conflict record | Yes — user resolves |
-| **Local-only** | `machine_runtime_state`, `sync_change_log`, `sync_nodes`, `sync_conflicts` | Not synced | N/A |
+| **Append-only** | `agent_actions` (via sync_id), `session_handoffs`, `native_import_attempts`, `run_handoff_decisions` | Auto-merge by PK dedup | Never |
+| **Mutable** | `agents`, `machines`, `agent_runs`, `rc_sessions`, `managed_sessions`, `project_account_mappings`, `settings`, `runtime_config_revisions`, `memory_scopes`, `memory_facts`, `memory_edges` | Vector clock comparison | Yes |
+| **Local-only** | `machine_runtime_state`, `api_accounts`, `sync_change_log`, `sync_nodes`, `sync_conflicts`, `sync_peer_cursors` | Not synced | N/A |
 
-**Total synced tables:** 16 (7 append-only + 9 mutable)
+**Total synced tables:** 15 (4 append-only + 11 mutable)
+
+**Non-`id` PK tables:** `settings` → PK is `key`, `memory_scopes` → PK is `scope`, `agent_actions` → uses `sync_id` UUID column (bigserial PK is not globally unique). Triggers use `TG_ARGV[0]` to specify PK column per table.
 
 ## 3. Change Log Table
 
@@ -200,14 +198,20 @@ BEGIN
     RETURN COALESCE(NEW, OLD);
   END IF;
 
-  -- Extract row ID and payload
+  -- PK column name passed as trigger argument (TG_ARGV[0])
+  v_pk_col := TG_ARGV[0];
+
+  -- Extract row ID using dynamic column reference
   IF TG_OP = 'DELETE' THEN
-    v_row_id := OLD.id::text;
+    EXECUTE format('SELECT ($1).%I::text', v_pk_col) INTO v_row_id USING OLD;
     v_payload := NULL;
   ELSE
-    v_row_id := NEW.id::text;
+    EXECUTE format('SELECT ($1).%I::text', v_pk_col) INTO v_row_id USING NEW;
     v_payload := to_jsonb(NEW);
   END IF;
+
+  -- Advisory lock to serialize concurrent vclock increments
+  PERFORM pg_advisory_xact_lock(hashtext(TG_TABLE_NAME || ':' || v_row_id)::bigint);
 
   -- Get previous vector clock for this row (if any)
   SELECT vclock INTO v_prev_vclock
@@ -235,40 +239,55 @@ $$ LANGUAGE plpgsql;
 
 ### Attaching triggers to synced tables
 
-```sql
--- Append-only tables
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON agent_runs FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON agent_actions FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON rc_sessions FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON managed_sessions FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON session_handoffs FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON native_import_attempts FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON run_handoff_decisions FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+PK column passed as TG_ARGV[0]. DROP+CREATE for idempotency. 15 tables (no api_accounts).
 
--- Mutable tables
+```sql
+-- Append-only (4 tables)
+DROP TRIGGER IF EXISTS sync_capture ON agent_actions;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON agents FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON agent_actions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('sync_id');
+DROP TRIGGER IF EXISTS sync_capture ON session_handoffs;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON machines FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON session_handoffs FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON native_import_attempts;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON api_accounts FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON native_import_attempts FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON run_handoff_decisions;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON project_account_mappings FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON run_handoff_decisions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+
+-- Mutable (11 tables)
+DROP TRIGGER IF EXISTS sync_capture ON agents;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON settings FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON agents FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON machines;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON runtime_config_revisions FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON machines FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON agent_runs;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON memory_scopes FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON agent_runs FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON rc_sessions;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON memory_facts FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
+  ON rc_sessions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON managed_sessions;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON managed_sessions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON project_account_mappings;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON project_account_mappings FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON settings;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON settings FOR EACH ROW EXECUTE FUNCTION sync_capture_change('key');
+DROP TRIGGER IF EXISTS sync_capture ON runtime_config_revisions;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON runtime_config_revisions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON memory_scopes;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON memory_scopes FOR EACH ROW EXECUTE FUNCTION sync_capture_change('scope');
+DROP TRIGGER IF EXISTS sync_capture ON memory_facts;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON memory_facts FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+DROP TRIGGER IF EXISTS sync_capture ON memory_edges;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON memory_edges FOR EACH ROW EXECUTE FUNCTION sync_capture_change();
 ```

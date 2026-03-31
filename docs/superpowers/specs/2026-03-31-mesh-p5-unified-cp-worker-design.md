@@ -18,10 +18,16 @@ Today's task worker processes ALL jobs from the global Redis queue. In mesh mode
 
 **Key change:** Each node's BullMQ queue is LOCAL (connected to local Redis), not shared. Cross-machine dispatch happens via HTTP sync (P2), not shared Redis.
 
-This means:
-- Cron/heartbeat jobs only trigger for agents on this machine
-- The stale-run reaper only reaps runs dispatched from this machine
-- No duplicate execution across nodes
+**Job scoping rules:**
+- Cron/heartbeat jobs only trigger for agents where `agents.machine_id = MACHINE_ID`
+- The stale-run reaper only reaps runs where `agent_runs.agent_id` belongs to a local agent (filter by `agents.machine_id`)
+- Task worker only dispatches to `localhost:9000` (its own worker), never to remote machines
+- Agent definitions synced from other nodes are read-only on this machine (they run on their home machine)
+
+**Code changes required for job scoping:**
+- `run-reaper.ts`: Add `WHERE agents.machine_id = $machineId` to stale-run query
+- `task-worker.ts`: Skip jobs where `agent.machineId !== localMachineId`
+- Repeatable job scheduler: Only create cron/heartbeat jobs for local agents
 
 ## 2. Bootstrap Script
 
@@ -65,10 +71,10 @@ TAILSCALE_IP=$TS_IP
 NODE_ENV=production
 EOF
 
-# 6. Run migrations
-for f in packages/control-plane/drizzle/*.sql; do
-  psql "postgresql://$(whoami)@127.0.0.1:5432/$DBNAME" -f "$f"
-done
+# 6. Run migrations (use the CP's built-in migration runner)
+DATABASE_URL="postgresql://$(whoami)@127.0.0.1:5432/$DBNAME" \
+  node packages/control-plane/dist/index.js --migrate-only 2>/dev/null || \
+  echo "Run 'pnpm build && pm2 start' to apply migrations on first boot"
 
 # 7. Install PM2 config
 echo "Run: pm2 start infra/pm2/ecosystem.mesh.config.cjs"

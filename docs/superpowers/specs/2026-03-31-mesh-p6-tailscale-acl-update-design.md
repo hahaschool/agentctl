@@ -41,9 +41,11 @@ Existing rules unchanged:
 ## 2. ACL Tests
 
 Add test cases per README policy:
-- Mesh node A can reach mesh node B on `:8080`
-- Mesh node A CANNOT reach mesh node B on `:9000` (unless also tagged control/worker)
-- Non-mesh nodes cannot reach sync endpoints
+- Mesh node A can reach mesh node B on `:8080` (via `tag:mesh-node` rule)
+- Mesh node A CAN reach mesh node B on `:9000` (because it also has `tag:control` → `tag:worker:9000`)
+- Non-mesh worker can reach its CP on `:8080` (existing rule, unchanged)
+- Mobile client CANNOT reach mesh sync endpoints (no `tag:mesh-node`)
+- Non-mesh, non-worker node CANNOT reach any mesh node
 
 ## 3. File Changes
 

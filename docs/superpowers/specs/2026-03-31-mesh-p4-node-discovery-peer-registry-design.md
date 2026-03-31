@@ -76,8 +76,9 @@ Add `machineId` and `nodePublicKey` to the `/health` response so discovery can m
 Sync requests (P2) must be authenticated. Reuse the existing Ed25519 dispatch signing infrastructure:
 - Each node generates a key pair on first boot (or reuses `DISPATCH_SIGNING_SECRET_KEY`)
 - Public key is advertised via `/health` and stored in `sync_nodes.public_key`
-- Every sync request includes a signed envelope: `{ machineId, method, path, bodyHash, issuedAt, nonce, signature }`
+- Every sync request includes a signed envelope in `X-Sync-Auth` header: `{ machineId, method, path, bodyHash, issuedAt, nonce, signature }`
 - Receiver verifies signature against stored public key, rejects if `issuedAt` is >60s stale
+- **Nonce replay prevention:** Receiver maintains an in-memory LRU set of seen nonces (bounded to last 10,000). Duplicate nonces within the 60s window are rejected. No persistent storage needed since the window is short.
 
 ## 6. Secrets Policy
 
