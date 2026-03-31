@@ -11,7 +11,7 @@
 3. **Advisory locks during apply:** Same `hashtext(table:row)::bigint` pattern from P1 triggers
 4. **Peer auth:** Signed request envelope verified via Ed25519 public key (from P4)
 5. **Non-`id` PKs:** Apply logic uses `TABLE_PK_COLUMN` mapping from P1 shared types
-6. **api_accounts excluded:** Credentials are local-only (decided in P4 v2)
+6. **api_accounts excluded:** Credentials are local-only (decided in P4 v3)
 
 ## Revised Table Classification
 
