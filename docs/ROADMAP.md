@@ -1790,6 +1790,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 ### 33.2 Sync Protocol + API (P2) — P0
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p2-sync-protocol-api-design.md`
+**Plan:** `docs/superpowers/plans/2026-03-31-mesh-p2-sync-protocol-api.md`
 
 - [ ] `GET /api/sync/changes?since=<cursor>&limit=500` — pull changes from a peer
 - [ ] `POST /api/sync/ack` — acknowledge cursor to mark entries synced
@@ -1801,6 +1802,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 ### 33.3 Conflict Resolution UI (P3) — P1
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p3-conflict-resolution-ui-design.md`
+**Plan:** `docs/superpowers/plans/2026-03-31-mesh-p3-conflict-resolution-ui.md`
 
 - [ ] `/conflicts` page with filter by table/peer/status
 - [ ] Side-by-side JSON diff view (local vs remote payload)
@@ -1811,6 +1813,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 ### 33.4 Node Discovery + Peer Registry (P4) — P0
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p4-node-discovery-peer-registry-design.md`
+**Plan:** `docs/superpowers/plans/2026-03-31-mesh-p4-node-discovery-peer-registry.md`
 
 - [ ] Extend sync_nodes with sync_url, sync_cursor, sync_status, sync_interval_ms, is_self
 - [ ] Tailscale auto-discovery via `tailscale status --json` (additive, 60s interval)
@@ -1821,6 +1824,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 ### 33.5 Unified CP + Worker per Machine (P5) — P1
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p5-unified-cp-worker-design.md`
+**Plan:** `docs/superpowers/plans/2026-03-31-mesh-p5-unified-cp-worker.md`
 
 - [ ] `packages/mesh-node/` — unified entry point (imports CP + Worker)
 - [ ] `scripts/setup-mesh-node.sh` — one-command bootstrap (PG + Redis + migrations + node-id)
@@ -1830,6 +1834,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 ### 33.6 Tailscale ACL Update (P6) — P1
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p6-tailscale-acl-update-design.md`
+**Plan:** `docs/superpowers/plans/2026-03-31-mesh-p6-tailscale-acl-update.md`
 
 - [ ] Add `tag:mesh-node` and peer-to-peer `:8080` ACL rule
 - [ ] Update `infra/tailscale/acl-policy.json`
@@ -1845,11 +1850,11 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
 | **P0** | Mesh: Change Log + Vector Clock | 33.1 | 🔧 Plan v4.2 approved (5 rounds Codex review), ready to implement |
-| **P0** | Mesh: Sync Protocol + API | 33.2 | 📋 Spec written — depends on 33.1+33.4 |
-| **P0** | Mesh: Node Discovery + Peer Registry | 33.4 | 📋 Spec written — parallelizable with 33.1 |
-| **P1** | Mesh: Conflict Resolution UI | 33.3 | 📋 Spec written — depends on 33.2 |
-| **P1** | Mesh: Unified CP + Worker | 33.5 | 📋 Spec written — depends on 33.4 |
-| **P1** | Mesh: Tailscale ACL Update | 33.6 | 📋 Spec written — depends on 33.4 |
+| **P0** | Mesh: Sync Protocol + API | 33.2 | 📋 Spec v3 + plan written — depends on 33.1+33.4 |
+| **P0** | Mesh: Node Discovery + Peer Registry | 33.4 | 📋 Spec v3 + plan v2 written — parallelizable with 33.1 |
+| **P1** | Mesh: Conflict Resolution UI | 33.3 | 📋 Spec v3 + plan written — depends on 33.2 |
+| **P1** | Mesh: Unified CP + Worker | 33.5 | 📋 Spec v3 + plan written — depends on 33.4 |
+| **P1** | Mesh: Tailscale ACL Update | 33.6 | 📋 Spec v3 + plan written — depends on 33.4 |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 fixed all 8 alerts (log injection, TOCTOU, temp files) |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 pinned brace-expansion <5 |
