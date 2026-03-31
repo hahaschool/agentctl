@@ -43,23 +43,26 @@ For DELETE conflicts (one side's payload is null):
 **Provenance:** Every resolution writes a new `sync_change_log` entry with `vcMerge(localVclock, remoteVclock)` so the resolution propagates to other peers. This is what makes resolution convergence-safe — the merged vclock dominates both sides.
 
 ```typescript
-// In resolve handler, after applying:
+// In resolve handler:
+// Body: { resolution: 'local' | 'remote' | 'merged', payload?: Record<string, unknown> }
+// For 'local' and 'remote', no body payload needed — we use the conflict's stored payloads.
+// For 'merged', the client sends the merged payload in the body.
 const mergedVclock = vcMerge(conflict.localVclock, conflict.remoteVclock);
+const chosenPayload = resolution === 'local' ? conflict.localPayload
+  : resolution === 'remote' ? conflict.remotePayload
+  : payload; // 'merged' — user-provided body
+
 await withSyncApplyGuard(db, async (tx) => {
-  // Apply chosen payload
-  if (resolution === 'local' && conflict.localPayload === null) {
-    // "Keep Local" where local side deleted → apply DELETE
-    const pkCol = getTablePkColumn(conflict.tableName);
+  const pkCol = getTablePkColumn(conflict.tableName);
+
+  if (chosenPayload === null) {
+    // Chosen side was a DELETE → apply DELETE
     await tx.execute(sql`DELETE FROM ${sql.identifier(conflict.tableName)} WHERE ${sql.identifier(pkCol)} = ${conflict.rowId}`);
-  } else if (resolution !== 'local' && payload === null) {
-    // "Keep Remote" where remote side deleted → apply DELETE
-    const pkCol = getTablePkColumn(conflict.tableName);
-    await tx.execute(sql`DELETE FROM ${sql.identifier(conflict.tableName)} WHERE ${sql.identifier(pkCol)} = ${conflict.rowId}`);
-  } else if (resolution !== 'local' && payload) {
-    // "Keep Remote" or "Merged" with actual payload → UPSERT
-    await tx.execute(buildUpsertFromPayload(conflict.tableName, payload));
+  } else if (resolution !== 'local') {
+    // 'remote' or 'merged' with non-null payload → UPSERT
+    await tx.execute(buildUpsertFromPayload(conflict.tableName, chosenPayload));
   }
-  // "Keep Local" with non-null local payload → no data change needed
+  // 'local' with non-null payload → no data change needed (row is already correct)
   // Write provenance entry with merged vclock.
   // Payload depends on resolution: 'local' uses localPayload, 'remote' uses remotePayload,
   // 'merged' uses the user-provided payload from the request body.
