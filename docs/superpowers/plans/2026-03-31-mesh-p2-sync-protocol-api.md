@@ -148,40 +148,38 @@ async function applyAppendOnly(change: ChangeLogEntry, db: Database): Promise<'a
 }
 
 async function applyMutable(change: ChangeLogEntry, db: Database): Promise<'applied' | 'skipped' | 'conflict'> {
-  // Advisory lock
-  await db.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${change.tableName + ':' + change.rowId})::bigint)`);
+  // Everything inside one transaction so advisory lock stays held during apply
+  return withSyncApplyGuard(db, async (tx) => {
+    // Advisory lock INSIDE the transaction (xact-scoped = released at tx end)
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${change.tableName + ':' + change.rowId})::bigint)`);
 
-  // Get local vclock
-  const localEntry = await getLatestChangeLogEntry(db, change.tableName, change.rowId);
-  const localVclock = localEntry?.vclock ?? {};
+    // Get local vclock
+    const localEntry = await getLatestChangeLogEntry(tx, change.tableName, change.rowId);
+    const localVclock = localEntry?.vclock ?? {};
+    const comparison = vcCompare(change.vclock, localVclock);
 
-  const comparison = vcCompare(change.vclock, localVclock);
-
-  if (comparison === 'a_dominates') {
-    // Remote is newer — apply
-    await withSyncApplyGuard(db, async (tx) => {
+    if (comparison === 'a_dominates') {
+      // Remote is newer — apply
       if (change.operation === 'DELETE') {
         await tx.execute(sql`DELETE FROM ${sql.identifier(change.tableName)} WHERE ${sql.identifier(getTablePkColumn(change.tableName))} = ${change.rowId}`);
       } else {
         await tx.execute(buildUpsertFromPayload(change.tableName, change.payload!));
       }
-      // Write merged vclock
       const merged = vcMerge(change.vclock, localVclock);
       await tx.execute(sql`INSERT INTO sync_change_log (node_id, table_name, row_id, operation, payload, vclock)
         VALUES (${change.nodeId}, ${change.tableName}, ${change.rowId}, ${change.operation}, ${change.payload}, ${JSON.stringify(merged)}::jsonb)`);
-    });
-    return 'applied';
-  }
+      return 'applied';
+    }
 
-  if (comparison === 'conflict') {
-    // Record conflict
-    await db.execute(sql`INSERT INTO sync_conflicts (table_name, row_id, local_vclock, local_payload, remote_vclock, remote_payload, remote_node_id)
-      VALUES (${change.tableName}, ${change.rowId}, ${JSON.stringify(localVclock)}::jsonb, ${JSON.stringify(localEntry?.payload)}::jsonb,
-              ${JSON.stringify(change.vclock)}::jsonb, ${JSON.stringify(change.payload)}::jsonb, ${change.nodeId})`);
-    return 'conflict';
-  }
+    if (comparison === 'conflict') {
+      await tx.execute(sql`INSERT INTO sync_conflicts (table_name, row_id, local_vclock, local_payload, remote_vclock, remote_payload, remote_node_id)
+        VALUES (${change.tableName}, ${change.rowId}, ${JSON.stringify(localVclock)}::jsonb, ${JSON.stringify(localEntry?.payload)}::jsonb,
+                ${JSON.stringify(change.vclock)}::jsonb, ${JSON.stringify(change.payload)}::jsonb, ${change.nodeId})`);
+      return 'conflict';
+    }
 
-  return 'skipped'; // b_dominates or equal
+    return 'skipped'; // b_dominates or equal
+  });
 }
 ```
 
@@ -223,19 +221,24 @@ export async function syncFromPeer(opts: {
     if (!resp.ok) { errors++; break; }
     const data = await resp.json() as { changes: ChangeLogEntry[]; cursor: number; hasMore: boolean };
 
+    let batchFailed = false;
+    let lastSuccessId = cursor; // track last successfully processed change
     for (const change of data.changes) {
       try {
         const result = await applyChange(change, db);
         if (result === 'applied') applied++;
         if (result === 'conflict') conflicts++;
+        lastSuccessId = change.id; // only advance on success
       } catch (err) {
-        logger.warn({ err, changeId: change.id }, 'Failed to apply sync change');
+        logger.warn({ err, changeId: change.id }, 'Failed to apply sync change — stopping batch');
         errors++;
-        break; // Stop batch on error, retry from last cursor
+        batchFailed = true;
+        break; // Stop batch on error, DON'T advance cursor past this point
       }
     }
 
-    cursor = data.cursor;
+    // Only advance cursor to last successfully processed change
+    cursor = batchFailed ? lastSuccessId : data.cursor;
     await updatePulledCursor(db, selfMachineId, peer.id, cursor);
 
     // ACK to peer
@@ -294,7 +297,16 @@ export async function markSyncedEntries(db: Database, selfMachineId: string): Pr
 
 ---
 
-### Task 7: Push + PR
+### Task 7: Verify TABLE_SYNC_CONFIG alignment
+
+P1 should have already set the correct classification (4 append-only + 11 mutable). Verify that `packages/shared/src/types/sync.ts` has `agent_runs`, `rc_sessions`, `managed_sessions` as `'mutable'` and `api_accounts` as `'local-only'`. If P1 was implemented with the old classification, update it here.
+
+- [ ] **Step 1: Verify and fix if needed**
+- [ ] **Step 2: Build shared + commit if changed**
+
+---
+
+### Task 8: Push + PR
 
 ```bash
 git push -u origin agent/claude/feat/mesh-p2-sync-protocol

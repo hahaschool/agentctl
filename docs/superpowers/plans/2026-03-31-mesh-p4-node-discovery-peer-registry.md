@@ -24,7 +24,7 @@ Add columns after `createdAt` in the `syncNodes` table (added by P1):
 
 ```typescript
   syncUrl: text('sync_url'),
-  syncCursor: bigint('sync_cursor', { mode: 'number' }).default(0),
+  // NOTE: sync_cursor is NOT on sync_nodes — directional cursors are in sync_peer_cursors table
   syncStatus: text('sync_status').default('unknown'),
   syncIntervalMs: integer('sync_interval_ms').default(30000),
   isSelf: boolean('is_self').default(false),
@@ -57,7 +57,6 @@ Create `packages/control-plane/drizzle/0022_mesh_peer_registry.sql`:
 ```sql
 -- Mesh P4: Peer registry extensions
 ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS sync_url TEXT;
-ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS sync_cursor BIGINT DEFAULT 0;
 ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS sync_status TEXT DEFAULT 'unknown';
 ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS sync_interval_ms INTEGER DEFAULT 30000;
 ALTER TABLE sync_nodes ADD COLUMN IF NOT EXISTS is_self BOOLEAN DEFAULT false;
@@ -92,30 +91,40 @@ git commit -m "feat(mesh-p4): extend sync_nodes + add sync_peer_cursors table"
 
 In `packages/control-plane/src/api/routes/health.ts`, the health route plugin needs access to machineId. Pass it via the route options or read from env:
 
-In the handler function, add to the `base` response object:
+The health route needs `machineId` and `publicKey`. These should be passed via `HealthRoutesOptions`:
+
+```typescript
+// In health.ts, add to HealthRoutesOptions:
+export type HealthRoutesOptions = {
+  // ... existing fields ...
+  machineId?: string;
+  syncPublicKey?: string;
+};
+```
+
+In the handler, add to the `base` response:
 
 ```typescript
       const base = {
-        status: anyError ? ('degraded' as const) : ('ok' as const),
-        timestamp,
-        uptime: process.uptime(),
-        nodeVersion: process.version,
-        memoryUsage,
-        // Mesh identity for peer discovery
-        machineId: process.env.MACHINE_ID ?? null,
-        nodePublicKey: process.env.SYNC_PUBLIC_KEY ?? null,
+        // ... existing fields ...
+        machineId: opts.machineId ?? null,
+        nodePublicKey: opts.syncPublicKey ?? null,
       };
 ```
 
-Update the `HealthResponse` type accordingly:
+In `server.ts`, pass when registering health routes:
 
 ```typescript
-type HealthResponse = {
-  // ... existing fields ...
-  machineId?: string | null;
-  nodePublicKey?: string | null;
-};
+await app.register(healthRoutes, {
+  // ... existing opts ...
+  machineId: process.env.MACHINE_ID,
+  syncPublicKey: dispatchSigningKeyPair?.publicKey
+    ? Buffer.from(dispatchSigningKeyPair.publicKey).toString('base64')
+    : undefined,
+});
 ```
+
+Update `HealthResponse` type to include the new fields.
 
 - [ ] **Step 2: Build + commit**
 

@@ -21,21 +21,58 @@
 
 - [ ] **Step 1: Add machineId filter to task worker**
 
-In task-worker.ts, after resolving the agent (~line 201), add early exit:
+In `task-worker.ts`, after resolving the agent (~line 201), add early exit:
 
 ```typescript
 const localMachineId = process.env.MACHINE_ID;
 if (localMachineId && agent.machineId !== localMachineId) {
   jobLogger.debug({ agentMachineId: agent.machineId, localMachineId }, 'Skipping job for non-local agent');
-  return; // This agent belongs to another node
+  return; // This agent belongs to another node — will be processed by its home node
 }
 ```
 
 - [ ] **Step 2: Add machineId filter to run reaper**
 
-The stale-run reaper query should filter: `WHERE agents.machine_id = $machineId` so each node only reaps its own runs.
+In `packages/control-plane/src/api/routes/run-reaper.ts` (or wherever the stale-run reaper query lives), add a WHERE clause:
 
-- [ ] **Step 3: Build + commit**
+```sql
+-- Before (reaps ALL stale runs globally):
+WHERE agent_runs.status = 'running' AND agent_runs.started_at < now() - interval '2 hours'
+
+-- After (reaps only this node's runs):
+WHERE agent_runs.status = 'running'
+  AND agent_runs.started_at < now() - interval '2 hours'
+  AND agent_runs.agent_id IN (SELECT id FROM agents WHERE machine_id = $machineId)
+```
+
+- [ ] **Step 3: Add machineId filter to repeatable job scheduler**
+
+In `packages/control-plane/src/scheduler/repeatable-jobs.ts`, when creating cron/heartbeat jobs, filter to only create jobs for agents where `agents.machine_id = localMachineId`.
+
+```typescript
+// Before creating repeatable jobs:
+const localMachineId = process.env.MACHINE_ID;
+const localAgents = allAgents.filter(a => !localMachineId || a.machineId === localMachineId);
+// Only create jobs for localAgents
+```
+
+- [ ] **Step 4: Guard the agent start route**
+
+In `packages/control-plane/src/api/routes/agents.ts`, the POST `/:id/start` route enqueues a job on the local BullMQ. With local Redis per node, this job will only be processed locally. If `agent.machineId !== localMachineId`, the start request should be forwarded to the correct node via the sync URL.
+
+For P5, the simplest approach: **reject remote starts with a clear error message** pointing the user to the correct node. Cross-node agent management can be added in a future iteration.
+
+```typescript
+const localMachineId = process.env.MACHINE_ID;
+if (localMachineId && agent.machineId !== localMachineId) {
+  return reply.code(409).send({
+    error: 'AGENT_ON_DIFFERENT_NODE',
+    message: `Agent '${agent.name}' is registered on machine '${agent.machineId}'. Start it from that node.`,
+  });
+}
+```
+
+- [ ] **Step 5: Build + commit**
 
 ---
 

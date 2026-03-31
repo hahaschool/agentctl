@@ -51,34 +51,28 @@ git commit -m "feat(mesh-p6): add mesh-node tag + peer-to-peer :8080 ACL rule"
 ### Task 2: ACL Tests
 
 **Files:**
-- Create or modify: `infra/tailscale/acl-tests.json`
+- Modify: `infra/tailscale/acl-policy.json` (tests section is embedded inside the policy file per repo convention)
 
-- [ ] **Step 1: Add test cases**
+- [ ] **Step 1: Add test cases INSIDE acl-policy.json**
+
+This repo keeps ACL tests embedded in the `"tests"` array within `acl-policy.json` (see line ~134 of the existing file). Do NOT create a separate `acl-tests.json` file.
+
+Add to the existing `"tests"` array:
 
 ```json
-[
-  {
-    "src": "tag:mesh-node",
-    "dst": "tag:mesh-node:8080",
-    "allow": true,
-    "comment": "Mesh peer sync on :8080"
-  },
-  {
-    "src": "tag:mesh-node",
-    "dst": "tag:mesh-node:9000",
-    "allow": true,
-    "comment": "Mesh nodes also have tag:control→tag:worker:9000"
-  },
-  {
-    "src": "tag:mobile",
-    "dst": "tag:mesh-node:8080",
-    "allow": false,
-    "comment": "Mobile cannot reach mesh sync directly"
-  }
-]
+{
+  "src": "tag:mesh-node",
+  "dst": "tag:mesh-node:8080",
+  "allow": true,
+  "comment": "Mesh peer sync on :8080"
+},
+{
+  "src": "tag:mobile",
+  "dst": "tag:mesh-node:8080",
+  "allow": false,
+  "comment": "Mobile cannot reach mesh sync directly"
+}
 ```
-
-Note: Actual test format depends on `tailscale test` CLI or repo's test convention. Read `infra/tailscale/README.md` for format guidance.
 
 - [ ] **Step 2: Commit**
 

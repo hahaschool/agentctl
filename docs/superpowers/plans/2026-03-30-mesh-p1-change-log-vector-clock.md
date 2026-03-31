@@ -249,18 +249,17 @@ export type SyncNode = {
  * its sync_id UUID column instead. See drizzle/0021 migration.
  */
 export const TABLE_SYNC_CONFIG: Record<string, TableSyncType> = {
-  // Append-only (7 tables)
-  agent_runs: 'append-only',
+  // Append-only (4 tables) — truly insert-only, never updated
   agent_actions: 'append-only', // trigger uses sync_id UUID, not bigserial id
-  rc_sessions: 'append-only',
-  managed_sessions: 'append-only',
   session_handoffs: 'append-only',
   native_import_attempts: 'append-only',
   run_handoff_decisions: 'append-only',
-  // Mutable (9 tables)
+  // Mutable (11 tables) — receive status updates, need vector clock conflict detection
   agents: 'mutable',
   machines: 'mutable',
-  api_accounts: 'mutable',
+  agent_runs: 'mutable',        // status updates: running→success/failure
+  rc_sessions: 'mutable',       // status updates: active→ended
+  managed_sessions: 'mutable',  // status updates during lifecycle
   project_account_mappings: 'mutable',
   settings: 'mutable', // PK = 'key' (not 'id')
   runtime_config_revisions: 'mutable',
@@ -269,12 +268,14 @@ export const TABLE_SYNC_CONFIG: Record<string, TableSyncType> = {
   memory_edges: 'mutable',
   // Local-only (not synced)
   machine_runtime_state: 'local-only',
+  api_accounts: 'local-only',   // encrypted credentials must not auto-replicate
   sync_change_log: 'local-only',
   sync_nodes: 'local-only',
   sync_conflicts: 'local-only',
+  sync_peer_cursors: 'local-only',
 } as const;
 
-/** List of table names that have sync triggers attached (16 tables). */
+/** List of table names that have sync triggers attached (15 tables). */
 export const SYNCED_TABLES = Object.entries(TABLE_SYNC_CONFIG)
   .filter(([, type]) => type !== 'local-only')
   .map(([name]) => name);
@@ -329,145 +330,111 @@ git commit -m "feat(mesh): add sync types — ChangeLogEntry, SyncConflict, Sync
 
 ---
 
-### Task 3: Node Identity Module
+### Task 3: Machine Identity Module
+
+Uses existing `MACHINE_ID` env var (same as worker registration). No separate file-based nodeId.
 
 **Files:**
-- Create: `packages/control-plane/src/sync/node-identity.ts`
-- Create: `packages/control-plane/src/sync/node-identity.test.ts`
+- Create: `packages/control-plane/src/sync/machine-identity.ts`
+- Create: `packages/control-plane/src/sync/machine-identity.test.ts`
 
 - [ ] **Step 1: Write failing tests**
 
-Create `packages/control-plane/src/sync/node-identity.test.ts`:
+Create `packages/control-plane/src/sync/machine-identity.test.ts`:
 
 ```typescript
-import * as fs from 'node:fs';
 import * as os from 'node:os';
-import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getOrCreateNodeId } from './node-identity.js';
+import { getMachineId } from './machine-identity.js';
 
-describe('getOrCreateNodeId', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentctl-node-id-'));
-  });
+describe('getMachineId', () => {
+  const originalEnv = process.env.MACHINE_ID;
 
   afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    if (originalEnv !== undefined) {
+      process.env.MACHINE_ID = originalEnv;
+    } else {
+      delete process.env.MACHINE_ID;
+    }
   });
 
-  it('creates a new node ID file on first call', () => {
-    const nodeId = getOrCreateNodeId(tmpDir);
-    expect(nodeId).toMatch(/^node-.+-[a-f0-9]{4}$/);
-    expect(fs.existsSync(path.join(tmpDir, 'node-id'))).toBe(true);
+  it('returns MACHINE_ID from env when set', () => {
+    process.env.MACHINE_ID = 'mac-local';
+    expect(getMachineId()).toBe('mac-local');
   });
 
-  it('returns the same ID on subsequent calls', () => {
-    const first = getOrCreateNodeId(tmpDir);
-    const second = getOrCreateNodeId(tmpDir);
-    expect(first).toBe(second);
+  it('derives from hostname when MACHINE_ID is not set', () => {
+    delete process.env.MACHINE_ID;
+    const id = getMachineId();
+    // Should be lowercase, alphanumeric+hyphens, derived from os.hostname()
+    expect(id).toMatch(/^[a-z0-9-]+$/);
+    expect(id.length).toBeGreaterThan(0);
   });
 
-  it('reads existing node ID from file', () => {
-    const filePath = path.join(tmpDir, 'node-id');
-    fs.writeFileSync(filePath, 'node-custom-abcd', 'utf8');
-    const nodeId = getOrCreateNodeId(tmpDir);
-    expect(nodeId).toBe('node-custom-abcd');
-  });
-
-  it('creates the directory if it does not exist', () => {
-    const nestedDir = path.join(tmpDir, 'nested', 'dir');
-    const nodeId = getOrCreateNodeId(nestedDir);
-    expect(nodeId).toMatch(/^node-.+-[a-f0-9]{4}$/);
+  it('sanitizes hostname to valid ID format', () => {
+    delete process.env.MACHINE_ID;
+    // hostname() may contain dots, underscores — getMachineId strips them
+    const id = getMachineId();
+    expect(id).not.toMatch(/[^a-z0-9-]/);
   });
 });
 ```
 
 - [ ] **Step 2: Run tests — expected FAIL**
 
-Run: `cd packages/control-plane && pnpm vitest run src/sync/node-identity.test.ts`
-Expected: FAIL — `Cannot find module './node-identity.js'`
+- [ ] **Step 3: Implement machine identity**
 
-- [ ] **Step 3: Implement node identity**
-
-Create `packages/control-plane/src/sync/node-identity.ts`:
+Create `packages/control-plane/src/sync/machine-identity.ts`:
 
 ```typescript
-import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
 import * as os from 'node:os';
-import * as path from 'node:path';
 
 import { sql } from 'drizzle-orm';
 
 import type { Database } from '../db/index.js';
 
-const NODE_ID_FILE = 'node-id';
-
 /**
- * Get or create the persistent node ID for this machine.
- * Stored at `<configDir>/node-id`.
- * Format: `node-<hostname-prefix>-<4-hex>`
+ * Get the machine ID for this node. Uses MACHINE_ID env var (same as worker
+ * registration) or derives from hostname. No separate file-based identity.
  */
-export function getOrCreateNodeId(configDir: string): string {
-  const filePath = path.join(configDir, NODE_ID_FILE);
+export function getMachineId(): string {
+  const envId = process.env.MACHINE_ID;
+  if (envId) return envId;
 
-  try {
-    const existing = fs.readFileSync(filePath, 'utf8').trim();
-    if (existing) return existing;
-  } catch {
-    // File doesn't exist — generate below
-  }
-
-  const hostPrefix =
-    os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 16) || 'unknown';
-  const suffix = crypto.randomBytes(2).toString('hex');
-  const nodeId = `node-${hostPrefix}-${suffix}`;
-
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, nodeId, 'utf8');
-
-  return nodeId;
+  return os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32) || 'unknown';
 }
 
 /**
- * Upsert the current node into the sync_nodes registry.
- * Safe to call before the sync tables exist (catches errors silently).
+ * Upsert this node into the sync_nodes registry with is_self=true.
+ * Safe to call before sync tables exist.
  */
-export async function upsertSyncNode(
+export async function upsertSelfNode(
   db: Database,
-  nodeId: string,
+  machineId: string,
   tailscaleIp?: string,
 ): Promise<void> {
   const hostname = os.hostname();
   await db.execute(
-    sql`INSERT INTO sync_nodes (id, hostname, tailscale_ip, role, last_seen)
-        VALUES (${nodeId}, ${hostname}, ${tailscaleIp ?? null}, 'full', now())
+    sql`INSERT INTO sync_nodes (id, hostname, tailscale_ip, role, is_self, last_seen)
+        VALUES (${machineId}, ${hostname}, ${tailscaleIp ?? null}, 'full', true, now())
         ON CONFLICT (id) DO UPDATE SET
           hostname = EXCLUDED.hostname,
           tailscale_ip = EXCLUDED.tailscale_ip,
+          is_self = true,
           last_seen = now()`,
   );
 }
 ```
 
-- [ ] **Step 4: Run tests — expected PASS (4 tests)**
-
-Run: `cd packages/control-plane && pnpm vitest run src/sync/node-identity.test.ts`
-
+- [ ] **Step 4: Run tests — expected PASS (3 tests)**
 - [ ] **Step 5: Build**
-
-Run: `pnpm --filter @agentctl/control-plane build`
-Expected: clean build
-
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/control-plane/src/sync/node-identity.ts packages/control-plane/src/sync/node-identity.test.ts
-git commit -m "feat(mesh): add node identity — getOrCreateNodeId + upsertSyncNode"
+git add packages/control-plane/src/sync/machine-identity.ts packages/control-plane/src/sync/machine-identity.test.ts
+git commit -m "feat(mesh): add machine identity — getMachineId + upsertSelfNode (uses MACHINE_ID env)"
 ```
 
 ---
@@ -590,34 +557,30 @@ git commit -m "feat(mesh): set app.node_id on every pool connection via pool.on(
 
 ---
 
-### Task 5: Wire Node ID into Startup
+### Task 5: Wire Machine ID into Startup
 
 **Files:**
 - Modify: `packages/control-plane/src/index.ts:203-222`
 
-- [ ] **Step 1: Import node identity functions**
+- [ ] **Step 1: Import machine identity functions**
 
 At the top of `packages/control-plane/src/index.ts`, add:
 
 ```typescript
-import { getOrCreateNodeId, upsertSyncNode } from './sync/node-identity.js';
+import { getMachineId, upsertSelfNode } from './sync/machine-identity.js';
 ```
 
-- [ ] **Step 2: Generate nodeId before createDb**
+- [ ] **Step 2: Get machineId before createDb**
 
 In the `main()` function, before the `if (DATABASE_URL)` block (~line 220), add:
 
 ```typescript
-  // --- Mesh node identity ---
-  const agentctlConfigDir = process.env.AGENTCTL_CONFIG_DIR
-    ?? join(process.env.HOME ?? '/tmp', '.agentctl');
-  const nodeId = getOrCreateNodeId(agentctlConfigDir);
-  logger.info({ nodeId, configDir: agentctlConfigDir }, 'Mesh node identity initialized');
+  // --- Mesh identity (reuses MACHINE_ID env var from worker registration) ---
+  const machineId = getMachineId();
+  logger.info({ machineId }, 'Mesh machine identity initialized');
 ```
 
-Note: `join` from `node:path` is already imported at the top of `index.ts` (line 3). No new import needed.
-
-- [ ] **Step 3: Pass nodeId to createDb**
+- [ ] **Step 3: Pass machineId to createDb**
 
 Change the `createDb` call at line 222 from:
 
@@ -628,17 +591,17 @@ Change the `createDb` call at line 222 from:
 to:
 
 ```typescript
-    db = createDb(DATABASE_URL, { sessionNodeId: nodeId });
+    db = createDb(DATABASE_URL, { sessionNodeId: machineId });
 ```
 
-- [ ] **Step 4: Upsert sync node after DB is ready**
+- [ ] **Step 4: Upsert self node after DB is ready**
 
 After the migration block (~line 260, after migrations run or are skipped), add:
 
 ```typescript
-    // Register this mesh node in the sync_nodes table (safe if table doesn't exist yet)
+    // Register this mesh node in sync_nodes with is_self=true
     try {
-      await upsertSyncNode(db, nodeId, process.env.TAILSCALE_IP);
+      await upsertSelfNode(db, machineId, process.env.TAILSCALE_IP);
     } catch {
       logger.debug('sync_nodes table not available yet — skipping node registration');
     }
@@ -868,27 +831,15 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- ============================================================================
--- 4. Attach triggers to all 16 synced tables
+-- 4. Attach triggers to all 15 synced tables (no api_accounts — local-only)
 --    DROP + CREATE for idempotent replay-on-boot.
 --    PK column name is passed as the trigger argument.
 -- ============================================================================
 
--- Append-only tables (PK = 'id' unless noted)
-DROP TRIGGER IF EXISTS sync_capture ON agent_runs;
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON agent_runs FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
-
+-- Append-only tables (4 tables)
 DROP TRIGGER IF EXISTS sync_capture ON agent_actions;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON agent_actions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('sync_id');
-
-DROP TRIGGER IF EXISTS sync_capture ON rc_sessions;
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON rc_sessions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
-
-DROP TRIGGER IF EXISTS sync_capture ON managed_sessions;
-CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON managed_sessions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 
 DROP TRIGGER IF EXISTS sync_capture ON session_handoffs;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
@@ -902,7 +853,7 @@ DROP TRIGGER IF EXISTS sync_capture ON run_handoff_decisions;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON run_handoff_decisions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 
--- Mutable tables
+-- Mutable tables (11 tables — agent_runs, rc_sessions, managed_sessions moved here from append-only)
 DROP TRIGGER IF EXISTS sync_capture ON agents;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON agents FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
@@ -911,9 +862,17 @@ DROP TRIGGER IF EXISTS sync_capture ON machines;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
   ON machines FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 
-DROP TRIGGER IF EXISTS sync_capture ON api_accounts;
+DROP TRIGGER IF EXISTS sync_capture ON agent_runs;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
-  ON api_accounts FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+  ON agent_runs FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+
+DROP TRIGGER IF EXISTS sync_capture ON rc_sessions;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON rc_sessions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
+
+DROP TRIGGER IF EXISTS sync_capture ON managed_sessions;
+CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE
+  ON managed_sessions FOR EACH ROW EXECUTE FUNCTION sync_capture_change('id');
 
 DROP TRIGGER IF EXISTS sync_capture ON project_account_mappings;
 CREATE TRIGGER sync_capture AFTER INSERT OR UPDATE OR DELETE

@@ -37,10 +37,30 @@ Resolve handler:
 ```
 
 For DELETE conflicts (one side's payload is null):
-- `resolution: 'local'` with null local payload = keep deleted
-- `resolution: 'remote'` with non-null remote payload = restore the row
+- `resolution: 'local'` with null local payload = keep the row deleted locally
+- `resolution: 'remote'` with non-null remote payload = restore the row from remote
 
-- [ ] **Step 2: Register routes, build, commit**
+**Provenance:** Every resolution writes a new `sync_change_log` entry with `vcMerge(localVclock, remoteVclock)` so the resolution propagates to other peers. This is what makes resolution convergence-safe — the merged vclock dominates both sides.
+
+```typescript
+// In resolve handler, after applying:
+const mergedVclock = vcMerge(conflict.localVclock, conflict.remoteVclock);
+await withSyncApplyGuard(db, async (tx) => {
+  // Apply chosen payload (if 'remote' or 'merged')
+  if (resolution !== 'local' && payload) {
+    await tx.execute(buildUpsertFromPayload(conflict.tableName, payload));
+  }
+  // Write provenance entry with merged vclock
+  await tx.execute(sql`INSERT INTO sync_change_log
+    (node_id, table_name, row_id, operation, payload, vclock)
+    VALUES (${selfMachineId}, ${conflict.tableName}, ${conflict.rowId},
+            'UPDATE', ${JSON.stringify(payload)}::jsonb,
+            ${JSON.stringify(mergedVclock)}::jsonb)`);
+});
+```
+
+- [ ] **Step 2: Add filter by peer** — GET endpoint accepts `?remoteNodeId=<machineId>` filter param
+- [ ] **Step 3: Register routes, build, commit**
 
 ---
 
