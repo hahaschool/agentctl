@@ -1789,38 +1789,51 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 33.2 Sync Protocol + API (P2) — P0
 
-- [ ] `GET /sync/changes?since=<cursor>&limit=N` — pull changes from a peer
-- [ ] `POST /sync/push` — push local changes to a peer
-- [ ] Append-only auto-merge logic (deduplicate by PK)
-- [ ] Mutable conflict detection + `sync_conflicts` insertion
-- [ ] Sync scheduler: 30s poll for always-on peers, catch-up on reconnect
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p2-sync-protocol-api-design.md`
+
+- [ ] `GET /api/sync/changes?since=<cursor>&limit=500` — pull changes from a peer
+- [ ] `POST /api/sync/ack` — acknowledge cursor to mark entries synced
+- [ ] Append-only auto-merge (PK dedup, INSERT via withSyncApplyGuard)
+- [ ] Mutable conflict detection (vcCompare → sync_conflicts insertion)
+- [ ] Per-peer sync loop with adaptive interval (30s default, backoff on failure)
+- [ ] Catch-up on reconnect (immediate full sync when peer transitions to reachable)
 
 ### 33.3 Conflict Resolution UI (P3) — P1
 
-- [ ] `/conflicts` page listing pending conflicts
-- [ ] Side-by-side diff view (local vs remote payload)
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p3-conflict-resolution-ui-design.md`
+
+- [ ] `/conflicts` page with filter by table/peer/status
+- [ ] Side-by-side JSON diff view (local vs remote payload)
 - [ ] Resolve actions: keep local / keep remote / manual merge
 - [ ] Conflict count badge in sidebar navigation
+- [ ] Resolution flow: apply remote payload via withSyncApplyGuard + merge vclocks
 
 ### 33.4 Node Discovery + Peer Registry (P4) — P0
 
-- [ ] `sync_nodes` peer management (add/remove/status)
-- [ ] Tailscale-based auto-discovery (query `tailscale status --json`)
-- [ ] Peer health check + adaptive poll interval
-- [ ] Settings page: "Mesh Peers" section
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p4-node-discovery-peer-registry-design.md`
+
+- [ ] Extend sync_nodes with sync_url, sync_cursor, sync_status, sync_interval_ms, is_self
+- [ ] Tailscale auto-discovery via `tailscale status --json` (additive, 60s interval)
+- [ ] Per-peer health check with adaptive interval (30s → 5min on failure)
+- [ ] REST API: `GET/POST/DELETE /api/sync/peers`, `POST /:nodeId/ping`
+- [ ] Mesh Peers section on Machines page
 
 ### 33.5 Unified CP + Worker per Machine (P5) — P1
 
-- [ ] Single process mode: CP + Worker in one Fastify instance
-- [ ] Local PostgreSQL bootstrap script (per-machine)
-- [ ] PM2 ecosystem config for mesh node (`ecosystem.mesh.config.cjs`)
-- [ ] `scripts/setup-mesh-node.sh` — one-command new machine setup
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p5-unified-cp-worker-design.md`
+
+- [ ] `packages/mesh-node/` — unified entry point (imports CP + Worker)
+- [ ] `scripts/setup-mesh-node.sh` — one-command bootstrap (PG + Redis + migrations + node-id)
+- [ ] `infra/pm2/ecosystem.mesh.config.cjs` — mesh node PM2 config
+- [ ] `docs/QUICKSTART-MESH.md` — setup guide
 
 ### 33.6 Tailscale ACL Update (P6) — P1
 
-- [ ] Open peer-to-peer `:8080` between all mesh nodes
-- [ ] Update `infra/tailscale/acl-policy.json` with `tag:mesh-node`
-- [ ] Documentation for ACL deployment
+**Spec:** `docs/superpowers/specs/2026-03-31-mesh-p6-tailscale-acl-update-design.md`
+
+- [ ] Add `tag:mesh-node` and peer-to-peer `:8080` ACL rule
+- [ ] Update `infra/tailscale/acl-policy.json`
+- [ ] Document ACL deployment procedure
 
 ---
 
@@ -1831,12 +1844,12 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
-| **P0** | Mesh: Change Log + Vector Clock | 33.1 | 🔧 Spec approved, plan in progress |
-| **P0** | Mesh: Sync Protocol + API | 33.2 | Planned — depends on 33.1 |
-| **P0** | Mesh: Node Discovery + Peer Registry | 33.4 | Planned — parallelizable with 33.1 |
-| **P1** | Mesh: Conflict Resolution UI | 33.3 | Planned — depends on 33.2 |
-| **P1** | Mesh: Unified CP + Worker | 33.5 | Planned — depends on 33.4 |
-| **P1** | Mesh: Tailscale ACL Update | 33.6 | Planned — depends on 33.4 |
+| **P0** | Mesh: Change Log + Vector Clock | 33.1 | 🔧 Plan v4.2 approved (5 rounds Codex review), ready to implement |
+| **P0** | Mesh: Sync Protocol + API | 33.2 | 📋 Spec written — depends on 33.1+33.4 |
+| **P0** | Mesh: Node Discovery + Peer Registry | 33.4 | 📋 Spec written — parallelizable with 33.1 |
+| **P1** | Mesh: Conflict Resolution UI | 33.3 | 📋 Spec written — depends on 33.2 |
+| **P1** | Mesh: Unified CP + Worker | 33.5 | 📋 Spec written — depends on 33.4 |
+| **P1** | Mesh: Tailscale ACL Update | 33.6 | 📋 Spec written — depends on 33.4 |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 fixed all 8 alerts (log injection, TOCTOU, temp files) |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 pinned brace-expansion <5 |
