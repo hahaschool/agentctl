@@ -13,6 +13,10 @@ export type HealthRoutesOptions = {
   redis?: { ping: () => Promise<string> };
   mem0Client?: Mem0Client;
   litellmClient?: LiteLLMClient;
+  /** Mesh node identity for peer discovery. */
+  machineId?: string;
+  /** Ed25519 public key (base64) for peer auth. */
+  syncPublicKey?: string;
 };
 
 type MemoryUsage = {
@@ -27,6 +31,8 @@ type HealthResponse = {
   uptime: number;
   nodeVersion: string;
   memoryUsage: MemoryUsage;
+  machineId?: string | null;
+  nodePublicKey?: string | null;
   dependencies?: {
     postgres: DependencyStatus;
     redis: DependencyStatus;
@@ -174,6 +180,8 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
         uptime: process.uptime(),
         nodeVersion: process.version,
         memoryUsage,
+        machineId: opts.machineId ?? null,
+        nodePublicKey: opts.syncPublicKey ?? null,
       };
 
       if (!detail) {
