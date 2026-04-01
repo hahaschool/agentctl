@@ -558,8 +558,8 @@ describe('agentRuns table columns', () => {
 describe('agentActions table columns', () => {
   const meta = getColumnMeta(agentActions);
 
-  it('has exactly 9 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(9);
+  it('has exactly 10 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(10);
   });
 
   it('has all expected column keys', () => {
@@ -573,6 +573,7 @@ describe('agentActions table columns', () => {
       'toolOutputHash',
       'durationMs',
       'approvedBy',
+      'syncId',
     ];
     expect(Object.keys(meta)).toEqual(expectedKeys);
   });
@@ -650,6 +651,17 @@ describe('agentActions table columns', () => {
     expect(meta.approvedBy.hasDefault).toBe(false);
   });
 
+  it('sync_id is a nullable UUID column with defaultRandom()', () => {
+    expect(meta.syncId).toEqual({
+      name: 'sync_id',
+      columnType: 'PgUUID',
+      dataType: 'string',
+      notNull: false,
+      hasDefault: true,
+      primary: false,
+    });
+  });
+
   it('SQL column names match the migration (snake_case)', () => {
     const sqlNames = Object.values(meta).map((m) => m.name);
     expect(sqlNames).toEqual([
@@ -662,6 +674,7 @@ describe('agentActions table columns', () => {
       'tool_output_hash',
       'duration_ms',
       'approved_by',
+      'sync_id',
     ]);
   });
 });
@@ -780,6 +793,7 @@ describe('Required (NOT NULL) vs nullable columns', () => {
       'toolOutputHash',
       'durationMs',
       'approvedBy',
+      'syncId',
     ]);
   });
 });

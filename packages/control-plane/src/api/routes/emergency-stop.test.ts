@@ -347,24 +347,31 @@ describe('Emergency stop proxy routes -- with dbRegistry', () => {
       },
     ] as never);
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/agents/emergency-stop-all',
-    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
 
-    expect(response.statusCode).toBe(200);
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/emergency-stop-all',
+      });
 
-    const body = response.json();
-    expect(body.ok).toBe(true);
-    expect(body.results).toHaveLength(2);
+      expect(response.statusCode).toBe(200);
 
-    // The offline machine should report machine_offline
-    const offlineResult = body.results.find(
-      (r: { machineId: string }) => r.machineId === 'machine-offline',
-    );
-    expect(offlineResult).toBeDefined();
-    expect(offlineResult.stoppedCount).toBe(0);
-    expect(offlineResult.error).toBe('machine_offline');
+      const body = response.json();
+      expect(body.ok).toBe(true);
+      expect(body.results).toHaveLength(2);
+
+      // The offline machine should report machine_offline
+      const offlineResult = body.results.find(
+        (r: { machineId: string }) => r.machineId === 'machine-offline',
+      );
+      expect(offlineResult).toBeDefined();
+      expect(offlineResult.stoppedCount).toBe(0);
+      expect(offlineResult.error).toBe('machine_offline');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -493,16 +500,23 @@ describe('Emergency stop proxy routes -- with dbRegistry', () => {
       },
     ] as never);
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/agents/emergency-stop-all',
-    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
 
-    expect(response.statusCode).toBe(200);
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/emergency-stop-all',
+      });
 
-    const body = response.json();
-    expect(body.results).toHaveLength(1);
-    expect(body.results[0].machineId).toBe('machine-alt');
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.results).toHaveLength(1);
+      expect(body.results[0].machineId).toBe('machine-alt');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('uses hostname as fallback when neither id nor machineId is present', async () => {
@@ -519,16 +533,23 @@ describe('Emergency stop proxy routes -- with dbRegistry', () => {
       },
     ] as never);
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/agents/emergency-stop-all',
-    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
 
-    expect(response.statusCode).toBe(200);
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/emergency-stop-all',
+      });
 
-    const body = response.json();
-    expect(body.results).toHaveLength(1);
-    expect(body.results[0].machineId).toBe('host-only.local');
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.results).toHaveLength(1);
+      expect(body.results[0].machineId).toBe('host-only.local');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -549,17 +570,24 @@ describe('Emergency stop proxy routes -- with dbRegistry', () => {
       },
     ] as never);
 
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/agents/emergency-stop-all',
-    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Connection refused'));
 
-    expect(response.statusCode).toBe(200);
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/agents/emergency-stop-all',
+      });
 
-    const body = response.json();
-    expect(body.results).toHaveLength(1);
-    // Should use hostname as address since tailscaleIp is missing
-    expect(body.results[0].machineId).toBe('machine-no-ts');
+      expect(response.statusCode).toBe(200);
+
+      const body = response.json();
+      expect(body.results).toHaveLength(1);
+      // Should use hostname as address since tailscaleIp is missing
+      expect(body.results[0].machineId).toBe('machine-no-ts');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   // ---------------------------------------------------------------------------
