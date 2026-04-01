@@ -29,6 +29,7 @@ import { MachineCircuitBreaker } from './scheduler/circuit-breaker.js';
 import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
+import { getMachineId, upsertSelfNode } from './sync/machine-identity.js';
 
 // ── Environment validation ────────────────────────────────────────────
 const CONTROL_PLANE_ENV: EnvVar[] = [
@@ -213,13 +214,17 @@ async function main(): Promise<void> {
 
   logger.info({ redisUrl: REDIS_URL }, 'Connecting to Redis');
 
+  // --- Mesh identity (reuses MACHINE_ID env var from worker registration) ---
+  const machineId = getMachineId();
+  logger.info({ machineId }, 'Mesh machine identity initialized');
+
   // Optionally connect to PostgreSQL when DATABASE_URL is provided.
   let db: Database | undefined;
   let dbRegistry: DbAgentRegistry | undefined;
 
   if (DATABASE_URL) {
     logger.info('Connecting to PostgreSQL');
-    db = createDb(DATABASE_URL);
+    db = createDb(DATABASE_URL, { sessionNodeId: machineId });
 
     const skipMigrations = env.SKIP_MIGRATIONS === 'true';
 
@@ -306,6 +311,13 @@ async function main(): Promise<void> {
     }
 
     await ensureSchemaCompatibility(db, logger.child({ component: 'schema-compat' }));
+
+    // Register this mesh node in sync_nodes with is_self=true
+    try {
+      await upsertSelfNode(db, machineId, process.env.TAILSCALE_IP);
+    } catch {
+      logger.debug('sync_nodes table not available yet — skipping node registration');
+    }
 
     dbRegistry = new DbAgentRegistry(db, logger.child({ component: 'db-registry' }));
     logger.info('Database-backed agent registry initialised');
