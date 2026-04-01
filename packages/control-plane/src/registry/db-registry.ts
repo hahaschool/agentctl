@@ -554,19 +554,11 @@ export class DbAgentRegistry {
     return this.toRun(rows[0] as typeof agentRuns.$inferSelect);
   }
 
-  async updateRunDispatchConfig(
-    runId: string,
-    config: DispatchConfigSnapshot,
-  ): Promise<void> {
-    await this.db
-      .update(agentRuns)
-      .set({ dispatchConfig: config })
-      .where(eq(agentRuns.id, runId));
+  async updateRunDispatchConfig(runId: string, config: DispatchConfigSnapshot): Promise<void> {
+    await this.db.update(agentRuns).set({ dispatchConfig: config }).where(eq(agentRuns.id, runId));
   }
 
-  async getRunDispatchConfig(
-    runId: string,
-  ): Promise<DispatchConfigSnapshot | null> {
+  async getRunDispatchConfig(runId: string): Promise<DispatchConfigSnapshot | null> {
     const [row] = await this.db
       .select({ dispatchConfig: agentRuns.dispatchConfig })
       .from(agentRuns)

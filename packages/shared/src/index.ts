@@ -12,7 +12,7 @@ export * from './health/index.js';
 export * from './metrics/index.js';
 export type { NativeImportAttempt, NativeImportAttemptReason } from './protocol/handoff.js';
 export * from './protocol/index.js';
+export { redactMcpServers } from './redact-mcp.js';
 export * from './runtime/index.js';
 export * from './templates/index.js';
-export { redactMcpServers } from './redact-mcp.js';
 export * from './types/index.js';

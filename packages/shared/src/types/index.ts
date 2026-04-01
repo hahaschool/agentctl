@@ -66,10 +66,6 @@ export type {
   RunTrigger,
 } from './agent-run.js';
 export type {
-  DispatchConfigSnapshot,
-  McpServerConfigRedacted,
-} from './dispatch-config.js';
-export type {
   ApprovalDecision,
   ApprovalDecisionAction,
   ApprovalGate,
@@ -183,6 +179,10 @@ export {
   PROMOTION_STATUSES,
 } from './deployment.js';
 export type { DiscoveredSession } from './discovered-session.js';
+export type {
+  DispatchConfigSnapshot,
+  McpServerConfigRedacted,
+} from './dispatch-config.js';
 export { AgentError, ControlPlaneError, WorkerError } from './errors.js';
 export type {
   ExecutionSummary,
