@@ -462,6 +462,8 @@ async function main(): Promise<void> {
     isProduction: IS_PRODUCTION,
     corsOrigins: CORS_ORIGINS || undefined,
     dispatchVerificationConfig,
+    machineId,
+    syncPublicKey: dispatchSigningKeyPair?.publicKey,
   });
 
   // Run dependency health checks before starting the server.

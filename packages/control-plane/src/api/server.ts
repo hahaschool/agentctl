@@ -71,6 +71,7 @@ import { fileProxyRoutes } from './routes/files.js';
 import { gitProxyRoutes } from './routes/git.js';
 import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
+import { syncPeersRoutes } from './routes/sync-peers.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { machineCapabilitiesRoutes } from './routes/machine-capabilities.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
@@ -145,6 +146,10 @@ type CreateServerOptions = {
   corsOrigins?: string;
   runtimeConfigStore?: RuntimeConfigRouteStore;
   dispatchVerificationConfig?: DispatchVerificationConfig | null;
+  /** Mesh identity for /health endpoint peer discovery. */
+  machineId?: string;
+  /** Ed25519 public key (base64) for mesh peer auth. */
+  syncPublicKey?: string;
 };
 
 export async function createServer({
@@ -166,6 +171,8 @@ export async function createServer({
   corsOrigins: corsOriginsOverride,
   runtimeConfigStore: externalRuntimeConfigStore,
   dispatchVerificationConfig = null,
+  machineId,
+  syncPublicKey,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
@@ -313,6 +320,8 @@ export async function createServer({
     redis,
     mem0Client,
     litellmClient,
+    machineId,
+    syncPublicKey,
   });
   await app.register(metricsRoutes, {
     registry,
@@ -747,6 +756,12 @@ export async function createServer({
 
     await app.register(settingsRoutes, {
       prefix: '/api/settings',
+      db,
+    });
+
+    // Mesh peer sync routes
+    await app.register(syncPeersRoutes, {
+      prefix: '/api/sync/peers',
       db,
     });
   }
