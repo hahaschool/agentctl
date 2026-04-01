@@ -2198,3 +2198,19 @@ describe('sanitizeLogValue', () => {
     );
   });
 });
+
+describe('formatRemoteErrorForTerminal', () => {
+  it('does not echo remote-controlled text back to the terminal', async () => {
+    const mod = await importCliModule();
+    const formatRemoteErrorForTerminal = mod.formatRemoteErrorForTerminal as (
+      value: unknown,
+    ) => string;
+
+    expect(formatRemoteErrorForTerminal('boom\r\nsecond line\u001b[31m SECRET')).toBe(
+      'Remote error received from remote session. Message content omitted from terminal output.',
+    );
+    expect(formatRemoteErrorForTerminal(undefined)).toBe(
+      'Remote error received from remote session.',
+    );
+  });
+});
