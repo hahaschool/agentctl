@@ -331,6 +331,8 @@ export const agentActions = pgTable(
     toolOutputHash: text('tool_output_hash'),
     durationMs: integer('duration_ms'),
     approvedBy: text('approved_by'),
+    /** Globally unique ID for mesh sync (bigserial PK is not globally unique). */
+    syncId: uuid('sync_id').defaultRandom(),
   },
   (table) => [index('idx_agent_actions_run_id').on(table.runId)],
 );
@@ -374,3 +376,59 @@ export const settings = pgTable('settings', {
   value: jsonb('value').notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Mesh Sync — Change log, conflict tracking, and node registry
+// ---------------------------------------------------------------------------
+
+export const syncNodes = pgTable('sync_nodes', {
+  id: text('id').primaryKey(),
+  hostname: text('hostname').notNull(),
+  tailscaleIp: text('tailscale_ip'),
+  role: text('role').notNull().default('full'),
+  lastSeen: timestamp('last_seen', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const syncChangeLog = pgTable(
+  'sync_change_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    nodeId: text('node_id').notNull(),
+    tableName: text('table_name').notNull(),
+    rowId: text('row_id').notNull(),
+    operation: text('operation').notNull(),
+    payload: jsonb('payload'),
+    vclock: jsonb('vclock').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    synced: boolean('synced').notNull().default(false),
+  },
+  // NOTE: The migration creates partial indexes (WHERE synced = false, WHERE status = 'pending')
+  // which Drizzle's schema API does not natively support. The indexes below are plain (non-partial)
+  // in the Drizzle schema for type-safety only — the actual partial indexes come from the SQL migration.
+  // This intentional divergence is acceptable; drizzle-kit push/pull is not used for migrations.
+  (table) => [
+    index('idx_change_log_table_row').on(table.tableName, table.rowId),
+  ],
+);
+
+export const syncConflicts = pgTable(
+  'sync_conflicts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tableName: text('table_name').notNull(),
+    rowId: text('row_id').notNull(),
+    localVclock: jsonb('local_vclock').notNull(),
+    localPayload: jsonb('local_payload'),
+    remoteVclock: jsonb('remote_vclock').notNull(),
+    remotePayload: jsonb('remote_payload'),
+    remoteNodeId: text('remote_node_id').notNull(),
+    status: text('status').notNull().default('pending'),
+    resolution: text('resolution'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // NOTE: The migration creates idx_conflicts_pending as a partial index (WHERE status = 'pending').
+  // Drizzle schema API does not support partial index predicates, so no index is declared here.
+  // The actual index comes from the SQL migration only.
+);
