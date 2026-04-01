@@ -2204,7 +2204,7 @@ describe('sanitizeLogValue', () => {
     const source = readFileSync(new URL('./agentctl.ts', import.meta.url), 'utf8');
 
     expect(source).toMatch(
-      /const remoteError =\s*sanitizeLogValue\(\s*String\(msg\.message \?\? 'unknown'\)\s*\.replace\(\/\[\\r\\n\]\+\/g,\s*' '\),\s*\);/,
+      /const remoteError =\s*String\(msg\.message \?\? 'unknown'\)\s*\.replace\(\/\[\\r\\n\]\+\/g,\s*' '\);/,
     );
     expect(source).toMatch(/console\.error\(red\('Remote error:'\),\s*remoteError\)/);
   });
