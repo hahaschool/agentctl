@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-04-01 (`main` is now at `f7794d25` after PR #389 added targeted Playwright coverage for the already-delivered `/conflicts` page and session `Config` tab on top of the completed 2026-04-01 CI/security follow-up: PR #385 upgraded the remaining `pnpm/action-setup` workflow uses to `v5`, and PRs #386-#388 re-closed the reopened sync/scripts CodeQL findings. GitHub currently reports `0` open PRs, `0` open Dependabot alerts, `0` open secret-scanning alerts, and `0` open code-scanning alerts as of 2026-04-01)
+> Last updated: 2026-04-01 (`main` is now at `72c618c6` after the direct mesh-docs follow-up added `docs/QUICKSTART-MESH.md`; the latest numbered follow-throughs before that were PR #390, which synced roadmap/plan status to the green post-security baseline, and PR #391, which added direct control-plane route coverage for the already-delivered session `dispatch-config` and `sync-conflicts` APIs. GitHub currently reports `0` open PRs, `0` open Dependabot alerts, `0` open secret-scanning alerts, and `0` open code-scanning alerts as of 2026-04-01)
 
 ## Current State
 
@@ -1737,6 +1737,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Persist redacted config snapshot in `task-worker.ts` after dispatch payload assembly
 - [x] Add `GET /api/sessions/:sessionId/dispatch-config` endpoint returning `{ runId, runCount, config }`
 - [x] 404 for nonexistent session, `{ runId: null, runCount: 0, config: null }` for sessions without runs
+- [x] Direct route coverage for missing-session, no-run, and latest-config responses *(PR #391)*
 
 ### 31.3 Frontend — Config Tab — Delivered
 
@@ -1835,6 +1836,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Side-by-side JSON diff with field-level highlighting (`ConflictDiffView` component)
 - [x] Conflict count badge in sidebar navigation (polled every 60s)
 - [x] Focused Playwright coverage for `/conflicts` page load, empty state, and filter dropdown flows *(PR #389)*
+- [x] Direct control-plane route coverage for `sync-conflicts` list/detail/resolve/count handlers *(PR #391)*
 
 ### 33.4 Node Discovery + Peer Registry (P4) — Delivered
 
@@ -1865,7 +1867,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Dispatch to localhost: force `127.0.0.1:${workerPort}` for local agent dispatch
 - [x] `scripts/setup-mesh-node.sh` — bootstrap (PG + Redis + .env.mesh + first boot auto-migration)
 - [x] `infra/pm2/ecosystem.mesh.config.cjs` — mesh node PM2 config (loads .env.mesh)
-- [x] `.env.mesh.template` + `docs/QUICKSTART-MESH.md`
+- [x] `.env.mesh.template` + `docs/QUICKSTART-MESH.md` *(direct `main` follow-up `72c618c6`)*
 
 ### 33.6 Tailscale ACL Update (P6) — Delivered
 
@@ -1891,13 +1893,13 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Mesh: Change Log + Vector Clock~~ | 33.1 | ✅ Delivered — PR #374 merged. 17 files, 871 additions, 32 tests. VectorClock utils, sync types, machine identity, pool hook, PG triggers on 15 tables, sync maintenance queue. |
 | **P0** | ~~Mesh: Node Discovery + Peer Registry~~ | 33.4 | ✅ Delivered — PR #376 merged. Peer discovery, health check, auth, REST API, 36 tests. |
 | **P0** | ~~Mesh: Sync Protocol + API~~ | 33.2 | ✅ Delivered — PR #377 merged. Sync auth, pull/ack endpoints, apply logic with advisory locks, per-peer sync loop, synced marker. 33 tests. |
-| **P1** | ~~Mesh: Conflict Resolution UI~~ | 33.3 | ✅ Delivered — PR #381 merged the feature slice, and PR #389 added focused Playwright coverage for the existing `/conflicts` page state/filter flows. |
+| **P1** | ~~Mesh: Conflict Resolution UI~~ | 33.3 | ✅ Delivered — PR #381 merged the feature slice, PR #389 added focused Playwright coverage for the existing `/conflicts` page state/filter flows, and PR #391 added direct backend route coverage for the `sync-conflicts` handlers. |
 | **P1** | ~~Mesh: Unified CP + Worker~~ | 33.5 | ✅ Delivered — PR #379 merged. Machine-scoped jobs/reaper/scheduler, localhost dispatch, setup script, PM2 mesh config. |
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 landed the scripts hardening, PR #380 re-closed the earlier latest-base alert, and PRs #386-#388 closed the reopened 2026-04-01 findings on current `main` |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 fixed the original `brace-expansion` regression, PR #380 closed the remaining latest-main dependency/security follow-up, and PR #385 cleared the last `pnpm/action-setup` Node20 deprecation warnings |
-| **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend), #368 (frontend), and #389 (focused Playwright coverage) are on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, and Config tab on session detail page |
+| **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend), #368 (frontend), #389 (focused Playwright coverage), and #391 (direct backend route coverage) are on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, and Config tab on session detail page |
 | **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, `e5f07913` hardened the early `rc_session` bookkeeping, and `bf899eb0` plus PR #361 now keep heartbeat refresh on live progress updates covered on current `main` |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
@@ -1970,7 +1972,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | Current loop closed — PR #385 plus PRs #386-#388 finished the 2026-04-01 CI/security follow-up on `main`, and PR #389 added focused regression coverage for delivered `/conflicts` and Config-tab surfaces |
+| **P0** | Agent Run Quality | 16.1 | Current loop closed — PR #385 plus PRs #386-#388 finished the 2026-04-01 CI/security follow-up on `main`, PR #389 added focused regression coverage for delivered `/conflicts` and Config-tab surfaces, PR #390 synced roadmap/plan state, and PR #391 added direct backend route coverage for those same delivered APIs |
 | **P0** | ~~Dev Environment Infrastructure~~ | 16.2 | ✅ Delivered — dev-1/dev-2 isolation, PM2 configs, Next.js middleware proxy, version display |
 | **P0** | ~~Frontend UI Polish (dashboard, agent detail, cards)~~ | 16.3 | ✅ Delivered — PRs #158-#165, #212-#213, #229-#246; all critique items resolved |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
