@@ -407,9 +407,7 @@ export const syncChangeLog = pgTable(
   // which Drizzle's schema API does not natively support. The indexes below are plain (non-partial)
   // in the Drizzle schema for type-safety only — the actual partial indexes come from the SQL migration.
   // This intentional divergence is acceptable; drizzle-kit push/pull is not used for migrations.
-  (table) => [
-    index('idx_change_log_table_row').on(table.tableName, table.rowId),
-  ],
+  (table) => [index('idx_change_log_table_row').on(table.tableName, table.rowId)],
 );
 
 export const syncConflicts = pgTable(

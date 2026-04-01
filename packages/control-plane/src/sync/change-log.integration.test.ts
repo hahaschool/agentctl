@@ -80,9 +80,7 @@ describe.skipIf(!DATABASE_URL)('sync_change_log trigger (integration)', () => {
       sql`INSERT INTO agents (id, machine_id, name, type, status, project_path)
           VALUES (${agentId}, ${testMachineId}, 'test-agent', 'autonomous', 'registered', '/tmp/test')`,
     );
-    await db.execute(
-      sql`UPDATE agents SET name = 'updated-agent' WHERE id = ${agentId}`,
-    );
+    await db.execute(sql`UPDATE agents SET name = 'updated-agent' WHERE id = ${agentId}`);
 
     const result = await db.execute(
       sql`SELECT operation, vclock FROM sync_change_log

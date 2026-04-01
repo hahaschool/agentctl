@@ -12,7 +12,13 @@ export function getMachineId(): string {
   const envId = process.env.MACHINE_ID;
   if (envId) return envId;
 
-  return os.hostname().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32) || 'unknown';
+  return (
+    os
+      .hostname()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '')
+      .slice(0, 32) || 'unknown'
+  );
 }
 
 /**

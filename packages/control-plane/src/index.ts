@@ -30,7 +30,10 @@ import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
 import { getMachineId, upsertSelfNode } from './sync/machine-identity.js';
-import { createSyncMaintenanceWorker, registerSyncMaintenanceJobs } from './sync/sync-maintenance-worker.js';
+import {
+  createSyncMaintenanceWorker,
+  registerSyncMaintenanceJobs,
+} from './sync/sync-maintenance-worker.js';
 
 // ── Environment validation ────────────────────────────────────────────
 const CONTROL_PLANE_ENV: EnvVar[] = [

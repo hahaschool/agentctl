@@ -23,11 +23,15 @@ export async function registerSyncMaintenanceJobs(
     { connection },
   );
 
-  await queue.add('sync:cleanup', {}, {
-    repeat: { pattern: '0 3 * * *' },
-    removeOnComplete: true,
-    removeOnFail: 5,
-  });
+  await queue.add(
+    'sync:cleanup',
+    {},
+    {
+      repeat: { pattern: '0 3 * * *' },
+      removeOnComplete: true,
+      removeOnFail: 5,
+    },
+  );
 
   return queue;
 }
