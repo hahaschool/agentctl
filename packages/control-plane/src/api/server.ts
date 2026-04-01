@@ -71,7 +71,6 @@ import { fileProxyRoutes } from './routes/files.js';
 import { gitProxyRoutes } from './routes/git.js';
 import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
-import { syncPeersRoutes } from './routes/sync-peers.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { machineCapabilitiesRoutes } from './routes/machine-capabilities.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
@@ -107,6 +106,8 @@ import { settingsRoutes } from './routes/settings.js';
 import { skillDiscoverRoutes } from './routes/skill-discover.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { streamRoutes } from './routes/stream.js';
+import { syncRoutes } from './routes/sync.js';
+import { syncPeersRoutes } from './routes/sync-peers.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
 import { taskRunRoutes } from './routes/task-runs.js';
 import { terminalProxyRoutes } from './routes/terminal.js';
@@ -764,6 +765,16 @@ export async function createServer({
       prefix: '/api/sync/peers',
       db,
     });
+
+    // Mesh sync protocol routes (pull changes + ACK)
+    if (machineId) {
+      await app.register(syncRoutes, {
+        prefix: '/api/sync',
+        db,
+        logger,
+        selfMachineId: machineId,
+      });
+    }
   }
 
   // --- Global error handler ---
