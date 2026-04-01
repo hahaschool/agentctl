@@ -39,14 +39,49 @@ function createConflict(overrides: Partial<ConflictResponse> = {}): ConflictResp
   };
 }
 
+const NORMAL_CONFLICT: ConflictResponse = {
+  id: 'conflict-normal-1',
+  tableName: 'agents',
+  rowId: 'agent-row-1234567890',
+  localVclock: { local: 2, 'remote-node-primary-1234567890': 1 },
+  localPayload: { name: 'Local Agent', status: 'paused', retries: 1 },
+  remoteVclock: { local: 2, 'remote-node-primary-1234567890': 2 },
+  remotePayload: { name: 'Remote Agent', status: 'running', retries: 1, owner: 'ops' },
+  remoteNodeId: 'remote-node-primary-1234567890',
+  status: 'pending',
+  resolution: null,
+  resolvedAt: null,
+  createdAt: '2026-04-01T08:00:00.000Z',
+};
+
+const DELETE_CONFLICT: ConflictResponse = {
+  id: 'conflict-delete-1',
+  tableName: 'api_accounts',
+  rowId: 'account-row-0987654321',
+  localVclock: { local: 3, 'remote-node-delete-1234567890': 1 },
+  localPayload: null,
+  remoteVclock: { local: 3, 'remote-node-delete-1234567890': 2 },
+  remotePayload: { provider: 'claude_team', label: 'Shared Account' },
+  remoteNodeId: 'remote-node-delete-1234567890',
+  status: 'pending',
+  resolution: null,
+  resolvedAt: null,
+  createdAt: '2026-04-01T08:05:00.000Z',
+};
+
+function cloneConflict(conflict: ConflictResponse): ConflictResponse {
+  return JSON.parse(JSON.stringify(conflict)) as ConflictResponse;
+}
+
 async function interceptConflictsApi(
   page: Page,
   options: {
     conflicts?: ConflictResponse[];
     onResolve?: (request: ResolveRequest) => void;
   } = {},
-): Promise<void> {
-  let conflicts = [...(options.conflicts ?? [])];
+): Promise<{ resolutionRequests: ResolveRequest[] }> {
+  let conflicts = (options.conflicts ?? []).map(cloneConflict);
+  const resolutionRequests: ResolveRequest[] = [];
 
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -95,11 +130,13 @@ async function interceptConflictsApi(
         payload?: Record<string, unknown> | null;
       };
 
-      options.onResolve?.({
+      const resolveRequest: ResolveRequest = {
         id,
         resolution: body.resolution,
         payload: body.payload,
-      });
+      };
+      resolutionRequests.push(resolveRequest);
+      options.onResolve?.(resolveRequest);
 
       conflicts = conflicts.map((conflict) =>
         conflict.id === id
@@ -129,6 +166,20 @@ async function interceptConflictsApi(
       body: JSON.stringify({ error: 'NOT_FOUND', message: 'Not found' }),
     });
   });
+
+  return { resolutionRequests };
+}
+
+async function openConflictsPage(
+  page: Page,
+  conflicts: ConflictResponse[],
+): Promise<{ resolutionRequests: ResolveRequest[] }> {
+  const state = await interceptConflictsApi(page, { conflicts });
+  await page.goto('/conflicts');
+  await expect(page.getByRole('heading', { name: /sync conflicts/i })).toBeVisible({
+    timeout: 15_000,
+  });
+  return state;
 }
 
 test.describe('Conflicts page', () => {
@@ -228,5 +279,103 @@ test.describe('Conflicts page', () => {
 
     await expect(page.getByText('Conflict resolved: merged')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('No sync conflicts found.')).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('shows populated conflicts, supports filters, and opens selected details', async ({
+    page,
+  }) => {
+    await openConflictsPage(page, [NORMAL_CONFLICT, DELETE_CONFLICT]);
+
+    await expect(page.getByText('2 pending')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Select a conflict to view details')).toBeVisible();
+
+    await page.getByLabel('Filter by table').selectOption('agents');
+    await expect(page.getByRole('button', { name: /agents/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /api_accounts/i })).toHaveCount(0);
+
+    await page.getByLabel('Filter by peer').selectOption(NORMAL_CONFLICT.remoteNodeId);
+
+    await page.getByRole('button', { name: /agents/i }).click();
+
+    await expect(page.getByText(/Table:\s*agents/)).toBeVisible();
+    await expect(page.getByText('Local (this node)')).toBeVisible();
+    await expect(page.getByText(/Remote \(/)).toBeVisible();
+    await expect(page.getByText('Keep Local')).toBeVisible();
+    await expect(page.getByText('Keep Remote')).toBeVisible();
+    await expect(page.getByText('Edit & Merge')).toBeVisible();
+    await expect(page.getByText('Local vclock:')).toBeVisible();
+    await expect(page.getByText('Remote vclock:')).toBeVisible();
+  });
+
+  test('restores delete conflicts and refreshes the pending state', async ({ page }) => {
+    const { resolutionRequests } = await openConflictsPage(page, [DELETE_CONFLICT]);
+
+    await expect(page.getByText('1 pending')).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: /api_accounts/i }).click();
+
+    await expect(page.getByText('DELETED', { exact: true })).toBeVisible();
+    await expect(page.getByText('Restore')).toBeVisible();
+    await expect(page.getByText('Edit & Merge')).toHaveCount(0);
+
+    await Promise.all([
+      page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === 'PUT' && url.pathname.endsWith('/resolve');
+      }),
+      page.getByRole('button', { name: 'Restore', exact: true }).click(),
+    ]);
+
+    await expect(page.getByText('No sync conflicts found.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('All conflicts have been resolved.')).toBeVisible();
+    await expect(page.getByText('1 pending')).toHaveCount(0);
+    expect(resolutionRequests).toEqual([
+      {
+        id: DELETE_CONFLICT.id,
+        resolution: 'remote',
+        payload: undefined,
+      },
+    ]);
+  });
+
+  test('validates merge JSON and submits a merged resolution', async ({ page }) => {
+    const { resolutionRequests } = await openConflictsPage(page, [NORMAL_CONFLICT]);
+
+    await page.getByRole('button', { name: /agents/i }).click();
+    await page.getByRole('button', { name: 'Edit & Merge', exact: true }).click();
+
+    const mergeEditor = page.getByLabel('Merged payload (edit JSON)');
+    await expect(mergeEditor).toBeVisible();
+    await expect(mergeEditor).toHaveValue(/"owner": "ops"/);
+
+    await mergeEditor.fill('{invalid json');
+    await page.getByRole('button', { name: 'Apply Merge', exact: true }).click();
+    await expect(page.getByText('Invalid JSON', { exact: true })).toBeVisible();
+
+    const mergedPayload = {
+      name: 'Merged Agent',
+      status: 'running',
+      retries: 2,
+      owner: 'ops',
+    };
+
+    await mergeEditor.fill(JSON.stringify(mergedPayload, null, 2));
+
+    await Promise.all([
+      page.waitForResponse((response) => {
+        const url = new URL(response.url());
+        return response.request().method() === 'PUT' && url.pathname.endsWith('/resolve');
+      }),
+      page.getByRole('button', { name: 'Apply Merge', exact: true }).click(),
+    ]);
+
+    await expect(page.getByText('No sync conflicts found.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('All conflicts have been resolved.')).toBeVisible();
+    expect(resolutionRequests).toEqual([
+      {
+        id: NORMAL_CONFLICT.id,
+        resolution: 'merged',
+        payload: mergedPayload,
+      },
+    ]);
   });
 });
