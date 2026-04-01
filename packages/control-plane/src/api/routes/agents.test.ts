@@ -1191,7 +1191,7 @@ describe('Agent routes — with dbRegistry', () => {
           'http://100.64.0.1:9000/api/agents/agent-1',
           expect.objectContaining({
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
+            signal: expect.any(AbortSignal),
           }),
         );
       } finally {

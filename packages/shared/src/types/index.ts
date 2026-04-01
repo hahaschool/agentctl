@@ -1,3 +1,4 @@
+export type { VectorClock } from '../vector-clock.js';
 export type {
   AccountCustody,
   AccountDefaults,
@@ -337,6 +338,18 @@ export {
   VALID_TRANSITIONS,
   validateTransition,
 } from './status-machine.js';
+export type {
+  ChangeLogEntry,
+  SyncConflict,
+  SyncNode,
+  TableSyncType,
+} from './sync.js';
+export {
+  getTablePkColumn,
+  SYNCED_TABLES,
+  TABLE_PK_COLUMN,
+  TABLE_SYNC_CONFIG,
+} from './sync.js';
 export type { TaskExecutor } from './task-executor.js';
 export type {
   FleetOverview,
@@ -368,16 +381,3 @@ export type {
   WebhookProvider,
 } from './webhook.js';
 export { WEBHOOK_EVENT_TYPES, WEBHOOK_PROVIDERS } from './webhook.js';
-export type {
-  ChangeLogEntry,
-  SyncConflict,
-  SyncNode,
-  TableSyncType,
-} from './sync.js';
-export {
-  getTablePkColumn,
-  SYNCED_TABLES,
-  TABLE_PK_COLUMN,
-  TABLE_SYNC_CONFIG,
-} from './sync.js';
-export type { VectorClock } from '../vector-clock.js';

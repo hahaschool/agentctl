@@ -19,8 +19,6 @@ import { pm2Restart } from './pm2-client.js';
 
 const HEALTH_TIMEOUT_MS = 5_000;
 const BUILD_TIMEOUT_MS = 120_000;
-const POLL_INTERVAL_MS = 5_000;
-const POLL_TIMEOUT_MS = 30_000;
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -637,30 +635,5 @@ export class PromotionRunner {
         resolve({ ok: false });
       });
     });
-  }
-
-  // Kept for future use: post-restart health verification from dev-1
-  // @ts-expect-error intentionally unused — will be wired when promote runs from dev tier
-  private async pollHealth(tier: TierConfig, events: EventEmitter): Promise<boolean> {
-    const deadline = Date.now() + POLL_TIMEOUT_MS;
-
-    while (Date.now() < deadline) {
-      const cpOk = await fetchHealth(tier.cpPort);
-      const workerOk = await fetchHealth(tier.workerPort);
-      const webOk = await tcpCheck(tier.webPort);
-
-      events.emit('event', {
-        type: 'log',
-        line: `Health poll: cp=${cpOk}, worker=${workerOk}, web=${webOk}`,
-      });
-
-      if (cpOk && workerOk && webOk) {
-        return true;
-      }
-
-      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-    }
-
-    return false;
   }
 }

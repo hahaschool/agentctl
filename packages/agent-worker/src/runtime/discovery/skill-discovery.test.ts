@@ -1,3 +1,4 @@
+import type { Dirent } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { discoverSkills } from './skill-discovery.js';
@@ -12,16 +13,25 @@ import { readdir, readFile } from 'node:fs/promises';
 const mockReaddir = vi.mocked(readdir);
 const mockReadFile = vi.mocked(readFile);
 
+type MockDirent = Pick<Dirent, 'name' | 'isDirectory'>;
+
+const createDirEntry = (name: string, isDirectory = true): MockDirent => ({
+  name,
+  isDirectory: () => isDirectory,
+});
+
+const asReaddirResult = (entries: MockDirent[]) =>
+  entries as unknown as Awaited<ReturnType<typeof readdir>>;
+
 describe('discoverSkills', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('discovers claude-code global skills from ~/.claude/skills/', async () => {
-    mockReaddir.mockResolvedValue([
-      { name: 'systematic-debugging', isDirectory: () => true },
-      { name: 'tdd', isDirectory: () => true },
-    ] as any);
+    mockReaddir.mockResolvedValue(
+      asReaddirResult([createDirEntry('systematic-debugging'), createDirEntry('tdd')]),
+    );
     mockReadFile.mockImplementation(async (path) => {
       if (String(path).includes('systematic-debugging')) {
         return `---
@@ -56,7 +66,7 @@ TDD content`;
   });
 
   it('discovers codex skills from ~/.agents/skills/', async () => {
-    mockReaddir.mockResolvedValue([{ name: 'code-review', isDirectory: () => true }] as any);
+    mockReaddir.mockResolvedValue(asReaddirResult([createDirEntry('code-review')]));
     mockReadFile.mockResolvedValue(`---
 name: Code Review
 description: Automated code review
@@ -77,10 +87,9 @@ Content`);
   });
 
   it('skips entries without SKILL.md', async () => {
-    mockReaddir.mockResolvedValue([
-      { name: 'valid-skill', isDirectory: () => true },
-      { name: 'no-skill-md', isDirectory: () => true },
-    ] as any);
+    mockReaddir.mockResolvedValue(
+      asReaddirResult([createDirEntry('valid-skill'), createDirEntry('no-skill-md')]),
+    );
     mockReadFile.mockImplementation(async (path) => {
       if (String(path).includes('valid-skill')) {
         return `---
@@ -98,7 +107,7 @@ Content`;
   });
 
   it('skips skills with missing frontmatter', async () => {
-    mockReaddir.mockResolvedValue([{ name: 'no-frontmatter', isDirectory: () => true }] as any);
+    mockReaddir.mockResolvedValue(asReaddirResult([createDirEntry('no-frontmatter')]));
     mockReadFile.mockResolvedValue('Just content, no frontmatter');
 
     const result = await discoverSkills('claude-code', '/home/user');
@@ -106,10 +115,9 @@ Content`;
   });
 
   it('skips non-directory entries', async () => {
-    mockReaddir.mockResolvedValue([
-      { name: 'README.md', isDirectory: () => false },
-      { name: 'valid-skill', isDirectory: () => true },
-    ] as any);
+    mockReaddir.mockResolvedValue(
+      asReaddirResult([createDirEntry('README.md', false), createDirEntry('valid-skill')]),
+    );
     mockReadFile.mockResolvedValue(`---
 name: Valid
 description: A valid skill
@@ -127,7 +135,7 @@ Content`);
       if (String(path).includes('/home/user')) {
         throw new Error('ENOENT');
       }
-      return [{ name: 'project-skill', isDirectory: () => true }] as any;
+      return asReaddirResult([createDirEntry('project-skill')]);
     });
     mockReadFile.mockResolvedValue(`---
 name: Project Skill
@@ -159,7 +167,7 @@ Content`);
   });
 
   it('skips entries whose SKILL.md path escapes the skills directory', async () => {
-    mockReaddir.mockResolvedValue([{ name: '../escape', isDirectory: () => true }] as any);
+    mockReaddir.mockResolvedValue(asReaddirResult([createDirEntry('../escape')]));
 
     const result = await discoverSkills('claude-code', '/home/user');
 

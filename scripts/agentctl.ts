@@ -131,6 +131,12 @@ export function sanitizeLogValue(value: unknown): string {
   return sanitized || 'unknown';
 }
 
+export function formatRemoteErrorForTerminal(value: unknown): string {
+  return typeof value === 'string' && sanitizeLogValue(value).length > 0
+    ? 'Remote error received from remote session. Message content omitted from terminal output.'
+    : 'Remote error received from remote session.';
+}
+
 // ---------------------------------------------------------------------------
 // Error handling
 // ---------------------------------------------------------------------------
@@ -1390,7 +1396,7 @@ async function cmdTakeover(sessionId: string, yolo: boolean, observer: boolean):
 
         case 'error':
           process.stdout.write('\r\n');
-          console.error(red(`Remote error: ${sanitizeLogValue(msg.message ?? 'unknown')}`));
+          console.error(red(formatRemoteErrorForTerminal(msg.message)));
           break;
 
         case 'presence':

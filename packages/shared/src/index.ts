@@ -16,5 +16,5 @@ export { redactMcpServers } from './redact-mcp.js';
 export * from './runtime/index.js';
 export * from './templates/index.js';
 export * from './types/index.js';
-export { vcCompare, vcDominates, vcMerge } from './vector-clock.js';
 export type { VectorClock } from './vector-clock.js';
+export { vcCompare, vcDominates, vcMerge } from './vector-clock.js';
