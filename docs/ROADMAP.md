@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-22 (PR #355 is now on `main` at `573e0aec`, so section 12.6's beta-promotion wording is reality-synced without changing the remaining requirement for a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY`; direct `main` commits `58d8b840`, `e5f07913`, and `73145841` then hardened the existing runtime-session/session-lifecycle surfaces by reaping stale `claudeSessionId` sessions after 30 minutes without heartbeats, auto-creating `rc_session` rows when the SDK reports a session ID early, and restoring explicit empty-body takeover/release POSTs from the web client; PR #359 is now on `main` at `d4155209` to remove the last remaining `actions/cache/save@v4` use from `ci.yml`, and the merge-triggered `CI`, `Security Audit`, and `Build` workflows for `d4155209` are now confirmed green; direct `main` commit `bf899eb0` then refreshed managed-session heartbeats during live cost/progress updates so the reaper does not kill active sessions, and PR #361 is now on `main` at `a53c242f` with focused control-plane regression coverage for that path while the merge-triggered `CI`, `Security Audit`, and `Build` workflows for `a53c242f` are now confirmed green; section 27.3 remains fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, section 30 remains delivered with `7a2ae06` + `d1b7a77` plus the early-session-link hardening in `e5f07913`, open PRs are `0`, and explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-22)
+> Last updated: 2026-04-01 (PR #373 is now on `main` at `56b950ce` to restore the Security Audit path and sanitize remote-error logging, PR #379 is now on `main` at `31d85840` to deliver mesh §33.5, and PR #380 is now on `main` at `8069a74f` to close the remaining brace-expansion, gitleaks, and scripts/security follow-through. Open PRs are `0`; Dependabot and secret-scanning alert counts are `0`; the only open code-scanning alert is `#560` (`js/missing-rate-limiting`) in `packages/control-plane/src/api/routes/sync.ts`.)
 
 ## Current State
 
@@ -1136,8 +1136,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.1 Agent Run Quality — P0
 
-- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(delivered on `main`; synced after PR #227 and successful DAST rerun `23131047045`)*
-- Status note: `main` is re-stabilized for the CI/CodeQL/Dependabot/DAST backlog through PR #227. After PRs #206-#210, the follow-up instructions-strategy/config-preview path hardening landed via PRs #217 and #219, the agent-settings coverage follow-up landed via PR #220, PR #222 bundled control-plane drizzle migrations during build, PR #223 aligned the DAST/bootstrap PostgreSQL images with `pgvector`, PR #226 moved the generated OpenAPI target into the ZAP-mounted workspace, and PR #227 moved local DAST bootstrap onto the same runners that execute the scans. The post-merge DAST rerun `23131047045` succeeded. The lingering Fastify rate-limit plus stale Alpine-image findings remain dispositioned as tooling/modeling false positives relative to the current source. There are currently no open PRs, CodeQL alerts, or Dependabot alerts on `main`.
+- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(delivered on `main`; reality-synced after PRs #373 and #380 on 2026-04-01)*
+- Status note: the original CI/security stabilization wave remains delivered on `main`. The 2026-04-01 follow-up then closed via PR #373 (restore Security Audit + sanitize remote-error logging) and PR #380 (brace-expansion override follow-through, historical gitleaks fingerprints, and remaining scripts/security cleanup). There are currently no open PRs or Dependabot alerts on `main`; the only open code-scanning item is `#560` (`js/missing-rate-limiting`) in `packages/control-plane/src/api/routes/sync.ts`, which is a narrow sync-route follow-up rather than a reopening of the broader cycle.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1750,6 +1750,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 32.1 CodeQL Scripts Alerts — Delivered
 
+- Status note: the scripts backlog remains delivered on `main`. PR #371 cleared the original scripts CodeQL batch, PR #373 restored the Security Audit path, and PR #380 closed the remaining direct remote-error logging/security follow-through. There are no open scripts code-scanning alerts on `main`.
 - [x] Fix log injection in `scripts/agentctl.ts` — sanitize remote error text (PR #371)
 - [x] Fix TOCTOU race conditions in `scripts/provision-target.ts` and `scripts/deploy.ts` (PR #371)
 - [x] Fix insecure temp file creation via `mkdtemp()` in `scripts/provision-target.ts` (PR #371)
@@ -1762,7 +1763,9 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 32.3 CI Stability — Delivered
 
+- Status note: the broad 2026-04-01 dependency/security regression loop is closed on `main`. PR #373 restored the Security Audit workflow path, and PR #380 landed the remaining brace-expansion/gitleaks/scripts follow-through. Dependabot is now `0`; the sole remaining open security item is CodeQL alert `#560` in `packages/control-plane/src/api/routes/sync.ts`, which is tracked as a mesh sync-route follow-up instead of a general CI-stability regression.
 - [x] Fix brace-expansion v5 ESM-only override breaking CJS require() in test runners (PR #369)
+- [x] Close the 2026-04-01 brace-expansion, gitleaks, and scripts/security follow-through on current `main` (PRs #373, #380)
 
 ---
 
@@ -1777,46 +1780,49 @@ Agent run lifecycle has hidden intermediate states users can't see:
 **Auth:** Ed25519 signed request envelopes (reuses dispatch signing), nonce replay prevention
 **Review:** All 6 specs (v3) + 6 plans passed Codex (GPT 5.4 xhigh) adversarial review (6 rounds)
 
-### 33.1 Change Log + Vector Clock (P1) — P0
+### 33.1 Change Log + Vector Clock (P1) — Delivered
 
 **Spec:** `docs/superpowers/specs/2026-03-30-mesh-p1-change-log-vector-clock-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-30-mesh-p1-change-log-vector-clock.md` (v4.2, 5 rounds review)
+**Status:** Delivered on `main` via PR #374.
 
-- [ ] Machine identity via `getMachineId()` (uses `MACHINE_ID` env, same as worker registration)
-- [ ] `sync_change_log` table with JSONB vector clocks
-- [ ] `sync_conflicts` table for mutable-table conflicts
-- [ ] `sync_nodes` table (PK = machineId) for peer registry
-- [ ] Generic PG trigger `sync_capture_change()` with `TG_ARGV[0]` PK column on 15 synced tables
-- [ ] Advisory lock `pg_advisory_xact_lock(hashtext(table:row)::bigint)` for concurrent vclock safety
-- [ ] `agent_actions.sync_id` UUID column (bigserial PK is not globally unique)
-- [ ] `pool.on('connect')` sets `app.node_id` per physical connection (not per-request)
-- [ ] `withSyncApplyGuard()` transaction helper for P2 remote-apply path
-- [ ] `VectorClock` type + `vcDominates`/`vcMerge`/`vcCompare` utilities (12 unit tests)
-- [ ] Sync maintenance queue with daily cleanup job (30-day retention for synced entries)
+- [x] Machine identity via `getMachineId()` (uses `MACHINE_ID` env, same as worker registration)
+- [x] `sync_change_log` table with JSONB vector clocks
+- [x] `sync_conflicts` table for mutable-table conflicts
+- [x] `sync_nodes` table (PK = machineId) for peer registry
+- [x] Generic PG trigger `sync_capture_change()` with `TG_ARGV[0]` PK column on 15 synced tables
+- [x] Advisory lock `pg_advisory_xact_lock(hashtext(table:row)::bigint)` for concurrent vclock safety
+- [x] `agent_actions.sync_id` UUID column (bigserial PK is not globally unique)
+- [x] `pool.on('connect')` sets `app.node_id` per physical connection (not per-request)
+- [x] `withSyncApplyGuard()` transaction helper for P2 remote-apply path
+- [x] `VectorClock` type + `vcDominates`/`vcMerge`/`vcCompare` utilities (12 unit tests)
+- [x] Sync maintenance queue with daily cleanup job (30-day retention for synced entries)
 
-### 33.2 Sync Protocol + API (P2) — P0
+### 33.2 Sync Protocol + API (P2) — Delivered
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p2-sync-protocol-api-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p2-sync-protocol-api.md`
 **Depends on:** P1 + P4
+**Status:** Delivered on `main` via PR #377. The only remaining open security follow-up in this area is CodeQL alert `#560` (`js/missing-rate-limiting`) in `packages/control-plane/src/api/routes/sync.ts`.
 
-- [ ] Sync auth middleware (`X-Sync-Auth` header, Ed25519 signed envelope with nonce replay LRU)
-- [ ] `GET /api/sync/changes?since=<cursor>&limit=500` — pull changes from a peer
-- [ ] `POST /api/sync/ack` — acknowledge cursor, update `sync_peer_cursors.acked_cursor`
-- [ ] Append-only apply: PK dedup check → INSERT via `withSyncApplyGuard`
-- [ ] Mutable apply: advisory lock inside transaction → `vcCompare(remote, local)` → apply/skip/conflict
-- [ ] DELETE handling for mutable tables (vclock comparison same as update)
-- [ ] Per-peer sync loop with cursor from `sync_peer_cursors.pulled_cursor`
-- [ ] Batch failure rule: cursor only advances to last successfully applied change
-- [ ] `markSyncedEntries()`: mark entries synced when ALL peers have ACKed past them
-- [ ] Catch-up on reconnect (immediate sync when peer transitions unreachable → reachable)
-- [ ] Verify `TABLE_SYNC_CONFIG` alignment (4 append-only + 11 mutable, api_accounts local-only)
+- [x] Sync auth middleware (`X-Sync-Auth` header, Ed25519 signed envelope with nonce replay LRU)
+- [x] `GET /api/sync/changes?since=<cursor>&limit=500` — pull changes from a peer
+- [x] `POST /api/sync/ack` — acknowledge cursor, update `sync_peer_cursors.acked_cursor`
+- [x] Append-only apply: PK dedup check → INSERT via `withSyncApplyGuard`
+- [x] Mutable apply: advisory lock inside transaction → `vcCompare(remote, local)` → apply/skip/conflict
+- [x] DELETE handling for mutable tables (vclock comparison same as update)
+- [x] Per-peer sync loop with cursor from `sync_peer_cursors.pulled_cursor`
+- [x] Batch failure rule: cursor only advances to last successfully applied change
+- [x] `markSyncedEntries()`: mark entries synced when ALL peers have ACKed past them
+- [x] Catch-up on reconnect (immediate sync when peer transitions unreachable → reachable)
+- [x] Verify `TABLE_SYNC_CONFIG` alignment (4 append-only + 11 mutable, api_accounts local-only)
 
 ### 33.3 Conflict Resolution UI (P3) — P1
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p3-conflict-resolution-ui-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p3-conflict-resolution-ui.md`
 **Depends on:** P2
+**Status:** Planned; design + implementation plan are complete, but this slice is not yet on `main`.
 
 - [ ] Conflict resolution API: `GET /api/sync/conflicts` (filter by table/peer/status), `PUT /:id/resolve`
 - [ ] Convergence-safe resolve: every resolution writes merged vclock (`vcMerge`) to `sync_change_log`
@@ -1826,47 +1832,50 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [ ] Side-by-side JSON diff with field-level highlighting (`ConflictDiffView` component)
 - [ ] Conflict count badge in sidebar navigation (polled every 60s)
 
-### 33.4 Node Discovery + Peer Registry (P4) — P0
+### 33.4 Node Discovery + Peer Registry (P4) — Delivered
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p4-node-discovery-peer-registry-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p4-node-discovery-peer-registry.md` (v2)
 **Parallelizable with:** P1
+**Status:** Delivered on `main` via PR #376.
 
-- [ ] Extend `sync_nodes` with `sync_url`, `sync_status`, `sync_interval_ms`, `is_self`, `public_key`
-- [ ] Add `sync_peer_cursors` table (bidirectional: `pulled_cursor` + `acked_cursor` per peer pair)
-- [ ] `/health` endpoint exposes `machineId` + `nodePublicKey` (threaded via `CreateServerOptions`)
-- [ ] Tailscale auto-discovery: `tailscale status --json` → `/health` to resolve hostname → machineId
-- [ ] Peer auth foundation: `peer-auth.ts` with Ed25519 signing/verification (reuses dispatch signing)
-- [ ] Per-peer health check with adaptive interval (30s default → 5min backoff on failure)
-- [ ] REST API: `GET/POST/DELETE /api/sync/peers`, `POST /:machineId/ping`
-- [ ] Mesh Peers section on Machines page with status indicators and ping/remove actions
+- [x] Extend `sync_nodes` with `sync_url`, `sync_status`, `sync_interval_ms`, `is_self`, `public_key`
+- [x] Add `sync_peer_cursors` table (bidirectional: `pulled_cursor` + `acked_cursor` per peer pair)
+- [x] `/health` endpoint exposes `machineId` + `nodePublicKey` (threaded via `CreateServerOptions`)
+- [x] Tailscale auto-discovery: `tailscale status --json` → `/health` to resolve hostname → machineId
+- [x] Peer auth foundation: `peer-auth.ts` with Ed25519 signing/verification (reuses dispatch signing)
+- [x] Per-peer health check with adaptive interval (30s default → 5min backoff on failure)
+- [x] REST API: `GET/POST/DELETE /api/sync/peers`, `POST /:machineId/ping`
+- [x] Mesh Peers section on Machines page with status indicators and ping/remove actions
 
-### 33.5 Unified CP + Worker per Machine (P5) — P1
+### 33.5 Unified CP + Worker per Machine (P5) — Delivered
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p5-unified-cp-worker-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p5-unified-cp-worker.md`
 **Depends on:** P4
+**Status:** Delivered on `main` via PR #379.
 
-- [ ] Machine-scoped task worker: skip jobs for agents where `machineId !== localMachineId`
-- [ ] Machine-scoped run reaper: only reap runs for local agents (JOIN to agents.machine_id)
-- [ ] Machine-scoped repeatable jobs: `createRepeatableJobManager()` filters by machineId
-- [ ] Machine-scoped audit scheduler: filter audit jobs to local agents
-- [ ] Agent start route guard: reject remote starts with `AGENT_ON_DIFFERENT_NODE` error
-- [ ] Dispatch to localhost: force `127.0.0.1:${workerPort}` for local agent dispatch
-- [ ] `scripts/setup-mesh-node.sh` — bootstrap (PG + Redis + .env.mesh + first boot auto-migration)
-- [ ] `infra/pm2/ecosystem.mesh.config.cjs` — mesh node PM2 config (loads .env.mesh)
-- [ ] `.env.mesh.template` + `docs/QUICKSTART-MESH.md`
+- [x] Machine-scoped task worker: skip jobs for agents where `machineId !== localMachineId`
+- [x] Machine-scoped run reaper: only reap runs for local agents (JOIN to agents.machine_id)
+- [x] Machine-scoped repeatable jobs: `createRepeatableJobManager()` filters by machineId
+- [x] Machine-scoped audit scheduler: filter audit jobs to local agents
+- [x] Agent start route guard: reject remote starts with `AGENT_ON_DIFFERENT_NODE` error
+- [x] Dispatch to localhost: force `127.0.0.1:${workerPort}` for local agent dispatch
+- [x] `scripts/setup-mesh-node.sh` — bootstrap (PG + Redis + .env.mesh + first boot auto-migration)
+- [x] `infra/pm2/ecosystem.mesh.config.cjs` — mesh node PM2 config (loads .env.mesh)
+- [x] `.env.mesh.template` + `docs/QUICKSTART-MESH.md`
 
-### 33.6 Tailscale ACL Update (P6) — P1
+### 33.6 Tailscale ACL Update (P6) — Delivered
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p6-tailscale-acl-update-design.md` (v3)
 **Plan:** `docs/superpowers/plans/2026-03-31-mesh-p6-tailscale-acl-update.md`
 **Depends on:** P4
+**Status:** Delivered on `main` via PR #378.
 
-- [ ] Add `tag:mesh-node` tag owner + peer-to-peer `:8080` ACL rule
-- [ ] Mesh nodes triple-tagged: `tag:mesh-node` + `tag:control` + `tag:worker`
-- [ ] ACL tests embedded in `acl-policy.json` (5 test cases per repo convention)
-- [ ] Document mesh tagging procedure in `infra/tailscale/README.md`
+- [x] Add `tag:mesh-node` tag owner + peer-to-peer `:8080` ACL rule
+- [x] Mesh nodes triple-tagged: `tag:mesh-node` + `tag:control` + `tag:worker`
+- [x] ACL tests embedded in `acl-policy.json` (5 test cases per repo convention)
+- [x] Document mesh tagging procedure in `infra/tailscale/README.md`
 
 ---
 
@@ -1874,13 +1883,14 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
+| **P0** | Sync route rate-limit follow-up | 16.1, 33.2 | 🚧 Sole remaining open security item on `main`: CodeQL alert `#560` (`js/missing-rate-limiting`) in `packages/control-plane/src/api/routes/sync.ts`; open PRs, Dependabot, and secret-scanning alerts are all `0` |
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
 | **P0** | ~~Mesh: Change Log + Vector Clock~~ | 33.1 | ✅ Delivered — PR #374 merged. 17 files, 871 additions, 32 tests. VectorClock utils, sync types, machine identity, pool hook, PG triggers on 15 tables, sync maintenance queue. |
 | **P0** | ~~Mesh: Node Discovery + Peer Registry~~ | 33.4 | ✅ Delivered — PR #376 merged. Peer discovery, health check, auth, REST API, 36 tests. |
 | **P0** | ~~Mesh: Sync Protocol + API~~ | 33.2 | ✅ Delivered — PR #377 merged. Sync auth, pull/ack endpoints, apply logic with advisory locks, per-peer sync loop, synced marker. 33 tests. |
-| **P1** | ~~Mesh: Conflict Resolution UI~~ | 33.3 | ✅ Delivered — PR #381 merged. Resolve API with convergence-safe vclock merge, /conflicts page, side-by-side diff, sidebar badge, delete conflict UX. |
+| **P1** | Mesh: Conflict Resolution UI | 33.3 | Planned — design + implementation plan exist in `docs/superpowers/specs/2026-03-31-mesh-p3-conflict-resolution-ui-design.md` and `docs/superpowers/plans/2026-03-31-mesh-p3-conflict-resolution-ui.md`, but the feature is not yet on `main` |
 | **P1** | ~~Mesh: Unified CP + Worker~~ | 33.5 | ✅ Delivered — PR #379 merged. Machine-scoped jobs/reaper/scheduler, localhost dispatch, setup script, PM2 mesh config. |
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 fixed all 8 alerts (log injection, TOCTOU, temp files) |
@@ -2098,7 +2108,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
 | [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered — PRs #167-#227 are on `main`, and post-merge DAST rerun `23131047045` succeeded | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered historically; PRs #373 and #380 closed the 2026-04-01 follow-up backlog on `main`, leaving only CodeQL alert #560 in `packages/control-plane/src/api/routes/sync.ts` | 16.1-16.3 |
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
