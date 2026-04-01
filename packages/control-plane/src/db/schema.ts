@@ -10,6 +10,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -388,6 +389,12 @@ export const syncNodes = pgTable('sync_nodes', {
   role: text('role').notNull().default('full'),
   lastSeen: timestamp('last_seen', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // P4 extensions:
+  syncUrl: text('sync_url'),
+  syncStatus: text('sync_status').default('unknown'),
+  syncIntervalMs: integer('sync_interval_ms').default(30000),
+  isSelf: boolean('is_self').default(false),
+  publicKey: text('public_key'),
 });
 
 export const syncChangeLog = pgTable(
@@ -429,4 +436,16 @@ export const syncConflicts = pgTable(
   // NOTE: The migration creates idx_conflicts_pending as a partial index (WHERE status = 'pending').
   // Drizzle schema API does not support partial index predicates, so no index is declared here.
   // The actual index comes from the SQL migration only.
+);
+
+export const syncPeerCursors = pgTable(
+  'sync_peer_cursors',
+  {
+    localNodeId: text('local_node_id').notNull(),
+    remoteNodeId: text('remote_node_id').notNull(),
+    pulledCursor: bigint('pulled_cursor', { mode: 'number' }).default(0),
+    ackedCursor: bigint('acked_cursor', { mode: 'number' }).default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.localNodeId, table.remoteNodeId] })],
 );

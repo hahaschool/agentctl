@@ -30,6 +30,7 @@ import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
 import { getMachineId, upsertSelfNode } from './sync/machine-identity.js';
+import { startSyncLoops } from './sync/sync-loop.js';
 import {
   createSyncMaintenanceWorker,
   registerSyncMaintenanceJobs,
@@ -447,6 +448,22 @@ async function main(): Promise<void> {
     }
   }
 
+  // --- Sync protocol loops (pull changes from reachable peers) ---
+  let syncLoops: { stop: () => void } | null = null;
+  if (db) {
+    try {
+      syncLoops = startSyncLoops({
+        db,
+        selfMachineId: machineId,
+        secretKey: dispatchSigningKeyPair.secretKey,
+        logger: logger.child({ component: 'sync-loop' }),
+      });
+      logger.info({ machineId }, 'Mesh sync loops started');
+    } catch (err) {
+      logger.debug({ err }, 'Sync loops not started (sync tables may not exist)');
+    }
+  }
+
   const server = await createServer({
     logger,
     taskQueue,
@@ -465,6 +482,8 @@ async function main(): Promise<void> {
     isProduction: IS_PRODUCTION,
     corsOrigins: CORS_ORIGINS || undefined,
     dispatchVerificationConfig,
+    machineId,
+    syncPublicKey: dispatchSigningKeyPair?.publicKey,
   });
 
   // Run dependency health checks before starting the server.
@@ -502,6 +521,12 @@ async function main(): Promise<void> {
       await taskQueue.close();
     } catch (err: unknown) {
       logger.error({ err }, 'Error closing task queue');
+    }
+
+    try {
+      if (syncLoops) syncLoops.stop();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error stopping sync loops');
     }
 
     try {
