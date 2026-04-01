@@ -208,6 +208,20 @@ export function createTaskWorker({
           );
         }
 
+        // ---------------------------------------------------------------------
+        // 1a. Machine-scoped filter: skip jobs for agents on other mesh nodes.
+        // When MACHINE_ID is set, this CP instance only processes jobs for
+        // agents registered on this machine. Other nodes handle their own.
+        // ---------------------------------------------------------------------
+        const localMachineId = process.env.MACHINE_ID;
+        if (localMachineId && agent.machineId !== localMachineId) {
+          jobLogger.debug(
+            { agentMachineId: agent.machineId, localMachineId },
+            'Skipping job for non-local agent',
+          );
+          return;
+        }
+
         const machine = await registry.getMachine(agent.machineId);
 
         if (!machine) {
@@ -422,8 +436,13 @@ export function createTaskWorker({
         await updateRunPhase('dispatching');
 
         const workerPort = DEFAULT_WORKER_PORT;
-        const address = machine.tailscaleIp ?? machine.hostname;
-        const dispatchUrl = `http://${address}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
+        // Mesh mode: dispatch to co-located worker via localhost instead of
+        // round-tripping through the Tailscale IP when the agent is local.
+        const dispatchHost =
+          localMachineId && machine.id === localMachineId
+            ? '127.0.0.1'
+            : (machine.tailscaleIp ?? machine.hostname);
+        const dispatchUrl = `http://${dispatchHost}:${workerPort}/api/agents/${encodeURIComponent(agentId)}/start`;
 
         // Include MCP server config in the dispatch payload.
         // Priority: job-level > agent mcpServers > fetch from worker discovery > null.
@@ -433,7 +452,11 @@ export function createTaskWorker({
 
         if (!mcpServers && machine) {
           try {
-            const workerMcpUrl = `http://${machine.tailscaleIp ?? machine.hostname}:${workerPort}/api/mcp/discover?runtime=claude-code`;
+            const mcpDiscoveryHost =
+              localMachineId && machine.id === localMachineId
+                ? '127.0.0.1'
+                : (machine.tailscaleIp ?? machine.hostname);
+            const workerMcpUrl = `http://${mcpDiscoveryHost}:${workerPort}/api/mcp/discover?runtime=claude-code`;
             const mcpResp = await fetch(workerMcpUrl, { signal: AbortSignal.timeout(5_000) });
             if (mcpResp.ok) {
               const mcpBody = (await mcpResp.json()) as {

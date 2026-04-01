@@ -30,10 +30,21 @@ export type RepeatableJobInfo = {
   next: number | null;
 };
 
+export type RepeatableJobManagerOptions = {
+  queue: Queue<AgentTaskJobData, void, AgentTaskJobName>;
+  logger: Logger;
+  /** When set, the manager is scoped to a single mesh node. */
+  machineId?: string;
+};
+
 export function createRepeatableJobManager(
-  queue: Queue<AgentTaskJobData, void, AgentTaskJobName>,
-  logger: Logger,
+  opts: RepeatableJobManagerOptions,
 ): RepeatableJobManager {
+  const { queue, logger, machineId } = opts;
+
+  if (machineId) {
+    logger.info({ machineId }, 'Repeatable job manager scoped to machine');
+  }
   return {
     async addCronJob(
       agentId: string,

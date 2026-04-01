@@ -4,6 +4,7 @@ dist/
 .env.*
 !.env.example
 !.env.template
+!.env.mesh.template
 *.log
 
 # Agent worktrees

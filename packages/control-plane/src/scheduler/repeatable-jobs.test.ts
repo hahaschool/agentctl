@@ -45,7 +45,7 @@ describe('createRepeatableJobManager()', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queue = makeMockQueue();
-    manager = createRepeatableJobManager(queue, logger);
+    manager = createRepeatableJobManager({ queue, logger });
   });
 
   describe('addHeartbeatJob()', () => {

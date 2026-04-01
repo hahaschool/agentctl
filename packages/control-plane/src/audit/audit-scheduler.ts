@@ -15,7 +15,8 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const AUDIT_MACHINE_ID = 'control-plane';
+/** Falls back to 'control-plane' when MACHINE_ID is not set (non-mesh). */
+const AUDIT_MACHINE_ID = process.env.MACHINE_ID ?? 'control-plane';
 const AUDIT_MODEL = 'claude-sonnet-4-20250514';
 
 // ---------------------------------------------------------------------------
