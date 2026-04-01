@@ -1390,7 +1390,7 @@ async function cmdTakeover(sessionId: string, yolo: boolean, observer: boolean):
 
         case 'error': {
           process.stdout.write('\r\n');
-          const remoteError = String(msg.message ?? 'unknown').replace(/[\r\n]+/g, ' ');
+          const remoteError = String(msg.message ?? 'unknown').replace(/\n|\r/g, '');
           console.error(red('Remote error:'), remoteError);
           break;
         }
