@@ -603,6 +603,19 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
           }
 
           machineId = agent.machineId;
+
+          // -----------------------------------------------------------------
+          // Mesh guard: reject start requests for agents on a different node.
+          // With per-node local Redis, the BullMQ job would never be picked
+          // up by the correct worker. Direct the user to the home node.
+          // -----------------------------------------------------------------
+          const localMachineId = process.env.MACHINE_ID;
+          if (localMachineId && agent.machineId !== localMachineId) {
+            return reply.code(409).send({
+              error: 'AGENT_ON_DIFFERENT_NODE',
+              message: `Agent '${agent.name}' is registered on machine '${agent.machineId}'. Start it from that node.`,
+            });
+          }
         }
 
         // Fall back to the agent's configured model and tools when

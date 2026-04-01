@@ -430,10 +430,11 @@ async function main(): Promise<void> {
     db: db ?? null,
     dispatchSigningKeyPair,
   });
-  const repeatableJobs = createRepeatableJobManager(
-    taskQueue,
-    logger.child({ component: 'repeatable-jobs' }),
-  );
+  const repeatableJobs = createRepeatableJobManager({
+    queue: taskQueue,
+    logger: logger.child({ component: 'repeatable-jobs' }),
+    machineId,
+  });
 
   // --- Sync maintenance (separate queue, not on the agent-tasks type) ---
   let syncQueue: Awaited<ReturnType<typeof registerSyncMaintenanceJobs>> | null = null;

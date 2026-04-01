@@ -1,8 +1,8 @@
-import { and, eq, isNull, lt } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
 import type { Database } from '../../db/index.js';
-import { agentRuns } from '../../db/schema.js';
+import { agentRuns, agents } from '../../db/schema.js';
 
 /**
  * How often to check for stale runs (every 60 seconds).
@@ -21,9 +21,27 @@ const STALE_RUN_TIMEOUT_MS = 30 * 60 * 1000;
  * or the completion callback is lost.
  */
 export function registerRunReaper(app: FastifyInstance, db: Database): void {
+  const localMachineId = process.env.MACHINE_ID;
+
   async function reapStaleRuns(): Promise<void> {
     try {
       const cutoff = new Date(Date.now() - STALE_RUN_TIMEOUT_MS);
+
+      // Build the WHERE conditions. In mesh mode (MACHINE_ID set), restrict
+      // the reaper to runs belonging to agents on this node only.
+      const conditions = [
+        eq(agentRuns.status, 'running'),
+        isNull(agentRuns.finishedAt),
+        lt(agentRuns.startedAt, cutoff),
+      ];
+
+      if (localMachineId) {
+        const localAgentIds = db
+          .select({ id: agents.id })
+          .from(agents)
+          .where(eq(agents.machineId, localMachineId));
+        conditions.push(inArray(agentRuns.agentId, localAgentIds));
+      }
 
       const staleRows = await db
         .update(agentRuns)
@@ -33,13 +51,7 @@ export function registerRunReaper(app: FastifyInstance, db: Database): void {
           errorMessage:
             'Run timed out — no completion callback received from worker within 30 minutes',
         })
-        .where(
-          and(
-            eq(agentRuns.status, 'running'),
-            isNull(agentRuns.finishedAt),
-            lt(agentRuns.startedAt, cutoff),
-          ),
-        )
+        .where(and(...conditions))
         .returning({ id: agentRuns.id });
 
       if (staleRows.length > 0) {

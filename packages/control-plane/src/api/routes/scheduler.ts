@@ -9,6 +9,7 @@ export type SchedulerRoutesOptions = {
 
 export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async (app, opts) => {
   const { repeatableJobManager } = opts;
+  const localMachineId = process.env.MACHINE_ID;
 
   // ---------------------------------------------------------------------------
   // Guard — return 501 for all routes when the manager is not configured
@@ -80,6 +81,14 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         });
       }
 
+      // Mesh guard: only allow scheduling for agents on this node.
+      if (localMachineId && machineId !== localMachineId) {
+        return reply.code(409).send({
+          error: 'AGENT_ON_DIFFERENT_NODE',
+          message: `Schedule agent '${agentId}' from its home node '${machineId}'.`,
+        });
+      }
+
       try {
         await repeatableJobManager?.addHeartbeatJob(agentId, intervalMs, {
           agentId,
@@ -135,6 +144,14 @@ export const schedulerRoutes: FastifyPluginAsync<SchedulerRoutesOptions> = async
         return reply.code(400).send({
           error: 'INVALID_CRON_PATTERN',
           message: 'A non-empty "pattern" string is required',
+        });
+      }
+
+      // Mesh guard: only allow scheduling for agents on this node.
+      if (localMachineId && machineId !== localMachineId) {
+        return reply.code(409).send({
+          error: 'AGENT_ON_DIFFERENT_NODE',
+          message: `Schedule agent '${agentId}' from its home node '${machineId}'.`,
         });
       }
 
