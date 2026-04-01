@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-
 import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,20 +31,6 @@ async function buildApp() {
   await app.ready();
   return { app, db };
 }
-
-describe('syncRoutes source shape', () => {
-  it('declares route-local Fastify rate limiting on both sync endpoints', () => {
-    const source = readFileSync(new URL('./sync.ts', import.meta.url), 'utf8');
-
-    expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
-    expect(source).toMatch(
-      /'\/changes'[\s\S]*?config:\s*\{\s*rateLimit:\s*syncFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(syncFastifyRateLimit\)/,
-    );
-    expect(source).toMatch(
-      /'\/ack'[\s\S]*?config:\s*\{\s*rateLimit:\s*syncFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(syncFastifyRateLimit\)/,
-    );
-  });
-});
 
 describe('syncRoutes rate limiting', () => {
   let app: Awaited<ReturnType<typeof buildApp>>['app'];

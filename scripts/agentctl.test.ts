@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -2196,5 +2198,14 @@ describe('sanitizeLogValue', () => {
     expect(sanitizeLogValue('first line\r\nsecond line\u001b[31m alert\t')).toBe(
       'first line second line alert',
     );
+  });
+
+  it('logs remote errors using a direct single-line sanitization shape', () => {
+    const source = readFileSync(new URL('./agentctl.ts', import.meta.url), 'utf8');
+
+    expect(source).toMatch(
+      /const remoteError =\s*sanitizeLogValue\(\s*String\(msg\.message \?\? 'unknown'\)\s*\.replace\(\/\[\\r\\n\]\+\/g,\s*' '\),\s*\);/,
+    );
+    expect(source).toMatch(/console\.error\(red\('Remote error:'\),\s*remoteError\)/);
   });
 });

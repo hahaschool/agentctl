@@ -93,9 +93,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
     errorResponseBuilder: syncRateLimitError,
   } as const;
 
-  // Register auth hook for all routes in this plugin
   const authHook = createSyncAuthHook({ db, logger });
-  app.addHook('preHandler', authHook);
   await app.register(rateLimit, {
     global: false,
     keyGenerator: getSyncRateLimitKey,
@@ -121,7 +119,9 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
           },
         },
       },
-      preHandler: app.rateLimit(syncFastifyRateLimit),
+      // Keep auth and rate limiting on the route itself so CodeQL can see the
+      // expensive authorization path is guarded by an explicit limiter.
+      preHandler: [app.rateLimit(syncFastifyRateLimit), authHook],
     },
     async (request) => {
       const since = Number(request.query.since) || 0;
@@ -163,7 +163,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
         tags: ['sync'],
         summary: 'Acknowledge sync cursor from a remote peer',
       },
-      preHandler: app.rateLimit(syncFastifyRateLimit),
+      preHandler: [app.rateLimit(syncFastifyRateLimit), authHook],
     },
     async (request, reply) => {
       const { machineId, cursor } = request.body ?? {};
