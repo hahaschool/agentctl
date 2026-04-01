@@ -350,7 +350,8 @@ export function AgentsPage(): React.JSX.Element {
             />
             {startDialogAgent?.defaultPrompt && !startPrompt.trim() && (
               <p className="text-xs text-muted-foreground">
-                Default: {startDialogAgent.defaultPrompt.length > 120
+                Default:{' '}
+                {startDialogAgent.defaultPrompt.length > 120
                   ? `${startDialogAgent.defaultPrompt.slice(0, 120)}...`
                   : startDialogAgent.defaultPrompt}
               </p>

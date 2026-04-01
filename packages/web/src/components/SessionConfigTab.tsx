@@ -1,10 +1,9 @@
 'use client';
 
 import type { DispatchConfigSnapshot, McpServerConfigRedacted } from '@agentctl/shared';
+import { useQuery } from '@tanstack/react-query';
 import { Info, Server, Settings, Shield, Terminal } from 'lucide-react';
 import type React from 'react';
-
-import { useQuery } from '@tanstack/react-query';
 
 import { sessionDispatchConfigQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
@@ -29,15 +28,11 @@ export function SessionConfigTab({ sessionId }: SessionConfigTabProps): React.JS
   }
 
   if (!data || data.runCount === 0) {
-    return (
-      <EmptyState message="No dispatch record — this session has no associated agent run." />
-    );
+    return <EmptyState message="No dispatch record — this session has no associated agent run." />;
   }
 
   if (!data.config) {
-    return (
-      <EmptyState message="Config not captured for this run (pre-feature data)." />
-    );
+    return <EmptyState message="Config not captured for this run (pre-feature data)." />;
   }
 
   return (
@@ -95,9 +90,7 @@ function McpServersSection({
               {srv.command} {srv.args?.join(' ')}
             </div>
             {srv.envKeys && srv.envKeys.length > 0 && (
-              <div className="text-muted-foreground mt-0.5">
-                env: {srv.envKeys.join(', ')}
-              </div>
+              <div className="text-muted-foreground mt-0.5">env: {srv.envKeys.join(', ')}</div>
             )}
           </div>
         ))}

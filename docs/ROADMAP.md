@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-03-22 (PR #355 is now on `main` at `573e0aec`, so section 12.6's beta-promotion wording is reality-synced without changing the remaining requirement for a dedicated `agentctl-beta` self-hosted runner plus `BETA_SELF_HOSTED_RUNNER_READY`; direct `main` commits `58d8b840`, `e5f07913`, and `73145841` then hardened the existing runtime-session/session-lifecycle surfaces by reaping stale `claudeSessionId` sessions after 30 minutes without heartbeats, auto-creating `rc_session` rows when the SDK reports a session ID early, and restoring explicit empty-body takeover/release POSTs from the web client; PR #359 is now on `main` at `d4155209` to remove the last remaining `actions/cache/save@v4` use from `ci.yml`, and the merge-triggered `CI`, `Security Audit`, and `Build` workflows for `d4155209` are now confirmed green; direct `main` commit `bf899eb0` then refreshed managed-session heartbeats during live cost/progress updates so the reaper does not kill active sessions, and PR #361 is now on `main` at `a53c242f` with focused control-plane regression coverage for that path while the merge-triggered `CI`, `Security Audit`, and `Build` workflows for `a53c242f` are now confirmed green; section 27.3 remains fully delivered with focused runtime-session attach e2e coverage on `main`, section 29 remains delivered via the dedicated machine-terminal Playwright coverage in PR #346, section 30 remains delivered with `7a2ae06` + `d1b7a77` plus the early-session-link hardening in `e5f07913`, open PRs are `0`, and explicit open code-scanning, dependabot, and secret-scanning alert counts are all `0` as of 2026-03-22)
+> Last updated: 2026-04-01 (`main` HEAD is `e7d79e3fc98a8de7c8c0c6e66dc1f823fafb6d35`; open PRs are `0`; push `CI` run `23838087239` is failing in `Lint`, `Test mobile`, `Test agent-worker`, `Test shared`, and `Test control-plane`; push `Security Audit` run `23838087232` is failing in `Dependency Audit`; push `Build & Publish Docker Images` run `23838087262` is green; explicit open code-scanning, dependabot, and secret-scanning alert counts are `2`, `2`, and `0`, with the current open code-scanning backlog consisting of the container `brace-expansion` finding plus the `scripts/agentctl.ts` `js/log-injection` alert)
 
 ## Current State
 
@@ -13,7 +13,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - **CI/CD**: 11 GitHub Actions workflows (build, test, deploy, promotion, cleanup, security, DAST, fleet)
 - **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
-**7,255+ unit tests** across 111 files + **143 Playwright e2e tests**. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
+**7,255+ unit tests** across 111 files + **143 Playwright e2e tests**. The last fully green merge-triggered `CI` + `Security Audit` + `Build` set remains `a53c242f`; current `main` `e7d79e3f` is not green, and the active CI/security regressions are tracked below.
 
 ---
 
@@ -44,9 +44,14 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > and PR #353 then ignored the historical gitleaks fingerprints that only
 > resurfaced on scheduled full-history security scans. PR #359 then finished
 > the last leftover `ci.yml` Node24 cache-action follow-through by bumping the
-> install job's `actions/cache/save` step from `v4` to `v5`. As of this update,
-> `a53c242f` is the latest `main` commit where the merge-triggered `CI`,
-> `Security Audit`, and `Build` workflows are all confirmed green.
+> install job's `actions/cache/save` step from `v4` to `v5`. The last fully
+> green merge-triggered `CI`, `Security Audit`, and `Build` set remains
+> `a53c242f`, but current `main` HEAD
+> `e7d79e3fc98a8de7c8c0c6e66dc1f823fafb6d35` is not green: push `CI` run
+> `23838087239` failed in `Lint`, `Test mobile`, `Test agent-worker`,
+> `Test shared`, and `Test control-plane`, while push `Security Audit` run
+> `23838087232` failed in `Dependency Audit`. Open alert counts currently read
+> `2` code-scanning, `2` dependabot, and `0` secret-scanning.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
@@ -1136,8 +1141,8 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.1 Agent Run Quality — P0
 
-- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(delivered on `main`; synced after PR #227 and successful DAST rerun `23131047045`)*
-- Status note: `main` is re-stabilized for the CI/CodeQL/Dependabot/DAST backlog through PR #227. After PRs #206-#210, the follow-up instructions-strategy/config-preview path hardening landed via PRs #217 and #219, the agent-settings coverage follow-up landed via PR #220, PR #222 bundled control-plane drizzle migrations during build, PR #223 aligned the DAST/bootstrap PostgreSQL images with `pgvector`, PR #226 moved the generated OpenAPI target into the ZAP-mounted workspace, and PR #227 moved local DAST bootstrap onto the same runners that execute the scans. The post-merge DAST rerun `23131047045` succeeded. The lingering Fastify rate-limit plus stale Alpine-image findings remain dispositioned as tooling/modeling false positives relative to the current source. There are currently no open PRs, CodeQL alerts, or Dependabot alerts on `main`.
+- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(historical delivery record through PR #230; current `main` regression state synced below)*
+- Status note: the earlier stabilization/security wave remains delivered through PR #230, including the path-hardening, coverage, DAST bootstrap, and config-preview follow-through that landed in PRs #206-#230. The successful DAST rerun `23131047045` remains part of that historical record. Current `main` HEAD `e7d79e3fc98a8de7c8c0c6e66dc1f823fafb6d35` is no longer fully re-stabilized: open PRs remain `0`, but push `CI` run `23838087239` failed in `Lint`, `Test mobile`, `Test agent-worker`, `Test shared`, and `Test control-plane`; push `Security Audit` run `23838087232` failed in `Dependency Audit`; the current open code-scanning backlog is the container `brace-expansion` finding plus the `scripts/agentctl.ts` `js/log-injection` alert; and open alert counts are currently `2` code-scanning, `2` dependabot, and `0` secret-scanning.
 
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
@@ -1180,6 +1185,9 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] ZAP API scan now reads its generated OpenAPI target from the mounted workspace path *(PR #226)*
 - [x] Local DAST scan jobs now self-bootstrap the control-plane on the same runners that execute the scans; post-merge rerun `23131047045` succeeded *(PR #227)*
 - [x] Stale old-Alpine Grype findings dismissed after PR #205 moved current runtime images to `bookworm-slim` *(direct dismissal, 2026-03-15)*
+- [ ] Clear the still-open `scripts/agentctl.ts` `js/log-injection` code-scanning alert on `main`; PR #371's scripts hardening batch did not fully close that backlog item
+- [ ] Re-stabilize current `main` CI after push run `23838087239` failed in `Lint`, `Test mobile`, `Test agent-worker`, `Test shared`, and `Test control-plane`
+- [ ] Clear current `Security Audit` dependency failures on `main` (run `23838087232`) by closing the open `brace-expansion` and `@xmldom/xmldom` alerts
 
 ### 16.2 Dev Environment Infrastructure — P0
 
@@ -1748,11 +1756,16 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 > Surface backend capabilities that lack frontend support and fix UX issues.
 
-### 32.1 CodeQL Scripts Alerts — Delivered
+### 32.1 CodeQL Scripts Alerts — Follow-up Reopened
 
-- [x] Fix log injection in `scripts/agentctl.ts` — sanitize remote error text (PR #371)
+> Status note: PR #371 landed the TOCTOU and temp-file fixes plus an initial
+> remote-error sanitization pass, but current `main` still has an open
+> `scripts/agentctl.ts` `js/log-injection` code-scanning alert. Keep this
+> section active until that alert clears on `main`.
+
 - [x] Fix TOCTOU race conditions in `scripts/provision-target.ts` and `scripts/deploy.ts` (PR #371)
 - [x] Fix insecure temp file creation via `mkdtemp()` in `scripts/provision-target.ts` (PR #371)
+- [ ] Clear the remaining `scripts/agentctl.ts` `js/log-injection` code-scanning alert on `main`
 
 ### 32.2 Machine ID → Hostname Resolution — Delivered
 
@@ -1760,9 +1773,11 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Replace raw machine UUID with hostname in `AgentsPage.tsx` (PR #370)
 - [x] `RuntimeSessionPanel.tsx` already resolved hostnames correctly — no changes needed
 
-### 32.3 CI Stability — Delivered
+### 32.3 CI Stability — Regression Reopened
 
 - [x] Fix brace-expansion v5 ESM-only override breaking CJS require() in test runners (PR #369)
+- [ ] Re-stabilize current `CI` on `main` after push run `23838087239` failed in `Lint`, `Test mobile`, `Test agent-worker`, `Test shared`, and `Test control-plane`
+- [ ] Clear the current `Security Audit` dependency failure on `main` (run `23838087232`; open Dependabot alerts remain for `brace-expansion` and `@xmldom/xmldom`)
 
 ---
 
@@ -1883,9 +1898,9 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | Mesh: Conflict Resolution UI | 33.3 | ✅ Plan — Codex parity. Depends on 33.2. |
 | **P1** | Mesh: Unified CP + Worker | 33.5 | ✅ Plan — Codex parity. Depends on 33.4. |
 | **P1** | Mesh: Tailscale ACL Update | 33.6 | ✅ Plan — Codex parity. Depends on 33.4. |
-| **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 fixed all 8 alerts (log injection, TOCTOU, temp files) |
+| **P0** | CodeQL Scripts Alerts | 32.1 | Follow-up reopened — PR #371 landed the TOCTOU/temp-file fixes, but `main` still has an open `scripts/agentctl.ts` `js/log-injection` code-scanning alert |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
-| **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 pinned brace-expansion <5 |
+| **P0** | CI Stability | 32.3 | Regression reopened — push `CI` run `23838087239` is failing in `Lint` plus four package test jobs, and push `Security Audit` run `23838087232` still fails `Dependency Audit` |
 | **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend) and #368 (frontend) on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, Config tab on session detail page |
 | **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, `e5f07913` hardened the early `rc_session` bookkeeping, and `bf899eb0` plus PR #361 now keep heartbeat refresh on live progress updates covered on current `main` |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
@@ -1959,7 +1974,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | ~~Agent Run Quality~~ | 16.1 | ✅ Delivered — PRs #167-#227 cleared the reproduced CI/CodeQL backlog and closed the DAST recovery chain through a successful rerun on `main` |
+| **P0** | Agent Run Quality | 16.1 | Historical delivery record — PRs #167-#230 cleared the earlier CI/CodeQL backlog and closed the DAST recovery chain, but current `main` has reopened CI/security regressions tracked above |
 | **P0** | ~~Dev Environment Infrastructure~~ | 16.2 | ✅ Delivered — dev-1/dev-2 isolation, PM2 configs, Next.js middleware proxy, version display |
 | **P0** | ~~Frontend UI Polish (dashboard, agent detail, cards)~~ | 16.3 | ✅ Delivered — PRs #158-#165, #212-#213, #229-#246; all critique items resolved |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
@@ -2098,7 +2113,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
 | [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered — PRs #167-#227 are on `main`, and post-merge DAST rerun `23131047045` succeeded | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Historical delivery through PR #230, but current `main` has reopened CI/security backlog: `CI` run `23838087239` failed, `Security Audit` run `23838087232` failed, and open alerts are `2` code-scanning / `2` dependabot / `0` secret-scanning | 16.1-16.3 |
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |

@@ -1388,10 +1388,12 @@ async function cmdTakeover(sessionId: string, yolo: boolean, observer: boolean):
           break;
         }
 
-        case 'error':
+        case 'error': {
           process.stdout.write('\r\n');
-          console.error(red(`Remote error: ${sanitizeLogValue(msg.message ?? 'unknown')}`));
+          const remoteError = sanitizeLogValue(msg.message ?? 'unknown').replace(/[\r\n]+/g, ' ');
+          console.error(red(`Remote error: ${remoteError}`));
           break;
+        }
 
         case 'presence':
           // Subscriber count update — silently ignore for now
