@@ -1,12 +1,14 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bot,
   Compass,
   Database,
   ExternalLink,
   Gauge,
+  GitMerge,
   ListTree,
   Menu,
   MessageSquare,
@@ -31,6 +33,7 @@ import { cn } from '@/lib/utils';
 import { useNotificationContext } from '../contexts/notification-context';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import { useWebSocket } from '../hooks/use-websocket';
+import { syncConflictCountQuery } from '../lib/queries';
 import { CommandPalette } from './CommandPalette';
 import { ConnectionBanner } from './ConnectionBanner';
 import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
@@ -65,6 +68,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9' },
   { href: '/tasks', label: 'Tasks', icon: ListTree },
   { href: '/deployment', label: 'Deployment', icon: Rocket, shortcut: '0' },
+  { href: '/conflicts', label: 'Conflicts', icon: GitMerge },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
@@ -85,6 +89,8 @@ export function Sidebar(): React.JSX.Element {
   const toast = useToast();
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotificationContext();
   const queryClient = useQueryClient();
+  const conflictCount = useQuery(syncConflictCountQuery());
+  const pendingConflicts = conflictCount.data?.count ?? 0;
 
   // Track WS connection for reconnect/disconnect toasts (skip initial connect)
   const wasConnectedRef = useRef(false);
@@ -320,7 +326,12 @@ export function Sidebar(): React.JSX.Element {
                     : 'bg-transparent text-muted-foreground font-normal border-l-transparent hover:bg-accent/5',
                 )}
               >
-                <Icon size={16} className="shrink-0" aria-hidden="true" />
+                <span className="relative shrink-0">
+                  <Icon size={16} aria-hidden="true" />
+                  {item.href === '/conflicts' && pendingConflicts > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 lg:hidden" />
+                  )}
+                </span>
                 <span className="flex-1 max-md:inline hidden lg:inline">{item.label}</span>
                 {item.shortcut && (
                   <span
@@ -330,6 +341,11 @@ export function Sidebar(): React.JSX.Element {
                     )}
                   >
                     {item.shortcut}
+                  </span>
+                )}
+                {item.href === '/conflicts' && pendingConflicts > 0 && (
+                  <span className="ml-auto px-1.5 py-px rounded-full bg-red-500 text-white text-[10px] font-semibold leading-tight min-w-[18px] text-center max-md:inline hidden lg:inline">
+                    {pendingConflicts}
                   </span>
                 )}
               </Link>
