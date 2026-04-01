@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-04-01 (`main` is now at `8069a74f` after PR #380 merged the remaining 2026-04-01 security follow-ups on top of the earlier mesh delivery batch: PRs #374, #376, #377, #378, #379, and #381 delivered sections 33.1-33.6 on `main`; PR #373 restored the failing Security Audit / nightly gitleaks follow-up on the current base; open PRs are `0`, open Dependabot alerts are `0`, open secret-scanning alerts are `0`, and the only open code-scanning alert is `#560` (`js/missing-rate-limiting`) in `packages/control-plane/src/api/routes/sync.ts` as of 2026-04-01)
+> Last updated: 2026-04-01 (`main` is now at `f7794d25` after PR #389 added targeted Playwright coverage for the already-delivered `/conflicts` page and session `Config` tab on top of the completed 2026-04-01 CI/security follow-up: PR #385 upgraded the remaining `pnpm/action-setup` workflow uses to `v5`, and PRs #386-#388 re-closed the reopened sync/scripts CodeQL findings. GitHub currently reports `0` open PRs, `0` open Dependabot alerts, `0` open secret-scanning alerts, and `0` open code-scanning alerts as of 2026-04-01)
 
 ## Current State
 
@@ -13,7 +13,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - **CI/CD**: 11 GitHub Actions workflows (build, test, deploy, promotion, cleanup, security, DAST, fleet)
 - **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
-**7,255+ unit tests** across 111 files + **143 Playwright e2e tests**. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
+**7,255+ unit tests** across 111 files + **140+ Playwright e2e tests**. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
 
 ---
 
@@ -44,9 +44,11 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > and PR #353 then ignored the historical gitleaks fingerprints that only
 > resurfaced on scheduled full-history security scans. PR #359 then finished
 > the last leftover `ci.yml` Node24 cache-action follow-through by bumping the
-> install job's `actions/cache/save` step from `v4` to `v5`. As of this update,
-> `a53c242f` is the latest `main` commit where the merge-triggered `CI`,
-> `Security Audit`, and `Build` workflows are all confirmed green.
+> install job's `actions/cache/save` step from `v4` to `v5`. PR #385 then
+> upgraded the remaining `pnpm/action-setup` uses in `ci.yml`,
+> `security-audit.yml`, and `promote-beta.yml` to `v5`, clearing the final
+> Node20 deprecation warnings without changing workflow logic. As of this
+> update, the workflow stack remains green on current `main`.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
@@ -1136,10 +1138,10 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 
 ### 16.1 Agent Run Quality — P0
 
-- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(historical cycle delivered on `main`; the 2026-04-01 follow-up is now narrowed to CodeQL alert `#560` in `packages/control-plane/src/api/routes/sync.ts`)*
-- Status note: The historical CI/CodeQL/Dependabot/DAST recovery through PR #227 remains delivered on `main`. On the latest 2026-04-01 security loop, PR #373 restored the failing Security Audit / nightly gitleaks / remote-error-sanitization follow-up on the current base, and PR #380 merged at `8069a74f` to close the remaining `brace-expansion`, historical gitleaks fingerprint, and `scripts/agentctl.ts` alert follow-ups. There are currently no open PRs, Dependabot alerts, or secret-scanning alerts on `main`; the only open GitHub security item is CodeQL alert `#560` (`js/missing-rate-limiting`) in `packages/control-plane/src/api/routes/sync.ts`.
+- Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(historical cycle delivered on `main`; the 2026-04-01 follow-up is now also closed via PR #385 plus PRs #386-#388, leaving GitHub with `0` open PR/dependency/secret/code-scanning items as of 2026-04-01)*
+- Status note: The historical CI/CodeQL/Dependabot/DAST recovery through PR #227 remains delivered on `main`. On the 2026-04-01 follow-up loop, PR #373 restored the failing Security Audit / nightly gitleaks / remote-error-sanitization path on the current base, PR #380 closed the then-current `brace-expansion`, historical fingerprint, and scripts follow-ups, PR #385 upgraded the remaining `pnpm/action-setup` workflow uses to `v5`, PR #386 added the explicit sync pull/ack limiters that closed CodeQL `#560`, and PR #388 aligned the final `scripts/agentctl.ts` sanitizer with the CodeQL-recognized `String(...).replace(/\n|\r/g, '')` sink shape. GitHub currently reports `0` open PRs, Dependabot alerts, secret-scanning alerts, and code-scanning alerts on `main`.
 
-- [ ] Add explicit rate limiting to the sync pull/ack routes newly flagged by CodeQL on current `main` (`#560`, `js/missing-rate-limiting`, `packages/control-plane/src/api/routes/sync.ts`)
+- [x] Add explicit rate limiting to the sync pull/ack routes newly flagged by CodeQL on current `main` (`#560`, `js/missing-rate-limiting`, `packages/control-plane/src/api/routes/sync.ts`) *(PR #386)*
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
 - [x] Main CI regressions around dispatch lifecycle + registry expectations fixed *(PR #167)*
@@ -1742,6 +1744,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Add "Config" tab to `SessionDetailView` tab bar
 - [x] Empty states: no runs, pre-feature data, multi-run indicator
 - [x] API client method + React Query hook (`sessionDispatchConfigQuery`)
+- [x] Focused Playwright coverage for Config-tab visibility plus empty/loaded states *(PR #389)*
 
 ---
 
@@ -1751,9 +1754,9 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 32.1 CodeQL Scripts Alerts — Delivered
 
-> Status note: The scripts-specific CodeQL backlog is closed on current `main`; PR #371 landed the original hardening and PR #380 re-closed the remaining latest-base GitHub alert. The only open code-scanning alert now lives in `packages/control-plane/src/api/routes/sync.ts`, not under `scripts/`.
+> Status note: The scripts-specific CodeQL backlog is closed on current `main`; PR #371 landed the original hardening, PR #380 re-closed the earlier latest-base GitHub alert, and PRs #386-#388 closed the reopened 2026-04-01 GitHub findings with the final CodeQL-recognized remote-error sanitizer shape. GitHub currently reports `0` open code-scanning alerts on `main`.
 
-- [x] Fix log injection in `scripts/agentctl.ts` — sanitize remote error text (PR #371; latest-main alert closure confirmed in PR #380)
+- [x] Fix log injection in `scripts/agentctl.ts` — sanitize remote error text (PR #371; latest-base re-closures in PR #380 and PRs #386-#388)
 - [x] Fix TOCTOU race conditions in `scripts/provision-target.ts` and `scripts/deploy.ts` (PR #371)
 - [x] Fix insecure temp file creation via `mkdtemp()` in `scripts/provision-target.ts` (PR #371)
 
@@ -1765,7 +1768,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 32.3 CI Stability — Delivered
 
-> Status note: The historical CI/dependency regression chain is again green on the latest `main`; PR #369 fixed the original `brace-expansion` CJS/ESM break, PR #373 restored the failing Security Audit/nightly gitleaks path on the current base, and PR #380 merged the remaining targeted `brace-expansion` overrides plus historical fingerprint follow-up. There are no open Dependabot alerts on `main`.
+> Status note: The historical CI/dependency regression chain is again green on the latest `main`; PR #369 fixed the original `brace-expansion` CJS/ESM break, PR #373 restored the failing Security Audit/nightly gitleaks path on the current base, PR #380 merged the remaining targeted `brace-expansion` overrides plus historical fingerprint follow-up, and PR #385 upgraded the remaining `pnpm/action-setup` workflow uses to `v5` to clear the last Node20 deprecation warnings. There are no open Dependabot alerts on `main`.
 
 - [x] Fix `brace-expansion` v5 ESM-only override breaking CJS `require()` in test runners (PR #369; latest-main follow-up merged in PR #380)
 
@@ -1831,6 +1834,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] `/conflicts` page with list view showing both node IDs, table, row, timestamp
 - [x] Side-by-side JSON diff with field-level highlighting (`ConflictDiffView` component)
 - [x] Conflict count badge in sidebar navigation (polled every 60s)
+- [x] Focused Playwright coverage for `/conflicts` page load, empty state, and filter dropdown flows *(PR #389)*
 
 ### 33.4 Node Discovery + Peer Registry (P4) — Delivered
 
@@ -1880,20 +1884,20 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
-| **P0** | Sync Route Rate-Limit Hardening | 16.1 / 33.2 | Open — only remaining GitHub security alert on `main` is CodeQL `#560` (`js/missing-rate-limiting`) in `packages/control-plane/src/api/routes/sync.ts` after PR #380 |
+| **P0** | ~~Sync Route Rate-Limit Hardening~~ | 16.1 / 33.2 | ✅ Delivered — PR #386 added the explicit sync pull/ack limiters on current `main`, PR #388 closed the final scripts CodeQL follow-up, and GitHub now reports `0` open security alerts |
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
 | **P0** | ~~Mesh: Change Log + Vector Clock~~ | 33.1 | ✅ Delivered — PR #374 merged. 17 files, 871 additions, 32 tests. VectorClock utils, sync types, machine identity, pool hook, PG triggers on 15 tables, sync maintenance queue. |
 | **P0** | ~~Mesh: Node Discovery + Peer Registry~~ | 33.4 | ✅ Delivered — PR #376 merged. Peer discovery, health check, auth, REST API, 36 tests. |
 | **P0** | ~~Mesh: Sync Protocol + API~~ | 33.2 | ✅ Delivered — PR #377 merged. Sync auth, pull/ack endpoints, apply logic with advisory locks, per-peer sync loop, synced marker. 33 tests. |
-| **P1** | ~~Mesh: Conflict Resolution UI~~ | 33.3 | ✅ Delivered — PR #381 merged. Resolve API with convergence-safe vclock merge, /conflicts page, side-by-side diff, sidebar badge, delete conflict UX. |
+| **P1** | ~~Mesh: Conflict Resolution UI~~ | 33.3 | ✅ Delivered — PR #381 merged the feature slice, and PR #389 added focused Playwright coverage for the existing `/conflicts` page state/filter flows. |
 | **P1** | ~~Mesh: Unified CP + Worker~~ | 33.5 | ✅ Delivered — PR #379 merged. Machine-scoped jobs/reaper/scheduler, localhost dispatch, setup script, PM2 mesh config. |
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
-| **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 landed the scripts hardening and PR #380 re-closed the remaining latest-base alert on `main` |
+| **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 landed the scripts hardening, PR #380 re-closed the earlier latest-base alert, and PRs #386-#388 closed the reopened 2026-04-01 findings on current `main` |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
-| **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 fixed the original `brace-expansion` regression and PR #380 closed the remaining latest-main dependency/security follow-up |
-| **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend) and #368 (frontend) on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, Config tab on session detail page |
+| **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 fixed the original `brace-expansion` regression, PR #380 closed the remaining latest-main dependency/security follow-up, and PR #385 cleared the last `pnpm/action-setup` Node20 deprecation warnings |
+| **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend), #368 (frontend), and #389 (focused Playwright coverage) are on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, and Config tab on session detail page |
 | **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, `e5f07913` hardened the early `rc_session` bookkeeping, and `bf899eb0` plus PR #361 now keep heartbeat refresh on live progress updates covered on current `main` |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
@@ -1966,7 +1970,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | Narrow follow-up — the historical CI/CodeQL/DAST cycle remains delivered, PRs #373/#380 re-closed the 2026-04-01 security loop on `main`, and the only open security item is CodeQL `#560` in `packages/control-plane/src/api/routes/sync.ts` |
+| **P0** | Agent Run Quality | 16.1 | Current loop closed — PR #385 plus PRs #386-#388 finished the 2026-04-01 CI/security follow-up on `main`, and PR #389 added focused regression coverage for delivered `/conflicts` and Config-tab surfaces |
 | **P0** | ~~Dev Environment Infrastructure~~ | 16.2 | ✅ Delivered — dev-1/dev-2 isolation, PM2 configs, Next.js middleware proxy, version display |
 | **P0** | ~~Frontend UI Polish (dashboard, agent detail, cards)~~ | 16.3 | ✅ Delivered — PRs #158-#165, #212-#213, #229-#246; all critique items resolved |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
@@ -2105,7 +2109,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
 | [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered on historical scope; PRs #373 and #380 re-closed the 2026-04-01 security follow-up on `main`, leaving only CodeQL `#560` in `packages/control-plane/src/api/routes/sync.ts` | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered on historical scope; PR #385 and PRs #386-#388 closed the 2026-04-01 CI/security follow-up on `main`, and GitHub now reports `0` open PR/dependency/secret/code-scanning items | 16.1-16.3 |
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
