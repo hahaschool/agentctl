@@ -368,3 +368,4 @@ export type {
   WebhookProvider,
 } from './webhook.js';
 export { WEBHOOK_EVENT_TYPES, WEBHOOK_PROVIDERS } from './webhook.js';
+export type { VectorClock } from '../vector-clock.js';
