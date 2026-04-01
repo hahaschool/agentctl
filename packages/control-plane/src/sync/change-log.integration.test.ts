@@ -29,7 +29,11 @@ describe.skipIf(!DATABASE_URL)('sync_change_log trigger (integration)', () => {
   const testMachineId = 'test-machine-sync';
 
   beforeAll(async () => {
-    db = createDb(DATABASE_URL!, { sessionNodeId: 'node-test-0001' });
+    if (!DATABASE_URL) {
+      throw new Error('DATABASE_URL must be set when running sync change-log integration tests');
+    }
+
+    db = createDb(DATABASE_URL, { sessionNodeId: 'node-test-0001' });
     // Create a test machine so agents FK constraint is satisfied
     await db.execute(
       sql`INSERT INTO machines (id, hostname, tailscale_ip, os, arch)
