@@ -1881,7 +1881,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Mesh: Node Discovery + Peer Registry~~ | 33.4 | ✅ Delivered — PR #376 merged. Peer discovery, health check, auth, REST API, 36 tests. |
 | **P0** | ~~Mesh: Sync Protocol + API~~ | 33.2 | ✅ Delivered — PR #377 merged. Sync auth, pull/ack endpoints, apply logic with advisory locks, per-peer sync loop, synced marker. 33 tests. |
 | **P1** | Mesh: Conflict Resolution UI | 33.3 | ✅ Plan — Codex parity. Depends on 33.2. |
-| **P1** | Mesh: Unified CP + Worker | 33.5 | ✅ Plan — Codex parity. Depends on 33.4. |
+| **P1** | ~~Mesh: Unified CP + Worker~~ | 33.5 | ✅ Delivered — PR #379 merged. Machine-scoped jobs/reaper/scheduler, localhost dispatch, setup script, PM2 mesh config. |
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 fixed all 8 alerts (log injection, TOCTOU, temp files) |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
