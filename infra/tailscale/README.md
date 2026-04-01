@@ -105,6 +105,21 @@ admin console after it joins:
 3. Under **Tags**, add `tag:mobile`.
 4. Save.
 
+## Mesh Node Tagging
+
+Mesh nodes are triple-tagged: `tag:mesh-node`, `tag:control`, `tag:worker`.
+This allows:
+
+- Peer-to-peer `:8080` access for sync protocol (via the `mesh-node` rule)
+- Standard CP->Worker `:9000` dispatch (via the `control->worker` rule)
+- Worker->CP `:8080` heartbeat (via the `worker->control` rule)
+
+To tag a machine as a mesh node:
+
+```bash
+sudo tailscale up --advertise-tags=tag:mesh-node,tag:control,tag:worker --hostname=agentctl-mesh-01
+```
+
 ## CI/CD Setup (GitHub Actions)
 
 CI runners use ephemeral OAuth clients so they join the tailnet for the
