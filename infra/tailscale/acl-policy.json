@@ -20,7 +20,8 @@
     "tag:worker":  ["autogroup:admin"],
     "tag:mobile":  ["autogroup:admin"],
     "tag:ci":      ["autogroup:admin"],
-    "tag:dev":     ["autogroup:admin"]
+    "tag:dev":     ["autogroup:admin"],
+    "tag:mesh-node": ["autogroup:admin"]
   },
 
   // -- Access Control Lists -----------------------------------------------
@@ -78,6 +79,14 @@
       "action": "accept",
       "src":    ["tag:worker"],
       "dst":    ["tag:control:4000", "tag:control:5432", "tag:control:6379", "tag:control:8000"]
+    },
+
+    // 8. Mesh nodes can reach each other on :8080 for peer sync
+    {
+      "action": "accept",
+      "src":    ["tag:mesh-node"],
+      "dst":    ["tag:mesh-node:8080"],
+      "comment": "Mesh nodes sync via CP API on :8080"
     }
 
     // NOTE: The following are implicitly denied (no rule exists):
@@ -194,6 +203,36 @@
     {
       "src":    "tag:dev",
       "accept": ["tag:worker:9000"]
+    },
+
+    // 11. Mesh nodes can reach each other on :8080 (peer sync)
+    {
+      "src":    "tag:mesh-node",
+      "accept": ["tag:mesh-node:8080"]
+    },
+
+    // 12. Mesh nodes can reach worker API via control tag (triple-tagged)
+    {
+      "src":    "tag:control",
+      "accept": ["tag:worker:9000"]
+    },
+
+    // 13. Worker heartbeat to CP still works (unchanged by mesh rule)
+    {
+      "src":    "tag:worker",
+      "accept": ["tag:control:8080"]
+    },
+
+    // 14. Mobile CANNOT reach mesh sync directly
+    {
+      "src":    "tag:mobile",
+      "deny":   ["tag:mesh-node:8080"]
+    },
+
+    // 15. CI runners CANNOT reach mesh sync
+    {
+      "src":    "tag:ci",
+      "deny":   ["tag:mesh-node:8080"]
     }
   ]
 }
