@@ -1879,7 +1879,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Web Hardening Follow-through~~ | 25.1-25.3 | ✅ Delivered — runtime sessions Playwright coverage (PR #306), settings control-center coverage (PR #304), and web/shared permission-request contract cleanup (PR #305) are now on `main`; machines / terminal coverage now lives in the dedicated section 29 follow-up |
 | **P0** | ~~Mesh: Change Log + Vector Clock~~ | 33.1 | ✅ Delivered — PR #374 merged. 17 files, 871 additions, 32 tests. VectorClock utils, sync types, machine identity, pool hook, PG triggers on 15 tables, sync maintenance queue. |
 | **P0** | ~~Mesh: Node Discovery + Peer Registry~~ | 33.4 | ✅ Delivered — PR #376 merged. Peer discovery, health check, auth, REST API, 36 tests. |
-| **P0** | Mesh: Sync Protocol + API | 33.2 | ✅ Plan — Codex parity. Depends on 33.1 + 33.4. |
+| **P0** | ~~Mesh: Sync Protocol + API~~ | 33.2 | ✅ Delivered — PR #377 merged. Sync auth, pull/ack endpoints, apply logic with advisory locks, per-peer sync loop, synced marker. 33 tests. |
 | **P1** | Mesh: Conflict Resolution UI | 33.3 | ✅ Plan — Codex parity. Depends on 33.2. |
 | **P1** | Mesh: Unified CP + Worker | 33.5 | ✅ Plan — Codex parity. Depends on 33.4. |
 | **P1** | Mesh: Tailscale ACL Update | 33.6 | ✅ Plan — Codex parity. Depends on 33.4. |
