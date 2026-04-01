@@ -368,4 +368,16 @@ export type {
   WebhookProvider,
 } from './webhook.js';
 export { WEBHOOK_EVENT_TYPES, WEBHOOK_PROVIDERS } from './webhook.js';
+export type {
+  ChangeLogEntry,
+  SyncConflict,
+  SyncNode,
+  TableSyncType,
+} from './sync.js';
+export {
+  getTablePkColumn,
+  SYNCED_TABLES,
+  TABLE_PK_COLUMN,
+  TABLE_SYNC_CONFIG,
+} from './sync.js';
 export type { VectorClock } from '../vector-clock.js';
