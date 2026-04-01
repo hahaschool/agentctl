@@ -59,6 +59,10 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
   const authHook = createSyncAuthHook({ db, logger });
   app.addHook('preHandler', authHook);
 
+  // Rate limiting is provided by the global @fastify/rate-limit plugin (server.ts).
+  // Sync routes additionally have peer auth (X-Sync-Auth) which limits access
+  // to known mesh peers only.
+
   /**
    * GET /api/sync/changes?since=<cursor>&limit=<n>
    * Returns changes from sync_change_log after the given cursor.
@@ -66,6 +70,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
   app.get<{ Querystring: ChangesQuerystring }>(
     '/changes',
     {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
       schema: {
         tags: ['sync'],
         summary: 'Pull sync changes from this node',
