@@ -30,6 +30,7 @@ import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
 import { getMachineId, upsertSelfNode } from './sync/machine-identity.js';
+import { createSyncMaintenanceWorker, registerSyncMaintenanceJobs } from './sync/sync-maintenance-worker.js';
 
 // ── Environment validation ────────────────────────────────────────────
 const CONTROL_PLANE_ENV: EnvVar[] = [
@@ -430,6 +431,19 @@ async function main(): Promise<void> {
     logger.child({ component: 'repeatable-jobs' }),
   );
 
+  // --- Sync maintenance (separate queue, not on the agent-tasks type) ---
+  let syncQueue: Awaited<ReturnType<typeof registerSyncMaintenanceJobs>> | null = null;
+  let syncWorker: ReturnType<typeof createSyncMaintenanceWorker> | null = null;
+  if (db && redisConnection) {
+    try {
+      syncQueue = await registerSyncMaintenanceJobs(redisConnection);
+      syncWorker = createSyncMaintenanceWorker({ connection: redisConnection, db, logger });
+      logger.info('Sync maintenance worker started (daily cleanup at 3 AM)');
+    } catch (err) {
+      logger.debug({ err }, 'Sync maintenance worker not started (sync tables may not exist)');
+    }
+  }
+
   const server = await createServer({
     logger,
     taskQueue,
@@ -485,6 +499,13 @@ async function main(): Promise<void> {
       await taskQueue.close();
     } catch (err: unknown) {
       logger.error({ err }, 'Error closing task queue');
+    }
+
+    try {
+      if (syncWorker) await syncWorker.close();
+      if (syncQueue) await syncQueue.close();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error closing sync maintenance worker/queue');
     }
 
     try {
