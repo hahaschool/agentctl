@@ -1747,6 +1747,10 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] API client method + React Query hook (`sessionDispatchConfigQuery`)
 - [x] Focused Playwright coverage for Config-tab visibility plus empty/loaded states *(PR #389)*
 
+> Follow-up note: [plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md](plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md)
+> tracks deeper browser assertions for the already-delivered Config-tab detail
+> states without reopening the feature scope.
+
 ---
 
 ## 32. Frontend Gaps & UX Polish
@@ -1838,6 +1842,10 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Focused Playwright coverage for `/conflicts` page load, empty state, and filter dropdown flows *(PR #389)*
 - [x] Direct control-plane route coverage for `sync-conflicts` list/detail/resolve/count handlers *(PR #391)*
 
+> Follow-up note: [plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md](plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md)
+> tracks deeper browser coverage for the already-delivered resolve / merge
+> flows without reopening the mesh conflict feature slice.
+
 ### 33.4 Node Discovery + Peer Registry (P4) — Delivered
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p4-node-discovery-peer-registry-design.md` (v3)
@@ -1899,6 +1907,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 landed the scripts hardening, PR #380 re-closed the earlier latest-base alert, and PRs #386-#388 closed the reopened 2026-04-01 findings on current `main` |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 fixed the original `brace-expansion` regression, PR #380 closed the remaining latest-main dependency/security follow-up, and PR #385 cleared the last `pnpm/action-setup` Node20 deprecation warnings |
+| **P1** | Mesh / Runtime E2E Follow-up | 16.1 / 31.3 / 33.3 | In flight — PR #395 merged the deeper session `Config` tab detail-state coverage; PR #396 still open for `/conflicts` resolution-flow coverage. See [plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md](plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md) |
 | **P0** | ~~Runtime Config Visibility~~ | 31.1-31.3 | ✅ Delivered — PRs #366 (backend), #368 (frontend), #389 (focused Playwright coverage), and #391 (direct backend route coverage) are on `main`; dispatch_config JSONB column, redactMcpServers, GET /sessions/:id/dispatch-config endpoint, and Config tab on session detail page |
 | **P0** | ~~Running Agent Observability~~ | 30.1-30.2 | ✅ Delivered — direct `main` commits `7a2ae06` and `d1b7a77` shipped early session linking plus live cost/token reporting in run history, `e5f07913` hardened the early `rc_session` bookkeeping, and `bf899eb0` plus PR #361 now keep heartbeat refresh on live progress updates covered on current `main` |
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
@@ -2112,6 +2121,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
 | [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered on historical scope; PR #385 and PRs #386-#388 closed the 2026-04-01 CI/security follow-up on `main`, and GitHub now reports `0` open PR/dependency/secret/code-scanning items | 16.1-16.3 |
+| [mesh-runtime-e2e-follow-up-plan](plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md) | In flight — PR #395 merged the session `Config` tab detail-state coverage; PR #396 still open for `/conflicts` resolution-flow coverage | 16.1, 31.3, 33.3 |
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
