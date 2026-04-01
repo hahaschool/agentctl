@@ -1796,9 +1796,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
       }
 
       const latestRun = await dbRegistry.getLatestRunForSession(sessionId);
-      const config = latestRun
-        ? await dbRegistry.getRunDispatchConfig(latestRun.id)
-        : null;
+      const config = latestRun ? await dbRegistry.getRunDispatchConfig(latestRun.id) : null;
 
       return {
         runId: latestRun?.id ?? null,

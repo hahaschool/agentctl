@@ -48,12 +48,15 @@
   },
   "files": {
     "includes": [
-      "**",
-      "!!**/.trees",
       "packages/**/src/**/*.ts",
       "packages/**/src/**/*.tsx",
       "scripts/**/*.ts",
-      "scripts/**/*.tsx"
+      "scripts/**/*.tsx",
+      "!**/dist/**",
+      "!**/node_modules/**",
+      "!**/.next/**",
+      "!**/.trees/**",
+      "!**/coverage/**"
     ]
   }
 }
