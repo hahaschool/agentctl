@@ -2,9 +2,8 @@
 
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
-
-import { cn } from '@/lib/utils';
 import type { SyncConflictItem } from '@/lib/api';
+import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -12,7 +11,10 @@ import type { SyncConflictItem } from '@/lib/api';
 
 type ConflictDiffViewProps = {
   conflict: SyncConflictItem;
-  onResolve: (resolution: 'local' | 'remote' | 'merged', payload?: Record<string, unknown> | null) => void;
+  onResolve: (
+    resolution: 'local' | 'remote' | 'merged',
+    payload?: Record<string, unknown> | null,
+  ) => void;
   isResolving: boolean;
 };
 
@@ -156,11 +158,14 @@ function VectorClockDisplay({
     <div>
       <span className="text-[10px] text-muted-foreground/70 mr-1">{label}:</span>
       <span className="font-mono text-[10px] text-muted-foreground">
-        {'{'}{entries.map(([k, v], i) => (
+        {'{'}
+        {entries.map(([k, v], i) => (
           <span key={k}>
-            {i > 0 ? ', ' : ''}{k.slice(0, 8)}:{v}
+            {i > 0 ? ', ' : ''}
+            {k.slice(0, 8)}:{v}
           </span>
-        ))}{'}'}
+        ))}
+        {'}'}
       </span>
     </div>
   );
@@ -220,12 +225,12 @@ export function ConflictDiffView({
   }, []);
 
   // Labels for delete conflicts
-  const localLabel = isDeleteConflict && conflict.localPayload === null
-    ? 'Local (Deleted)'
-    : `Local (this node)`;
-  const remoteLabel = isDeleteConflict && conflict.remotePayload === null
-    ? `Remote (Deleted)`
-    : `Remote (${remoteNodeId.slice(0, 12)})`;
+  const localLabel =
+    isDeleteConflict && conflict.localPayload === null ? 'Local (Deleted)' : `Local (this node)`;
+  const remoteLabel =
+    isDeleteConflict && conflict.remotePayload === null
+      ? `Remote (Deleted)`
+      : `Remote (${remoteNodeId.slice(0, 12)})`;
 
   return (
     <div className="space-y-4">
@@ -238,7 +243,8 @@ export function ConflictDiffView({
           Row: <span className="font-mono text-foreground">{conflict.rowId.slice(0, 12)}</span>
         </span>
         <span>
-          Remote node: <span className="font-mono text-foreground">{remoteNodeId.slice(0, 12)}</span>
+          Remote node:{' '}
+          <span className="font-mono text-foreground">{remoteNodeId.slice(0, 12)}</span>
         </span>
       </div>
 
@@ -282,9 +288,7 @@ export function ConflictDiffView({
             rows={10}
             className="w-full px-3 py-2 bg-muted text-foreground border border-border rounded-md text-xs font-mono outline-none resize-y focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           />
-          {jsonError && (
-            <p className="text-xs text-red-400">{jsonError}</p>
-          )}
+          {jsonError && <p className="text-xs text-red-400">{jsonError}</p>}
         </div>
       )}
 
@@ -303,9 +307,7 @@ export function ConflictDiffView({
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
-                {isDeleteConflict && conflict.localPayload === null
-                  ? 'Keep Deleted'
-                  : 'Keep Local'}
+                {isDeleteConflict && conflict.localPayload === null ? 'Keep Deleted' : 'Keep Local'}
               </button>
               <button
                 type="button"

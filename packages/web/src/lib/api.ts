@@ -1640,8 +1640,7 @@ export const api = {
       },
     ),
 
-  getSyncConflictCount: () =>
-    request<{ count: number }>('/api/sync/conflicts/count'),
+  getSyncConflictCount: () => request<{ count: number }>('/api/sync/conflicts/count'),
 };
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
-import { getTablePkColumn, vcMerge } from '@agentctl/shared';
 import type { VectorClock } from '@agentctl/shared';
+import { getTablePkColumn, vcMerge } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
@@ -121,9 +121,7 @@ export const syncConflictsRoutes: FastifyPluginAsync<SyncConflictsRoutesOptions>
       }
 
       const whereClause =
-        conditions.length > 0
-          ? sql`WHERE ${sql.join(conditions, sql` AND `)}`
-          : sql``;
+        conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``;
 
       const result = await db.execute(sql`
         SELECT id, table_name, row_id, local_vclock, local_payload,

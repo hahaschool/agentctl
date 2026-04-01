@@ -9,9 +9,9 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
-import { cn } from '@/lib/utils';
 import type { SyncConflictItem } from '@/lib/api';
 import { syncConflictsQuery, useResolveSyncConflict } from '@/lib/queries';
+import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Filter bar
@@ -99,8 +99,7 @@ function ConflictRow({
   isSelected: boolean;
   onClick: () => void;
 }): React.JSX.Element {
-  const isDelete =
-    conflict.localPayload === null || conflict.remotePayload === null;
+  const isDelete = conflict.localPayload === null || conflict.remotePayload === null;
 
   return (
     <button
@@ -273,9 +272,7 @@ export function ConflictsPage(): React.JSX.Element {
                   key={conflict.id}
                   conflict={conflict}
                   isSelected={conflict.id === selectedId}
-                  onClick={() =>
-                    setSelectedId(conflict.id === selectedId ? null : conflict.id)
-                  }
+                  onClick={() => setSelectedId(conflict.id === selectedId ? null : conflict.id)}
                 />
               ))}
             </div>
