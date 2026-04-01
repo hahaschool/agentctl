@@ -1880,7 +1880,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Mesh: Change Log + Vector Clock~~ | 33.1 | ✅ Delivered — PR #374 merged. 17 files, 871 additions, 32 tests. VectorClock utils, sync types, machine identity, pool hook, PG triggers on 15 tables, sync maintenance queue. |
 | **P0** | ~~Mesh: Node Discovery + Peer Registry~~ | 33.4 | ✅ Delivered — PR #376 merged. Peer discovery, health check, auth, REST API, 36 tests. |
 | **P0** | ~~Mesh: Sync Protocol + API~~ | 33.2 | ✅ Delivered — PR #377 merged. Sync auth, pull/ack endpoints, apply logic with advisory locks, per-peer sync loop, synced marker. 33 tests. |
-| **P1** | Mesh: Conflict Resolution UI | 33.3 | ✅ Plan — Codex parity. Depends on 33.2. |
+| **P1** | ~~Mesh: Conflict Resolution UI~~ | 33.3 | ✅ Delivered — PR #381 merged. Resolve API with convergence-safe vclock merge, /conflicts page, side-by-side diff, sidebar badge, delete conflict UX. |
 | **P1** | ~~Mesh: Unified CP + Worker~~ | 33.5 | ✅ Delivered — PR #379 merged. Machine-scoped jobs/reaper/scheduler, localhost dispatch, setup script, PM2 mesh config. |
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 fixed all 8 alerts (log injection, TOCTOU, temp files) |
