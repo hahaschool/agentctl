@@ -1,3 +1,4 @@
+import rateLimit from '@fastify/rate-limit';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
@@ -5,9 +6,14 @@ import type { Logger } from 'pino';
 import type { Database } from '../../db/index.js';
 import { extractRows } from '../../db/index.js';
 import { createSyncAuthHook } from '../../sync/sync-auth.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 5_000;
+const SYNC_RATE_LIMIT = {
+  max: 120,
+  timeWindow: '1 minute',
+} as const;
 
 type SyncRoutesOptions = {
   db: Database;
@@ -54,10 +60,47 @@ function mapChangeLogRow(row: ChangeLogRow) {
 
 export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opts) => {
   const { db, logger, selfMachineId } = opts;
+  const syncRateLimitMax = readRateLimitEnv('SYNC_ROUTE_RATE_LIMIT_MAX', SYNC_RATE_LIMIT.max);
+  const syncRateLimitWindowMs = readRateLimitEnv('SYNC_ROUTE_RATE_LIMIT_WINDOW_MS', 60_000);
+  const syncRouteRateLimit = {
+    max: syncRateLimitMax,
+    timeWindow: syncRateLimitWindowMs,
+  } as const;
+  const syncRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many requests',
+  });
+  const getSyncRateLimitKey = (request: {
+    ip?: string;
+    headers: Record<string, string | string[] | undefined>;
+  }) => {
+    const verifiedPeerId = request.headers['x-verified-peer-id'];
+    if (typeof verifiedPeerId === 'string' && verifiedPeerId.trim().length > 0) {
+      return `peer:${verifiedPeerId.trim()}`;
+    }
+
+    return (
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown')
+    );
+  };
+  const syncFastifyRateLimit = {
+    ...syncRouteRateLimit,
+    keyGenerator: getSyncRateLimitKey,
+    errorResponseBuilder: syncRateLimitError,
+  } as const;
 
   // Register auth hook for all routes in this plugin
   const authHook = createSyncAuthHook({ db, logger });
   app.addHook('preHandler', authHook);
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: getSyncRateLimitKey,
+    errorResponseBuilder: syncRateLimitError,
+  });
 
   /**
    * GET /api/sync/changes?since=<cursor>&limit=<n>
@@ -66,6 +109,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
   app.get<{ Querystring: ChangesQuerystring }>(
     '/changes',
     {
+      config: { rateLimit: syncFastifyRateLimit },
       schema: {
         tags: ['sync'],
         summary: 'Pull sync changes from this node',
@@ -77,6 +121,7 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
           },
         },
       },
+      preHandler: app.rateLimit(syncFastifyRateLimit),
     },
     async (request) => {
       const since = Number(request.query.since) || 0;
@@ -113,10 +158,12 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
   app.post<{ Body: AckBody }>(
     '/ack',
     {
+      config: { rateLimit: syncFastifyRateLimit },
       schema: {
         tags: ['sync'],
         summary: 'Acknowledge sync cursor from a remote peer',
       },
+      preHandler: app.rateLimit(syncFastifyRateLimit),
     },
     async (request, reply) => {
       const { machineId, cursor } = request.body ?? {};
