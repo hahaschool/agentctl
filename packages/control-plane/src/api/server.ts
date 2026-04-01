@@ -107,6 +107,7 @@ import { skillDiscoverRoutes } from './routes/skill-discover.js';
 import { spaceRoutes } from './routes/spaces.js';
 import { streamRoutes } from './routes/stream.js';
 import { syncRoutes } from './routes/sync.js';
+import { syncConflictsRoutes } from './routes/sync-conflicts.js';
 import { syncPeersRoutes } from './routes/sync-peers.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
 import { taskRunRoutes } from './routes/task-runs.js';
@@ -765,6 +766,16 @@ export async function createServer({
       prefix: '/api/sync/peers',
       db,
     });
+
+    // Mesh sync conflict resolution routes
+    if (machineId) {
+      await app.register(syncConflictsRoutes, {
+        prefix: '/api/sync/conflicts',
+        db,
+        logger,
+        selfMachineId: machineId,
+      });
+    }
 
     // Mesh sync protocol routes (pull changes + ACK)
     if (machineId) {

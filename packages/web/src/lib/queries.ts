@@ -138,6 +138,10 @@ export const queryKeys = {
   deploymentTiers: ['deployment-tiers'] as const,
   promotionHistory: ['promotion-history'] as const,
   notificationPreferences: (userId: string) => ['notification-preferences', userId] as const,
+  syncConflicts: (params?: { status?: string; table?: string; remoteNodeId?: string }) =>
+    params ? (['sync-conflicts', params] as const) : (['sync-conflicts'] as const),
+  syncConflict: (id: string) => ['sync-conflicts', id] as const,
+  syncConflictCount: ['sync-conflict-count'] as const,
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
@@ -1536,6 +1540,61 @@ export function useDeleteSpaceSubscription() {
       api.deleteSpaceSubscription(spaceId, subId),
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.spaces.subscriptions(variables.spaceId) });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Sync Conflicts
+// ---------------------------------------------------------------------------
+
+const CONFLICT_POLL_INTERVAL = 60_000;
+
+export function syncConflictsQuery(params?: {
+  status?: string;
+  table?: string;
+  remoteNodeId?: string;
+}) {
+  return queryOptions({
+    queryKey: queryKeys.syncConflicts(params),
+    queryFn: () => api.listSyncConflicts(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function syncConflictQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.syncConflict(id),
+    queryFn: () => api.getSyncConflict(id),
+    enabled: !!id,
+  });
+}
+
+export function syncConflictCountQuery() {
+  return queryOptions({
+    queryKey: queryKeys.syncConflictCount,
+    queryFn: api.getSyncConflictCount,
+    refetchInterval: CONFLICT_POLL_INTERVAL,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useResolveSyncConflict() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      resolution,
+      payload,
+    }: {
+      id: string;
+      resolution: 'local' | 'remote' | 'merged';
+      payload?: Record<string, unknown> | null;
+    }) => api.resolveSyncConflict(id, { resolution, payload }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['sync-conflicts'] });
+      void qc.invalidateQueries({ queryKey: queryKeys.syncConflictCount });
     },
   });
 }

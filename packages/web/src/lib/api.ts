@@ -552,6 +552,21 @@ export type ResolvedContextRefResponse = {
   hint?: string;
 };
 
+export type SyncConflictItem = {
+  id: string;
+  tableName: string;
+  rowId: string;
+  localVclock: Record<string, number>;
+  localPayload: Record<string, unknown> | null;
+  remoteVclock: Record<string, number>;
+  remotePayload: Record<string, unknown> | null;
+  remoteNodeId: string;
+  status: 'pending' | 'resolved';
+  resolution: 'local' | 'remote' | 'merged' | null;
+  resolvedAt: string | null;
+  createdAt: string;
+};
+
 export class ApiError extends Error {
   public hint?: string;
   constructor(
@@ -1594,6 +1609,39 @@ export const api = {
     request<{ records: DeploymentPromotionRecord[]; total: number }>(
       `/api/deployment/history?limit=${limit}&offset=${offset}`,
     ),
+
+  // ---------------------------------------------------------------------------
+  // Sync Conflicts
+  // ---------------------------------------------------------------------------
+
+  listSyncConflicts: (params?: { status?: string; table?: string; remoteNodeId?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.table) searchParams.set('table', params.table);
+    if (params?.remoteNodeId) searchParams.set('remoteNodeId', params.remoteNodeId);
+    const qs = searchParams.toString();
+    return request<{ conflicts: SyncConflictItem[]; total: number }>(
+      `/api/sync/conflicts${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  getSyncConflict: (id: string) =>
+    request<SyncConflictItem>(`/api/sync/conflicts/${encodeURIComponent(id)}`),
+
+  resolveSyncConflict: (
+    id: string,
+    body: { resolution: 'local' | 'remote' | 'merged'; payload?: Record<string, unknown> | null },
+  ) =>
+    request<{ ok: boolean; resolution: string }>(
+      `/api/sync/conflicts/${encodeURIComponent(id)}/resolve`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      },
+    ),
+
+  getSyncConflictCount: () =>
+    request<{ count: number }>('/api/sync/conflicts/count'),
 };
 
 // ---------------------------------------------------------------------------
