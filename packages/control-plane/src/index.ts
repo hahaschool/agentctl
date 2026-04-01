@@ -29,6 +29,8 @@ import { MachineCircuitBreaker } from './scheduler/circuit-breaker.js';
 import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
+import { getMachineId, upsertSelfNode } from './sync/machine-identity.js';
+import { createSyncMaintenanceWorker, registerSyncMaintenanceJobs } from './sync/sync-maintenance-worker.js';
 
 // ── Environment validation ────────────────────────────────────────────
 const CONTROL_PLANE_ENV: EnvVar[] = [
@@ -213,13 +215,17 @@ async function main(): Promise<void> {
 
   logger.info({ redisUrl: REDIS_URL }, 'Connecting to Redis');
 
+  // --- Mesh identity (reuses MACHINE_ID env var from worker registration) ---
+  const machineId = getMachineId();
+  logger.info({ machineId }, 'Mesh machine identity initialized');
+
   // Optionally connect to PostgreSQL when DATABASE_URL is provided.
   let db: Database | undefined;
   let dbRegistry: DbAgentRegistry | undefined;
 
   if (DATABASE_URL) {
     logger.info('Connecting to PostgreSQL');
-    db = createDb(DATABASE_URL);
+    db = createDb(DATABASE_URL, { sessionNodeId: machineId });
 
     const skipMigrations = env.SKIP_MIGRATIONS === 'true';
 
@@ -306,6 +312,13 @@ async function main(): Promise<void> {
     }
 
     await ensureSchemaCompatibility(db, logger.child({ component: 'schema-compat' }));
+
+    // Register this mesh node in sync_nodes with is_self=true
+    try {
+      await upsertSelfNode(db, machineId, process.env.TAILSCALE_IP);
+    } catch {
+      logger.debug('sync_nodes table not available yet — skipping node registration');
+    }
 
     dbRegistry = new DbAgentRegistry(db, logger.child({ component: 'db-registry' }));
     logger.info('Database-backed agent registry initialised');
@@ -418,6 +431,19 @@ async function main(): Promise<void> {
     logger.child({ component: 'repeatable-jobs' }),
   );
 
+  // --- Sync maintenance (separate queue, not on the agent-tasks type) ---
+  let syncQueue: Awaited<ReturnType<typeof registerSyncMaintenanceJobs>> | null = null;
+  let syncWorker: ReturnType<typeof createSyncMaintenanceWorker> | null = null;
+  if (db && redisConnection) {
+    try {
+      syncQueue = await registerSyncMaintenanceJobs(redisConnection);
+      syncWorker = createSyncMaintenanceWorker({ connection: redisConnection, db, logger });
+      logger.info('Sync maintenance worker started (daily cleanup at 3 AM)');
+    } catch (err) {
+      logger.debug({ err }, 'Sync maintenance worker not started (sync tables may not exist)');
+    }
+  }
+
   const server = await createServer({
     logger,
     taskQueue,
@@ -473,6 +499,13 @@ async function main(): Promise<void> {
       await taskQueue.close();
     } catch (err: unknown) {
       logger.error({ err }, 'Error closing task queue');
+    }
+
+    try {
+      if (syncWorker) await syncWorker.close();
+      if (syncQueue) await syncQueue.close();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error closing sync maintenance worker/queue');
     }
 
     try {

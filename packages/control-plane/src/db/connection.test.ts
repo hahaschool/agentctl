@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Mocks — set up before importing the module under test
 // ---------------------------------------------------------------------------
 
-const mockPool = { connect: vi.fn(), query: vi.fn(), end: vi.fn() };
+const mockPool = { connect: vi.fn(), query: vi.fn(), end: vi.fn(), on: vi.fn() };
 
 vi.mock('pg', () => {
   const Pool = vi.fn(() => mockPool);
@@ -118,6 +118,31 @@ describe('connection', () => {
       });
 
       expect(() => createDb('postgresql://localhost/test')).toThrow('drizzle init failed');
+    });
+  });
+
+  describe('sessionNodeId', () => {
+    it('registers a connect listener when sessionNodeId is provided', () => {
+      createDb('postgresql://test:test@localhost/test', { sessionNodeId: 'node-test-abcd' });
+      expect(mockPool.on).toHaveBeenCalledWith('connect', expect.any(Function));
+    });
+
+    it('does not register a connect listener when sessionNodeId is omitted', () => {
+      createDb('postgresql://test:test@localhost/test');
+      expect(mockPool.on).not.toHaveBeenCalled();
+    });
+
+    it('connect listener calls set_config with the node ID', async () => {
+      createDb('postgresql://test:test@localhost/test', { sessionNodeId: 'node-test-abcd' });
+
+      // Get the registered callback and invoke it with a mock client
+      const connectCallback = mockPool.on.mock.calls[0][1];
+      const mockClient = { query: vi.fn().mockResolvedValue(undefined) };
+      await connectCallback(mockClient);
+
+      expect(mockClient.query).toHaveBeenCalledWith(
+        expect.stringContaining("set_config('app.node_id', 'node-test-abcd'"),
+      );
     });
   });
 });
