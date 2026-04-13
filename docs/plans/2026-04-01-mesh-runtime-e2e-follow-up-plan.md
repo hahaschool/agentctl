@@ -8,9 +8,11 @@
 
 **Tech Stack:** Playwright, Next.js App Router, React Query, existing `packages/web/e2e` request interception harness, Vitest only if page/component hardening becomes necessary.
 
-> Status note: execution is in flight. PR #395 (session `Config` tab
-> detail-state coverage) has merged to `main`; PR #396 (`/conflicts`
-> resolution-flow coverage) is still open.
+> Status: **Delivered — 2026-04-13**. All three tracked PRs are merged to
+> `main`: PR #389 (initial `/conflicts` page + Config-tab Playwright
+> coverage), PR #395 (session `Config` tab detail-state coverage), and
+> PR #396 (`/conflicts` resolution-flow coverage). PR #397 synced this
+> tracking doc.
 
 ---
 
