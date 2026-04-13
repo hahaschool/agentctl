@@ -366,141 +366,151 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
   // POST /:id/test — test connectivity by making a minimal API call
   // ---------------------------------------------------------------------------
 
-  app.post<{ Params: { id: string } }>('/:id/test', async (request, reply) => {
-    const [row] = await db.select().from(apiAccounts).where(eq(apiAccounts.id, request.params.id));
-    if (!row) {
-      return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
-    }
-    let credential: string;
-    try {
-      credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
-    } catch (err) {
-      request.log.warn(
-        { accountId: request.params.id, err },
-        'Failed to decrypt credential for account test',
-      );
-      return reply.code(500).send({
-        error: 'ACCOUNT_TEST_ERROR',
-        message: 'Failed to decrypt account credential',
-      });
-    }
-
-    switch (row.provider) {
-      case 'anthropic_api': {
-        try {
-          const start = Date.now();
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'x-api-key': credential,
-              'anthropic-version': '2023-06-01',
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'claude-haiku-4-5-20251001',
-              max_tokens: 1,
-              messages: [{ role: 'user', content: 'hi' }],
-            }),
-            signal: AbortSignal.timeout(15_000),
-          });
-          const latencyMs = Date.now() - start;
-          if (res.ok) {
-            return reply.send({ ok: true, latencyMs });
-          }
-          return reply.send({
-            ok: false,
-            error: await extractErrorMessage(res),
-          });
-        } catch (err) {
-          request.log.warn(
-            { accountId: request.params.id, provider: 'anthropic_api', err },
-            'Anthropic API connectivity test failed',
-          );
-          return reply.code(500).send({
-            error: 'ACCOUNT_TEST_ERROR',
-            message: err instanceof Error ? err.message : String(err),
-          });
-        }
+  app.post<{ Params: { id: string } }>(
+    '/:id/test',
+    {
+      config: { rateLimit: accountsFastifyRateLimit },
+      preHandler: [app.rateLimit(accountsFastifyRateLimit)],
+    },
+    async (request, reply) => {
+      const [row] = await db
+        .select()
+        .from(apiAccounts)
+        .where(eq(apiAccounts.id, request.params.id));
+      if (!row) {
+        return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
+      }
+      let credential: string;
+      try {
+        credential = decryptCredential(row.credential, row.credentialIv, encryptionKey);
+      } catch (err) {
+        request.log.warn(
+          { accountId: request.params.id, err },
+          'Failed to decrypt credential for account test',
+        );
+        return reply.code(500).send({
+          error: 'ACCOUNT_TEST_ERROR',
+          message: 'Failed to decrypt account credential',
+        });
       }
 
-      case 'openai_api': {
-        try {
-          const start = Date.now();
-          const res = await fetch('https://api.openai.com/v1/models', {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${credential}`,
-            },
-            signal: AbortSignal.timeout(15_000),
-          });
-          const latencyMs = Date.now() - start;
-          if (res.ok) {
-            return reply.send({ ok: true, latencyMs });
-          }
-          return reply.send({
-            ok: false,
-            error: await extractErrorMessage(res),
-          });
-        } catch (err) {
-          request.log.warn(
-            { accountId: request.params.id, provider: 'openai_api', err },
-            'OpenAI API connectivity test failed',
-          );
-          return reply.code(500).send({
-            error: 'ACCOUNT_TEST_ERROR',
-            message: err instanceof Error ? err.message : String(err),
-          });
-        }
-      }
-
-      case 'claude_max':
-      case 'claude_team': {
-        // Session tokens cannot be API-tested — validate format only
-        if (!credential || credential.length < 20) {
-          return reply.send({
-            ok: false,
-            error: 'Session token is too short or empty (must be at least 20 characters)',
-          });
-        }
-        return reply.send({ ok: true, latencyMs: 0 });
-      }
-
-      case 'bedrock': {
-        const parts = credential.split(':');
-        if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
-          return reply.send({
-            ok: false,
-            error: 'Bedrock credential must be in format ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION',
-          });
-        }
-        return reply.send({ ok: true, latencyMs: 0 });
-      }
-
-      case 'vertex': {
-        try {
-          const parsed = JSON.parse(credential) as Record<string, unknown>;
-          if (!parsed.client_email || !parsed.private_key) {
+      switch (row.provider) {
+        case 'anthropic_api': {
+          try {
+            const start = Date.now();
+            const res = await fetch('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'x-api-key': credential,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'claude-haiku-4-5-20251001',
+                max_tokens: 1,
+                messages: [{ role: 'user', content: 'hi' }],
+              }),
+              signal: AbortSignal.timeout(15_000),
+            });
+            const latencyMs = Date.now() - start;
+            if (res.ok) {
+              return reply.send({ ok: true, latencyMs });
+            }
             return reply.send({
               ok: false,
-              error: 'Vertex AI service account JSON must contain client_email and private_key',
+              error: await extractErrorMessage(res),
+            });
+          } catch (err) {
+            request.log.warn(
+              { accountId: request.params.id, provider: 'anthropic_api', err },
+              'Anthropic API connectivity test failed',
+            );
+            return reply.code(500).send({
+              error: 'ACCOUNT_TEST_ERROR',
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        case 'openai_api': {
+          try {
+            const start = Date.now();
+            const res = await fetch('https://api.openai.com/v1/models', {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${credential}`,
+              },
+              signal: AbortSignal.timeout(15_000),
+            });
+            const latencyMs = Date.now() - start;
+            if (res.ok) {
+              return reply.send({ ok: true, latencyMs });
+            }
+            return reply.send({
+              ok: false,
+              error: await extractErrorMessage(res),
+            });
+          } catch (err) {
+            request.log.warn(
+              { accountId: request.params.id, provider: 'openai_api', err },
+              'OpenAI API connectivity test failed',
+            );
+            return reply.code(500).send({
+              error: 'ACCOUNT_TEST_ERROR',
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        case 'claude_max':
+        case 'claude_team': {
+          // Session tokens cannot be API-tested — validate format only
+          if (!credential || credential.length < 20) {
+            return reply.send({
+              ok: false,
+              error: 'Session token is too short or empty (must be at least 20 characters)',
             });
           }
           return reply.send({ ok: true, latencyMs: 0 });
-        } catch {
-          return reply.send({
-            ok: false,
-            error: 'Vertex AI credential is not valid JSON',
-          });
         }
-      }
 
-      default:
-        return reply.code(400).send({
-          error: 'UNKNOWN_PROVIDER',
-          message: `Unknown provider type: ${row.provider}`,
-        });
-    }
-  });
+        case 'bedrock': {
+          const parts = credential.split(':');
+          if (parts.length < 3 || !parts[0] || !parts[1] || !parts[2]) {
+            return reply.send({
+              ok: false,
+              error: 'Bedrock credential must be in format ACCESS_KEY_ID:SECRET_ACCESS_KEY:REGION',
+            });
+          }
+          return reply.send({ ok: true, latencyMs: 0 });
+        }
+
+        case 'vertex': {
+          try {
+            const parsed = JSON.parse(credential) as Record<string, unknown>;
+            if (!parsed.client_email || !parsed.private_key) {
+              return reply.send({
+                ok: false,
+                error: 'Vertex AI service account JSON must contain client_email and private_key',
+              });
+            }
+            return reply.send({ ok: true, latencyMs: 0 });
+          } catch {
+            return reply.send({
+              ok: false,
+              error: 'Vertex AI credential is not valid JSON',
+            });
+          }
+        }
+
+        default:
+          return reply.code(400).send({
+            error: 'UNKNOWN_PROVIDER',
+            message: `Unknown provider type: ${row.provider}`,
+          });
+      }
+    },
+  );
 };
 
 async function extractErrorMessage(res: Response): Promise<string> {

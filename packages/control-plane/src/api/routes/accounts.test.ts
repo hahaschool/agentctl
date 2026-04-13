@@ -765,4 +765,37 @@ describe('Account routes rate limiting — /api/settings/accounts', () => {
       await app.close();
     }
   });
+
+  it('returns 429 on POST /:id/test before decrypting credentials', async () => {
+    const mockDb = createMockDb();
+    const app = await buildApp(mockDb);
+    try {
+      mockDb.setRows([makeAccount({ provider: 'claude_max' })]);
+      vi.mocked(decryptCredential).mockClear();
+
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/settings/accounts/acct-rl/test',
+          headers: { 'x-forwarded-for': '10.0.0.52' },
+          remoteAddress: '10.0.0.52',
+        });
+        expect(ok.statusCode).toBe(200);
+      }
+
+      const decryptCallsBeforeBlockedRequest = vi.mocked(decryptCredential).mock.calls.length;
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts/acct-rl/test',
+        headers: { 'x-forwarded-for': '10.0.0.52' },
+        remoteAddress: '10.0.0.52',
+      });
+
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+      expect(vi.mocked(decryptCredential).mock.calls.length).toBe(decryptCallsBeforeBlockedRequest);
+    } finally {
+      await app.close();
+    }
+  });
 });
