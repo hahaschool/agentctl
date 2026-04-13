@@ -80,7 +80,7 @@ describe('manualTakeoverRoutes source shape', () => {
       /app\.get[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\),\s*authorizeManualTakeover\s*\]/,
     );
     expect(source).toMatch(
-      /app\.get[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?codeql\[js\/missing-rate-limiting\][\s\S]*?async \(request, reply\) =>/,
+      /app\.get[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\),\s*authorizeManualTakeover\s*\][\s\S]*?\n\s*\/\/ codeql\[js\/missing-rate-limiting\]\n\s*async \(request, reply\) =>/,
     );
     expect(source).toMatch(
       /app\.delete[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\),\s*authorizeManualTakeover\s*\]/,
