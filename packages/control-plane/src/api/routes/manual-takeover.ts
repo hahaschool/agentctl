@@ -5,6 +5,7 @@ import type {
   StartManualTakeoverRequest,
 } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -14,6 +15,7 @@ import type {
 } from '../../runtime-management/managed-session-store.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type ManualTakeoverRoutesOptions = {
@@ -31,11 +33,44 @@ type RelayReverificationResult =
   | { kind: 'still-active'; manualTakeover: ManualTakeoverState }
   | { kind: 'unreachable'; reason: string };
 
+const MANUAL_TAKEOVER_RATE_LIMIT = {
+  max: 60,
+  timeWindow: '1 minute',
+} as const;
+
 export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOptions> = async (
   app,
   opts,
 ) => {
   const { managedSessionStore, dbRegistry, workerPort = 9000 } = opts;
+  const manualTakeoverRateLimitMax = readRateLimitEnv(
+    'MANUAL_TAKEOVER_RATE_LIMIT_MAX',
+    MANUAL_TAKEOVER_RATE_LIMIT.max,
+  );
+  const manualTakeoverRateLimitWindowMs = readRateLimitEnv(
+    'MANUAL_TAKEOVER_RATE_LIMIT_WINDOW_MS',
+    60_000,
+  );
+  const manualTakeoverRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many requests',
+  });
+  const manualTakeoverFastifyRateLimit = {
+    max: manualTakeoverRateLimitMax,
+    timeWindow: manualTakeoverRateLimitWindowMs,
+    errorResponseBuilder: manualTakeoverRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: manualTakeoverRateLimitError,
+  });
 
   app.post<{
     Params: { id: string };
@@ -47,6 +82,8 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         tags: ['runtime-sessions'],
         summary: 'Start or reuse a manual Claude Remote Control takeover for a managed session',
       },
+      config: { rateLimit: manualTakeoverFastifyRateLimit },
+      preHandler: app.rateLimit(manualTakeoverFastifyRateLimit),
     },
     async (request, reply) => {
       const session = await requireManualTakeoverSession(
@@ -97,6 +134,8 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         tags: ['runtime-sessions'],
         summary: 'Read manual Claude Remote Control takeover state for a managed session',
       },
+      config: { rateLimit: manualTakeoverFastifyRateLimit },
+      preHandler: app.rateLimit(manualTakeoverFastifyRateLimit),
     },
     async (request, reply) => {
       const session = await requireManualTakeoverSession(
@@ -207,6 +246,8 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         tags: ['runtime-sessions'],
         summary: 'Revoke a manual Claude Remote Control takeover for a managed session',
       },
+      config: { rateLimit: manualTakeoverFastifyRateLimit },
+      preHandler: app.rateLimit(manualTakeoverFastifyRateLimit),
     },
     async (request, reply) => {
       const session = await requireManualTakeoverSession(

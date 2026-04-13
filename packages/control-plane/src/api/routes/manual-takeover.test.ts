@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import type { ManualTakeoverState } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
@@ -65,6 +67,23 @@ async function buildApp(
   await app.ready();
   return app;
 }
+
+describe('manualTakeoverRoutes source shape', () => {
+  it('declares direct Fastify rate-limit preHandlers and route config markers on all endpoints', () => {
+    const source = readFileSync(new URL('./manual-takeover.ts', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
+    expect(source).toMatch(
+      /app\.post[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)/,
+    );
+    expect(source).toMatch(
+      /app\.get[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)/,
+    );
+    expect(source).toMatch(
+      /app\.delete[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)/,
+    );
+  });
+});
 
 describe('manualTakeoverRoutes', () => {
   let app: FastifyInstance;
