@@ -174,7 +174,7 @@ test.describe('Notification bell — pending approvals', () => {
     const trigger = bellTrigger(page);
     await expect(trigger).toBeVisible({ timeout: 15_000 });
     // Badge reflects pending count (1).
-    await expect(trigger).toHaveAttribute('aria-label', /Notifications \(1\)/);
+    await expect(trigger).toHaveAttribute('aria-label', /Notifications \(1 pending approval\)/);
 
     await trigger.click();
     const dialog = popover(page);
@@ -229,7 +229,7 @@ test.describe('Notification bell — pending approvals', () => {
 
     const trigger = bellTrigger(page);
     await expect(trigger).toBeVisible({ timeout: 15_000 });
-    await expect(trigger).toHaveAttribute('aria-label', /Notifications \(2\)/);
+    await expect(trigger).toHaveAttribute('aria-label', /Notifications \(2 pending approvals\)/);
 
     await trigger.click();
     const dialog = popover(page);
@@ -250,7 +250,9 @@ test.describe('Notification bell — pending approvals', () => {
     expect(denySent.postDataJSON()).toMatchObject({ decision: 'denied' });
 
     // After resolution the second card remains.
-    await expect(trigger).toHaveAttribute('aria-label', /Notifications \(1\)/, { timeout: 10_000 });
+    await expect(trigger).toHaveAttribute('aria-label', /Notifications \(1 pending approval\)/, {
+      timeout: 10_000,
+    });
     await expect(dialog.getByText('Deploy Agent')).toBeVisible();
 
     // Allow for session on the second card.
