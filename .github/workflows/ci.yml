@@ -378,6 +378,68 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
+  # Web E2E — runs Playwright coverage for web changes and every main push.
+  # ---------------------------------------------------------------------------
+  web-e2e:
+    name: Web E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes, install]
+    if: >-
+      github.event_name == 'push'
+      || needs.changes.outputs.web == 'true'
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.PRIMARY_NODE }}
+          cache: pnpm
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            node_modules
+            packages/shared/node_modules
+            packages/control-plane/node_modules
+            packages/agent-worker/node_modules
+            packages/mobile/node_modules
+            packages/web/node_modules
+          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @agentctl/web exec playwright install --with-deps chromium
+
+      - name: Run web Playwright tests
+        env:
+          WEB_PORT: "5173"
+        run: pnpm --filter @agentctl/web test:e2e:ci
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-playwright-report
+          path: packages/web/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-playwright-test-results
+          path: packages/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
   # Node compat — lightweight build check on Node 20 (no tests, no coverage).
   # Runs in parallel with everything else so it does not block the pipeline.
   # ---------------------------------------------------------------------------

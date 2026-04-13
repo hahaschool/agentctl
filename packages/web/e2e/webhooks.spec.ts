@@ -20,6 +20,14 @@ type Webhook = {
 
 type CreateBody = { url: string; provider?: WebhookProvider; eventTypes: WebhookEventType[]; secret?: string };
 
+type UpdateBody = {
+  url?: string;
+  provider?: WebhookProvider;
+  eventTypes?: WebhookEventType[];
+  secret?: string | null;
+  active?: boolean;
+};
+
 type Delivery = {
   id: string; subscriptionId: string; eventType: string; status: string;
   statusCode: number | null; responseBody: string | null;
@@ -29,12 +37,23 @@ type Delivery = {
 type TestResponse = { ok: boolean; delivery: Delivery };
 
 type MockState = {
-  webhooks: Webhook[]; createCalls: CreateBody[]; deleteCalls: string[];
-  testCalls: string[]; testResponses: Map<string, TestResponse>;
+  webhooks: Webhook[];
+  createCalls: CreateBody[];
+  updateCalls: Array<{ id: string; body: UpdateBody }>;
+  deleteCalls: string[];
+  testCalls: string[];
+  testResponses: Map<string, TestResponse>;
 };
 
 function emptyState(webhooks: Webhook[] = []): MockState {
-  return { webhooks, createCalls: [], deleteCalls: [], testCalls: [], testResponses: new Map() };
+  return {
+    webhooks,
+    createCalls: [],
+    updateCalls: [],
+    deleteCalls: [],
+    testCalls: [],
+    testResponses: new Map(),
+  };
 }
 
 function makeWebhook(overrides: Partial<Webhook> = {}): Webhook {
@@ -84,6 +103,31 @@ async function mountApiMocks(page: Page, state: MockState): Promise<void> {
     }
 
     const idMatch = pathname.match(/^\/api\/webhooks\/([^/]+)$/);
+    if (method === 'PATCH' && idMatch) {
+      const id = decodeURIComponent(idMatch[1] ?? '');
+      const body = (req.postDataJSON() ?? {}) as UpdateBody;
+      state.updateCalls.push({ id, body });
+
+      const existing = state.webhooks.find((w) => w.id === id);
+      if (!existing) {
+        await fulfillJson(route, { error: 'Webhook not found' }, 404);
+        return;
+      }
+
+      const updated: Webhook = {
+        ...existing,
+        url: body.url ?? existing.url,
+        provider: body.provider ?? existing.provider,
+        secret: body.secret ?? existing.secret,
+        eventTypes: body.eventTypes ?? existing.eventTypes,
+        active: body.active ?? existing.active,
+        updatedAt: new Date().toISOString(),
+      };
+      state.webhooks = state.webhooks.map((w) => (w.id === id ? updated : w));
+      await fulfillJson(route, { ok: true, subscription: updated });
+      return;
+    }
+
     if (method === 'DELETE' && idMatch) {
       const id = decodeURIComponent(idMatch[1] ?? '');
       state.deleteCalls.push(id);
@@ -114,7 +158,19 @@ async function mountApiMocks(page: Page, state: MockState): Promise<void> {
       return;
     }
 
-    // Safe empty payloads for anything the shell (sidebar, bell) polls on boot.
+    // Safe empty payloads for explicit shell/sidebar/bell boot requests.
+    if (method === 'GET' && pathname === '/api/permission-requests') {
+      await fulfillJson(route, []);
+      return;
+    }
+    if (method === 'GET' && pathname === '/api/sync/conflicts/count') {
+      await fulfillJson(route, { count: 0 });
+      return;
+    }
+    if (method === 'GET' && pathname === '/api/agents') {
+      await fulfillJson(route, []);
+      return;
+    }
     if (method === 'GET' && pathname === '/api/sessions') {
       await fulfillJson(route, { sessions: [], total: 0, limit: 50, offset: 0, hasMore: false });
       return;
@@ -123,7 +179,15 @@ async function mountApiMocks(page: Page, state: MockState): Promise<void> {
       await fulfillJson(route, { sessions: [], count: 0 });
       return;
     }
-    await fulfillJson(route, method === 'GET' ? [] : {});
+    if (method === 'GET' && pathname === '/api/settings/accounts') {
+      await fulfillJson(route, []);
+      return;
+    }
+    if (method === 'GET' && pathname === '/api/health') {
+      await fulfillJson(route, { ok: true, status: 'healthy' });
+      return;
+    }
+    throw new Error(`Unhandled API request in webhooks e2e mock: ${method} ${pathname}`);
   });
 }
 
@@ -228,6 +292,59 @@ test.describe('Webhooks page', () => {
     await expect(dialog.getByTestId('form-error')).toHaveText(/URL is required/i);
     expect(state.createCalls).toHaveLength(0);
     await expect(dialog).toBeVisible();
+  });
+
+  test('Edit Webhook dialog submits a PATCH and refreshes the row', async ({ page }) => {
+    const state = emptyState([
+      makeWebhook({
+        id: 'wh-edit-me',
+        url: 'https://example.com/old',
+        provider: 'slack',
+        eventTypes: ['agent.started'],
+        active: true,
+      }),
+    ]);
+    await mountApiMocks(page, state);
+
+    await page.goto('/webhooks');
+    await page.getByTestId('edit-wh-edit-me').click();
+
+    const dialog = page.getByTestId('webhook-form-dialog');
+    await expect(dialog.getByRole('heading', { name: 'Edit webhook' })).toBeVisible();
+
+    await dialog.locator('#webhook-url').fill('https://example.com/updated');
+    await dialog.locator('#webhook-provider').selectOption('discord');
+    await dialog.getByTestId('event-agent.started').uncheck();
+    await dialog.getByTestId('event-deploy.failure').check();
+    await dialog.getByTestId('webhook-active').uncheck();
+
+    const patchRequest = page.waitForRequest(
+      (r) => r.method() === 'PATCH' && new URL(r.url()).pathname === '/api/webhooks/wh-edit-me',
+    );
+    await dialog.getByTestId('webhook-submit').click();
+    await patchRequest;
+
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('alert').filter({ hasText: /updated/i })).toBeVisible();
+
+    expect(state.updateCalls).toHaveLength(1);
+    expect(state.updateCalls[0]).toEqual({
+      id: 'wh-edit-me',
+      body: {
+        url: 'https://example.com/updated',
+        provider: 'discord',
+        eventTypes: ['deploy.failure'],
+        active: false,
+      },
+    });
+
+    const updatedRow = page.getByRole('table', { name: 'Webhook subscriptions' }).getByRole('row').filter({
+      hasText: 'wh-edit-me',
+    });
+    await expect(updatedRow.getByText('discord', { exact: true })).toBeVisible();
+    await expect(updatedRow.getByText('https://example.com/updated')).toBeVisible();
+    await expect(updatedRow.getByText('deploy.failure', { exact: true })).toBeVisible();
+    await expect(updatedRow.getByText('Paused', { exact: true })).toBeVisible();
   });
 
   test('Delete requires confirmation and issues a DELETE request', async ({ page }) => {
