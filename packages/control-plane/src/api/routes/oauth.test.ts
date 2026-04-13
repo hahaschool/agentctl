@@ -441,3 +441,91 @@ describe('OAuth PKCE routes — /api/oauth', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Rate limiting — OAuth routes allocate in-memory flow state and/or issue
+// outbound HTTP calls to Anthropic, so every route must be rate-limited to
+// prevent memory DoS + outbound traffic amplification.
+// ---------------------------------------------------------------------------
+
+describe('OAuth rate limiting — /api/oauth', () => {
+  const originalMax = process.env.OAUTH_RATE_LIMIT_MAX;
+  const originalWindow = process.env.OAUTH_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.OAUTH_RATE_LIMIT_MAX = '3';
+    process.env.OAUTH_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.OAUTH_RATE_LIMIT_MAX;
+    else process.env.OAUTH_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.OAUTH_RATE_LIMIT_WINDOW_MS;
+    else process.env.OAUTH_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /initiate', async () => {
+    const mockDb = createMockDb();
+    const app = await buildApp(mockDb);
+    try {
+      const payload = { provider: 'claude_max', accountName: 'Flooder' };
+      // OAUTH_RATE_LIMIT_MAX=3 -> first 3 succeed, 4th should be rate-limited.
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/oauth/initiate',
+          payload,
+          // Use a fixed IP so the limiter buckets all requests together.
+          headers: { 'x-forwarded-for': '10.0.0.42' },
+          remoteAddress: '10.0.0.42',
+        });
+        expect(ok.statusCode).toBe(200);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/oauth/initiate',
+        payload,
+        headers: { 'x-forwarded-for': '10.0.0.42' },
+        remoteAddress: '10.0.0.42',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /refresh', async () => {
+    const mockDb = createMockDb();
+    const app = await buildApp(mockDb);
+    try {
+      // Empty rows -> handler returns 404 ACCOUNT_NOT_FOUND, but each request
+      // still counts toward the rate-limit bucket.
+      mockDb.setRows([]);
+      const payload = { accountId: 'acc-rl' };
+      for (let i = 0; i < 3; i += 1) {
+        const resp = await app.inject({
+          method: 'POST',
+          url: '/api/oauth/refresh',
+          payload,
+          headers: { 'x-forwarded-for': '10.0.0.43' },
+          remoteAddress: '10.0.0.43',
+        });
+        expect([200, 400, 404]).toContain(resp.statusCode);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/oauth/refresh',
+        payload,
+        headers: { 'x-forwarded-for': '10.0.0.43' },
+        remoteAddress: '10.0.0.43',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
+  });
+});
