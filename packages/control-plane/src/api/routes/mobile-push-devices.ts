@@ -4,13 +4,23 @@ import {
   isMobilePushProvider,
   type UpsertMobilePushDeviceRequest,
 } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MobilePushDeviceStore } from '../../notifications/mobile-push-device-store.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 
 export type MobilePushDeviceRoutesOptions = {
   mobilePushDeviceStore: MobilePushDeviceStore;
 };
+
+// Rate-limit mobile push device writes: upsert persists push tokens against
+// arbitrary userIds and deactivate mutates device state, so both are cross-
+// user abuse vectors.
+const MOBILE_PUSH_DEVICES_RATE_LIMIT = {
+  max: 20,
+  timeWindow: 60_000,
+} as const;
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -44,6 +54,35 @@ export const mobilePushDeviceRoutes: FastifyPluginAsync<MobilePushDeviceRoutesOp
 ) => {
   const { mobilePushDeviceStore } = opts;
 
+  const mobilePushDevicesRateLimitMax = readRateLimitEnv(
+    'MOBILE_PUSH_DEVICES_RATE_LIMIT_MAX',
+    MOBILE_PUSH_DEVICES_RATE_LIMIT.max,
+  );
+  const mobilePushDevicesRateLimitWindowMs = readRateLimitEnv(
+    'MOBILE_PUSH_DEVICES_RATE_LIMIT_WINDOW_MS',
+    MOBILE_PUSH_DEVICES_RATE_LIMIT.timeWindow,
+  );
+  const mobilePushDevicesRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many mobile push device requests',
+  });
+  const mobilePushDevicesFastifyRateLimit = {
+    max: mobilePushDevicesRateLimitMax,
+    timeWindow: mobilePushDevicesRateLimitWindowMs,
+    errorResponseBuilder: mobilePushDevicesRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: mobilePushDevicesRateLimitError,
+  });
+
   app.post<{ Body: UpsertMobilePushDeviceRequest }>(
     '/',
     {
@@ -51,6 +90,8 @@ export const mobilePushDeviceRoutes: FastifyPluginAsync<MobilePushDeviceRoutesOp
         tags: ['notifications'],
         summary: 'Upsert a mobile push device registration',
       },
+      config: { rateLimit: mobilePushDevicesFastifyRateLimit },
+      preHandler: [app.rateLimit(mobilePushDevicesFastifyRateLimit)],
     },
     async (request, reply) => {
       const { userId, platform, provider, pushToken, appId, lastSeenAt } = request.body;
@@ -169,6 +210,8 @@ export const mobilePushDeviceRoutes: FastifyPluginAsync<MobilePushDeviceRoutesOp
         tags: ['notifications'],
         summary: 'Deactivate a mobile push device',
       },
+      config: { rateLimit: mobilePushDevicesFastifyRateLimit },
+      preHandler: [app.rateLimit(mobilePushDevicesFastifyRateLimit)],
     },
     async (request, reply) => {
       const { deviceId } = request.params;

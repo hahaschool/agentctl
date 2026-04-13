@@ -1,7 +1,16 @@
 import { NOTIFICATION_CHANNELS, NOTIFICATION_PRIORITIES } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { NotificationRouterStore } from '../../intelligence/notification-router-store.js';
+import { readRateLimitEnv } from '../rate-limit.js';
+
+// Rate-limit notification preference writes: set/delete persist per-user
+// routing rules. A flood can thrash preferences for a victim userId.
+const NOTIFICATION_PREFERENCES_RATE_LIMIT = {
+  max: 20,
+  timeWindow: 60_000,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -50,6 +59,35 @@ export const notificationPreferenceRoutes: FastifyPluginAsync<
   NotificationPreferenceRoutesOptions
 > = async (app, opts) => {
   const { notificationRouterStore } = opts;
+
+  const notificationPreferencesRateLimitMax = readRateLimitEnv(
+    'NOTIFICATION_PREFERENCES_RATE_LIMIT_MAX',
+    NOTIFICATION_PREFERENCES_RATE_LIMIT.max,
+  );
+  const notificationPreferencesRateLimitWindowMs = readRateLimitEnv(
+    'NOTIFICATION_PREFERENCES_RATE_LIMIT_WINDOW_MS',
+    NOTIFICATION_PREFERENCES_RATE_LIMIT.timeWindow,
+  );
+  const notificationPreferencesRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many notification preference requests',
+  });
+  const notificationPreferencesFastifyRateLimit = {
+    max: notificationPreferencesRateLimitMax,
+    timeWindow: notificationPreferencesRateLimitWindowMs,
+    errorResponseBuilder: notificationPreferencesRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: notificationPreferencesRateLimitError,
+  });
 
   // ── GET / — List all preferences (requires userId query param) ────
   app.get<{ Querystring: { userId?: string } }>(
@@ -116,6 +154,8 @@ export const notificationPreferenceRoutes: FastifyPluginAsync<
         tags: ['notifications'],
         summary: 'Create or update a notification preference',
       },
+      config: { rateLimit: notificationPreferencesFastifyRateLimit },
+      preHandler: [app.rateLimit(notificationPreferencesFastifyRateLimit)],
     },
     async (request, reply) => {
       const { userId, priority, channels, quietHoursStart, quietHoursEnd, timezone } = request.body;
@@ -193,6 +233,8 @@ export const notificationPreferenceRoutes: FastifyPluginAsync<
         tags: ['notifications'],
         summary: 'Delete a notification preference',
       },
+      config: { rateLimit: notificationPreferencesFastifyRateLimit },
+      preHandler: [app.rateLimit(notificationPreferencesFastifyRateLimit)],
     },
     async (request, reply) => {
       const { id } = request.params;
