@@ -6,11 +6,21 @@ import type {
   MemoryScope,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 
 import type { MemorySearch } from '../../memory/memory-search.js';
 import type { MemoryStore, UpdateFactInput } from '../../memory/memory-store.js';
 
 const VALID_FEEDBACK_SIGNALS: FeedbackSignal[] = ['used', 'irrelevant', 'outdated'];
+
+// Memory facts are long-lived, user-readable strings surfaced in memory
+// search, graph visualization, and mobile summaries. Caps prevent a single
+// fact from bloating the table or UI (8 KB is well above natural summaries)
+// and keep filter queries bounded.
+const MAX_FACT_CONTENT_LENGTH = 8_192;
+const MAX_FACT_FILTER_LENGTH = 128;
+const MAX_FACT_QUERY_LENGTH = 1_024;
+const MAX_FACT_LIMIT = 500;
 
 type MemoryFactRoutesOptions = {
   memorySearch: Pick<MemorySearch, 'search'>;
@@ -27,6 +37,61 @@ type MemoryFactRoutesOptions = {
 };
 
 const DEFAULT_LIMIT = 50;
+
+const createFactBodySchema = z.object({
+  content: z.string().min(1).max(MAX_FACT_CONTENT_LENGTH),
+  scope: z.string().min(1).max(MAX_FACT_FILTER_LENGTH),
+  entityType: z.string().min(1).max(MAX_FACT_FILTER_LENGTH),
+  confidence: z.number().min(0).max(1).optional(),
+  source: z.record(z.unknown()).optional(),
+});
+
+const updateFactBodySchema = z.object({
+  scope: z.string().min(1).max(MAX_FACT_FILTER_LENGTH).optional(),
+  content: z.string().min(1).max(MAX_FACT_CONTENT_LENGTH).optional(),
+  entityType: z.string().min(1).max(MAX_FACT_FILTER_LENGTH).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  strength: z.number().min(0).max(1).optional(),
+});
+
+const listFactsQuerySchema = z.object({
+  q: z.string().max(MAX_FACT_QUERY_LENGTH).optional(),
+  scope: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
+  entityType: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
+  sessionId: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
+  agentId: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
+  machineId: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
+  minConfidence: z.string().max(32).optional(),
+  limit: z.string().max(16).optional(),
+  offset: z.string().max(16).optional(),
+});
+
+function mapFactBodyIssue(issue: z.ZodIssue | undefined): { error: string; message: string } {
+  const field = issue?.path[0];
+  switch (field) {
+    case 'content':
+      return {
+        error: 'INVALID_CONTENT',
+        message: `"content" must be a non-empty string of at most ${MAX_FACT_CONTENT_LENGTH} characters`,
+      };
+    case 'scope':
+      return {
+        error: 'INVALID_SCOPE',
+        message: `"scope" must be a non-empty string of at most ${MAX_FACT_FILTER_LENGTH} characters`,
+      };
+    case 'entityType':
+      return {
+        error: 'INVALID_ENTITY_TYPE',
+        message: `"entityType" must be a non-empty string of at most ${MAX_FACT_FILTER_LENGTH} characters`,
+      };
+    case 'confidence':
+      return { error: 'INVALID_CONFIDENCE', message: '"confidence" must be a number in [0, 1]' };
+    case 'strength':
+      return { error: 'INVALID_STRENGTH', message: '"strength" must be a number in [0, 1]' };
+    default:
+      return { error: 'INVALID_FACT_BODY', message: 'Invalid memory fact body' };
+  }
+}
 
 const DEFAULT_SOURCE: FactSource = {
   session_id: null,
@@ -54,19 +119,28 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
   }>(
     '/',
     { schema: { tags: ['memory'], summary: 'Search or list memory facts' } },
-    async (request) => {
-      const { q, scope, entityType, sessionId, agentId, machineId, minConfidence } = request.query;
-      const limit = parseInteger(request.query.limit, DEFAULT_LIMIT);
-      const offset = parseInteger(request.query.offset, 0);
+    async (request, reply) => {
+      const parsedQuery = listFactsQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        reply.code(400).send({
+          error: 'INVALID_FACT_QUERY',
+          message: 'memory fact query parameters exceed bounded limits',
+        });
+        return;
+      }
+      const { q, scope, entityType, sessionId, agentId, machineId, minConfidence } =
+        parsedQuery.data;
+      const limit = Math.min(parseInteger(parsedQuery.data.limit, DEFAULT_LIMIT), MAX_FACT_LIMIT);
+      const offset = parseInteger(parsedQuery.data.offset, 0);
       const minConfidenceValue = parseFloatValue(minConfidence);
 
       if (q && q.trim().length > 0) {
-        const visibleScopes = scope ? [scope] : [];
+        const visibleScopes = scope ? [scope as MemoryScope] : [];
         const results = await memorySearch.search({
           query: q,
           visibleScopes,
           limit: limit + offset,
-          entityType,
+          entityType: entityType as EntityType | undefined,
         });
         const facts = results
           .map((result) => result.fact)
@@ -87,8 +161,8 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       }
 
       const facts = await memoryStore.listFacts({
-        scope,
-        entityType,
+        scope: scope as MemoryScope | undefined,
+        entityType: entityType as EntityType | undefined,
         sessionId,
         agentId,
         machineId,
@@ -117,14 +191,18 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
     '/',
     { schema: { tags: ['memory'], summary: 'Create a memory fact' } },
     async (request, reply) => {
-      const { content, scope, entityType, confidence, source } = request.body;
+      const parsed = createFactBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send(mapFactBodyIssue(parsed.error.issues[0]));
+      }
+      const { content, scope, entityType, confidence, source } = parsed.data;
 
       const fact = await memoryStore.addFact({
         content,
-        scope,
-        entity_type: entityType,
+        scope: scope as MemoryScope,
+        entity_type: entityType as EntityType,
         confidence,
-        source: source ?? DEFAULT_SOURCE,
+        source: (source as FactSource | undefined) ?? DEFAULT_SOURCE,
       });
 
       return reply.code(201).send({ ok: true, fact });
@@ -158,12 +236,16 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
     '/:id',
     { schema: { tags: ['memory'], summary: 'Update editable memory fact fields' } },
     async (request, reply) => {
+      const parsed = updateFactBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send(mapFactBodyIssue(parsed.error.issues[0]));
+      }
       const patch: UpdateFactInput = {};
-      if (request.body.scope) patch.scope = request.body.scope;
-      if (request.body.content !== undefined) patch.content = request.body.content;
-      if (request.body.entityType) patch.entity_type = request.body.entityType;
-      if (request.body.confidence !== undefined) patch.confidence = request.body.confidence;
-      if (request.body.strength !== undefined) patch.strength = request.body.strength;
+      if (parsed.data.scope) patch.scope = parsed.data.scope as MemoryScope;
+      if (parsed.data.content !== undefined) patch.content = parsed.data.content;
+      if (parsed.data.entityType) patch.entity_type = parsed.data.entityType as EntityType;
+      if (parsed.data.confidence !== undefined) patch.confidence = parsed.data.confidence;
+      if (parsed.data.strength !== undefined) patch.strength = parsed.data.strength;
 
       const fact = await memoryStore.updateFact(request.params.id, patch);
       if (!fact) {

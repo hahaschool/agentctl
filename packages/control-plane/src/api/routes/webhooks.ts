@@ -4,10 +4,21 @@ import { ControlPlaneError, WEBHOOK_EVENT_TYPES, WEBHOOK_PROVIDERS } from '@agen
 import rateLimit from '@fastify/rate-limit';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 
 import { type Database, extractRows } from '../../db/index.js';
 import { clampLimit, PAGINATION } from '../constants.js';
 import { readRateLimitEnv } from '../rate-limit.js';
+
+// Webhook write payloads are stored verbatim and used for outbound fetches.
+// Caps prevent oversized URLs (log/store bloat), arbitrary-size secrets
+// (memory exhaustion via the subscription table), and ballooning event/filter
+// arrays. 64 event types + 256 agent filter entries is generous for real UIs.
+const MAX_WEBHOOK_URL_LENGTH = 2_048;
+const MAX_WEBHOOK_SECRET_LENGTH = 512;
+const MAX_WEBHOOK_EVENT_TYPES = 64;
+const MAX_WEBHOOK_AGENT_FILTER = 256;
+const MAX_WEBHOOK_AGENT_FILTER_ITEM_LENGTH = 128;
 
 // Rate-limit webhook write paths + the test delivery endpoint: creates persist
 // provider secrets, updates/deletes touch the subscription store, and /test
@@ -94,6 +105,129 @@ function isValidEventType(value: string): value is WebhookEventType {
   return (WEBHOOK_EVENT_TYPES as readonly string[]).includes(value);
 }
 
+// Shared Zod primitives for webhook schemas. Using a single definition keeps
+// POST (create) and PATCH (update) validation aligned as new bounds are added.
+const urlSchema = z
+  .string()
+  .min(1)
+  .max(MAX_WEBHOOK_URL_LENGTH)
+  .refine(isValidUrl, { message: '"url" must be a valid HTTP or HTTPS URL' });
+
+const providerSchema = z.string().refine(isValidProvider, { message: 'invalid provider' });
+
+const eventTypesSchema = z
+  .array(z.string().refine(isValidEventType, { message: 'invalid event type' }))
+  .min(1)
+  .max(MAX_WEBHOOK_EVENT_TYPES);
+
+const agentFilterSchema = z
+  .array(z.string().min(1).max(MAX_WEBHOOK_AGENT_FILTER_ITEM_LENGTH))
+  .max(MAX_WEBHOOK_AGENT_FILTER);
+
+const createWebhookBodySchema = z.object({
+  url: urlSchema,
+  provider: providerSchema.optional(),
+  secret: z.string().max(MAX_WEBHOOK_SECRET_LENGTH).optional(),
+  eventTypes: eventTypesSchema,
+  agentFilter: agentFilterSchema.optional(),
+});
+
+const updateWebhookBodySchema = z.object({
+  url: urlSchema.optional(),
+  provider: providerSchema.optional(),
+  secret: z.string().max(MAX_WEBHOOK_SECRET_LENGTH).nullable().optional(),
+  eventTypes: eventTypesSchema.optional(),
+  agentFilter: agentFilterSchema.nullable().optional(),
+  active: z.boolean().optional(),
+});
+
+// Map Zod issues for webhook bodies back to the stable per-field error codes
+// existing clients already handle, so tightening schemas doesn't change the
+// wire-level error vocabulary. `rawBody` is the original (pre-parse) body so
+// we can surface the offending array entry for error types that embed it
+// (e.g. which eventType string was rejected).
+function mapWebhookIssue(
+  issue: z.ZodIssue | undefined,
+  rawBody?: unknown,
+): { error: string; message: string } {
+  const pickFromRaw = (): unknown => {
+    if (!issue || !rawBody || typeof rawBody !== 'object') {
+      return undefined;
+    }
+    let current: unknown = rawBody;
+    for (const segment of issue.path) {
+      if (current === null || current === undefined) {
+        return undefined;
+      }
+      current = (current as Record<string | number, unknown>)[segment as string | number];
+    }
+    return current;
+  };
+  const field = issue?.path[0];
+  switch (field) {
+    case 'url':
+      if (issue?.code === 'too_big') {
+        return {
+          error: 'URL_TOO_LONG',
+          message: `URL must be under ${MAX_WEBHOOK_URL_LENGTH} characters`,
+        };
+      }
+      return {
+        error: 'INVALID_URL',
+        message: '"url" must be a valid HTTP or HTTPS URL',
+      };
+    case 'provider': {
+      const bad = pickFromRaw();
+      const badStr = typeof bad === 'string' ? ` "${bad}"` : '';
+      return {
+        error: 'INVALID_PROVIDER',
+        message: `Invalid provider${badStr}. Must be one of: ${WEBHOOK_PROVIDERS.join(', ')}`,
+      };
+    }
+    case 'secret':
+      return {
+        error: 'INVALID_SECRET',
+        message: `"secret" must be a string of at most ${MAX_WEBHOOK_SECRET_LENGTH} characters`,
+      };
+    case 'eventTypes':
+      if (issue?.code === 'too_big') {
+        return {
+          error: 'INVALID_EVENT_TYPES',
+          message: `"eventTypes" must contain at most ${MAX_WEBHOOK_EVENT_TYPES} entries`,
+        };
+      }
+      if (issue?.code === 'too_small') {
+        return {
+          error: 'INVALID_EVENT_TYPES',
+          message: 'A non-empty "eventTypes" array is required',
+        };
+      }
+      {
+        const bad = pickFromRaw();
+        const badStr = typeof bad === 'string' ? ` "${bad}"` : '';
+        return {
+          error: 'INVALID_EVENT_TYPES',
+          message: `Invalid event type${badStr}. Must be one of: ${WEBHOOK_EVENT_TYPES.join(', ')}`,
+        };
+      }
+    case 'agentFilter':
+      return {
+        error: 'INVALID_AGENT_FILTER',
+        message: `"agentFilter" must be an array of up to ${MAX_WEBHOOK_AGENT_FILTER} agent IDs (each ≤ ${MAX_WEBHOOK_AGENT_FILTER_ITEM_LENGTH} chars)`,
+      };
+    case 'active':
+      return {
+        error: 'INVALID_ACTIVE',
+        message: '"active" must be a boolean',
+      };
+    default:
+      return {
+        error: 'INVALID_WEBHOOK_BODY',
+        message: 'Invalid webhook body',
+      };
+  }
+}
+
 function formatSubscription(row: WebhookSubscriptionRow): Record<string, unknown> {
   return {
     id: row.id,
@@ -169,58 +303,11 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
       preHandler: [app.rateLimit(webhooksFastifyRateLimit)],
     },
     async (request, reply) => {
-      const { url, provider = 'generic', secret, eventTypes, agentFilter } = request.body;
-
-      if (!url || typeof url !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_URL',
-          message: 'A non-empty "url" string is required',
-        });
+      const parsed = createWebhookBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send(mapWebhookIssue(parsed.error.issues[0], request.body));
       }
-
-      if (!isValidUrl(url)) {
-        return reply.code(400).send({
-          error: 'INVALID_URL',
-          message: '"url" must be a valid HTTP or HTTPS URL',
-        });
-      }
-
-      if (url.length > 2048) {
-        return reply.code(400).send({
-          error: 'URL_TOO_LONG',
-          message: 'URL must be under 2,048 characters',
-        });
-      }
-
-      if (!isValidProvider(provider)) {
-        return reply.code(400).send({
-          error: 'INVALID_PROVIDER',
-          message: `Invalid provider "${provider}". Must be one of: ${WEBHOOK_PROVIDERS.join(', ')}`,
-        });
-      }
-
-      if (!Array.isArray(eventTypes) || eventTypes.length === 0) {
-        return reply.code(400).send({
-          error: 'INVALID_EVENT_TYPES',
-          message: 'A non-empty "eventTypes" array is required',
-        });
-      }
-
-      for (const eventType of eventTypes) {
-        if (!isValidEventType(eventType)) {
-          return reply.code(400).send({
-            error: 'INVALID_EVENT_TYPES',
-            message: `Invalid event type "${eventType}". Must be one of: ${WEBHOOK_EVENT_TYPES.join(', ')}`,
-          });
-        }
-      }
-
-      if (agentFilter !== undefined && !Array.isArray(agentFilter)) {
-        return reply.code(400).send({
-          error: 'INVALID_AGENT_FILTER',
-          message: '"agentFilter" must be an array of agent IDs',
-        });
-      }
+      const { url, provider = 'generic', secret, eventTypes, agentFilter } = parsed.data;
 
       const id = crypto.randomUUID();
       const now = new Date();
@@ -363,48 +450,11 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { url, provider, secret, eventTypes, agentFilter, active } = request.body;
-
-      if (url !== undefined) {
-        if (typeof url !== 'string' || !isValidUrl(url)) {
-          return reply.code(400).send({
-            error: 'INVALID_URL',
-            message: '"url" must be a valid HTTP or HTTPS URL',
-          });
-        }
+      const parsedBody = updateWebhookBodySchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.code(400).send(mapWebhookIssue(parsedBody.error.issues[0], request.body));
       }
-
-      if (provider !== undefined && !isValidProvider(provider)) {
-        return reply.code(400).send({
-          error: 'INVALID_PROVIDER',
-          message: `Invalid provider "${provider}". Must be one of: ${WEBHOOK_PROVIDERS.join(', ')}`,
-        });
-      }
-
-      if (eventTypes !== undefined) {
-        if (!Array.isArray(eventTypes) || eventTypes.length === 0) {
-          return reply.code(400).send({
-            error: 'INVALID_EVENT_TYPES',
-            message: 'A non-empty "eventTypes" array is required',
-          });
-        }
-
-        for (const eventType of eventTypes) {
-          if (!isValidEventType(eventType)) {
-            return reply.code(400).send({
-              error: 'INVALID_EVENT_TYPES',
-              message: `Invalid event type "${eventType}". Must be one of: ${WEBHOOK_EVENT_TYPES.join(', ')}`,
-            });
-          }
-        }
-      }
-
-      if (agentFilter !== undefined && agentFilter !== null && !Array.isArray(agentFilter)) {
-        return reply.code(400).send({
-          error: 'INVALID_AGENT_FILTER',
-          message: '"agentFilter" must be an array of agent IDs or null',
-        });
-      }
+      const { url, provider, secret, eventTypes, agentFilter, active } = parsedBody.data;
 
       try {
         const existing = await db.execute(

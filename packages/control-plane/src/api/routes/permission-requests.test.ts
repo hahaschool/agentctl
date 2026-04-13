@@ -472,5 +472,38 @@ describe('permission-requests routes', () => {
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toBe('INVALID_DECISION');
     });
+
+    it('returns 400 when resolvedBy falls back to an overlong x-user-id header', async () => {
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/permission-requests/${ROW_ID}`,
+        headers: { 'x-user-id': 'u'.repeat(1024) },
+        payload: { decision: 'approved' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_RESOLVED_BY');
+    });
+  });
+
+  describe('input validation bounds', () => {
+    it('rejects overlong description on POST / with 400 INVALID_DESCRIPTION', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/permission-requests',
+        payload: {
+          agentId: AGENT_ID,
+          sessionId: SESSION_ID,
+          machineId: MACHINE_ID,
+          requestId: REQUEST_ID,
+          toolName: 'Bash',
+          description: 'x'.repeat(10_000),
+          timeoutSeconds: 300,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_DESCRIPTION');
+    });
   });
 });

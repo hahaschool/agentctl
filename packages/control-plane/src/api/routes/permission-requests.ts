@@ -1,9 +1,22 @@
 import { DEFAULT_WORKER_PORT, type PermissionRequest } from '@agentctl/shared';
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 
 import type { Database } from '../../db/index.js';
 import { permissionRequests } from '../../db/schema-permission-requests.js';
+
+// Permission request payloads are stored in the control-plane DB and re-served
+// to mobile clients. Caps guard against unbounded strings landing in the table
+// (reasonable IDs are ≤128 chars) and keep free-form description + toolInput
+// JSON small enough to fit in mobile push previews / UI cells.
+const MAX_ID_LENGTH = 128;
+const MAX_TOOL_NAME_LENGTH = 256;
+const MAX_DESCRIPTION_LENGTH = 8_192;
+const MAX_TOOL_INPUT_BYTES = 32_768;
+const MAX_RESOLVED_BY_LENGTH = 256;
+const MAX_TIMEOUT_SECONDS = 86_400;
+
 import type {
   ExpoPushDispatcher,
   ExpoPushFailure,
@@ -27,6 +40,105 @@ const PERMISSION_EXPIRY_INTERVAL_MS = 30_000;
 type PermissionRequestStatus = (typeof PERMISSION_REQUEST_STATUSES)[number];
 type PermissionDecisionValue = (typeof PERMISSION_DECISIONS)[number];
 type PermissionRequestRow = typeof permissionRequests.$inferSelect;
+
+const trimmedId = (max: number) =>
+  z
+    .string()
+    .transform((value) => value.trim())
+    .pipe(z.string().min(1).max(max));
+
+// Cap toolInput at 32 KB stringified so a malicious worker can't insert
+// multi-MB blobs into permission_requests.tool_input. Arbitrary JSON is
+// accepted; only the serialized size is bounded.
+const boundedJsonObject = z
+  .record(z.unknown())
+  .refine((value) => JSON.stringify(value).length <= MAX_TOOL_INPUT_BYTES, {
+    message: `toolInput JSON must be ≤ ${MAX_TOOL_INPUT_BYTES} bytes when stringified`,
+  });
+
+const createPermissionRequestBodySchema = z.object({
+  agentId: trimmedId(MAX_ID_LENGTH),
+  sessionId: trimmedId(MAX_ID_LENGTH),
+  machineId: trimmedId(MAX_ID_LENGTH),
+  requestId: trimmedId(MAX_ID_LENGTH),
+  toolName: trimmedId(MAX_TOOL_NAME_LENGTH),
+  toolInput: boundedJsonObject.optional(),
+  description: z.string().max(MAX_DESCRIPTION_LENGTH).optional(),
+  timeoutSeconds: z.number().int().positive().max(MAX_TIMEOUT_SECONDS),
+});
+
+const resolvePermissionRequestBodySchema = z.object({
+  decision: z.enum(PERMISSION_DECISIONS),
+  resolvedBy: z.string().max(MAX_RESOLVED_BY_LENGTH).optional(),
+  allowForSession: z.boolean().optional(),
+});
+
+const resolvedByStorageSchema = z.string().max(MAX_RESOLVED_BY_LENGTH);
+
+function mapCreatePermissionIssue(issue: z.ZodIssue | undefined): {
+  error: string;
+  message: string;
+} {
+  const field = issue?.path[0];
+  switch (field) {
+    case 'agentId':
+      return { error: 'INVALID_AGENT_ID', message: 'A non-empty "agentId" string is required' };
+    case 'sessionId':
+      return { error: 'INVALID_SESSION_ID', message: 'A non-empty "sessionId" string is required' };
+    case 'machineId':
+      return { error: 'INVALID_MACHINE_ID', message: 'A non-empty "machineId" string is required' };
+    case 'requestId':
+      return { error: 'INVALID_REQUEST_ID', message: 'A non-empty "requestId" string is required' };
+    case 'toolName':
+      return { error: 'INVALID_TOOL_NAME', message: 'A non-empty "toolName" string is required' };
+    case 'toolInput':
+      return {
+        error: 'INVALID_TOOL_INPUT',
+        message: `"toolInput" must be an object of at most ${MAX_TOOL_INPUT_BYTES} bytes when provided`,
+      };
+    case 'description':
+      return {
+        error: 'INVALID_DESCRIPTION',
+        message: `"description" must be a string of at most ${MAX_DESCRIPTION_LENGTH} characters`,
+      };
+    case 'timeoutSeconds':
+      return {
+        error: 'INVALID_TIMEOUT_SECONDS',
+        message: `"timeoutSeconds" must be a positive integer ≤ ${MAX_TIMEOUT_SECONDS}`,
+      };
+    default:
+      return {
+        error: 'INVALID_PERMISSION_REQUEST_BODY',
+        message: 'Invalid permission request body',
+      };
+  }
+}
+
+function mapResolvePermissionIssue(issue: z.ZodIssue | undefined): {
+  error: string;
+  message: string;
+} {
+  const field = issue?.path[0];
+  if (field === 'decision') {
+    return {
+      error: 'INVALID_DECISION',
+      message: `decision must be one of: ${PERMISSION_DECISIONS.join(', ')}`,
+    };
+  }
+  if (field === 'resolvedBy') {
+    return {
+      error: 'INVALID_RESOLVED_BY',
+      message: `"resolvedBy" must be a string of at most ${MAX_RESOLVED_BY_LENGTH} characters`,
+    };
+  }
+  if (field === 'allowForSession') {
+    return { error: 'INVALID_ALLOW_FOR_SESSION', message: '"allowForSession" must be a boolean' };
+  }
+  return {
+    error: 'INVALID_PERMISSION_RESOLVE_BODY',
+    message: 'Invalid permission resolve body',
+  };
+}
 
 export type PermissionRequestRoutesOptions = {
   db: Database;
@@ -63,65 +175,20 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
     '/',
     { schema: { tags: ['approvals'], summary: 'Create permission request' } },
     async (request, reply) => {
-      const { agentId, sessionId, machineId, requestId, toolName, toolInput, description } =
-        request.body;
-
-      if (!isNonEmptyString(agentId)) {
-        return reply.code(400).send({
-          error: 'INVALID_AGENT_ID',
-          message: 'A non-empty "agentId" string is required',
-        });
+      const parsed = createPermissionRequestBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send(mapCreatePermissionIssue(parsed.error.issues[0]));
       }
-
-      if (!isNonEmptyString(sessionId)) {
-        return reply.code(400).send({
-          error: 'INVALID_SESSION_ID',
-          message: 'A non-empty "sessionId" string is required',
-        });
-      }
-
-      if (!isNonEmptyString(machineId)) {
-        return reply.code(400).send({
-          error: 'INVALID_MACHINE_ID',
-          message: 'A non-empty "machineId" string is required',
-        });
-      }
-
-      if (!isNonEmptyString(requestId)) {
-        return reply.code(400).send({
-          error: 'INVALID_REQUEST_ID',
-          message: 'A non-empty "requestId" string is required',
-        });
-      }
-
-      if (!isNonEmptyString(toolName)) {
-        return reply.code(400).send({
-          error: 'INVALID_TOOL_NAME',
-          message: 'A non-empty "toolName" string is required',
-        });
-      }
-
-      if (toolInput !== undefined && !isJsonObject(toolInput)) {
-        return reply.code(400).send({
-          error: 'INVALID_TOOL_INPUT',
-          message: '"toolInput" must be an object when provided',
-        });
-      }
-
-      if (description !== undefined && typeof description !== 'string') {
-        return reply.code(400).send({
-          error: 'INVALID_DESCRIPTION',
-          message: '"description" must be a string when provided',
-        });
-      }
-
-      if (!isPositiveInteger(request.body.timeoutSeconds)) {
-        return reply.code(400).send({
-          error: 'INVALID_TIMEOUT_SECONDS',
-          message: '"timeoutSeconds" must be a positive integer',
-        });
-      }
-      const timeoutSeconds = request.body.timeoutSeconds;
+      const {
+        agentId,
+        sessionId,
+        machineId,
+        requestId,
+        toolName,
+        toolInput,
+        description,
+        timeoutSeconds,
+      } = parsed.data;
 
       const now = new Date();
       const timeoutAt = new Date(now.getTime() + timeoutSeconds * 1000);
@@ -271,11 +338,19 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
     '/:id',
     { schema: { tags: ['approvals'], summary: 'Resolve permission request' } },
     async (request, reply) => {
-      const decision = request.body.decision;
-      if (!isPermissionDecision(decision)) {
+      const parsedBody = resolvePermissionRequestBodySchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.code(400).send(mapResolvePermissionIssue(parsedBody.error.issues[0]));
+      }
+      const decision = parsedBody.data.decision;
+      const resolvedByCandidate = parsedBody.data.allowForSession
+        ? `session-allow:${resolveResolvedBy(parsedBody.data.resolvedBy, request.headers['x-user-id'])}`
+        : resolveResolvedBy(parsedBody.data.resolvedBy, request.headers['x-user-id']);
+      const parsedResolvedBy = resolvedByStorageSchema.safeParse(resolvedByCandidate);
+      if (!parsedResolvedBy.success) {
         return reply.code(400).send({
-          error: 'INVALID_DECISION',
-          message: `decision must be one of: ${PERMISSION_DECISIONS.join(', ')}`,
+          error: 'INVALID_RESOLVED_BY',
+          message: `"resolvedBy" must be a string of at most ${MAX_RESOLVED_BY_LENGTH} characters`,
         });
       }
 
@@ -305,9 +380,7 @@ export const permissionRequestRoutes: FastifyPluginAsync<PermissionRequestRoutes
           status: decision,
           decision,
           resolvedAt,
-          resolvedBy: request.body.allowForSession
-            ? `session-allow:${resolveResolvedBy(request.body.resolvedBy, request.headers['x-user-id'])}`
-            : resolveResolvedBy(request.body.resolvedBy, request.headers['x-user-id']),
+          resolvedBy: parsedResolvedBy.data,
         })
         .where(
           and(
@@ -370,20 +443,8 @@ function isPermissionRequestStatus(value: string): value is PermissionRequestSta
   return (PERMISSION_REQUEST_STATUSES as readonly string[]).includes(value);
 }
 
-function isPermissionDecision(value: string | undefined): value is PermissionDecisionValue {
-  return Boolean(value && (PERMISSION_DECISIONS as readonly string[]).includes(value));
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
 function isJsonObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function isPositiveInteger(value: unknown): value is number {
-  return Number.isInteger(value) && typeof value === 'number' && value > 0;
 }
 
 function resolveResolvedBy(

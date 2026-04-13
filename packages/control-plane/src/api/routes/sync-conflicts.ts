@@ -3,10 +3,18 @@ import { getTablePkColumn, vcMerge } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Logger } from 'pino';
+import { z } from 'zod';
 
 import type { Database } from '../../db/index.js';
 import { extractRows } from '../../db/index.js';
 import { withSyncApplyGuard } from '../../sync/apply-guard.js';
+
+// Sync conflict inputs drive raw SQL filters and conflict-resolution payloads
+// that are persisted to sync_change_log. Caps keep filter strings bounded
+// (DB status/table/node identifiers are ≤128 chars in practice) and stop
+// callers from writing arbitrarily large payload blobs into the change log.
+const MAX_CONFLICT_FILTER_LENGTH = 128;
+const MAX_CONFLICT_PAYLOAD_BYTES = 32_768;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -76,6 +84,56 @@ function mapConflictRow(row: ConflictRow) {
 
 const VALID_RESOLUTIONS = new Set(['local', 'remote', 'merged']);
 
+const boundedFilter = z.string().max(MAX_CONFLICT_FILTER_LENGTH).optional();
+
+const listConflictsQuerySchema = z.object({
+  status: boundedFilter,
+  table: boundedFilter,
+  remoteNodeId: boundedFilter,
+});
+
+// Cap the resolution payload at 32 KB stringified — this is what ends up in
+// sync_change_log.payload and propagates to every peer, so bounded size
+// prevents cross-node amplification and keeps the replication log manageable.
+const boundedResolutionPayload = z
+  .record(z.unknown())
+  .nullable()
+  .refine((value) => value === null || JSON.stringify(value).length <= MAX_CONFLICT_PAYLOAD_BYTES, {
+    message: `payload JSON must be ≤ ${MAX_CONFLICT_PAYLOAD_BYTES} bytes when stringified`,
+  });
+
+const resolveConflictBodySchema = z.object({
+  resolution: z.enum(['local', 'remote', 'merged']),
+  payload: boundedResolutionPayload.optional(),
+});
+
+function mapListConflictsIssue(): { error: string; message: string } {
+  return {
+    error: 'INVALID_CONFLICT_FILTER',
+    message: `conflict filter strings must be at most ${MAX_CONFLICT_FILTER_LENGTH} characters`,
+  };
+}
+
+function mapResolveConflictIssue(issue: z.ZodIssue | undefined): {
+  error: string;
+  message: string;
+} {
+  const field = issue?.path[0];
+  if (field === 'resolution') {
+    return {
+      error: 'INVALID_RESOLUTION',
+      message: 'resolution must be one of: local, remote, merged',
+    };
+  }
+  if (field === 'payload') {
+    return {
+      error: 'INVALID_PAYLOAD',
+      message: `payload must be a JSON object of at most ${MAX_CONFLICT_PAYLOAD_BYTES} bytes (or null)`,
+    };
+  }
+  return { error: 'INVALID_CONFLICT_RESOLVE_BODY', message: 'Invalid conflict resolve body' };
+}
+
 // ---------------------------------------------------------------------------
 // Route plugin
 // ---------------------------------------------------------------------------
@@ -106,8 +164,13 @@ export const syncConflictsRoutes: FastifyPluginAsync<SyncConflictsRoutesOptions>
         },
       },
     },
-    async (request) => {
-      const { status, table, remoteNodeId } = request.query;
+    async (request, reply) => {
+      const parsedQuery = listConflictsQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        reply.code(400).send(mapListConflictsIssue());
+        return;
+      }
+      const { status, table, remoteNodeId } = parsedQuery.data;
 
       const conditions: ReturnType<typeof sql>[] = [];
       if (status && status.trim().length > 0) {
@@ -194,10 +257,16 @@ export const syncConflictsRoutes: FastifyPluginAsync<SyncConflictsRoutesOptions>
     },
     async (request, reply) => {
       const { id } = request.params;
-      const { resolution, payload: userPayload } = request.body ?? {};
+      const parsedBody = resolveConflictBodySchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.code(400).send(mapResolveConflictIssue(parsedBody.error.issues[0]));
+      }
+      const { resolution, payload: userPayload } = parsedBody.data;
 
-      // Validate resolution
-      if (!resolution || !VALID_RESOLUTIONS.has(resolution)) {
+      // Defensive cross-check: the zod schema already enforced the enum, but
+      // keep the set guard to satisfy the runtime invariant downstream code
+      // depends on (VALID_RESOLUTIONS is exported by other callers).
+      if (!VALID_RESOLUTIONS.has(resolution)) {
         return reply.code(400).send({
           error: 'INVALID_RESOLUTION',
           message: 'resolution must be one of: local, remote, merged',

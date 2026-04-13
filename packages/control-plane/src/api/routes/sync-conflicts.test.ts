@@ -188,4 +188,26 @@ describe('syncConflictsRoutes', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ count: 3 });
   });
+
+  it('rejects overlong resolution payload on PUT /:id/resolve with 400', async () => {
+    const built = await buildApp();
+    app = built.app;
+
+    const bigPayload: Record<string, string> = {};
+    for (let i = 0; i < 2000; i += 1) {
+      bigPayload[`key${i}`] = 'x'.repeat(64);
+    }
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/sync/conflicts/conflict-1/resolve',
+      payload: {
+        resolution: 'merged',
+        payload: bigPayload,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_PAYLOAD');
+  });
 });
