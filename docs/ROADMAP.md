@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-04-13 (post-PR #408 roadmap sync). The 2026-04-13 landing set includes PR #395 (session `Config` tab e2e depth), PR #396 (`/conflicts` resolution-flow e2e depth), PR #397 (mesh/runtime e2e follow-up tracking doc), PR #398 (dependabot `drizzle-orm 0.38.4 → 0.45.2`, closes `GHSA-gpj5-g38j-94v9`), PR #400 (DAST WebSocket fuzz scan pnpm setup), PR #401 (`chore(deps): patch vite and next CVEs` — adds `vite ">=7.3.2"` pnpm override closing `GHSA-v2wj-q39q-566r` and `GHSA-p9ff-h696-f583`, bumps `next ^16.1.7 → ^16.2.3` closing `GHSA-q4gf-8mx6-v5v3`), PR #402 (Anthropic Claude Agent SDK lockfile refresh to `@anthropic-ai/sdk 0.81.0`, closing the remaining moderate advisory), PR #404 (roadmap/security-plan reconciliation after those fixes landed), PR #405 (manual-takeover relay re-verification closing §2.4 with new rate-limit hardening on all three manual-takeover handlers), PR #406 (durable roadmap sync wording), PR #407 (memory decay UI exposing existing `/api/memory/decay/*` routes), and PR #408 (emergency-stop UI exposing existing `/api/agents/*/emergency-stop` routes with a typed "STOP ALL" fleet confirmation). PR #399 was closed unmerged after #401 covered the high-severity Next/Vite lane; PR #402 carried forward its remaining moderate fix. Local verification on the final dependency state reports `pnpm audit --audit-level=moderate` with no known vulnerabilities.
+> Last updated: 2026-04-13 (post-PR #410 CodeQL follow-up). The 2026-04-13 landing set includes PR #395 (session `Config` tab e2e depth), PR #396 (`/conflicts` resolution-flow e2e depth), PR #397 (mesh/runtime e2e follow-up tracking doc), PR #398 (dependabot `drizzle-orm 0.38.4 → 0.45.2`, closes `GHSA-gpj5-g38j-94v9`), PR #400 (DAST WebSocket fuzz scan pnpm setup), PR #401 (`chore(deps): patch vite and next CVEs` — adds `vite ">=7.3.2"` pnpm override closing `GHSA-v2wj-q39q-566r` and `GHSA-p9ff-h696-f583`, bumps `next ^16.1.7 → ^16.2.3` closing `GHSA-q4gf-8mx6-v5v3`), PR #402 (Anthropic Claude Agent SDK lockfile refresh to `@anthropic-ai/sdk 0.81.0`, closing the remaining moderate advisory), PR #404 (roadmap/security-plan reconciliation after those fixes landed), PR #405 (manual-takeover relay re-verification closing §2.4 with new rate-limit hardening on all three manual-takeover handlers), PR #406 (durable roadmap sync wording), PR #407 (memory decay UI exposing existing `/api/memory/decay/*` routes), PR #408 (emergency-stop UI exposing existing `/api/agents/*/emergency-stop` routes with a typed "STOP ALL" fleet confirmation), PR #409 (roadmap sync after #405-#408 merged), and PR #410 (narrow CodeQL `#579` false-positive suppression for the already-rate-limited manual-takeover GET handler). PR #399 was closed unmerged after #401 covered the high-severity Next/Vite lane; PR #402 carried forward its remaining moderate fix. Local verification on the final dependency state reports `pnpm audit --audit-level=moderate` with no known vulnerabilities.
 
 ## Current State
 
@@ -137,12 +137,16 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > second worker poll before flipping a previously-online takeover to `stopped`.
 > A confirmed second miss yields `stopped`; a transient unreachable second
 > response yields the non-terminal `reconnecting` state with a structured
-> `relayCheck` log line so the failure stays observable.
+> `relayCheck` log line so the failure stays observable. PR #410 added the
+> narrow CodeQL `#579` suppression marker on the GET handler after confirming
+> `@fastify/rate-limit` runs before `authorizeManualTakeover`, while current
+> CodeQL only models the legacy `fastify-rate-limit` package for this query.
 
 - [x] Spike: evaluate Remote Control relay vs current CLI `-p`
 - [x] Decision: keep `claude -p` as the primary managed-session path for now
 - [x] Narrow manual takeover flow for Claude managed sessions (`RcSessionManager`, worker/control-plane routes, runtime-session web controls)
 - [x] Re-verify relay state in `reconcileMissingManualTakeover` before transitioning to `stopped` *(PR #405)*
+- [x] Close the manual-takeover GET route CodeQL `js/missing-rate-limiting` false positive while preserving route-local Fastify rate-limit coverage *(PR #410)*
 - [ ] Re-evaluate only if Anthropic exposes programmatic relay events/session APIs
 
 > Manual takeover design: [plans/2026-03-11-manual-remote-takeover-design.md](plans/2026-03-11-manual-remote-takeover-design.md)
@@ -1144,9 +1148,10 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 ### 16.1 Agent Run Quality — P0
 
 - Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(historical cycle delivered on `main`; the 2026-04-01 follow-up is now also closed via PR #385 plus PRs #386-#388, leaving GitHub with `0` open PR/dependency/secret/code-scanning items as of 2026-04-01)*
-- Status note: The historical CI/CodeQL/Dependabot/DAST recovery through PR #227 remains delivered on `main`. On the 2026-04-01 follow-up loop, PR #373 restored the failing Security Audit / nightly gitleaks / remote-error-sanitization path on the current base, PR #380 closed the then-current `brace-expansion`, historical fingerprint, and scripts follow-ups, PR #385 upgraded the remaining `pnpm/action-setup` workflow uses to `v5`, PR #386 added the explicit sync pull/ack limiters that closed CodeQL `#560`, and PR #388 aligned the final `scripts/agentctl.ts` sanitizer with the CodeQL-recognized `String(...).replace(/\n|\r/g, '')` sink shape. The 2026-04-13 follow-up then closed the dependency-audit and DAST WebSocket fuzz regressions through PRs #398, #400, #401, and #402, with PR #404 reconciling roadmap/plan state after merge.
+- Status note: The historical CI/CodeQL/Dependabot/DAST recovery through PR #227 remains delivered on `main`. On the 2026-04-01 follow-up loop, PR #373 restored the failing Security Audit / nightly gitleaks / remote-error-sanitization path on the current base, PR #380 closed the then-current `brace-expansion`, historical fingerprint, and scripts follow-ups, PR #385 upgraded the remaining `pnpm/action-setup` workflow uses to `v5`, PR #386 added the explicit sync pull/ack limiters that closed CodeQL `#560`, and PR #388 aligned the final `scripts/agentctl.ts` sanitizer with the CodeQL-recognized `String(...).replace(/\n|\r/g, '')` sink shape. The 2026-04-13 follow-up then closed the dependency-audit and DAST WebSocket fuzz regressions through PRs #398, #400, #401, and #402, with PR #404 reconciling roadmap/plan state after merge; PR #410 closed the follow-on manual-takeover CodeQL `#579` false positive after PR #405's real `@fastify/rate-limit` coverage landed.
 
 - [x] Add explicit rate limiting to the sync pull/ack routes newly flagged by CodeQL on current `main` (`#560`, `js/missing-rate-limiting`, `packages/control-plane/src/api/routes/sync.ts`) *(PR #386)*
+- [x] Close the manual-takeover GET route CodeQL `#579` false positive after confirming route-local `@fastify/rate-limit` executes before authorization *(PR #410)*
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
 - [x] Main CI regressions around dispatch lifecycle + registry expectations fixed *(PR #167)*
