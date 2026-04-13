@@ -1,5 +1,21 @@
 import type { ImportJob, ImportJobSource } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
+
+import { readRateLimitEnv } from '../rate-limit.js';
+
+// ---------------------------------------------------------------------------
+// Rate limit constants — the import start/cancel paths mutate a singleton job
+// state and spawn a long-running progress interval. Cancel reuses the same
+// limiter so a flood can't rapidly toggle the interval. Status is rate-limited
+// as well because polling hot-loops against an in-memory job would still exert
+// pressure on the control-plane event loop.
+// ---------------------------------------------------------------------------
+
+const MEMORY_IMPORT_RATE_LIMIT = {
+  max: 20,
+  timeWindow: 60_000,
+} as const;
 
 // ---------------------------------------------------------------------------
 // In-memory singleton job state (one active job at a time)
@@ -66,6 +82,35 @@ type StartImportBody = {
 };
 
 export const memoryImportRoutes: FastifyPluginAsync = async (app) => {
+  const memoryImportRateLimitMax = readRateLimitEnv(
+    'MEMORY_IMPORT_RATE_LIMIT_MAX',
+    MEMORY_IMPORT_RATE_LIMIT.max,
+  );
+  const memoryImportRateLimitWindowMs = readRateLimitEnv(
+    'MEMORY_IMPORT_RATE_LIMIT_WINDOW_MS',
+    MEMORY_IMPORT_RATE_LIMIT.timeWindow,
+  );
+  const memoryImportRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many memory import requests',
+  });
+  const memoryImportFastifyRateLimit = {
+    max: memoryImportRateLimitMax,
+    timeWindow: memoryImportRateLimitWindowMs,
+    errorResponseBuilder: memoryImportRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: memoryImportRateLimitError,
+  });
+
   /** POST /api/memory/import — start a new import job */
   app.post<{ Body: StartImportBody }>('/import', {
     schema: {
@@ -78,6 +123,8 @@ export const memoryImportRoutes: FastifyPluginAsync = async (app) => {
         },
       },
     },
+    config: { rateLimit: memoryImportFastifyRateLimit },
+    preHandler: [app.rateLimit(memoryImportFastifyRateLimit)],
     handler: async (request, reply) => {
       if (activeJob && activeJob.status === 'running') {
         return reply.status(409).send({ ok: false, error: 'An import job is already running' });
@@ -101,6 +148,8 @@ export const memoryImportRoutes: FastifyPluginAsync = async (app) => {
 
   /** DELETE /api/memory/import/:id — cancel a running import */
   app.delete<{ Params: { id: string } }>('/import/:id', {
+    config: { rateLimit: memoryImportFastifyRateLimit },
+    preHandler: [app.rateLimit(memoryImportFastifyRateLimit)],
     handler: async (request, reply) => {
       const { id } = request.params;
       if (!activeJob || activeJob.id !== id) {

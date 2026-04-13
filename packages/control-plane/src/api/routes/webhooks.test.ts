@@ -236,8 +236,16 @@ async function buildApp(mockDb: ReturnType<typeof createMockDb>): Promise<Fastif
 describe('Webhook routes — /api/webhooks', () => {
   let app: FastifyInstance;
   let mockDb: ReturnType<typeof createMockDb>;
+  // Raise the rate-limit bucket for the shared-app fixture so the existing
+  // ~65 write requests against Fastify's default injected IP (127.0.0.1) do
+  // not trip the 20/min production default. The dedicated "rate limiting"
+  // describe block below overrides these to a low ceiling to exercise 429s.
+  const originalMax = process.env.WEBHOOKS_RATE_LIMIT_MAX;
+  const originalWindow = process.env.WEBHOOKS_RATE_LIMIT_WINDOW_MS;
 
   beforeAll(async () => {
+    process.env.WEBHOOKS_RATE_LIMIT_MAX = '10000';
+    process.env.WEBHOOKS_RATE_LIMIT_WINDOW_MS = '60000';
     mockDb = createMockDb();
     app = await buildApp(mockDb);
   });
@@ -250,6 +258,10 @@ describe('Webhook routes — /api/webhooks', () => {
 
   afterAll(async () => {
     await app.close();
+    if (originalMax === undefined) delete process.env.WEBHOOKS_RATE_LIMIT_MAX;
+    else process.env.WEBHOOKS_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.WEBHOOKS_RATE_LIMIT_WINDOW_MS;
+    else process.env.WEBHOOKS_RATE_LIMIT_WINDOW_MS = originalWindow;
   });
 
   // ---------------------------------------------------------------------------
@@ -1270,5 +1282,61 @@ describe('Webhook routes — /api/webhooks', () => {
         expect(response.statusCode).toBe(500);
       }
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rate limiting — webhook write paths persist provider secrets and the /test
+// endpoint issues outbound HTTP to an arbitrary URL, so they must be rate-
+// limited to bound credential churn and outbound-traffic amplification.
+// ---------------------------------------------------------------------------
+
+describe('Webhook rate limiting — /api/webhooks', () => {
+  const originalMax = process.env.WEBHOOKS_RATE_LIMIT_MAX;
+  const originalWindow = process.env.WEBHOOKS_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.WEBHOOKS_RATE_LIMIT_MAX = '3';
+    process.env.WEBHOOKS_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.WEBHOOKS_RATE_LIMIT_MAX;
+    else process.env.WEBHOOKS_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.WEBHOOKS_RATE_LIMIT_WINDOW_MS;
+    else process.env.WEBHOOKS_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /', async () => {
+    const mockDb = createMockDb();
+    const app = await buildApp(mockDb);
+    try {
+      const payload = {
+        url: 'https://example.com/hook',
+        eventTypes: ['agent.started'],
+      };
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/webhooks',
+          payload,
+          headers: { 'x-forwarded-for': '10.0.0.60' },
+          remoteAddress: '10.0.0.60',
+        });
+        expect([200, 201]).toContain(ok.statusCode);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload,
+        headers: { 'x-forwarded-for': '10.0.0.60' },
+        remoteAddress: '10.0.0.60',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
   });
 });

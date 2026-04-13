@@ -1,11 +1,23 @@
 import crypto from 'node:crypto';
 import type { WebhookEventType, WebhookProvider } from '@agentctl/shared';
 import { ControlPlaneError, WEBHOOK_EVENT_TYPES, WEBHOOK_PROVIDERS } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import { type Database, extractRows } from '../../db/index.js';
 import { clampLimit, PAGINATION } from '../constants.js';
+import { readRateLimitEnv } from '../rate-limit.js';
+
+// Rate-limit webhook write paths + the test delivery endpoint: creates persist
+// provider secrets, updates/deletes touch the subscription store, and /test
+// issues an outbound HTTP call to an arbitrary URL. A flood could be used as
+// an outbound-traffic amplifier (SSRF-style abuse of stored URLs) or to
+// exhaust the subscription / delivery store.
+const WEBHOOKS_RATE_LIMIT = {
+  max: 20,
+  timeWindow: 60_000,
+} as const;
 
 // NOTE: This module uses the existing WebhookProvider and WebhookEventType
 // types from @agentctl/shared (packages/shared/src/types/webhook.ts).
@@ -119,13 +131,43 @@ function formatDelivery(row: WebhookDeliveryRow): Record<string, unknown> {
 export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (app, opts) => {
   const { db } = opts;
 
+  const webhooksRateLimitMax = readRateLimitEnv('WEBHOOKS_RATE_LIMIT_MAX', WEBHOOKS_RATE_LIMIT.max);
+  const webhooksRateLimitWindowMs = readRateLimitEnv(
+    'WEBHOOKS_RATE_LIMIT_WINDOW_MS',
+    WEBHOOKS_RATE_LIMIT.timeWindow,
+  );
+  const webhooksRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many webhook requests',
+  });
+  const webhooksFastifyRateLimit = {
+    max: webhooksRateLimitMax,
+    timeWindow: webhooksRateLimitWindowMs,
+    errorResponseBuilder: webhooksRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: webhooksRateLimitError,
+  });
+
   // ---------------------------------------------------------------------------
   // POST / — Create a new webhook subscription
   // ---------------------------------------------------------------------------
 
   app.post<{ Body: CreateWebhookBody }>(
     '/',
-    { schema: { tags: ['webhooks'], summary: 'Create a new webhook subscription' } },
+    {
+      schema: { tags: ['webhooks'], summary: 'Create a new webhook subscription' },
+      config: { rateLimit: webhooksFastifyRateLimit },
+      preHandler: [app.rateLimit(webhooksFastifyRateLimit)],
+    },
     async (request, reply) => {
       const { url, provider = 'generic', secret, eventTypes, agentFilter } = request.body;
 
@@ -314,7 +356,11 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
 
   app.patch<{ Params: { id: string }; Body: UpdateWebhookBody }>(
     '/:id',
-    { schema: { tags: ['webhooks'], summary: 'Update a webhook subscription' } },
+    {
+      schema: { tags: ['webhooks'], summary: 'Update a webhook subscription' },
+      config: { rateLimit: webhooksFastifyRateLimit },
+      preHandler: [app.rateLimit(webhooksFastifyRateLimit)],
+    },
     async (request, reply) => {
       const { id } = request.params;
       const { url, provider, secret, eventTypes, agentFilter, active } = request.body;
@@ -437,7 +483,11 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
 
   app.delete<{ Params: { id: string } }>(
     '/:id',
-    { schema: { tags: ['webhooks'], summary: 'Delete a webhook subscription' } },
+    {
+      schema: { tags: ['webhooks'], summary: 'Delete a webhook subscription' },
+      config: { rateLimit: webhooksFastifyRateLimit },
+      preHandler: [app.rateLimit(webhooksFastifyRateLimit)],
+    },
     async (request, reply) => {
       const { id } = request.params;
 
@@ -531,7 +581,11 @@ export const webhookRoutes: FastifyPluginAsync<WebhookRoutesOptions> = async (ap
 
   app.post<{ Params: { id: string } }>(
     '/:id/test',
-    { schema: { tags: ['webhooks'], summary: 'Send a test webhook delivery' } },
+    {
+      schema: { tags: ['webhooks'], summary: 'Send a test webhook delivery' },
+      config: { rateLimit: webhooksFastifyRateLimit },
+      preHandler: [app.rateLimit(webhooksFastifyRateLimit)],
+    },
     async (request, reply) => {
       const { id } = request.params;
 

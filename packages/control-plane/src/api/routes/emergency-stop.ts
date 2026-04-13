@@ -1,10 +1,12 @@
 import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { MachineRegistryLike } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { EMERGENCY_STOP_TIMEOUT_MS } from '../constants.js';
 import { proxyWorkerRequest, replyWithProxyResult } from '../proxy-worker-request.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 import { resolveWorkerUrl } from '../resolve-worker-url.js';
 
 export type EmergencyStopRoutesOptions = {
@@ -12,6 +14,15 @@ export type EmergencyStopRoutesOptions = {
   dbRegistry?: DbAgentRegistry | null;
   workerPort?: number;
 };
+
+// Rate-limit the emergency-stop writes: a single request can shut down an
+// agent or fan out stop commands to every worker in the fleet. A flood could
+// repeatedly trigger expensive worker-side teardown, saturate outbound fan-out
+// traffic, or be used as a denial-of-service vector against the fleet.
+const EMERGENCY_STOP_RATE_LIMIT = {
+  max: 20,
+  timeWindow: 60_000,
+} as const;
 
 /**
  * Fastify plugin that registers emergency stop proxy routes.
@@ -25,13 +36,46 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
 ) => {
   const { registry, dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
 
+  const emergencyStopRateLimitMax = readRateLimitEnv(
+    'EMERGENCY_STOP_RATE_LIMIT_MAX',
+    EMERGENCY_STOP_RATE_LIMIT.max,
+  );
+  const emergencyStopRateLimitWindowMs = readRateLimitEnv(
+    'EMERGENCY_STOP_RATE_LIMIT_WINDOW_MS',
+    EMERGENCY_STOP_RATE_LIMIT.timeWindow,
+  );
+  const emergencyStopRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many emergency stop requests',
+  });
+  const emergencyStopFastifyRateLimit = {
+    max: emergencyStopRateLimitMax,
+    timeWindow: emergencyStopRateLimitWindowMs,
+    errorResponseBuilder: emergencyStopRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: emergencyStopRateLimitError,
+  });
+
   // POST /api/agents/:id/emergency-stop — Emergency stop a single agent (proxy to worker)
   app.post<{
     Params: { id: string };
     Querystring: { workerUrl?: string; machineId?: string };
   }>(
     '/:id/emergency-stop',
-    { schema: { tags: ['agents'], summary: 'Emergency stop a single agent' } },
+    {
+      schema: { tags: ['agents'], summary: 'Emergency stop a single agent' },
+      config: { rateLimit: emergencyStopFastifyRateLimit },
+      preHandler: [app.rateLimit(emergencyStopFastifyRateLimit)],
+    },
     async (request, reply) => {
       const agentId = request.params.id;
 
@@ -75,7 +119,11 @@ export const emergencyStopProxyRoutes: FastifyPluginAsync<EmergencyStopRoutesOpt
   // POST /api/agents/emergency-stop-all — Emergency stop ALL agents on ALL workers
   app.post(
     '/emergency-stop-all',
-    { schema: { tags: ['agents'], summary: 'Emergency stop all agents on all workers' } },
+    {
+      schema: { tags: ['agents'], summary: 'Emergency stop all agents on all workers' },
+      config: { rateLimit: emergencyStopFastifyRateLimit },
+      preHandler: [app.rateLimit(emergencyStopFastifyRateLimit)],
+    },
     async (_request, reply) => {
       app.log.error('Emergency stop ALL requested via control plane');
 

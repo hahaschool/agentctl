@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { memoryImportRoutes, resetActiveJobForTest } from './memory-import.js';
 
@@ -157,5 +157,65 @@ describe('memoryImportRoutes', () => {
       expect(body.job.status).toBe('cancelled');
       expect(body.job.completedAt).toBeDefined();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rate limiting — memory-import write paths mutate a singleton job state and
+// spawn a long-running progress interval. A flood can repeatedly toggle the
+// interval or exhaust the in-memory job slot.
+// ---------------------------------------------------------------------------
+
+describe('Memory import rate limiting — /api/memory/import', () => {
+  const originalMax = process.env.MEMORY_IMPORT_RATE_LIMIT_MAX;
+  const originalWindow = process.env.MEMORY_IMPORT_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.MEMORY_IMPORT_RATE_LIMIT_MAX = '3';
+    process.env.MEMORY_IMPORT_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.MEMORY_IMPORT_RATE_LIMIT_MAX;
+    else process.env.MEMORY_IMPORT_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.MEMORY_IMPORT_RATE_LIMIT_WINDOW_MS;
+    else process.env.MEMORY_IMPORT_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /import', async () => {
+    resetActiveJobForTest();
+    const app = Fastify({ logger: false });
+    await app.register(memoryImportRoutes, { prefix: '/api/memory' });
+    await app.ready();
+
+    try {
+      const payload = { source: 'claude-mem', dbPath: '/tmp/claude-mem.db' };
+      // First request starts the singleton job (202); subsequent requests
+      // collide and return 409, but every request still counts toward the
+      // rate-limit bucket.
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/memory/import',
+          payload,
+          headers: { 'x-forwarded-for': '10.0.0.70' },
+          remoteAddress: '10.0.0.70',
+        });
+        expect([202, 409]).toContain(ok.statusCode);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import',
+        payload,
+        headers: { 'x-forwarded-for': '10.0.0.70' },
+        remoteAddress: '10.0.0.70',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+    }
   });
 });
