@@ -18,6 +18,7 @@ import {
   ScrollText,
   Server,
   Settings,
+  ShieldAlert,
   ShieldCheck,
   Sun,
   Wifi,
@@ -70,6 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/deployment', label: 'Deployment', icon: Rocket, shortcut: '0' },
   { href: '/conflicts', label: 'Conflicts', icon: GitMerge },
   { href: '/mesh-peers', label: 'Mesh Peers', icon: Wifi },
+  { href: '/security-findings', label: 'Security', icon: ShieldAlert },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
