@@ -132,23 +132,22 @@ jobs:
           fail-build: false
           severity-cutoff: high
           output-format: sarif
-          output-file: grype-${{ matrix.package }}.sarif
 
       - name: Upload Grype SARIF to GitHub Security
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        if: always() && steps.grype-scan.outputs.sarif != ''
         with:
-          sarif_file: grype-${{ matrix.package }}.sarif
+          sarif_file: ${{ steps.grype-scan.outputs.sarif }}
           category: grype-${{ matrix.package }}
 
       - name: Upload Grype report artifact
         uses: actions/upload-artifact@v4
         continue-on-error: true
-        if: always()
+        if: always() && steps.grype-scan.outputs.sarif != ''
         with:
           name: grype-sarif-${{ matrix.package }}
-          path: grype-${{ matrix.package }}.sarif
+          path: ${{ steps.grype-scan.outputs.sarif }}
           retention-days: 90
 
       # ── Generate and upload SBOM ─────────────────────────────────
