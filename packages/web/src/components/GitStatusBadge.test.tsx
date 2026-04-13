@@ -55,6 +55,15 @@ describe('GitStatusBadge', () => {
       renderWithQuery(<GitStatusBadge {...defaultProps} />);
       expect(screen.getByText('git: loading...')).toBeDefined();
     });
+
+    it('exposes aria-busy and sr-only announcement while loading', () => {
+      mockUseQuery.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+      renderWithQuery(<GitStatusBadge {...defaultProps} />);
+      const status = screen.getByRole('status');
+      expect(status.getAttribute('aria-busy')).toBe('true');
+      expect(status.getAttribute('aria-live')).toBe('polite');
+      expect(screen.getByText('Loading git status')).toBeDefined();
+    });
   });
 
   describe('error / null states', () => {

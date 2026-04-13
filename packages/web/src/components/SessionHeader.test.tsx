@@ -796,6 +796,24 @@ describe('SessionHeader', () => {
       expect(screen.getByText('Collapse')).toBeDefined();
       expect(screen.getByText(longMsg)).toBeDefined();
     });
+
+    it('toggle button exposes aria-expanded and aria-controls', () => {
+      const longMsg = 'B'.repeat(250);
+      renderHeader({
+        session: makeSession({
+          status: 'error',
+          metadata: { errorMessage: longMsg },
+        }),
+      });
+      const toggle = screen.getByText('Expand').closest('button');
+      expect(toggle).not.toBeNull();
+      expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+      const controlsId = toggle?.getAttribute('aria-controls');
+      expect(controlsId).toBeTruthy();
+      expect(document.getElementById(controlsId ?? '')).not.toBeNull();
+      fireEvent.click(toggle as HTMLButtonElement);
+      expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    });
   });
 
   // -----------------------------------------------------------------------
