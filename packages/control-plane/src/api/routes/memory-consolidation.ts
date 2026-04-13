@@ -17,14 +17,24 @@ import type {
   ConsolidationSeverity,
   ConsolidationStatus,
 } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
+
+import { readRateLimitEnv } from '../rate-limit.js';
 
 export type MemoryConsolidationRoutesOptions = {
   pool: Pool;
   logger: Logger;
 };
+
+// Rate-limit consolidation action writes: they mutate structural memory
+// resolution state; a flood can thrash resolutions and saturate audit logs.
+const MEMORY_CONSOLIDATION_RATE_LIMIT = {
+  max: 20,
+  timeWindow: 60_000,
+} as const;
 
 const STALE_DAYS = 30;
 const NEAR_DUPLICATE_THRESHOLD = 0.85;
@@ -204,6 +214,35 @@ export const memoryConsolidationRoutes: FastifyPluginAsync<
 > = async (app, opts) => {
   const { pool, logger } = opts;
 
+  const memoryConsolidationRateLimitMax = readRateLimitEnv(
+    'MEMORY_CONSOLIDATION_RATE_LIMIT_MAX',
+    MEMORY_CONSOLIDATION_RATE_LIMIT.max,
+  );
+  const memoryConsolidationRateLimitWindowMs = readRateLimitEnv(
+    'MEMORY_CONSOLIDATION_RATE_LIMIT_WINDOW_MS',
+    MEMORY_CONSOLIDATION_RATE_LIMIT.timeWindow,
+  );
+  const memoryConsolidationRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many memory consolidation requests',
+  });
+  const memoryConsolidationFastifyRateLimit = {
+    max: memoryConsolidationRateLimitMax,
+    timeWindow: memoryConsolidationRateLimitWindowMs,
+    errorResponseBuilder: memoryConsolidationRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: memoryConsolidationRateLimitError,
+  });
+
   // GET / — List consolidation items with optional type/status/limit filters
   app.get<{
     Querystring: { type?: string; status?: string; limit?: string };
@@ -322,6 +361,8 @@ export const memoryConsolidationRoutes: FastifyPluginAsync<
           },
         },
       },
+      config: { rateLimit: memoryConsolidationFastifyRateLimit },
+      preHandler: [app.rateLimit(memoryConsolidationFastifyRateLimit)],
     },
     async (request) => {
       const { id } = request.params;

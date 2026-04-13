@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { memorySynthesisRoutes } from './memory-synthesis.js';
 import { createMockLogger } from './test-helpers.js';
 
@@ -75,5 +75,58 @@ describe('memorySynthesisRoutes', () => {
     }
 
     await scopedApp.close();
+  });
+});
+
+// Rate limiting — synthesis runs parallel DB scans; must bound CPU/IO.
+describe('memorySynthesisRoutes rate limiting', () => {
+  const originalMax = process.env.MEMORY_SYNTHESIS_RATE_LIMIT_MAX;
+  const originalWindow = process.env.MEMORY_SYNTHESIS_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.MEMORY_SYNTHESIS_RATE_LIMIT_MAX = '3';
+    process.env.MEMORY_SYNTHESIS_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.MEMORY_SYNTHESIS_RATE_LIMIT_MAX;
+    else process.env.MEMORY_SYNTHESIS_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.MEMORY_SYNTHESIS_RATE_LIMIT_WINDOW_MS;
+    else process.env.MEMORY_SYNTHESIS_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /', async () => {
+    const pool = makeEmptyPool();
+    const app = Fastify({ logger: false });
+    await app.register(memorySynthesisRoutes, {
+      prefix: '/api/memory/synthesis',
+      pool: pool as never,
+      logger,
+    });
+    await app.ready();
+    try {
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/memory/synthesis',
+          payload: {},
+          headers: { 'x-forwarded-for': '10.0.0.72' },
+          remoteAddress: '10.0.0.72',
+        });
+        expect(ok.statusCode).toBe(200);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/memory/synthesis',
+        payload: {},
+        headers: { 'x-forwarded-for': '10.0.0.72' },
+        remoteAddress: '10.0.0.72',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
   });
 });

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { NotificationRouterStore } from '../../intelligence/notification-router-store.js';
 import { notificationPreferenceRoutes } from './notification-preferences.js';
@@ -392,5 +392,63 @@ describe('notification-preferences routes', () => {
       expect(res.statusCode).toBe(500);
       expect(res.json().error).toBe('PREFERENCE_DELETE_FAILED');
     });
+  });
+});
+
+// Rate limiting — writes persist per-user routing rules.
+describe('notification-preferences rate limiting', () => {
+  const originalMax = process.env.NOTIFICATION_PREFERENCES_RATE_LIMIT_MAX;
+  const originalWindow = process.env.NOTIFICATION_PREFERENCES_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.NOTIFICATION_PREFERENCES_RATE_LIMIT_MAX = '3';
+    process.env.NOTIFICATION_PREFERENCES_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.NOTIFICATION_PREFERENCES_RATE_LIMIT_MAX;
+    else process.env.NOTIFICATION_PREFERENCES_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined)
+      delete process.env.NOTIFICATION_PREFERENCES_RATE_LIMIT_WINDOW_MS;
+    else process.env.NOTIFICATION_PREFERENCES_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /', async () => {
+    const store = createMockStore();
+    const app = Fastify({ logger: false });
+    await app.register(notificationPreferenceRoutes, {
+      prefix: '/api/notification-preferences',
+      notificationRouterStore: store,
+    });
+    await app.ready();
+    try {
+      const payload = {
+        userId: USER_ID,
+        priority: 'high',
+        channels: ['push', 'in-app'],
+      };
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/notification-preferences',
+          payload,
+          headers: { 'x-forwarded-for': '10.0.0.71' },
+          remoteAddress: '10.0.0.71',
+        });
+        expect([200, 201]).toContain(ok.statusCode);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/notification-preferences',
+        payload,
+        headers: { 'x-forwarded-for': '10.0.0.71' },
+        remoteAddress: '10.0.0.71',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
   });
 });

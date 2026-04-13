@@ -1,7 +1,7 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MobilePushDeviceStore } from '../../notifications/mobile-push-device-store.js';
 import { mobilePushDeviceRoutes } from './mobile-push-devices.js';
@@ -212,5 +212,59 @@ describe('mobilePushDeviceRoutes', () => {
       expect(response.statusCode).toBe(404);
       expect(response.json()).toMatchObject({ error: 'MOBILE_PUSH_DEVICE_NOT_FOUND' });
     });
+  });
+});
+
+// Rate limiting — writes persist push tokens / mutate device state.
+describe('mobilePushDeviceRoutes rate limiting', () => {
+  const originalMax = process.env.MOBILE_PUSH_DEVICES_RATE_LIMIT_MAX;
+  const originalWindow = process.env.MOBILE_PUSH_DEVICES_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.MOBILE_PUSH_DEVICES_RATE_LIMIT_MAX = '3';
+    process.env.MOBILE_PUSH_DEVICES_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.MOBILE_PUSH_DEVICES_RATE_LIMIT_MAX;
+    else process.env.MOBILE_PUSH_DEVICES_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.MOBILE_PUSH_DEVICES_RATE_LIMIT_WINDOW_MS;
+    else process.env.MOBILE_PUSH_DEVICES_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /', async () => {
+    const store = createMockStore();
+    const app = await buildApp(store);
+    try {
+      const payload = {
+        userId: 'operator-1',
+        platform: 'ios',
+        provider: 'expo',
+        pushToken: 'ExponentPushToken[abc123]',
+        appId: 'com.agentctl.mobile',
+      };
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/mobile-push-devices',
+          payload,
+          headers: { 'x-forwarded-for': '10.0.0.70' },
+          remoteAddress: '10.0.0.70',
+        });
+        expect([200, 201]).toContain(ok.statusCode);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/mobile-push-devices',
+        payload,
+        headers: { 'x-forwarded-for': '10.0.0.70' },
+        remoteAddress: '10.0.0.70',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
   });
 });

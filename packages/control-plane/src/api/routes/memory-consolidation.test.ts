@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { memoryConsolidationRoutes } from './memory-consolidation.js';
 import { createMockLogger } from './test-helpers.js';
@@ -507,5 +507,59 @@ describe('memory-consolidation routes', () => {
         expect(res.statusCode).toBe(200);
       }
     });
+  });
+});
+
+// Rate limiting — action writes mutate consolidation resolution state.
+describe('memory-consolidation rate limiting', () => {
+  const originalMax = process.env.MEMORY_CONSOLIDATION_RATE_LIMIT_MAX;
+  const originalWindow = process.env.MEMORY_CONSOLIDATION_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.MEMORY_CONSOLIDATION_RATE_LIMIT_MAX = '3';
+    process.env.MEMORY_CONSOLIDATION_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.MEMORY_CONSOLIDATION_RATE_LIMIT_MAX;
+    else process.env.MEMORY_CONSOLIDATION_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.MEMORY_CONSOLIDATION_RATE_LIMIT_WINDOW_MS;
+    else process.env.MEMORY_CONSOLIDATION_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /:id/action', async () => {
+    const pool = createMockPool();
+    const app = Fastify({ logger: false });
+    await app.register(memoryConsolidationRoutes, {
+      prefix: '/api/memory/consolidation',
+      pool: pool as never,
+      logger: createMockLogger(),
+    });
+    await app.ready();
+    try {
+      const payload = { action: 'accept', status: 'accepted' };
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/memory/consolidation/contradiction-edge-1/action',
+          payload,
+          headers: { 'x-forwarded-for': '10.0.0.73' },
+          remoteAddress: '10.0.0.73',
+        });
+        expect(ok.statusCode).toBe(200);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/memory/consolidation/contradiction-edge-1/action',
+        payload,
+        headers: { 'x-forwarded-for': '10.0.0.73' },
+        remoteAddress: '10.0.0.73',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
   });
 });

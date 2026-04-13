@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { knowledgeMaintenanceRoutes } from './knowledge-maintenance.js';
 import { createMockLogger } from './test-helpers.js';
@@ -290,5 +290,61 @@ describe('knowledge-maintenance routes', () => {
 
       expect(res.statusCode).toBe(500);
     });
+  });
+});
+
+// Rate limiting — maintenance runs a full memory sweep + report write.
+describe('knowledge-maintenance rate limiting', () => {
+  const originalMax = process.env.KNOWLEDGE_MAINTENANCE_RATE_LIMIT_MAX;
+  const originalWindow = process.env.KNOWLEDGE_MAINTENANCE_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.KNOWLEDGE_MAINTENANCE_RATE_LIMIT_MAX = '3';
+    process.env.KNOWLEDGE_MAINTENANCE_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.KNOWLEDGE_MAINTENANCE_RATE_LIMIT_MAX;
+    else process.env.KNOWLEDGE_MAINTENANCE_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.KNOWLEDGE_MAINTENANCE_RATE_LIMIT_WINDOW_MS;
+    else process.env.KNOWLEDGE_MAINTENANCE_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /', async () => {
+    mockRun.mockResolvedValue(makeMaintenanceResult());
+    const pool = createMockPool();
+    const memoryStore = createMockMemoryStore();
+    const app = Fastify({ logger: false });
+    await app.register(knowledgeMaintenanceRoutes, {
+      prefix: '/api/memory/maintenance',
+      pool: pool as never,
+      memoryStore: memoryStore as never,
+      logger: createMockLogger(),
+    });
+    await app.ready();
+    try {
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/memory/maintenance',
+          payload: {},
+          headers: { 'x-forwarded-for': '10.0.0.74' },
+          remoteAddress: '10.0.0.74',
+        });
+        expect(ok.statusCode).toBe(200);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/memory/maintenance',
+        payload: {},
+        headers: { 'x-forwarded-for': '10.0.0.74' },
+        remoteAddress: '10.0.0.74',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
   });
 });
