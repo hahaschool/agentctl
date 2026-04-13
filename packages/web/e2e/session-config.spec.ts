@@ -1,8 +1,11 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Locator, type Page, test } from '@playwright/test';
 
 const SESSION_ID = 'session-config-test';
 const CLAUDE_SESSION_ID = 'claude-session-config-test';
 const SESSION_MESSAGE = 'Session tab content for the config test.';
+const NO_DISPATCH_RECORD_MESSAGE =
+  'No dispatch record — this session has no associated agent run.';
+const PRE_FEATURE_MESSAGE = 'Config not captured for this run (pre-feature data).';
 
 type DispatchConfigResponse = {
   runId: string | null;
@@ -23,19 +26,42 @@ type DispatchConfigResponse = {
   } | null;
 };
 
-const POPULATED_DISPATCH_CONFIG: DispatchConfigResponse = {
-  runId: 'run-1',
+const NO_DISPATCH_CONFIG: DispatchConfigResponse = {
+  runId: null,
+  runCount: 0,
+  config: null,
+};
+
+const PRE_FEATURE_DISPATCH_CONFIG: DispatchConfigResponse = {
+  runId: 'run-pre-feature',
   runCount: 1,
+  config: null,
+};
+
+const LATEST_DISPATCH_CONFIG: DispatchConfigResponse = {
+  runId: 'run-3',
+  runCount: 3,
   config: {
-    model: 'claude-sonnet-4',
-    permissionMode: 'bypassPermissions',
-    allowedTools: null,
-    mcpServers: null,
-    systemPrompt: null,
-    defaultPrompt: 'start processing',
-    instructionsStrategy: null,
-    mcpServerCount: 0,
-    accountProvider: 'claude_team',
+    model: 'claude-opus-4-20250514',
+    permissionMode: 'acceptEdits',
+    allowedTools: ['Read', 'Edit', 'Bash'],
+    mcpServers: {
+      github: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+        envKeys: ['GITHUB_TOKEN'],
+      },
+      slack: {
+        command: 'uvx',
+        args: ['slack-mcp-server'],
+        envKeys: ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID'],
+      },
+    },
+    systemPrompt: 'Operate strictly within the assigned worktree.',
+    defaultPrompt: 'Investigate the latest dispatch snapshot.',
+    instructionsStrategy: 'file',
+    mcpServerCount: 2,
+    accountProvider: 'claude_max',
   },
 };
 
@@ -61,7 +87,7 @@ function createSession() {
 
 async function interceptSessionDetailApi(
   page: Page,
-  dispatchConfig: DispatchConfigResponse | undefined,
+  dispatchConfig: DispatchConfigResponse,
 ): Promise<void> {
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -83,13 +109,7 @@ async function interceptSessionDetailApi(
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(
-          dispatchConfig ?? {
-            runId: null,
-            runCount: 0,
-            config: null,
-          },
-        ),
+        body: JSON.stringify(dispatchConfig),
       });
       return;
     }
@@ -133,34 +153,91 @@ async function interceptSessionDetailApi(
   });
 }
 
+async function openConfigTab(page: Page, dispatchConfig: DispatchConfigResponse): Promise<void> {
+  await interceptSessionDetailApi(page, dispatchConfig);
+  await page.goto(`/sessions/${SESSION_ID}`);
+
+  await expect(page.getByText(SESSION_MESSAGE)).toBeVisible({ timeout: 15_000 });
+
+  const dispatchConfigResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === 'GET' &&
+      url.pathname === `/api/sessions/${SESSION_ID}/dispatch-config`
+    );
+  });
+
+  await page.getByRole('button', { name: 'Config', exact: true }).click();
+  await dispatchConfigResponsePromise;
+}
+
+function configSection(page: Page, title: string): Locator {
+  return page.getByText(title, { exact: true }).locator('xpath=../..');
+}
+
+async function expectConfigRow(
+  section: Locator,
+  label: string,
+  value: string,
+): Promise<void> {
+  const row = section.getByText(label, { exact: true }).locator('xpath=..');
+  await expect(row).toContainText(value);
+}
+
 test.describe('Session detail config tab', () => {
-  test('Config tab is visible on session detail page', async ({ page }) => {
-    await interceptSessionDetailApi(page, undefined);
-    await page.goto(`/sessions/${SESSION_ID}`);
+  test('shows the exact no-run empty state', async ({ page }) => {
+    await openConfigTab(page, NO_DISPATCH_CONFIG);
 
-    await expect(page.getByRole('button', { name: 'Config' })).toBeVisible({ timeout: 15_000 });
-  });
-
-  test('Config tab shows "No dispatch record" or config sections', async ({ page }) => {
-    await interceptSessionDetailApi(page, POPULATED_DISPATCH_CONFIG);
-    await page.goto(`/sessions/${SESSION_ID}`);
-
-    await page.getByRole('button', { name: 'Config' }).click();
-
-    const noDispatchRecord = page.getByText(/no dispatch record/i);
-    const configSections = page.getByText('MCP Servers (0)');
-    await expect(noDispatchRecord.or(configSections)).toBeVisible({ timeout: 15_000 });
-  });
-
-  test('clicking Config tab switches content', async ({ page }) => {
-    await interceptSessionDetailApi(page, POPULATED_DISPATCH_CONFIG);
-    await page.goto(`/sessions/${SESSION_ID}`);
-
-    await expect(page.getByText(SESSION_MESSAGE)).toBeVisible({ timeout: 15_000 });
-
-    await page.getByRole('button', { name: 'Config' }).click();
-
-    await expect(page.getByText('General')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(NO_DISPATCH_RECORD_MESSAGE)).toHaveText(NO_DISPATCH_RECORD_MESSAGE);
     await expect(page.getByText(SESSION_MESSAGE)).toHaveCount(0);
+  });
+
+  test('shows the exact pre-feature empty state when config was not captured', async ({ page }) => {
+    await openConfigTab(page, PRE_FEATURE_DISPATCH_CONFIG);
+
+    await expect(page.getByText(PRE_FEATURE_MESSAGE)).toHaveText(PRE_FEATURE_MESSAGE);
+    await expect(page.getByText(SESSION_MESSAGE)).toHaveCount(0);
+  });
+
+  test('shows the latest dispatch snapshot details for multi-run sessions', async ({ page }) => {
+    await openConfigTab(page, LATEST_DISPATCH_CONFIG);
+
+    await expect(page.getByText('Showing config from latest dispatch (1 of 3 runs).')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByText(SESSION_MESSAGE)).toHaveCount(0);
+
+    const generalSection = configSection(page, 'General');
+    await expect(generalSection).toBeVisible();
+    await expectConfigRow(generalSection, 'Model', 'claude-opus-4-20250514');
+    await expectConfigRow(generalSection, 'Permission', 'acceptEdits');
+    await expectConfigRow(generalSection, 'Provider', 'claude_max');
+    await expectConfigRow(generalSection, 'Strategy', 'file');
+
+    const toolRestrictionsSection = configSection(page, 'Tool Restrictions');
+    await expect(toolRestrictionsSection).toBeVisible();
+    await expectConfigRow(toolRestrictionsSection, 'Allowed', 'Read, Edit, Bash');
+
+    const promptsSection = configSection(page, 'Prompts');
+    await expect(promptsSection).toBeVisible();
+    await expectConfigRow(
+      promptsSection,
+      'Default',
+      'Investigate the latest dispatch snapshot.',
+    );
+    await expectConfigRow(
+      promptsSection,
+      'System',
+      'Operate strictly within the assigned worktree.',
+    );
+
+    const mcpServersSection = configSection(page, 'MCP Servers (2)');
+    await expect(mcpServersSection).toBeVisible();
+    await expect(mcpServersSection).toContainText('github');
+    await expect(mcpServersSection).toContainText('npx -y @modelcontextprotocol/server-github');
+    await expect(mcpServersSection).toContainText('env: GITHUB_TOKEN');
+    await expect(mcpServersSection).toContainText('slack');
+    await expect(mcpServersSection).toContainText('uvx slack-mcp-server');
+    await expect(mcpServersSection).toContainText('env: SLACK_BOT_TOKEN, SLACK_TEAM_ID');
   });
 });
