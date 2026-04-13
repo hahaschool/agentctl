@@ -451,7 +451,7 @@ jobs:
           GITLEAKS_VERSION: "8.30.0"
         run: |
           set -euo pipefail
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
+          curl --retry 5 --retry-delay 2 --retry-all-errors --connect-timeout 15 --max-time 120 -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C "$RUNNER_TEMP" gitleaks
           chmod +x "$RUNNER_TEMP/gitleaks"
           export PATH="$RUNNER_TEMP:$PATH"
