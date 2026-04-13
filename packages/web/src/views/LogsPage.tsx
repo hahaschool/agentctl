@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ScrollText, Server } from 'lucide-react';
+import { ScrollText, Server, ShieldAlert } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +23,7 @@ import { RefreshButton } from '../components/RefreshButton';
 import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
+import type { SecurityFinding, SecurityFindingSeverity } from '../lib/api';
 import { formatDateTime, formatDurationMs, formatNumber } from '../lib/format-utils';
 import {
   agentsQuery,
@@ -31,15 +32,26 @@ import {
   healthQuery,
   machinesQuery,
   metricsQuery,
+  securityFindingsQuery,
+  securityFindingsSummaryQuery,
 } from '../lib/queries';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type ActiveTab = 'overview' | 'audit';
+type ActiveTab = 'overview' | 'audit' | 'security';
 
 const AUDIT_PAGE_SIZE = 50;
+const SECURITY_FINDINGS_LIMIT = 20;
+
+const SECURITY_SEVERITY_CLASSES: Record<SecurityFindingSeverity, string> = {
+  critical: 'bg-red-500/10 text-red-500 border-red-500/30',
+  high: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-500 border-yellow-500/30',
+  medium: 'bg-blue-500/10 text-blue-500 border-blue-500/30',
+  low: 'bg-green-500/10 text-green-500 border-green-500/30',
+  info: 'bg-muted text-muted-foreground border-border',
+};
 
 // ---------------------------------------------------------------------------
 // Table class strings
@@ -48,6 +60,11 @@ const AUDIT_PAGE_SIZE = 50;
 const TH_CLASSES = 'px-3.5 py-2.5 text-[11px] font-semibold text-muted-foreground';
 
 const TD_CLASSES = 'px-3.5 py-2.5';
+
+function formatFindingLocation(finding: SecurityFinding): string {
+  if (!finding.file) return 'No file path';
+  return finding.line ? `${finding.file}:${String(finding.line)}` : finding.file;
+}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -94,6 +111,16 @@ export function LogsPage(): React.JSX.Element {
   const auditSummary = useQuery({
     ...auditSummaryQuery({ agentId: auditAgentFilter || undefined }),
     refetchInterval: autoRefresh ? 30_000 : false,
+  });
+  const securityFindings = useQuery({
+    ...securityFindingsQuery({ limit: SECURITY_FINDINGS_LIMIT }),
+    enabled: activeTab === 'security',
+    refetchInterval: activeTab === 'security' && autoRefresh ? 30_000 : false,
+  });
+  const securitySummary = useQuery({
+    ...securityFindingsSummaryQuery(),
+    enabled: activeTab === 'security',
+    refetchInterval: activeTab === 'security' && autoRefresh ? 30_000 : false,
   });
 
   // Derived
@@ -172,7 +199,9 @@ export function LogsPage(): React.JSX.Element {
     void machines.refetch();
     void audit.refetch();
     void auditSummary.refetch();
-  }, [health, metrics, machines, audit, auditSummary]);
+    void securityFindings.refetch();
+    void securitySummary.refetch();
+  }, [health, metrics, machines, audit, auditSummary, securityFindings, securitySummary]);
 
   useHotkeys(
     useMemo(
@@ -180,13 +209,19 @@ export function LogsPage(): React.JSX.Element {
         r: refetchAll,
         '1': () => setActiveTab('overview'),
         '2': () => setActiveTab('audit'),
+        '3': () => setActiveTab('security'),
       }),
       [refetchAll],
     ),
   );
 
   const isFetching =
-    health.isFetching || metrics.isFetching || machines.isFetching || audit.isFetching;
+    health.isFetching ||
+    metrics.isFetching ||
+    machines.isFetching ||
+    audit.isFetching ||
+    securityFindings.isFetching ||
+    securitySummary.isFetching;
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
@@ -197,7 +232,7 @@ export function LogsPage(): React.JSX.Element {
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight">Logs &amp; Metrics</h1>
           <p className="text-[13px] text-muted-foreground mt-1">
-            System health, audit trail, and runtime metrics.
+            System health, audit trail, security findings, and runtime metrics.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -236,6 +271,7 @@ export function LogsPage(): React.JSX.Element {
           [
             { key: 'overview', label: 'Overview' },
             { key: 'audit', label: 'Audit Trail' },
+            { key: 'security', label: 'Security Findings' },
           ] as const
         ).map((tab) => (
           <button
@@ -253,6 +289,11 @@ export function LogsPage(): React.JSX.Element {
             {tab.key === 'audit' && audit.data && (
               <span className="ml-1.5 text-[11px] text-muted-foreground">
                 ({formatNumber(audit.data.total)})
+              </span>
+            )}
+            {tab.key === 'security' && securitySummary.data && (
+              <span className="ml-1.5 text-[11px] text-muted-foreground">
+                ({formatNumber(securitySummary.data.total)})
               </span>
             )}
           </button>
@@ -671,6 +712,150 @@ export function LogsPage(): React.JSX.Element {
                     </button>
                   ))}
               </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ================================================================= */}
+      {/* SECURITY FINDINGS TAB                                              */}
+      {/* ================================================================= */}
+      {activeTab === 'security' && (
+        <>
+          {securitySummary.error && (
+            <ErrorBanner
+              message={securitySummary.error.message}
+              onRetry={() => void securitySummary.refetch()}
+            />
+          )}
+          {securityFindings.error && (
+            <ErrorBanner
+              message={securityFindings.error.message}
+              onRetry={() => void securityFindings.refetch()}
+            />
+          )}
+
+          {securitySummary.isLoading ? (
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-5">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div
+                  key={`sfsk-${String(i)}`}
+                  className="px-[18px] py-4 bg-card border border-border/50 rounded"
+                >
+                  <Skeleton className="h-3 w-20 mb-2.5" />
+                  <Skeleton className="h-7 w-16" />
+                </div>
+              ))}
+            </div>
+          ) : securitySummary.data ? (
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 mb-5">
+              <StatCard
+                label="Total Findings"
+                value={formatNumber(securitySummary.data.total)}
+                accent="blue"
+              />
+              <StatCard
+                label="Critical"
+                value={formatNumber(securitySummary.data.critical)}
+                accent="red"
+              />
+              <StatCard
+                label="High"
+                value={formatNumber(securitySummary.data.high)}
+                accent="yellow"
+              />
+              <StatCard
+                label="Categories"
+                value={formatNumber(Object.keys(securitySummary.data.byCategory).length)}
+                accent="purple"
+              />
+            </div>
+          ) : null}
+
+          <LogsSectionHeading>Latest Findings</LogsSectionHeading>
+
+          {securityFindings.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div
+                  key={`sfrow-${String(i)}`}
+                  className="px-3.5 py-3 bg-card border border-border/50 rounded"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                    <Skeleton className="h-5 w-40" />
+                  </div>
+                  <Skeleton className="h-4 w-full mb-1.5" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              ))}
+            </div>
+          ) : !securityFindings.data || securityFindings.data.findings.length === 0 ? (
+            <EmptyState
+              icon={ShieldAlert}
+              title="No security findings"
+              description="Security audit findings will appear here when agents report them."
+            />
+          ) : (
+            <div className="space-y-2">
+              {securityFindings.data.findings.map((finding) => (
+                <article
+                  key={finding.id}
+                  className="bg-card border border-border/50 rounded p-3.5 transition-colors hover:border-border"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span
+                          className={cn(
+                            'inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-normal',
+                            SECURITY_SEVERITY_CLASSES[finding.severity],
+                          )}
+                        >
+                          {finding.severity}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground font-mono">
+                          {finding.category}
+                        </span>
+                        {finding.acknowledged && (
+                          <span className="inline-flex items-center rounded-md border border-border bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                            Acknowledged
+                          </span>
+                        )}
+                      </div>
+                      <h2 className="text-[14px] font-semibold text-foreground leading-snug">
+                        {finding.title}
+                      </h2>
+                    </div>
+                    {finding.issueCreated && (
+                      <span className="shrink-0 rounded-md border border-border bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                        GitHub issue created
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
+                    {finding.description}
+                  </p>
+                  <p className="mt-2 text-[13px] leading-relaxed">
+                    <span className="font-medium">Recommendation: </span>
+                    {finding.recommendation}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                    <span className="font-mono">{formatFindingLocation(finding)}</span>
+                    <span>
+                      Agent{' '}
+                      <CopyableText value={finding.agentId} maxDisplay={10} className="font-mono" />
+                    </span>
+                    <span>
+                      Run{' '}
+                      <CopyableText value={finding.runId} maxDisplay={10} className="font-mono" />
+                    </span>
+                    <span>{formatDateTime(finding.createdAt)}</span>
+                  </div>
+                </article>
+              ))}
             </div>
           )}
         </>

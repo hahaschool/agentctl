@@ -13,6 +13,8 @@ const {
   mockAgentsQuery,
   mockAuditQuery,
   mockAuditSummaryQuery,
+  mockSecurityFindingsQuery,
+  mockSecurityFindingsSummaryQuery,
 } = vi.hoisted(() => ({
   mockHealthQuery: vi.fn(),
   mockMetricsQuery: vi.fn(),
@@ -20,6 +22,8 @@ const {
   mockAgentsQuery: vi.fn(),
   mockAuditQuery: vi.fn(),
   mockAuditSummaryQuery: vi.fn(),
+  mockSecurityFindingsQuery: vi.fn(),
+  mockSecurityFindingsSummaryQuery: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -116,13 +120,15 @@ vi.mock('@/lib/queries', () => ({
   agentsQuery: () => mockAgentsQuery(),
   auditQuery: () => mockAuditQuery(),
   auditSummaryQuery: () => mockAuditSummaryQuery(),
+  securityFindingsQuery: () => mockSecurityFindingsQuery(),
+  securityFindingsSummaryQuery: () => mockSecurityFindingsSummaryQuery(),
 }));
 
 // ---------------------------------------------------------------------------
 // Import component AFTER mocks
 // ---------------------------------------------------------------------------
 
-import type { AuditAction, Machine } from '@/lib/api';
+import type { AuditAction, Machine, SecurityFinding } from '@/lib/api';
 import { LogsPage } from './LogsPage';
 
 // ---------------------------------------------------------------------------
@@ -156,6 +162,27 @@ function createAuditAction(overrides?: Partial<AuditAction>): AuditAction {
     durationMs: 150,
     approvedBy: null,
     agentId: 'agent-1',
+    ...overrides,
+  };
+}
+
+function createSecurityFinding(overrides?: Partial<SecurityFinding>): SecurityFinding {
+  return {
+    id: 'finding-1',
+    agentId: 'agent-1',
+    runId: 'run-1',
+    severity: 'critical',
+    category: 'injection',
+    title: 'Unsafe shell interpolation',
+    description: 'User-controlled input reaches a shell command.',
+    file: 'packages/control-plane/src/api/routes/example.ts',
+    line: 42,
+    recommendation: 'Use structured process arguments instead of shell interpolation.',
+    acknowledged: false,
+    acknowledgedBy: null,
+    acknowledgeReason: null,
+    issueCreated: false,
+    createdAt: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -237,6 +264,27 @@ describe('LogsPage', () => {
         avgDurationMs: 250,
       }),
     });
+
+    mockSecurityFindingsQuery.mockReturnValue({
+      queryKey: ['security-findings'],
+      queryFn: vi.fn().mockResolvedValue({
+        findings: [createSecurityFinding()],
+        total: 1,
+      }),
+    });
+
+    mockSecurityFindingsSummaryQuery.mockReturnValue({
+      queryKey: ['security-findings', 'summary'],
+      queryFn: vi.fn().mockResolvedValue({
+        total: 1,
+        critical: 1,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+        byCategory: { injection: 1 },
+      }),
+    });
   });
 
   afterEach(() => {
@@ -250,13 +298,16 @@ describe('LogsPage', () => {
   it('renders page heading and description', async () => {
     renderLogsPage();
     expect(screen.getByText('Logs & Metrics')).toBeDefined();
-    expect(screen.getByText('System health, audit trail, and runtime metrics.')).toBeDefined();
+    expect(
+      screen.getByText('System health, audit trail, security findings, and runtime metrics.'),
+    ).toBeDefined();
   });
 
-  it('renders Overview and Audit Trail tabs', () => {
+  it('renders Overview, Audit Trail, and Security Findings tabs', () => {
     renderLogsPage();
     expect(screen.getByText('Overview')).toBeDefined();
     expect(screen.getByText(/Audit Trail/)).toBeDefined();
+    expect(screen.getByText(/Security Findings/)).toBeDefined();
   });
 
   it('renders refresh button', () => {
@@ -941,6 +992,58 @@ describe('LogsPage', () => {
       // The tab shows "(1)" from the audit.data.total
       const auditTab = screen.getByText(/Audit Trail/);
       expect(auditTab.textContent).toContain('(1)');
+    });
+  });
+
+  // =========================================================================
+  // Security Findings Tab
+  // =========================================================================
+
+  it('renders security findings summary and latest findings', async () => {
+    renderLogsPage();
+    fireEvent.click(screen.getByText(/Security Findings/));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('stat-card-Total Findings')).toBeDefined();
+      expect(screen.getByTestId('stat-card-Critical')).toBeDefined();
+      expect(screen.getByText('Unsafe shell interpolation')).toBeDefined();
+      expect(screen.getByText('injection')).toBeDefined();
+      expect(screen.getByText('Recommendation:')).toBeDefined();
+      expect(
+        screen.getByText('Use structured process arguments instead of shell interpolation.'),
+      ).toBeDefined();
+    });
+  });
+
+  it('shows empty state when no security findings exist', async () => {
+    mockSecurityFindingsQuery.mockReturnValue({
+      queryKey: ['security-findings'],
+      queryFn: vi.fn().mockResolvedValue({
+        findings: [],
+        total: 0,
+      }),
+    });
+    mockSecurityFindingsSummaryQuery.mockReturnValue({
+      queryKey: ['security-findings', 'summary'],
+      queryFn: vi.fn().mockResolvedValue({
+        total: 0,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        info: 0,
+        byCategory: {},
+      }),
+    });
+
+    renderLogsPage();
+    fireEvent.click(screen.getByText(/Security Findings/));
+
+    await waitFor(() => {
+      expect(screen.getByText('No security findings')).toBeDefined();
+      expect(
+        screen.getByText('Security audit findings will appear here when agents report them.'),
+      ).toBeDefined();
     });
   });
 

@@ -407,6 +407,41 @@ export type AuditSummary = {
   avgDurationMs: number | null;
 };
 
+export type SecurityFindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
+
+export type SecurityFinding = {
+  id: string;
+  agentId: string;
+  runId: string;
+  severity: SecurityFindingSeverity;
+  category: string;
+  title: string;
+  description: string;
+  file: string | null;
+  line: number | null;
+  recommendation: string;
+  acknowledged: boolean;
+  acknowledgedBy: string | null;
+  acknowledgeReason: string | null;
+  issueCreated: boolean;
+  createdAt: string;
+};
+
+export type SecurityFindingsResult = {
+  findings: SecurityFinding[];
+  total: number;
+};
+
+export type SecurityFindingsSummary = {
+  total: number;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
+  byCategory: Record<string, number>;
+};
+
 export type GitFileStatus = {
   clean: boolean;
   staged: number;
@@ -1143,6 +1178,24 @@ export const api = {
     const suffix = qs.toString() ? `?${qs}` : '';
     return request<AuditSummary>(`/api/audit/summary${suffix}`);
   },
+  listSecurityFindings: (params?: {
+    severity?: SecurityFindingSeverity;
+    category?: string;
+    agentId?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.severity) qs.set('severity', params.severity);
+    if (params?.category) qs.set('category', params.category);
+    if (params?.agentId) qs.set('agentId', params.agentId);
+    if (params?.limit !== undefined) qs.set('limit', String(params.limit));
+    if (params?.offset !== undefined) qs.set('offset', String(params.offset));
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<SecurityFindingsResult>(`/api/security/findings${suffix}`);
+  },
+  getSecurityFindingsSummary: () =>
+    request<SecurityFindingsSummary>('/api/security/findings/summary'),
 
   // Router / LiteLLM
   getRouterModels: () => request<RouterModelsResponse>('/api/router/models'),
