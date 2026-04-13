@@ -1,8 +1,10 @@
 import type {
   ManualTakeoverResponse,
   ManualTakeoverState,
+  ManualTakeoverStatus,
   StartManualTakeoverRequest,
 } from '@agentctl/shared';
+import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -19,6 +21,15 @@ export type ManualTakeoverRoutesOptions = {
   dbRegistry?: DbAgentRegistry;
   workerPort?: number;
 };
+
+/**
+ * Outcome of a follow-up relay/worker re-check after a missing manual-takeover
+ * response. Drives the status decision in `reconcileMissingManualTakeover`.
+ */
+type RelayReverificationResult =
+  | { kind: 'confirmed-missing' }
+  | { kind: 'still-active'; manualTakeover: ManualTakeoverState }
+  | { kind: 'unreachable'; reason: string };
 
 export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOptions> = async (
   app,
@@ -124,7 +135,61 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         return reply.status(result.status).send(result.data);
       }
 
-      const reconciled = reconcileMissingManualTakeover(storedManualTakeover);
+      // The first worker GET reported no manual takeover, but the worker may
+      // have been mid-restart or briefly partitioned from the relay. Re-verify
+      // before flipping a previously-online takeover to a terminal `stopped`
+      // state.
+      const reverification = await reverifyMissingManualTakeover({
+        workerBaseUrl,
+        nativeSessionId,
+      });
+
+      if (reverification.kind === 'still-active') {
+        app.log.info(
+          {
+            agentId: session.agentId,
+            sessionId: session.id,
+            machineId: session.machineId,
+            nativeSessionId,
+            relayCheck: 'still-active',
+          },
+          'Manual takeover reappeared on re-verification; keeping live state',
+        );
+        await managedSessionStore.patchMetadata(session.id, {
+          manualTakeover: reverification.manualTakeover,
+        });
+        return reply.status(result.status).send({
+          ok: true,
+          manualTakeover: reverification.manualTakeover,
+        } satisfies ManualTakeoverResponse);
+      }
+
+      if (reverification.kind === 'unreachable') {
+        app.log.warn(
+          {
+            agentId: session.agentId,
+            sessionId: session.id,
+            machineId: session.machineId,
+            nativeSessionId,
+            relayCheck: 'unreachable',
+            reason: reverification.reason,
+          },
+          'Worker unreachable on manual-takeover re-verification; marking session as reconnecting',
+        );
+      } else {
+        app.log.info(
+          {
+            agentId: session.agentId,
+            sessionId: session.id,
+            machineId: session.machineId,
+            nativeSessionId,
+            relayCheck: 'confirmed-missing',
+          },
+          'Manual takeover confirmed missing on re-verification; marking stopped',
+        );
+      }
+
+      const reconciled = reconcileMissingManualTakeover(storedManualTakeover, reverification);
       await managedSessionStore.patchMetadata(session.id, { manualTakeover: reconciled });
       return reply.status(result.status).send({
         ok: true,
@@ -171,7 +236,9 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
 
       const manualTakeover =
         extractManualTakeover(result.data) ??
-        reconcileMissingManualTakeover(readStoredManualTakeover(session.metadata));
+        reconcileMissingManualTakeover(readStoredManualTakeover(session.metadata), {
+          kind: 'confirmed-missing',
+        });
       if (manualTakeover) {
         await managedSessionStore.patchMetadata(session.id, { manualTakeover });
       }
@@ -253,22 +320,90 @@ function readStoredManualTakeover(metadata: Record<string, unknown>): ManualTake
   return isRecord(candidate) ? (candidate as ManualTakeoverState) : null;
 }
 
+/**
+ * Re-poll the worker once with a short timeout to confirm whether the manual
+ * takeover is genuinely gone before we transition to a terminal `stopped`
+ * status. This guards against a single transient miss (worker mid-restart,
+ * relay flap) producing a hollow reconciliation.
+ *
+ * Failures here are intentionally non-fatal — they bubble up as the
+ * `unreachable` outcome so the caller can flip to a non-terminal
+ * `reconnecting` state instead of `stopped`.
+ */
+async function reverifyMissingManualTakeover(opts: {
+  workerBaseUrl: string;
+  nativeSessionId: string;
+}): Promise<RelayReverificationResult> {
+  try {
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: opts.workerBaseUrl,
+      path: `/api/runtime-sessions/${encodeURIComponent(opts.nativeSessionId)}/manual-takeover`,
+      method: 'GET',
+      timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+    });
+
+    if (!result.ok) {
+      return {
+        kind: 'unreachable',
+        reason: `${result.error}: ${result.message}`,
+      };
+    }
+
+    const manualTakeover = extractManualTakeover(result.data);
+    if (manualTakeover && manualTakeover.status !== 'stopped') {
+      return { kind: 'still-active', manualTakeover };
+    }
+
+    return { kind: 'confirmed-missing' };
+  } catch (err) {
+    // proxyWorkerRequest already converts network errors into a typed result,
+    // so reaching this branch means an unexpected programmer error. Surface it
+    // as `unreachable` rather than letting it crash the request.
+    const message = err instanceof Error ? err.message : String(err);
+    return { kind: 'unreachable', reason: message };
+  }
+}
+
 function reconcileMissingManualTakeover(
   manualTakeover: ManualTakeoverState | null,
+  reverification: RelayReverificationResult,
 ): ManualTakeoverState | null {
   if (!manualTakeover) {
     return null;
   }
 
+  if (reverification.kind === 'still-active') {
+    // Defensive — caller should have used the live state directly. Use the
+    // typed error to avoid a bare throw and to keep the failure observable.
+    throw new ControlPlaneError(
+      'INVALID_RECONCILIATION_STATE',
+      'reconcileMissingManualTakeover called with a still-active relay result',
+      { workerSessionId: manualTakeover.workerSessionId },
+    );
+  }
+
+  const nextStatus: ManualTakeoverStatus =
+    manualTakeover.status === 'error'
+      ? 'error'
+      : reverification.kind === 'unreachable'
+        ? 'reconnecting'
+        : 'stopped';
+
+  const nextError =
+    manualTakeover.status === 'error'
+      ? (manualTakeover.error ?? 'Worker no longer owns this manual takeover session')
+      : reverification.kind === 'unreachable'
+        ? `Worker unreachable during manual takeover re-verification: ${reverification.reason}`
+        : null;
+
   return {
     ...manualTakeover,
-    status: manualTakeover.status === 'error' ? 'error' : 'stopped',
-    sessionUrl: null,
+    status: nextStatus,
+    // Preserve the existing sessionUrl while we are still trying to reach the
+    // worker — the link may still be valid once connectivity returns.
+    sessionUrl: nextStatus === 'reconnecting' ? manualTakeover.sessionUrl : null,
     lastVerifiedAt: new Date().toISOString(),
-    error:
-      manualTakeover.status === 'error'
-        ? (manualTakeover.error ?? 'Worker no longer owns this manual takeover session')
-        : null,
+    error: nextError,
   };
 }
 
