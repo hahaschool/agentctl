@@ -132,7 +132,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > web controls. Direct `main` follow-through in `58d8b840`, `e5f07913`, and
 > `73145841` tightened stale-session reaping, early `rc_session` creation, and
 > the existing takeover/release POST semantics without expanding this slice's
-> scope. The reconciliation hollow-flip gap closed in PR #392: the GET
+> scope. The reconciliation hollow-flip gap closed in PR #405: the GET
 > `manual-takeover` route now re-verifies a missing relay response with a
 > second worker poll before flipping a previously-online takeover to `stopped`.
 > A confirmed second miss yields `stopped`; a transient unreachable second
@@ -142,7 +142,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - [x] Spike: evaluate Remote Control relay vs current CLI `-p`
 - [x] Decision: keep `claude -p` as the primary managed-session path for now
 - [x] Narrow manual takeover flow for Claude managed sessions (`RcSessionManager`, worker/control-plane routes, runtime-session web controls)
-- [x] Re-verify relay state in `reconcileMissingManualTakeover` before transitioning to `stopped` *(PR #392)*
+- [x] Re-verify relay state in `reconcileMissingManualTakeover` before transitioning to `stopped` *(PR #405)*
 - [ ] Re-evaluate only if Anthropic exposes programmatic relay events/session APIs
 
 > Manual takeover design: [plans/2026-03-11-manual-remote-takeover-design.md](plans/2026-03-11-manual-remote-takeover-design.md)
@@ -1930,7 +1930,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
 | **P2** | ~~Codex Operational Parity~~ | 3.4 | ✅ Delivered — sandbox enforcement (PR #61) + verification evidence (PR #70) |
 | **P2** | ~~Automatic Handoff Triggers~~ | 3.5 | ✅ Delivered — task-affinity (PR #62) + live rate-limit failover + cost-threshold switching (PR #66) |
-| **P2** | ~~Remote Control Integration / Manual Takeover~~ | 2.4 | ✅ Delivered — relay decision + narrow manual takeover + reconciliation re-verification (PR #392) |
+| **P2** | ~~Remote Control Integration / Manual Takeover~~ | 2.4 | ✅ Delivered — relay decision + narrow manual takeover + reconciliation re-verification (PR #405) |
 | **P1** | ~~Approval Push Dispatch~~ | 21.2 | ✅ Delivered — Expo token bootstrap, device registry, tap routing, and control-plane dispatch are all on `main` (PRs #290, #291, #295) |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
@@ -2035,7 +2035,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | ~~Mid-Execution Steering (P2)~~ | AgentOutputStream | ✅ Delivered (PR #45) |
 | ~~Codex Operational Parity (P2)~~ | None | ✅ Delivered — sandbox enforcement + verification evidence |
 | ~~Automatic Handoff (P2)~~ | AgentOutputStream for live signals | ✅ Delivered — worker-side architecture (diverged from plan's CP-side design) |
-| ~~Remote Control Integration (P2)~~ | None | ✅ Delivered — relay decision + narrow manual takeover + reconciliation re-verification (PR #392) |
+| ~~Remote Control Integration (P2)~~ | None | ✅ Delivered — relay decision + narrow manual takeover + reconciliation re-verification (PR #405) |
 | ~~Fork UX Extensions (P2)~~ | Unified Memory Layer + Memory UI (§4.8) | ✅ Delivered — smart selection + runtime in fork |
 | ~~Layered Knowledge Loading (P2)~~ | None | ✅ Delivered — see §7.1 |
 | ~~Knowledge Sedimentation Rules (P2)~~ | None | ✅ Delivered — see §7.2 |
