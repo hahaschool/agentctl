@@ -127,6 +127,29 @@ export type {
   WorkerNode,
 };
 
+/**
+ * Strength distribution buckets returned by `GET /api/memory/decay/stats`.
+ * Each value is a count of active (non-archived) facts in that strength range.
+ */
+export type MemoryDecayStrengthBucket = {
+  low: number;
+  mediumLow: number;
+  mediumHigh: number;
+  high: number;
+};
+
+export type MemoryDecayStats = {
+  strengthDistribution: MemoryDecayStrengthBucket;
+  pinnedCount: number;
+  archivedCount: number;
+};
+
+export type MemoryDecayResult = {
+  decayed: number;
+  archived: number;
+  skipped: number;
+};
+
 export type HealthResponse = {
   status: 'ok' | 'degraded';
   timestamp: string;
@@ -1253,6 +1276,15 @@ export const api = {
   },
 
   getMemoryStats: () => request<{ ok: boolean; stats: MemoryStats }>('/api/memory/stats'),
+
+  // Memory decay (Ebbinghaus-curve archival of stale facts)
+  getMemoryDecayStats: () =>
+    request<{ ok: boolean; stats: MemoryDecayStats }>('/api/memory/decay/stats'),
+
+  runMemoryDecay: () =>
+    request<{ ok: boolean; result: MemoryDecayResult }>('/api/memory/decay/run', {
+      method: 'POST',
+    }),
 
   // Memory scope management
   listMemoryScopes: () =>

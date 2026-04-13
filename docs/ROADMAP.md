@@ -1920,6 +1920,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
 | **P1** | Machines / Terminal E2E Follow-up | 29 | ✅ Delivered — PR #346 shipped dedicated Playwright coverage for the existing machine terminal page without widening into §27.3 |
 | **P1** | ~~Terminal Takeover~~ | 27.3 | ✅ Delivered — PRs #340-#344 and #350 shipped worker/control-plane/web/CLI live attach plus focused runtime-session attach e2e coverage on `main` |
+| **P2** | ~~Memory Decay UI~~ | 3.6 / 4.8 | ✅ Delivered — PR #407 added stats card and trigger button for the existing memory-decay backend route. |
 | **P2** | ~~AgentOutputStream~~ | 3.3 | ✅ Delivered |
 | **P2** | ~~Fork UX Extensions~~ | 4.9 | ✅ Delivered — smart selection + runtime in fork (PR #57) |
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |

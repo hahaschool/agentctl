@@ -38,6 +38,10 @@ vi.mock('@/components/memory/KpiCard', () => ({
   ),
 }));
 
+vi.mock('@/components/memory/MemoryDecayCard', () => ({
+  MemoryDecayCard: () => <div data-testid="memory-decay-card-mock" />,
+}));
+
 vi.mock('@/components/memory/ActivityFeed', () => ({
   ActivityFeed: ({
     items,
