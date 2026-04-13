@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Filter, Server } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -36,8 +36,21 @@ export function MachinesPage(): React.JSX.Element {
   const [statusFilter, setStatusFilter] = useState<MachineStatusFilter>('all');
   const [sortOrder, setSortOrder] = useState<'name' | 'status' | 'lastHeartbeat' | 'os'>('name');
   const [compact, setCompact] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  useHotkeys(useMemo(() => ({ r: () => void machines.refetch() }), [machines]));
+  useHotkeys(
+    useMemo(
+      () => ({
+        r: () => void machines.refetch(),
+        slash: (e) => {
+          e.preventDefault();
+          searchRef.current?.focus();
+          searchRef.current?.select();
+        },
+      }),
+      [machines],
+    ),
+  );
 
   const list = machines.data ?? [];
   const online = list.filter((m) => m.status === 'online').length;
@@ -113,14 +126,22 @@ export function MachinesPage(): React.JSX.Element {
 
       {/* Filter controls */}
       <div className="flex gap-2.5 items-center mb-4 flex-wrap">
-        <input
-          type="search"
-          placeholder="Search machines..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search machines"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-        />
+        <div className="relative min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]">
+          <input
+            ref={searchRef}
+            type="search"
+            placeholder="Search machines..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search machines (press / to focus)"
+            className="w-full px-2.5 py-1.5 pr-8 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          />
+          {!search && (
+            <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">
+              /
+            </kbd>
+          )}
+        </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as MachineStatusFilter)}

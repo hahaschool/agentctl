@@ -353,6 +353,12 @@ export function SessionsPage(): React.JSX.Element {
       () => ({
         r: () => void refreshSessions(),
         n: () => setShowCreateForm(true),
+        slash: (e) => {
+          e.preventDefault();
+          const input = document.getElementById('session-search') as HTMLInputElement | null;
+          input?.focus();
+          input?.select();
+        },
         Escape: () => {
           if (checkedIds.size > 0) setCheckedIds(new Set());
           else if (showCreateForm) setShowCreateForm(false);
@@ -961,7 +967,7 @@ export function SessionsPage(): React.JSX.Element {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search sessions..."
-              aria-label="Search sessions"
+              aria-label="Search sessions (press / to focus)"
               className="w-full h-7 px-2.5 pr-12 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
             />
             {!searchQuery && (

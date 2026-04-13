@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { useHotkeys } from '@/hooks/use-hotkeys';
 import type { Agent, Machine } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -989,6 +990,36 @@ describe('AgentsPage', () => {
   // =========================================================================
   // Status description in header
   // =========================================================================
+
+  // =========================================================================
+  // Keyboard shortcut: / focuses search input
+  // =========================================================================
+
+  it('registers slash hotkey that focuses the search input', async () => {
+    renderAgentsPage();
+
+    const mocked = vi.mocked(useHotkeys);
+    const call = mocked.mock.calls.at(-1);
+    expect(call).toBeDefined();
+    const hotkeys = call?.[0] as Record<string, (e: KeyboardEvent) => void>;
+    expect(hotkeys.slash).toBeDefined();
+
+    const searchInput = screen.getByLabelText(/Search agents/i) as HTMLInputElement;
+    // Initially not focused
+    expect(document.activeElement).not.toBe(searchInput);
+
+    const preventDefault = vi.fn();
+    hotkeys.slash({ preventDefault } as unknown as KeyboardEvent);
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(document.activeElement).toBe(searchInput);
+  });
+
+  it('renders a visible slash kbd hint in the empty search input', () => {
+    renderAgentsPage();
+    const kbd = screen.getByText('/', { selector: 'kbd' });
+    expect(kbd).toBeDefined();
+  });
 
   it('shows status counts in description', async () => {
     mockAgentsQuery.mockReturnValue({

@@ -448,7 +448,7 @@ describe('MachinesPage', () => {
 
   it('renders search input', () => {
     renderMachines();
-    const searchInput = screen.getByLabelText('Search machines') as HTMLInputElement;
+    const searchInput = screen.getByLabelText(/^Search machines/) as HTMLInputElement;
     expect(searchInput).toBeDefined();
     expect(searchInput.value).toBe('');
   });
@@ -476,7 +476,7 @@ describe('MachinesPage', () => {
       expect(screen.getByText('dev-laptop')).toBeDefined();
     });
 
-    const searchInput = screen.getByLabelText('Search machines') as HTMLInputElement;
+    const searchInput = screen.getByLabelText(/^Search machines/) as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: 'prod' } });
 
     await waitFor(() => {
@@ -501,7 +501,7 @@ describe('MachinesPage', () => {
       expect(screen.getByText('ec2-box')).toBeDefined();
     });
 
-    const searchInput = screen.getByLabelText('Search machines') as HTMLInputElement;
+    const searchInput = screen.getByLabelText(/^Search machines/) as HTMLInputElement;
     fireEvent.change(searchInput, { target: { value: 'darwin' } });
 
     await waitFor(() => {
