@@ -1,9 +1,12 @@
 import type {
   ManualTakeoverResponse,
   ManualTakeoverState,
+  ManualTakeoverStatus,
   StartManualTakeoverRequest,
 } from '@agentctl/shared';
-import type { FastifyPluginAsync } from 'fastify';
+import { ControlPlaneError } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type {
@@ -12,6 +15,7 @@ import type {
 } from '../../runtime-management/managed-session-store.js';
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
 
 export type ManualTakeoverRoutesOptions = {
@@ -20,14 +24,79 @@ export type ManualTakeoverRoutesOptions = {
   workerPort?: number;
 };
 
+type ManualTakeoverRouteParams = { id: string };
+type ManualTakeoverSessionWithNativeId = ManagedSessionRecord & { nativeSessionId: string };
+type ManualTakeoverRequestContext = {
+  manualTakeoverSession?: ManualTakeoverSessionWithNativeId;
+};
+
+/**
+ * Outcome of a follow-up relay/worker re-check after a missing manual-takeover
+ * response. Drives the status decision in `reconcileMissingManualTakeover`.
+ */
+type RelayReverificationResult =
+  | { kind: 'confirmed-missing' }
+  | { kind: 'still-active'; manualTakeover: ManualTakeoverState }
+  | { kind: 'unreachable'; reason: string };
+
+const MANUAL_TAKEOVER_RATE_LIMIT = {
+  max: 60,
+  timeWindow: '1 minute',
+} as const;
+
 export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOptions> = async (
   app,
   opts,
 ) => {
   const { managedSessionStore, dbRegistry, workerPort = 9000 } = opts;
+  const manualTakeoverRateLimitMax = readRateLimitEnv(
+    'MANUAL_TAKEOVER_RATE_LIMIT_MAX',
+    MANUAL_TAKEOVER_RATE_LIMIT.max,
+  );
+  const manualTakeoverRateLimitWindowMs = readRateLimitEnv(
+    'MANUAL_TAKEOVER_RATE_LIMIT_WINDOW_MS',
+    60_000,
+  );
+  const manualTakeoverRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many requests',
+  });
+  const manualTakeoverFastifyRateLimit = {
+    max: manualTakeoverRateLimitMax,
+    timeWindow: manualTakeoverRateLimitWindowMs,
+    errorResponseBuilder: manualTakeoverRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: manualTakeoverRateLimitError,
+  });
+
+  const authorizeManualTakeover = async (
+    request: FastifyRequest<{ Params: ManualTakeoverRouteParams }>,
+    reply: FastifyReply,
+  ) => {
+    const session = await requireManualTakeoverSession(
+      managedSessionStore,
+      request.params.id,
+      reply,
+    );
+    if (!session) {
+      return;
+    }
+
+    (request as FastifyRequest & ManualTakeoverRequestContext).manualTakeoverSession =
+      session as ManualTakeoverSessionWithNativeId;
+  };
 
   app.post<{
-    Params: { id: string };
+    Params: ManualTakeoverRouteParams;
     Body: StartManualTakeoverRequest;
   }>(
     '/:id/manual-takeover',
@@ -36,20 +105,12 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         tags: ['runtime-sessions'],
         summary: 'Start or reuse a manual Claude Remote Control takeover for a managed session',
       },
+      config: { rateLimit: manualTakeoverFastifyRateLimit },
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = await requireManualTakeoverSession(
-        managedSessionStore,
-        request.params.id,
-        reply,
-      );
-      if (!session) {
-        return reply;
-      }
+      const session = readManualTakeoverSessionContext(request);
       const nativeSessionId = session.nativeSessionId;
-      if (!nativeSessionId) {
-        return reply;
-      }
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
       const result = await proxyWorkerRequest({
@@ -78,7 +139,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
   );
 
   app.get<{
-    Params: { id: string };
+    Params: ManualTakeoverRouteParams;
   }>(
     '/:id/manual-takeover',
     {
@@ -86,20 +147,12 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         tags: ['runtime-sessions'],
         summary: 'Read manual Claude Remote Control takeover state for a managed session',
       },
+      config: { rateLimit: manualTakeoverFastifyRateLimit },
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = await requireManualTakeoverSession(
-        managedSessionStore,
-        request.params.id,
-        reply,
-      );
-      if (!session) {
-        return reply;
-      }
+      const session = readManualTakeoverSessionContext(request);
       const nativeSessionId = session.nativeSessionId;
-      if (!nativeSessionId) {
-        return reply;
-      }
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
       const result = await proxyWorkerRequest({
@@ -124,7 +177,61 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         return reply.status(result.status).send(result.data);
       }
 
-      const reconciled = reconcileMissingManualTakeover(storedManualTakeover);
+      // The first worker GET reported no manual takeover, but the worker may
+      // have been mid-restart or briefly partitioned from the relay. Re-verify
+      // before flipping a previously-online takeover to a terminal `stopped`
+      // state.
+      const reverification = await reverifyMissingManualTakeover({
+        workerBaseUrl,
+        nativeSessionId,
+      });
+
+      if (reverification.kind === 'still-active') {
+        app.log.info(
+          {
+            agentId: session.agentId,
+            sessionId: session.id,
+            machineId: session.machineId,
+            nativeSessionId,
+            relayCheck: 'still-active',
+          },
+          'Manual takeover reappeared on re-verification; keeping live state',
+        );
+        await managedSessionStore.patchMetadata(session.id, {
+          manualTakeover: reverification.manualTakeover,
+        });
+        return reply.status(result.status).send({
+          ok: true,
+          manualTakeover: reverification.manualTakeover,
+        } satisfies ManualTakeoverResponse);
+      }
+
+      if (reverification.kind === 'unreachable') {
+        app.log.warn(
+          {
+            agentId: session.agentId,
+            sessionId: session.id,
+            machineId: session.machineId,
+            nativeSessionId,
+            relayCheck: 'unreachable',
+            reason: reverification.reason,
+          },
+          'Worker unreachable on manual-takeover re-verification; marking session as reconnecting',
+        );
+      } else {
+        app.log.info(
+          {
+            agentId: session.agentId,
+            sessionId: session.id,
+            machineId: session.machineId,
+            nativeSessionId,
+            relayCheck: 'confirmed-missing',
+          },
+          'Manual takeover confirmed missing on re-verification; marking stopped',
+        );
+      }
+
+      const reconciled = reconcileMissingManualTakeover(storedManualTakeover, reverification);
       await managedSessionStore.patchMetadata(session.id, { manualTakeover: reconciled });
       return reply.status(result.status).send({
         ok: true,
@@ -134,7 +241,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
   );
 
   app.delete<{
-    Params: { id: string };
+    Params: ManualTakeoverRouteParams;
   }>(
     '/:id/manual-takeover',
     {
@@ -142,20 +249,12 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         tags: ['runtime-sessions'],
         summary: 'Revoke a manual Claude Remote Control takeover for a managed session',
       },
+      config: { rateLimit: manualTakeoverFastifyRateLimit },
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = await requireManualTakeoverSession(
-        managedSessionStore,
-        request.params.id,
-        reply,
-      );
-      if (!session) {
-        return reply;
-      }
+      const session = readManualTakeoverSessionContext(request);
       const nativeSessionId = session.nativeSessionId;
-      if (!nativeSessionId) {
-        return reply;
-      }
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
       const result = await proxyWorkerRequest({
@@ -171,7 +270,9 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
 
       const manualTakeover =
         extractManualTakeover(result.data) ??
-        reconcileMissingManualTakeover(readStoredManualTakeover(session.metadata));
+        reconcileMissingManualTakeover(readStoredManualTakeover(session.metadata), {
+          kind: 'confirmed-missing',
+        });
       if (manualTakeover) {
         await managedSessionStore.patchMetadata(session.id, { manualTakeover });
       }
@@ -188,12 +289,23 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
   );
 };
 
+function readManualTakeoverSessionContext(
+  request: FastifyRequest,
+): ManualTakeoverSessionWithNativeId {
+  const session = (request as FastifyRequest & ManualTakeoverRequestContext).manualTakeoverSession;
+  if (!session) {
+    throw new ControlPlaneError(
+      'MISSING_MANUAL_TAKEOVER_SESSION_CONTEXT',
+      'Manual takeover route was called without a session context',
+    );
+  }
+  return session;
+}
+
 async function requireManualTakeoverSession(
   managedSessionStore: Pick<ManagedSessionStore, 'get'>,
   sessionId: string,
-  reply: {
-    code: (statusCode: number) => { send: (payload: Record<string, string>) => unknown };
-  },
+  reply: FastifyReply,
 ): Promise<ManagedSessionRecord | null> {
   const session = await managedSessionStore.get(sessionId);
 
@@ -253,22 +365,90 @@ function readStoredManualTakeover(metadata: Record<string, unknown>): ManualTake
   return isRecord(candidate) ? (candidate as ManualTakeoverState) : null;
 }
 
+/**
+ * Re-poll the worker once with a short timeout to confirm whether the manual
+ * takeover is genuinely gone before we transition to a terminal `stopped`
+ * status. This guards against a single transient miss (worker mid-restart,
+ * relay flap) producing a hollow reconciliation.
+ *
+ * Failures here are intentionally non-fatal — they bubble up as the
+ * `unreachable` outcome so the caller can flip to a non-terminal
+ * `reconnecting` state instead of `stopped`.
+ */
+async function reverifyMissingManualTakeover(opts: {
+  workerBaseUrl: string;
+  nativeSessionId: string;
+}): Promise<RelayReverificationResult> {
+  try {
+    const result = await proxyWorkerRequest({
+      workerBaseUrl: opts.workerBaseUrl,
+      path: `/api/runtime-sessions/${encodeURIComponent(opts.nativeSessionId)}/manual-takeover`,
+      method: 'GET',
+      timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
+    });
+
+    if (!result.ok) {
+      return {
+        kind: 'unreachable',
+        reason: `${result.error}: ${result.message}`,
+      };
+    }
+
+    const manualTakeover = extractManualTakeover(result.data);
+    if (manualTakeover && manualTakeover.status !== 'stopped') {
+      return { kind: 'still-active', manualTakeover };
+    }
+
+    return { kind: 'confirmed-missing' };
+  } catch (err) {
+    // proxyWorkerRequest already converts network errors into a typed result,
+    // so reaching this branch means an unexpected programmer error. Surface it
+    // as `unreachable` rather than letting it crash the request.
+    const message = err instanceof Error ? err.message : String(err);
+    return { kind: 'unreachable', reason: message };
+  }
+}
+
 function reconcileMissingManualTakeover(
   manualTakeover: ManualTakeoverState | null,
+  reverification: RelayReverificationResult,
 ): ManualTakeoverState | null {
   if (!manualTakeover) {
     return null;
   }
 
+  if (reverification.kind === 'still-active') {
+    // Defensive — caller should have used the live state directly. Use the
+    // typed error to avoid a bare throw and to keep the failure observable.
+    throw new ControlPlaneError(
+      'INVALID_RECONCILIATION_STATE',
+      'reconcileMissingManualTakeover called with a still-active relay result',
+      { workerSessionId: manualTakeover.workerSessionId },
+    );
+  }
+
+  const nextStatus: ManualTakeoverStatus =
+    manualTakeover.status === 'error'
+      ? 'error'
+      : reverification.kind === 'unreachable'
+        ? 'reconnecting'
+        : 'stopped';
+
+  const nextError =
+    manualTakeover.status === 'error'
+      ? (manualTakeover.error ?? 'Worker no longer owns this manual takeover session')
+      : reverification.kind === 'unreachable'
+        ? `Worker unreachable during manual takeover re-verification: ${reverification.reason}`
+        : null;
+
   return {
     ...manualTakeover,
-    status: manualTakeover.status === 'error' ? 'error' : 'stopped',
-    sessionUrl: null,
+    status: nextStatus,
+    // Preserve the existing sessionUrl while we are still trying to reach the
+    // worker — the link may still be valid once connectivity returns.
+    sessionUrl: nextStatus === 'reconnecting' ? manualTakeover.sessionUrl : null,
     lastVerifiedAt: new Date().toISOString(),
-    error:
-      manualTakeover.status === 'error'
-        ? (manualTakeover.error ?? 'Worker no longer owns this manual takeover session')
-        : null,
+    error: nextError,
   };
 }
 

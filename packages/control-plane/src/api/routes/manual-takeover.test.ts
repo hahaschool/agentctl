@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import type { ManualTakeoverState } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
@@ -65,6 +67,23 @@ async function buildApp(
   await app.ready();
   return app;
 }
+
+describe('manualTakeoverRoutes source shape', () => {
+  it('declares direct Fastify rate-limit preHandlers and route config markers on all endpoints', () => {
+    const source = readFileSync(new URL('./manual-takeover.ts', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
+    expect(source).toMatch(
+      /app\.post[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\),\s*authorizeManualTakeover\s*\]/,
+    );
+    expect(source).toMatch(
+      /app\.get[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\),\s*authorizeManualTakeover\s*\]/,
+    );
+    expect(source).toMatch(
+      /app\.delete[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\),\s*authorizeManualTakeover\s*\]/,
+    );
+  });
+});
 
 describe('manualTakeoverRoutes', () => {
   let app: FastifyInstance;
@@ -140,7 +159,7 @@ describe('manualTakeoverRoutes', () => {
     expect(response.json()).toEqual({ ok: true, manualTakeover });
   });
 
-  it('GET reconciles stale stored state when the worker no longer has the RC session', async () => {
+  it('GET marks the takeover stopped only after a re-verification round-trip confirms it is gone', async () => {
     const storedTakeover = makeManualTakeover({
       status: 'online',
       lastVerifiedAt: '2026-03-11T10:06:30.000Z',
@@ -164,9 +183,11 @@ describe('manualTakeoverRoutes', () => {
         },
       }),
     );
-    mockFetchOk({
+    // Both the initial GET and the re-verification GET return "no session".
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      manualTakeover: null,
+      status: 200,
+      json: async () => ({ ok: true, manualTakeover: null }),
     });
 
     const response = await app.inject({
@@ -175,6 +196,7 @@ describe('manualTakeoverRoutes', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
     const body = response.json();
     expect(body.ok).toBe(true);
     expect(body.manualTakeover).toMatchObject({
@@ -188,6 +210,88 @@ describe('manualTakeoverRoutes', () => {
       manualTakeover: expect.objectContaining({
         status: 'stopped',
         sessionUrl: null,
+      }),
+    });
+  });
+
+  it('GET keeps the takeover live when the re-verification call shows it is still active', async () => {
+    const storedTakeover = makeManualTakeover({ status: 'online' });
+    const liveTakeover = makeManualTakeover({
+      status: 'online',
+      lastVerifiedAt: '2026-03-11T10:07:00.000Z',
+    });
+    managedSessionStore.get.mockResolvedValue(
+      makeManagedSession({ metadata: { manualTakeover: storedTakeover } }),
+    );
+    managedSessionStore.patchMetadata.mockResolvedValue(
+      makeManagedSession({ metadata: { manualTakeover: liveTakeover } }),
+    );
+    // First worker GET: missing. Second (re-verify) GET: live again.
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, manualTakeover: null }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, manualTakeover: liveTakeover }),
+      });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions/ms-1/manual-takeover',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const body = response.json();
+    expect(body.ok).toBe(true);
+    expect(body.manualTakeover).toMatchObject({
+      status: 'online',
+      sessionUrl: liveTakeover.sessionUrl,
+    });
+    expect(managedSessionStore.patchMetadata).toHaveBeenCalledWith('ms-1', {
+      manualTakeover: liveTakeover,
+    });
+  });
+
+  it('GET transitions to reconnecting (not stopped) when the re-verification call cannot reach the worker', async () => {
+    const storedTakeover = makeManualTakeover({ status: 'online' });
+    managedSessionStore.get.mockResolvedValue(
+      makeManagedSession({ metadata: { manualTakeover: storedTakeover } }),
+    );
+    managedSessionStore.patchMetadata.mockResolvedValue(makeManagedSession());
+    // First call: worker reports missing. Second call: connection error.
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, manualTakeover: null }),
+      })
+      .mockRejectedValueOnce(new Error('ECONNRESET'));
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/runtime-sessions/ms-1/manual-takeover',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const body = response.json();
+    expect(body.ok).toBe(true);
+    expect(body.manualTakeover).toMatchObject({
+      status: 'reconnecting',
+      sessionUrl: storedTakeover.sessionUrl,
+    });
+    expect(body.manualTakeover.error).toContain('Worker unreachable');
+    expect(managedSessionStore.patchMetadata).toHaveBeenCalledWith('ms-1', {
+      manualTakeover: expect.objectContaining({
+        status: 'reconnecting',
+        sessionUrl: storedTakeover.sessionUrl,
       }),
     });
   });
