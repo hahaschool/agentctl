@@ -5,7 +5,7 @@ import { XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
@@ -61,6 +61,7 @@ function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.J
   const isLong = errorMessage.length > 200;
   const [expanded, setExpanded] = useState(!isLong);
   const [copied, setCopied] = useState(false);
+  const detailsId = useId();
 
   const handleCopy = useCallback(() => {
     void navigator.clipboard
@@ -75,7 +76,7 @@ function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.J
   return (
     <div className="mt-2 bg-red-500/5 border border-red-500/20 rounded-md px-3 py-2 text-[12px] text-red-700 dark:text-red-300">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 space-y-1 min-w-0">
+        <div id={detailsId} className="flex-1 space-y-1 min-w-0">
           {/* Error code + message */}
           <div className="flex items-start gap-2">
             {errorCode && (
@@ -108,7 +109,9 @@ function ErrorDetailPanel({ metadata }: { metadata?: SessionMetadata }): React.J
             <button
               type="button"
               onClick={() => setExpanded(!expanded)}
-              className="px-2 py-0.5 text-[10px] text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded cursor-pointer hover:bg-red-500/20"
+              aria-expanded={expanded}
+              aria-controls={detailsId}
+              className="px-2 py-0.5 text-[10px] text-red-600 dark:text-red-400 bg-red-500/10 border border-red-500/20 rounded cursor-pointer hover:bg-red-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
             >
               {expanded ? 'Collapse' : 'Expand'}
             </button>
@@ -452,7 +455,7 @@ export function SessionHeader({
                     exportSessionAsJson(session, messages);
                     setShowExportMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent flex items-center justify-between"
+                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 cursor-pointer border-none bg-transparent flex items-center justify-between"
                 >
                   Export as JSON
                   <kbd className="ml-2 px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded opacity-60">
@@ -466,7 +469,7 @@ export function SessionHeader({
                     exportSessionAsMarkdown(session, messages);
                     setShowExportMenu(false);
                   }}
-                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent cursor-pointer border-none bg-transparent border-t border-t-border flex items-center justify-between"
+                  className="w-full px-3 py-2 text-left text-xs text-popover-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30 cursor-pointer border-none bg-transparent border-t border-t-border flex items-center justify-between"
                 >
                   Export as Markdown
                   <kbd className="ml-2 px-1 py-0.5 text-[9px] font-mono bg-muted border border-border/50 rounded opacity-60">

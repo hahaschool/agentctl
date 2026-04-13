@@ -23,14 +23,19 @@ export function GitStatusBadge({
 
   if (isLoading) {
     return (
-      <span
+      <output
+        aria-busy="true"
+        aria-live="polite"
         className={cn(
           'inline-flex items-center gap-1 text-[11px] text-muted-foreground',
           className,
         )}
       >
-        <span className="animate-pulse">git: loading...</span>
-      </span>
+        <span className="animate-pulse" aria-hidden="true">
+          git: loading...
+        </span>
+        <span className="sr-only">Loading git status</span>
+      </output>
     );
   }
 
