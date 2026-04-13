@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-04-13 (post-PR #413 CodeQL suppression-format follow-up). The 2026-04-13 landing set includes PR #395 (session `Config` tab e2e depth), PR #396 (`/conflicts` resolution-flow e2e depth), PR #397 (mesh/runtime e2e follow-up tracking doc), PR #398 (dependabot `drizzle-orm 0.38.4 → 0.45.2`, closes `GHSA-gpj5-g38j-94v9`), PR #400 (DAST WebSocket fuzz scan pnpm setup), PR #401 (`chore(deps): patch vite and next CVEs` — adds `vite ">=7.3.2"` pnpm override closing `GHSA-v2wj-q39q-566r` and `GHSA-p9ff-h696-f583`, bumps `next ^16.1.7 → ^16.2.3` closing `GHSA-q4gf-8mx6-v5v3`), PR #402 (Anthropic Claude Agent SDK lockfile refresh to `@anthropic-ai/sdk 0.81.0`, closing the remaining moderate advisory), PR #404 (roadmap/security-plan reconciliation after those fixes landed), PR #405 (manual-takeover relay re-verification closing §2.4 with new rate-limit hardening on all three manual-takeover handlers), PR #406 (durable roadmap sync wording), PR #407 (memory decay UI exposing existing `/api/memory/decay/*` routes), PR #408 (emergency-stop UI exposing existing `/api/agents/*/emergency-stop` routes with a typed "STOP ALL" fleet confirmation), PR #409 (roadmap sync after #405-#408 merged), PR #410 (narrow CodeQL `#579` false-positive suppression for the already-rate-limited manual-takeover GET handler), PR #411 (AgentsPage + AgentDetailPage test repair, restoring the 123-test targeted suite), and PR #413 (standalone CodeQL source-suppression formatting for the same `#579` false positive after Security tab kept it open). PR #399 was closed unmerged after #401 covered the high-severity Next/Vite lane; PR #402 carried forward its remaining moderate fix. Local verification on the final dependency state reports `pnpm audit --audit-level=moderate` with no known vulnerabilities.
+> Last updated: 2026-04-13 (post-PR #423 roadmap/plan sync). The 2026-04-13 landing set includes PR #395 (session `Config` tab e2e depth), PR #396 (`/conflicts` resolution-flow e2e depth), PR #397 (mesh/runtime e2e follow-up tracking doc), PR #398 (dependabot `drizzle-orm 0.38.4 -> 0.45.2`, closes `GHSA-gpj5-g38j-94v9`), PR #400 (DAST WebSocket fuzz scan pnpm setup), PR #401 (`chore(deps): patch vite and next CVEs`, adding the `vite ">=7.3.2"` pnpm override and bumping `next ^16.1.7 -> ^16.2.3`), PR #402 (Anthropic Claude Agent SDK lockfile refresh to `@anthropic-ai/sdk 0.81.0`), PR #404 (roadmap/security-plan reconciliation after those fixes landed), PR #405 (manual-takeover relay re-verification closing §2.4 with new rate-limit hardening on all three manual-takeover handlers), PR #406 (durable roadmap sync wording), PR #407 (memory decay UI exposing existing `/api/memory/decay/*` routes), PR #408 (emergency-stop UI exposing existing `/api/agents/*/emergency-stop` routes with a typed "STOP ALL" fleet confirmation), PR #409 (roadmap sync after #405-#408 merged), PR #410 (narrow CodeQL `#579` false-positive suppression for the already-rate-limited manual-takeover GET handler), PR #411 (AgentsPage + AgentDetailPage test repair, restoring the 123-test targeted suite), PR #413 (standalone CodeQL source-suppression formatting for the same `#579` false positive), PR #414 (web Vitest `jest-dom` setup plus stale query/mock repairs), PR #415 (`/memory/reports` Playwright generation success/failure coverage), PR #416 (Logs UI Security Findings tab backed by the existing `/api/security/findings` route), PR #417 (StatusBadge native tooltips and screen-reader descriptions for known lifecycle/status values), PR #418 (NotificationBell pending-approvals popover Playwright coverage for allow-once, allow-for-session, deny, and empty states), PR #419 (plan status drift cleanup and orphan plan indexing), PR #420 (full web Vitest residual-failure cleanup plus small UI contract fixes), PR #422 (NotificationBell e2e aria-label follow-up after #420's more descriptive pending-approval labels), and PR #423 (OAuth PKCE route rate limiting for initiate/callback/refresh). CodeQL `#579` was formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`. Before opening this docs-sync PR, GitHub reported 0 open PRs plus 0 open code-scanning, Dependabot, and secret-scanning alerts; latest feature-bearing `main` before this docs sync (`bc6cb0a7`) has successful CI, Security Audit, and Docker build workflows. Local verification on the final dependency state reports `pnpm audit --audit-level=moderate` with no known vulnerabilities.
 
 ## Current State
 
@@ -142,13 +142,16 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > `@fastify/rate-limit` runs before `authorizeManualTakeover`, while current
 > CodeQL only models the legacy `fastify-rate-limit` package for this query.
 > PR #413 tightened the marker into CodeQL's standalone source-suppression
-> format after the Security tab kept the stale alert open on current `main`.
+> format. Fresh `main` analysis still flagged the route on `900acf20`, so
+> CodeQL `#579` was formally dismissed as a false positive because the real
+> limiter remains before `authorizeManualTakeover` and CodeQL does not model
+> this `@fastify/rate-limit` shape.
 
 - [x] Spike: evaluate Remote Control relay vs current CLI `-p`
 - [x] Decision: keep `claude -p` as the primary managed-session path for now
 - [x] Narrow manual takeover flow for Claude managed sessions (`RcSessionManager`, worker/control-plane routes, runtime-session web controls)
 - [x] Re-verify relay state in `reconcileMissingManualTakeover` before transitioning to `stopped` *(PR #405)*
-- [x] Close the manual-takeover GET route CodeQL `js/missing-rate-limiting` false positive while preserving route-local Fastify rate-limit coverage *(PRs #410, #413)*
+- [x] Close the manual-takeover GET route CodeQL `js/missing-rate-limiting` false positive while preserving route-local Fastify rate-limit coverage *(PRs #410, #413; alert #579 dismissed after fresh `900acf20` analysis)*
 - [ ] Re-evaluate only if Anthropic exposes programmatic relay events/session APIs
 
 > Manual takeover design: [plans/2026-03-11-manual-remote-takeover-design.md](plans/2026-03-11-manual-remote-takeover-design.md)
@@ -440,6 +443,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] `SessionMessageList.tsx:25` — add `aria-pressed` to ViewModeToggle buttons *(PR #59)*
 - [x] `ErrorBanner.tsx` — add `role="alert"` for screen reader announcement *(PR #59)*
 - [x] Decorative Lucide icons — audit and add `aria-hidden="true"` where missing *(PR #59)*
+- [x] `StatusBadge.tsx` — add native tooltip text, `aria-label`, decorative-dot hiding, and description lookup coverage for lifecycle/status values *(PR #417)*
 
 #### 4.7.3 Theming Normalization (Kill AI Palette) ✅
 
@@ -484,7 +488,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Knowledge Graph (`/memory/graph`) — multi-view visualization (Graph/Table/Timeline/Clusters); react-force-graph-2d; click node → detail panel; focus mode, time-lapse animation *(PR #50)*
 - [x] Memory Dashboard (`/memory/dashboard`) — original KPI/chart/activity implementation shipped in PR #52; current route re-activation is tracked separately in §20.4 after the memory shell foundation temporarily pointed the page at `MemoryPlaceholderView`
 - [x] Consolidation Board (`/memory/consolidation`) — human-in-the-loop knowledge quality review; category cards (contradictions, near-duplicates, stale, orphans); severity-sorted priority queue; AI suggestions with accept/edit/skip/delete actions *(PR #53)*
-- [x] Reports (`/memory/reports`) — 3 report types (Project Progress, Knowledge Health, Activity Digest); scope + time range selector; LLM-generated summaries; rendered markdown with download/copy *(PR #53)*
+- [x] Reports (`/memory/reports`) — 3 report types (Project Progress, Knowledge Health, Activity Digest); scope + time range selector; LLM-generated summaries; rendered markdown with download/copy; generation success/failure Playwright coverage *(PR #53, PR #415)*
 - [x] Import Wizard (`/memory/import`) — 4-step claude-mem migration wizard (source detection → preview/mapping → progress → summary); dedup via embedding similarity; rollback support *(PR #55)*
 - [x] Fact Editor (modal) — accessible from Browser/Graph/command palette; content, entity type, scope, confidence, pinned toggle, relationships editor *(PR #53)*
 - [x] Scope Manager (`/memory/scopes`) — scope hierarchy tree with fact counts; promote, merge, rename, delete scope operations *(PR #55)*
@@ -628,6 +632,7 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Configurable retention + batch cleanup
 - [x] Queryable API: `GET /api/audit?agentId=X&from=T1&to=T2&tool=Bash`
 - [x] Dashboard: top tools, cost by agent, error rates, blocked calls, session replay
+- [x] Logs UI Security Findings tab over `GET /api/security/findings`, with focused API/query/view tests *(PR #416)*
 
 ### 6.6 Threat Model & Compliance
 
@@ -1153,10 +1158,11 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 ### 16.1 Agent Run Quality — P0
 
 - Stability/security cycle plan: [plans/2026-03-15-main-stability-and-security-cycle-plan.md](plans/2026-03-15-main-stability-and-security-cycle-plan.md) *(historical cycle delivered on `main`; the 2026-04-01 follow-up is now also closed via PR #385 plus PRs #386-#388, leaving GitHub with `0` open PR/dependency/secret/code-scanning items as of 2026-04-01)*
-- Status note: The historical CI/CodeQL/Dependabot/DAST recovery through PR #227 remains delivered on `main`. On the 2026-04-01 follow-up loop, PR #373 restored the failing Security Audit / nightly gitleaks / remote-error-sanitization path on the current base, PR #380 closed the then-current `brace-expansion`, historical fingerprint, and scripts follow-ups, PR #385 upgraded the remaining `pnpm/action-setup` workflow uses to `v5`, PR #386 added the explicit sync pull/ack limiters that closed CodeQL `#560`, and PR #388 aligned the final `scripts/agentctl.ts` sanitizer with the CodeQL-recognized `String(...).replace(/\n|\r/g, '')` sink shape. The 2026-04-13 follow-up then closed the dependency-audit and DAST WebSocket fuzz regressions through PRs #398, #400, #401, and #402, with PR #404 reconciling roadmap/plan state after merge; PRs #410/#413 closed the follow-on manual-takeover CodeQL `#579` false positive after PR #405's real `@fastify/rate-limit` coverage landed; PR #411 repaired the pre-existing AgentsPage and AgentDetailPage targeted web test failures.
+- Status note: The historical CI/CodeQL/Dependabot/DAST recovery through PR #227 remains delivered on `main`. On the 2026-04-01 follow-up loop, PR #373 restored the failing Security Audit / nightly gitleaks / remote-error-sanitization path on the current base, PR #380 closed the then-current `brace-expansion`, historical fingerprint, and scripts follow-ups, PR #385 upgraded the remaining `pnpm/action-setup` workflow uses to `v5`, PR #386 added the explicit sync pull/ack limiters that closed CodeQL `#560`, and PR #388 aligned the final `scripts/agentctl.ts` sanitizer with the CodeQL-recognized `String(...).replace(/\n|\r/g, '')` sink shape. The 2026-04-13 follow-up then closed the dependency-audit and DAST WebSocket fuzz regressions through PRs #398, #400, #401, and #402, with PR #404 reconciling roadmap/plan state after merge; PRs #410/#413 plus a formal false-positive dismissal closed the follow-on manual-takeover CodeQL `#579` alert after PR #405's real `@fastify/rate-limit` coverage landed; PRs #411/#414 repaired targeted web test infrastructure and mocks; PR #415 added `/memory/reports` Playwright generation coverage; PR #416 exposed backend security findings in the Logs UI; PR #417 improved StatusBadge accessibility descriptions; PR #418 added NotificationBell approval-popover e2e depth; PR #419 reconciled plan status drift; PR #420 cleared the residual web unit failures; PR #422 aligned the NotificationBell e2e assertions with the new pending-approval labels; and PR #423 added explicit OAuth PKCE route rate limiting. Before opening this docs-sync PR, GitHub reported 0 open PRs and 0 open code-scanning, Dependabot, and secret-scanning alerts; latest feature-bearing `main` before this docs sync (`bc6cb0a7`) has green CI, Security Audit, and Docker build workflows.
 
 - [x] Add explicit rate limiting to the sync pull/ack routes newly flagged by CodeQL on current `main` (`#560`, `js/missing-rate-limiting`, `packages/control-plane/src/api/routes/sync.ts`) *(PR #386)*
-- [x] Close the manual-takeover GET route CodeQL `#579` false positive after confirming route-local `@fastify/rate-limit` executes before authorization *(PRs #410, #413)*
+- [x] Add explicit rate limiting to the OAuth PKCE initiate/callback/refresh routes, covering memory-flow allocation, public redirect probing, and outbound token-refresh amplification *(PR #423)*
+- [x] Close the manual-takeover GET route CodeQL `#579` false positive after confirming route-local `@fastify/rate-limit` executes before authorization *(PRs #410, #413; GitHub alert dismissed after fresh `main` analysis)*
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
 - [x] Main CI regressions around dispatch lifecycle + registry expectations fixed *(PR #167)*
@@ -1370,7 +1376,7 @@ Critical gap: when agent permission mode is NOT bypass, CLI outputs `permission_
 - [x] Worker captures `permission_request` *(PRs #238-240)* events from CLI stdout stream
 - [x] Worker forwards permission requests *(PRs #238-240)* via SSE to control plane
 - [x] CP stores pending approvals *(PRs #238-240)* in DB + pushes to frontend via WebSocket
-- [x] Notification center shows pending *(PRs #238-240)* approval with: agent name, tool name, command preview, approve/deny buttons
+- [x] Notification center shows pending *(PRs #238-240)* approval with: agent name, tool name, command preview, approve/deny buttons; global NotificationBell popover e2e coverage covers allow-once, allow-for-session, deny, and empty states *(PR #418)*
 - [x] User clicks Approve/Deny *(PRs #238-240)* → frontend sends decision via WebSocket → CP → Worker
 - [x] Worker writes approval via canUseTool hook *(PRs #238-240)* to CLI stdin (stream-json input)
 - [x] Timeout handling: auto-deny *(PRs #238-240)* after configurable timeout (default 5 min)
@@ -1572,6 +1578,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 ### 24.1 Approvals Page Playwright Coverage
 
 - [x] Add a targeted Playwright flow for `/approvals` *(PR #299)*
+- [x] Add targeted Playwright coverage for the global NotificationBell pending-approvals popover *(PR #418)*
 - [x] Cover thread selection, pending gate rendering, and approve/deny action feedback *(PR #299)*
 
 ### 24.2 Deployment Page / Promote Gate Playwright Coverage
@@ -1930,7 +1937,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
 | **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — 8 pages + integration points + MCP tools (PRs #47,#50,#52-#59); backend routes for consolidation, reports, and decay all landed |
-| **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all ARIA items complete (PRs #51,#54,#59) |
+| **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all ARIA items complete (PRs #51,#54,#59), with StatusBadge status descriptions/labels refreshed in PR #417 |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
 | **P1** | ~~Dispatch Signature Verification~~ | 2.7 | ✅ Delivered |
@@ -1942,7 +1949,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P2** | ~~Mid-Execution Steering~~ | 2.8 | ✅ Delivered (PR #45) |
 | **P2** | ~~Codex Operational Parity~~ | 3.4 | ✅ Delivered — sandbox enforcement (PR #61) + verification evidence (PR #70) |
 | **P2** | ~~Automatic Handoff Triggers~~ | 3.5 | ✅ Delivered — task-affinity (PR #62) + live rate-limit failover + cost-threshold switching (PR #66) |
-| **P2** | ~~Remote Control Integration / Manual Takeover~~ | 2.4 | ✅ Delivered — relay decision + narrow manual takeover + reconciliation re-verification (PR #405) plus the CodeQL #579 rate-limit false-positive follow-up (PRs #410/#413) |
+| **P2** | ~~Remote Control Integration / Manual Takeover~~ | 2.4 | ✅ Delivered — relay decision + narrow manual takeover + reconciliation re-verification (PR #405) plus the CodeQL #579 rate-limit false-positive follow-up (PRs #410/#413 and formal dismissal) |
 | **P1** | ~~Approval Push Dispatch~~ | 21.2 | ✅ Delivered — Expo token bootstrap, device registry, tap routing, and control-plane dispatch are all on `main` (PRs #290, #291, #295) |
 | **P2** | ~~Layered Knowledge Loading~~ | 7.1 | ✅ Delivered — always-on/on-demand split, error-handling rule extracted, all files audited |
 | **P2** | Knowledge Sedimentation Rules | 7.2 | ✅ Delivered |
@@ -1998,7 +2005,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | Current loop closed — PR #385 plus PRs #386-#388 finished the 2026-04-01 CI/security follow-up on `main`; PRs #398/#400/#401/#402/#404 cleared the 2026-04-13 dependency-audit + DAST WebSocket fuzz loop; PRs #410/#413 closed CodeQL #579; and PR #411 repaired the AgentsPage/AgentDetailPage targeted web test suites |
+| **P0** | Agent Run Quality | 16.1 | Current loop closed — PR #385 plus PRs #386-#388 finished the 2026-04-01 CI/security follow-up on `main`; PRs #398/#400/#401/#402/#404 cleared the 2026-04-13 dependency-audit + DAST WebSocket fuzz loop; PRs #410/#413 plus formal dismissal closed CodeQL #579; PRs #411/#414 repaired web test infrastructure; PR #415 added `/memory/reports` e2e depth; PR #416 surfaced security findings in Logs; PR #418/#422 covered NotificationBell approval-popover e2e depth and aria-label drift; PR #420 cleared the residual web unit failures; and PR #423 added OAuth PKCE route rate limiting |
 | **P0** | ~~Dev Environment Infrastructure~~ | 16.2 | ✅ Delivered — dev-1/dev-2 isolation, PM2 configs, Next.js middleware proxy, version display |
 | **P0** | ~~Frontend UI Polish (dashboard, agent detail, cards)~~ | 16.3 | ✅ Delivered — PRs #158-#165, #212-#213, #229-#246; all critique items resolved |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
@@ -2039,7 +2046,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
 | ~~Unified Memory Layer (P1)~~ | None | ✅ Delivered — all knowledge engineering items complete, decay module landed (PR #76) |
 | ~~Unified Memory System UI (P1)~~ | Unified Memory Layer (§3.6) backend routes | ✅ Delivered — 8 pages + integration + all backend routes (consolidation, reports, decay) |
-| ~~UI Quality & Accessibility (P1)~~ | None | ✅ Delivered — all ARIA items complete |
+| ~~UI Quality & Accessibility (P1)~~ | None | ✅ Delivered — all ARIA items complete; StatusBadge descriptions/labels refreshed in PR #417 |
 | ~~Execution Summary (P1)~~ | None | ✅ Delivered (PRs #32, #39) |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
 | ~~Dispatch Signing (P1)~~ | None | ✅ Delivered |
@@ -2047,7 +2054,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | ~~Mid-Execution Steering (P2)~~ | AgentOutputStream | ✅ Delivered (PR #45) |
 | ~~Codex Operational Parity (P2)~~ | None | ✅ Delivered — sandbox enforcement + verification evidence |
 | ~~Automatic Handoff (P2)~~ | AgentOutputStream for live signals | ✅ Delivered — worker-side architecture (diverged from plan's CP-side design) |
-| ~~Remote Control Integration (P2)~~ | None | ✅ Delivered — relay decision + narrow manual takeover + reconciliation re-verification (PR #405) plus CodeQL #579 follow-up (PRs #410/#413) |
+| ~~Remote Control Integration (P2)~~ | None | ✅ Delivered — relay decision + narrow manual takeover + reconciliation re-verification (PR #405) plus CodeQL #579 follow-up (PRs #410/#413 and formal dismissal) |
 | ~~Fork UX Extensions (P2)~~ | Unified Memory Layer + Memory UI (§4.8) | ✅ Delivered — smart selection + runtime in fork |
 | ~~Layered Knowledge Loading (P2)~~ | None | ✅ Delivered — see §7.1 |
 | ~~Knowledge Sedimentation Rules (P2)~~ | None | ✅ Delivered — see §7.2 |
@@ -2137,7 +2144,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
 | [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered on historical scope; PR #385 and PRs #386-#388 closed the 2026-04-01 CI/security follow-up, PRs #398/#400/#401/#402 closed the 2026-04-13 dependency-audit + DAST WebSocket fuzz follow-up on `main`, PR #404 reconciled roadmap/plan state after merge, PRs #410/#413 closed CodeQL #579, and PR #411 repaired the targeted AgentsPage/AgentDetailPage tests | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered on historical scope; PR #385 and PRs #386-#388 closed the 2026-04-01 CI/security follow-up, PRs #398/#400/#401/#402 closed the 2026-04-13 dependency-audit + DAST WebSocket fuzz follow-up on `main`, PR #404 reconciled roadmap/plan state after merge, PRs #410/#413 plus formal dismissal closed CodeQL #579, PRs #411/#414 repaired web test infrastructure, PR #415 added `/memory/reports` Playwright depth, PR #416 surfaced security findings in Logs, PR #418/#422 covered NotificationBell approval-popover e2e depth and aria-label drift, PR #419 reconciled plan status drift, PR #420 cleared the residual web unit failures, and PR #423 added OAuth PKCE route rate limiting | 16.1-16.3 |
 | [mesh-runtime-e2e-follow-up-plan](plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md) | Delivered — PR #395 (session `Config` tab detail-state coverage) + PR #396 (`/conflicts` resolution-flow coverage) both merged 2026-04-13; PR #397 synced the tracking doc | 16.1, 31.3, 33.3 |
 | [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main` | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
