@@ -83,7 +83,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         summary: 'Start or reuse a manual Claude Remote Control takeover for a managed session',
       },
       config: { rateLimit: manualTakeoverFastifyRateLimit },
-      preHandler: app.rateLimit(manualTakeoverFastifyRateLimit),
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit)],
     },
     async (request, reply) => {
       const session = await requireManualTakeoverSession(
@@ -135,7 +135,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         summary: 'Read manual Claude Remote Control takeover state for a managed session',
       },
       config: { rateLimit: manualTakeoverFastifyRateLimit },
-      preHandler: app.rateLimit(manualTakeoverFastifyRateLimit),
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit)],
     },
     async (request, reply) => {
       const session = await requireManualTakeoverSession(
@@ -247,7 +247,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         summary: 'Revoke a manual Claude Remote Control takeover for a managed session',
       },
       config: { rateLimit: manualTakeoverFastifyRateLimit },
-      preHandler: app.rateLimit(manualTakeoverFastifyRateLimit),
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit)],
     },
     async (request, reply) => {
       const session = await requireManualTakeoverSession(

@@ -74,13 +74,13 @@ describe('manualTakeoverRoutes source shape', () => {
 
     expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
     expect(source).toMatch(
-      /app\.post[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)/,
+      /app\.post[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)\s*\]/,
     );
     expect(source).toMatch(
-      /app\.get[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)/,
+      /app\.get[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)\s*\]/,
     );
     expect(source).toMatch(
-      /app\.delete[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)/,
+      /app\.delete[\s\S]*?'\/:id\/manual-takeover'[\s\S]*?config:\s*\{\s*rateLimit:\s*manualTakeoverFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(manualTakeoverFastifyRateLimit\)\s*\]/,
     );
   });
 });
