@@ -357,4 +357,26 @@ describe('Checkpoint route — with db', () => {
 
     expect(response.statusCode).toBe(200);
   });
+
+  it('returns 400 when lastResult exceeds the length bound', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-001/checkpoint',
+      payload: validBody({ lastResult: 'x'.repeat(10_000) }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_LAST_RESULT');
+  });
+
+  it('returns 400 when runId exceeds the length bound', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/agents/agent-001/checkpoint',
+      payload: validBody({ runId: 'r'.repeat(256) }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_RUN_ID');
+  });
 });

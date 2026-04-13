@@ -149,6 +149,29 @@ describe('mobilePushDeviceRoutes', () => {
       expect(response.statusCode).toBe(400);
       expect(response.json()).toMatchObject({ error: 'INVALID_LAST_SEEN_AT' });
     });
+
+    it('returns 400 when pushToken exceeds the length bound', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/mobile-push-devices',
+        payload: { ...validBody, pushToken: 'x'.repeat(4096) },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_PUSH_TOKEN' });
+      expect(store.upsertDevice).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when userId exceeds the length bound', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/mobile-push-devices',
+        payload: { ...validBody, userId: 'u'.repeat(1024) },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_USER_ID' });
+    });
   });
 
   describe('GET /api/mobile-push-devices', () => {
