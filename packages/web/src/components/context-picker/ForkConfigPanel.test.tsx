@@ -16,6 +16,10 @@ vi.mock('@/lib/model-options', () => ({
     { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
     { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5' },
   ],
+  AGENT_RUNTIMES: [
+    { value: 'claude-code', label: 'Claude Code', desc: 'Claude Code runtime' },
+    { value: 'codex', label: 'Codex', desc: 'Codex runtime' },
+  ],
 }));
 
 // ---------------------------------------------------------------------------

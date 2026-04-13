@@ -26,6 +26,17 @@ vi.mock('@/components/ui/skeleton', () => ({
 
 vi.mock('@/lib/queries', () => ({
   healthQuery: () => mockHealthQuery(),
+  notificationPreferencesQuery: (userId: string) => ({
+    queryKey: ['notification-preferences', userId],
+    queryFn: vi.fn().mockResolvedValue({ email: false, push: false }),
+    enabled: false,
+  }),
+}));
+
+vi.mock('@/components/settings/NotificationPreferencesPanel', () => ({
+  NotificationPreferencesPanel: () => (
+    <div data-testid="notification-preferences-panel">NotificationPreferencesPanel</div>
+  ),
 }));
 
 vi.mock('./AccountsSection', () => ({

@@ -203,6 +203,19 @@ vi.mock('@/lib/queries', () => ({
     mutateAsync: vi.fn().mockResolvedValue({ ok: true }),
     isPending: false,
   }),
+  runtimeSessionTerminalTakeoverQuery: (id: string) => ({
+    queryKey: ['runtime-session', id, 'terminal-takeover'],
+    queryFn: vi.fn().mockResolvedValue(null),
+    enabled: false,
+  }),
+  useStartRuntimeSessionTerminalTakeover: () => ({
+    mutateAsync: vi.fn().mockResolvedValue({ ok: true }),
+    isPending: false,
+  }),
+  useStopRuntimeSessionTerminalTakeover: () => ({
+    mutateAsync: vi.fn().mockResolvedValue({ ok: true }),
+    isPending: false,
+  }),
   queryKeys: {
     sessions: () => ['sessions'],
   },
