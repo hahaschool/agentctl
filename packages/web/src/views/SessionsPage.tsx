@@ -968,6 +968,7 @@ export function SessionsPage(): React.JSX.Element {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search sessions..."
               aria-label="Search sessions (press / to focus)"
+              aria-keyshortcuts="/"
               className="w-full h-7 px-2.5 pr-12 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
             />
             {!searchQuery && (

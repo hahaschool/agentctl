@@ -134,6 +134,7 @@ export function MachinesPage(): React.JSX.Element {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search machines (press / to focus)"
+            aria-keyshortcuts="/"
             className="w-full px-2.5 py-1.5 pr-8 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
           />
           {!search && (

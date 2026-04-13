@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useHotkeys } from '@/hooks/use-hotkeys';
 import type { Machine } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -451,6 +452,27 @@ describe('MachinesPage', () => {
     const searchInput = screen.getByLabelText(/^Search machines/) as HTMLInputElement;
     expect(searchInput).toBeDefined();
     expect(searchInput.value).toBe('');
+  });
+
+  it('registers slash hotkey that focuses the search input', () => {
+    renderMachines();
+
+    const mocked = vi.mocked(useHotkeys);
+    const hotkeys = mocked.mock.calls.find((call) => {
+      const map = call[0] as Record<string, unknown>;
+      return typeof map.slash === 'function';
+    })?.[0] as Record<string, (e: KeyboardEvent) => void> | undefined;
+    expect(hotkeys?.slash).toBeDefined();
+
+    const searchInput = screen.getByLabelText(/^Search machines/) as HTMLInputElement;
+    expect(searchInput.getAttribute('aria-keyshortcuts')).toBe('/');
+    expect(document.activeElement).not.toBe(searchInput);
+
+    const preventDefault = vi.fn();
+    hotkeys?.slash({ preventDefault } as unknown as KeyboardEvent);
+
+    expect(preventDefault).toHaveBeenCalled();
+    expect(document.activeElement).toBe(searchInput);
   });
 
   it('renders status filter dropdown', () => {
