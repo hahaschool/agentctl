@@ -1,9 +1,10 @@
-import type { FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AgentRegistry } from '../../registry/agent-registry.js';
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import { createServer } from '../server.js';
+import { emergencyStopProxyRoutes } from './emergency-stop.js';
 import { createMockLogger } from './test-helpers.js';
 
 const logger = createMockLogger();
@@ -667,6 +668,64 @@ describe('Emergency stop proxy routes -- with dbRegistry', () => {
       expect(body.message).toContain('string-error');
     } finally {
       globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rate limiting — emergency-stop routes can shut down single agents or fan
+// out stop commands across the whole fleet. A flood is both a DoS against the
+// fleet and a runaway amplifier for worker-side teardown work.
+// ---------------------------------------------------------------------------
+
+describe('Emergency stop rate limiting — /api/agents', () => {
+  const originalMax = process.env.EMERGENCY_STOP_RATE_LIMIT_MAX;
+  const originalWindow = process.env.EMERGENCY_STOP_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.EMERGENCY_STOP_RATE_LIMIT_MAX = '3';
+    process.env.EMERGENCY_STOP_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.EMERGENCY_STOP_RATE_LIMIT_MAX;
+    else process.env.EMERGENCY_STOP_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.EMERGENCY_STOP_RATE_LIMIT_WINDOW_MS;
+    else process.env.EMERGENCY_STOP_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /:id/emergency-stop', async () => {
+    const app = Fastify({ logger: false });
+    await app.register(emergencyStopProxyRoutes, {
+      prefix: '/api/agents',
+      registry: new AgentRegistry(),
+    });
+    await app.ready();
+
+    try {
+      // Each request below triggers REGISTRY_UNAVAILABLE (500) because no
+      // resolution method is wired up — but every request still counts
+      // toward the rate-limit bucket.
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/agents/agent-1/emergency-stop',
+          headers: { 'x-forwarded-for': '10.0.0.50' },
+          remoteAddress: '10.0.0.50',
+        });
+        expect([500, 502, 404]).toContain(ok.statusCode);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/agents/agent-1/emergency-stop',
+        headers: { 'x-forwarded-for': '10.0.0.50' },
+        remoteAddress: '10.0.0.50',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
     }
   });
 });
