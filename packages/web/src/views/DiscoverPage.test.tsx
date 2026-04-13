@@ -562,7 +562,7 @@ describe('DiscoverPage', () => {
       expect(screen.getByText('Import')).toBeDefined();
     });
 
-    const importBtn = screen.getByLabelText('Import session import-m');
+    const importBtn = screen.getByLabelText('Import session import-me');
     fireEvent.click(importBtn);
 
     await waitFor(() => {

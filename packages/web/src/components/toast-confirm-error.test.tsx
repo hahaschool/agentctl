@@ -23,7 +23,8 @@ import { ToastContainer, toast, useToast } from './Toast';
 const originalConsoleError = console.error;
 beforeAll(() => {
   console.error = (...args: unknown[]) => {
-    if (typeof args[0] === 'string' && args[0].includes('ErrorBoundary caught')) return;
+    if (typeof args[0] === 'string' && args[0].includes('[ErrorBoundary] Caught render error'))
+      return;
     if (typeof args[0] === 'string' && args[0].includes('The above error occurred')) return;
     originalConsoleError(...args);
   };

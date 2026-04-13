@@ -379,8 +379,8 @@ describe('SessionContent', () => {
       fireEvent.click(toolsBtn);
 
       await waitFor(() => {
-        expect(screen.getByText('Tool Call')).toBeDefined();
-        expect(screen.getByText('Tool Result')).toBeDefined();
+        expect(screen.getByText('Read')).toBeDefined();
+        expect(screen.getByText('Result')).toBeDefined();
       });
     });
 

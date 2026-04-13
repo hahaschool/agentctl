@@ -46,13 +46,13 @@ describe('GroupedRunHistory phase indicators', () => {
     }
 
     const finalIndicators = document.querySelectorAll('[data-phase-indicator="completed"]');
-    expect(finalIndicators.length).toBeGreaterThan(0);
-    for (const indicator of finalIndicators) {
-      expect(indicator.firstElementChild?.className).not.toContain('animate-pulse');
-    }
+    expect(finalIndicators).toHaveLength(0);
+    const successBadge = screen.getAllByText('Success')[0];
+    expect(successBadge).toBeDefined();
+    expect(successBadge?.firstElementChild?.className).not.toContain('animate-pulse');
   });
 
-  it('derives final phase labels from status when phase is missing', () => {
+  it('uses terminal status badges instead of separate phase labels', () => {
     render(
       <GroupedRunHistory
         runs={[
@@ -63,9 +63,10 @@ describe('GroupedRunHistory phase indicators', () => {
       />,
     );
 
-    expect(screen.getAllByText('Completed').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Failed').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('No output').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Success').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Failure').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Empty').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('[data-phase-indicator]')).toHaveLength(0);
   });
 
   it('anchors retry groups on original run and shows attempt labels', () => {
@@ -100,10 +101,10 @@ describe('GroupedRunHistory phase indicators', () => {
       />,
     );
 
-    expect(document.querySelectorAll('[data-run-id="run-original"]').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('[data-run-id="run-retry-2"]').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('[data-run-id="run-original"]')).toHaveLength(0);
     expect(document.querySelectorAll('[data-run-id="run-retry-1"]')).toHaveLength(0);
-    expect(document.querySelectorAll('[data-run-id="run-retry-2"]')).toHaveLength(0);
-    expect(screen.getAllByText('Attempt 1/3').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Attempt 3/3').length).toBeGreaterThan(0);
 
     const toggle = screen.getAllByRole('button', { name: /2 retries/i })[0];
     fireEvent.click(toggle);

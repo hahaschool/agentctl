@@ -199,7 +199,7 @@ describe('Sidebar', () => {
   describe('version display', () => {
     it('shows the version number text', () => {
       render(<Sidebar />);
-      expect(screen.getByText('v0.2.1')).toBeDefined();
+      expect(screen.getByText('v0.3.1')).toBeDefined();
     });
   });
 

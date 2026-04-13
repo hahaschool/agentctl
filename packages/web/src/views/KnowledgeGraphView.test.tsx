@@ -129,12 +129,12 @@ describe('KnowledgeGraphView', () => {
     expect(screen.getByTestId('knowledge-graph-count-skeleton')).toBeDefined();
   });
 
-  it('switches to Graph placeholder when Graph tab is clicked', () => {
+  it('switches to Graph visualization when Graph tab is clicked', () => {
     render(<KnowledgeGraphView />);
 
     fireEvent.click(screen.getByText('Graph'));
 
-    expect(screen.getByText('Interactive Graph View')).toBeDefined();
+    expect(screen.getByLabelText('Knowledge graph visualization')).toBeDefined();
   });
 
   it('switches back to Table view when Table tab is clicked', () => {
@@ -142,9 +142,9 @@ describe('KnowledgeGraphView', () => {
 
     // Switch to Graph
     fireEvent.click(screen.getByRole('button', { name: 'Graph' }));
-    expect(screen.getByText('Interactive Graph View')).toBeDefined();
+    expect(screen.getByLabelText('Knowledge graph visualization')).toBeDefined();
 
-    // Switch back to Table — use role-based query to avoid matching the <span>Table</span> in placeholder
+    // Switch back to Table — use role-based query to avoid matching table copy.
     fireEvent.click(screen.getByRole('button', { name: 'Table' }));
     expect(screen.getAllByText('depends on').length).toBeGreaterThanOrEqual(1);
   });

@@ -448,7 +448,7 @@ describe('SessionDetailView', () => {
   it('renders session model badge', async () => {
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('claude-sonnet-4-20250514')).toBeDefined();
+      expect(screen.getAllByText('claude-sonnet-4-20250514').length).toBeGreaterThan(0);
     });
   });
 
@@ -782,18 +782,20 @@ describe('SessionDetailView', () => {
   // 8. Send message input
   // =========================================================================
 
-  it('shows send message input for active sessions', async () => {
+  it('shows steering input for active agent sessions', async () => {
     renderView();
     await waitFor(() => {
-      const textarea = screen.getByPlaceholderText('Send a message... (paste images with Ctrl+V)');
+      const textarea = screen.getByPlaceholderText(
+        'Steer the agent: provide guidance or redirect...',
+      );
       expect(textarea).toBeDefined();
     });
   });
 
-  it('shows Send button for active sessions', async () => {
+  it('shows Steer button for active agent sessions', async () => {
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('Send')).toBeDefined();
+      expect(screen.getByText('Steer')).toBeDefined();
     });
   });
 
@@ -1018,7 +1020,7 @@ describe('SessionDetailView', () => {
     mockUseSessionStream.mockReturnValue({
       ...defaultStreamMock(),
       connected: true,
-      latestCost: { totalCostUsd: 0.1234, inputTokens: 10000, outputTokens: 3000 },
+      latestCost: { turnCost: 0.1234, totalCost: 0.1234 },
     });
 
     renderView();

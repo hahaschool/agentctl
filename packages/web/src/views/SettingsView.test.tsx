@@ -352,8 +352,8 @@ describe('SettingsView', () => {
   it('renders the correct number of kbd elements for all shortcuts', () => {
     renderSettings();
     const kbdElements = document.querySelectorAll('kbd');
-    // ALL_SHORTCUTS has 13 entries, each with 1 key = 13 kbd elements
-    expect(kbdElements.length).toBe(13);
+    // ALL_SHORTCUTS has 15 entries, each with 1 key = 15 kbd elements
+    expect(kbdElements.length).toBe(15);
   });
 
   it('renders specific shortcut key labels', () => {

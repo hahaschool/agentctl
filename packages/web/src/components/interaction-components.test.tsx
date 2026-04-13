@@ -41,7 +41,8 @@ function render(ui: React.ReactElement, options?: RenderOptions) {
 const originalConsoleError = console.error;
 beforeAll(() => {
   console.error = (...args: unknown[]) => {
-    if (typeof args[0] === 'string' && args[0].includes('ErrorBoundary caught')) return;
+    if (typeof args[0] === 'string' && args[0].includes('[ErrorBoundary] Caught render error'))
+      return;
     // React logs errors for error boundaries in dev; suppress those too
     if (typeof args[0] === 'string' && args[0].includes('The above error occurred')) return;
     originalConsoleError(...args);
@@ -228,7 +229,7 @@ describe('NotificationBell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(screen.getByText('No notifications')).toBeDefined();
 
-    fireEvent.mouseDown(screen.getByTestId('outside'));
+    fireEvent.pointerDown(screen.getByTestId('outside'));
     expect(screen.queryByText('No notifications')).toBeNull();
   });
 
@@ -451,7 +452,8 @@ describe('ErrorBoundary — additional coverage', () => {
     );
 
     const catchCall = consoleSpy.mock.calls.find(
-      (call) => typeof call[0] === 'string' && call[0].includes('ErrorBoundary caught'),
+      (call) =>
+        typeof call[0] === 'string' && call[0].includes('[ErrorBoundary] Caught render error'),
     );
     expect(catchCall).toBeDefined();
 

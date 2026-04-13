@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
       const errorMessage = this.state.error?.message?.trim() || 'An unexpected error occurred';
 
       return (
-        <div className="flex min-h-[50vh] items-center justify-center p-6 animate-fade-in">
+        <div className="flex min-h-[50vh] flex-col items-center justify-center p-6 animate-fade-in">
           <Card className="w-full max-w-2xl gap-4 border-zinc-800/80 bg-zinc-950 text-zinc-100 shadow-xl">
             <CardHeader className="border-b border-zinc-800/80 pb-5">
               <div className="flex items-center gap-3">

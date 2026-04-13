@@ -146,40 +146,40 @@ describe('StatusBadge', () => {
     expect(badge.className).toContain('text-red-500');
   });
 
-  it('applies animate-pulse to the dot for pulse statuses (running)', () => {
+  it('applies the status dot animation to the dot for pulse statuses (running)', () => {
     const { container } = render(<StatusBadge status="running" />);
     const dot = container.querySelector('span > span') as HTMLElement;
-    expect(dot.className).toContain('animate-pulse');
+    expect(dot.className).toContain('animate-status-dot');
   });
 
-  it('applies animate-pulse to the dot for "online"', () => {
+  it('applies the status dot animation to the dot for "online"', () => {
     const { container } = render(<StatusBadge status="online" />);
     const dot = container.querySelector('span > span') as HTMLElement;
-    expect(dot.className).toContain('animate-pulse');
+    expect(dot.className).toContain('animate-status-dot');
   });
 
-  it('applies animate-pulse to the dot for "active"', () => {
+  it('applies the status dot animation to the dot for "active"', () => {
     const { container } = render(<StatusBadge status="active" />);
     const dot = container.querySelector('span > span') as HTMLElement;
-    expect(dot.className).toContain('animate-pulse');
+    expect(dot.className).toContain('animate-status-dot');
   });
 
-  it('applies animate-pulse to the dot for "starting"', () => {
+  it('applies the status dot animation to the dot for "starting"', () => {
     const { container } = render(<StatusBadge status="starting" />);
     const dot = container.querySelector('span > span') as HTMLElement;
-    expect(dot.className).toContain('animate-pulse');
+    expect(dot.className).toContain('animate-status-dot');
   });
 
-  it('does NOT apply animate-pulse for non-pulse statuses ("stopped")', () => {
+  it('does NOT apply the status dot animation for non-pulse statuses ("stopped")', () => {
     const { container } = render(<StatusBadge status="stopped" />);
     const dot = container.querySelector('span > span') as HTMLElement;
-    expect(dot.className).not.toContain('animate-pulse');
+    expect(dot.className).not.toContain('animate-status-dot');
   });
 
-  it('does NOT apply animate-pulse for "error" status', () => {
+  it('does NOT apply the status dot animation for "error" status', () => {
     const { container } = render(<StatusBadge status="error" />);
     const dot = container.querySelector('span > span') as HTMLElement;
-    expect(dot.className).not.toContain('animate-pulse');
+    expect(dot.className).not.toContain('animate-status-dot');
   });
 
   it('falls back to muted classes for unknown status', () => {
