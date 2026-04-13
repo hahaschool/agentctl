@@ -179,6 +179,39 @@ describe('api.stopAgent', () => {
   });
 });
 
+describe('api.emergencyStopAgent', () => {
+  it('calls POST /api/agents/:id/emergency-stop with URL-encoded id', async () => {
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true }));
+
+    await api.emergencyStopAgent('agent/with slash');
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/agents/agent%2Fwith%20slash/emergency-stop');
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBeUndefined();
+  });
+});
+
+describe('api.emergencyStopAll', () => {
+  it('calls POST /api/agents/emergency-stop-all and returns the fan-out results', async () => {
+    const payload = {
+      ok: true,
+      results: [
+        { machineId: 'm-1', stoppedCount: 2 },
+        { machineId: 'm-2', stoppedCount: 0, error: 'machine_offline' },
+      ],
+    };
+    vi.mocked(fetch).mockResolvedValue(makeFetchResponse(payload));
+
+    const result = await api.emergencyStopAll();
+
+    const [url, init] = lastFetchCall();
+    expect(url).toBe('/api/agents/emergency-stop-all');
+    expect(init?.method).toBe('POST');
+    expect(result).toEqual(payload);
+  });
+});
+
 describe('api.updateAgent', () => {
   it('calls PATCH /api/agents/:id with body', async () => {
     const updated = { id: 'a1', accountId: 'acc-1' };

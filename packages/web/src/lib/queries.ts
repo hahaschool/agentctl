@@ -687,6 +687,29 @@ export function useStopAgent() {
   });
 }
 
+export function useEmergencyStopAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.emergencyStopAgent(id),
+    onSuccess: (_data, id) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agent(id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+    },
+  });
+}
+
+export function useEmergencyStopAll() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.emergencyStopAll(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions() });
+    },
+  });
+}
+
 export function useUpdateAgent() {
   const queryClient = useQueryClient();
   return useMutation({

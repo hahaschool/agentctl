@@ -667,6 +667,17 @@ export const api = {
     request<{ ok: boolean }>(`/api/agents/${id}/stop`, {
       method: 'POST',
     }),
+  emergencyStopAgent: (id: string) =>
+    request<{ ok: boolean }>(`/api/agents/${encodeURIComponent(id)}/emergency-stop`, {
+      method: 'POST',
+    }),
+  emergencyStopAll: () =>
+    request<{
+      ok: boolean;
+      results: { machineId: string; stoppedCount: number; error?: string }[];
+    }>('/api/agents/emergency-stop-all', {
+      method: 'POST',
+    }),
   steerAgent: (id: string, message: string) =>
     request<{ ok: boolean; accepted: boolean; reason?: string }>(`/api/agents/${id}/steer`, {
       method: 'POST',

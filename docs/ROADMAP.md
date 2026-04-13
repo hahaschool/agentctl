@@ -1894,6 +1894,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 | Priority | Item | Section | Status |
 |----------|------|---------|--------|
+| **P0** | ~~Emergency Stop UI~~ | — | ✅ Delivered — PR #408 exposed existing emergency-stop backend routes in the web UI with confirmation dialogs, tests, and fleet-wide kill. |
 | **P0** | ~~Sync Route Rate-Limit Hardening~~ | 16.1 / 33.2 | ✅ Delivered — PR #386 added the explicit sync pull/ack limiters on current `main`, PR #388 closed the final scripts CodeQL follow-up, and GitHub now reports `0` open security alerts |
 | **P0** | ~~Agent Worker Container Security Remediation~~ | 26.1 | ✅ Delivered — PRs #307, #314, and #326 are on `main`, and as of 2026-03-20 GitHub code scanning shows `0` open alerts while both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) |
 | **P0** | ~~Worker Git Capability Hardening~~ | 26.2 | ✅ Delivered — PR #322 landed the runtime hardening slice on `main`, and the post-#326 scans converged without removing `git` from the standard worker image |
