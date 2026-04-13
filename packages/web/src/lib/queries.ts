@@ -147,6 +147,7 @@ export const queryKeys = {
     params ? (['sync-conflicts', params] as const) : (['sync-conflicts'] as const),
   syncConflict: (id: string) => ['sync-conflicts', id] as const,
   syncConflictCount: ['sync-conflict-count'] as const,
+  syncPeers: ['sync-peers'] as const,
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
@@ -1653,6 +1654,31 @@ export function useRunMemoryDecay() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.memory.decayStats });
       void queryClient.invalidateQueries({ queryKey: queryKeys.memory.stats });
+    },
+  });
+}
+
+const SYNC_PEER_POLL_INTERVAL = 30_000;
+
+export function syncPeersQuery() {
+  return queryOptions({
+    queryKey: queryKeys.syncPeers,
+    queryFn: api.listSyncPeers,
+    refetchInterval: SYNC_PEER_POLL_INTERVAL,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Ping a mesh sync peer via its `/health` endpoint. Invalidates the peers
+ * list so the UI reflects the updated `syncStatus` and `lastSeen` values.
+ */
+export function usePingSyncPeer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (machineId: string) => api.pingSyncPeer(machineId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.syncPeers });
     },
   });
 }

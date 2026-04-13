@@ -20,6 +20,7 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  Wifi,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -68,6 +69,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/tasks', label: 'Tasks', icon: ListTree },
   { href: '/deployment', label: 'Deployment', icon: Rocket, shortcut: '0' },
   { href: '/conflicts', label: 'Conflicts', icon: GitMerge },
+  { href: '/mesh-peers', label: 'Mesh Peers', icon: Wifi },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
