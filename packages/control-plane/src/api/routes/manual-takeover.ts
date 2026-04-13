@@ -6,7 +6,7 @@ import type {
 } from '@agentctl/shared';
 import { ControlPlaneError } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type {
@@ -22,6 +22,12 @@ export type ManualTakeoverRoutesOptions = {
   managedSessionStore: Pick<ManagedSessionStore, 'get' | 'patchMetadata'>;
   dbRegistry?: DbAgentRegistry;
   workerPort?: number;
+};
+
+type ManualTakeoverRouteParams = { id: string };
+type AuthorizedManualTakeoverSession = ManagedSessionRecord & { nativeSessionId: string };
+type ManualTakeoverRequestContext = {
+  manualTakeoverSession?: AuthorizedManualTakeoverSession;
 };
 
 /**
@@ -72,8 +78,25 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
     errorResponseBuilder: manualTakeoverRateLimitError,
   });
 
+  const authorizeManualTakeover = async (
+    request: FastifyRequest<{ Params: ManualTakeoverRouteParams }>,
+    reply: FastifyReply,
+  ) => {
+    const session = await requireManualTakeoverSession(
+      managedSessionStore,
+      request.params.id,
+      reply,
+    );
+    if (!session) {
+      return;
+    }
+
+    (request as FastifyRequest & ManualTakeoverRequestContext).manualTakeoverSession =
+      session as AuthorizedManualTakeoverSession;
+  };
+
   app.post<{
-    Params: { id: string };
+    Params: ManualTakeoverRouteParams;
     Body: StartManualTakeoverRequest;
   }>(
     '/:id/manual-takeover',
@@ -83,21 +106,11 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         summary: 'Start or reuse a manual Claude Remote Control takeover for a managed session',
       },
       config: { rateLimit: manualTakeoverFastifyRateLimit },
-      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit)],
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = await requireManualTakeoverSession(
-        managedSessionStore,
-        request.params.id,
-        reply,
-      );
-      if (!session) {
-        return reply;
-      }
+      const session = getAuthorizedManualTakeoverSession(request);
       const nativeSessionId = session.nativeSessionId;
-      if (!nativeSessionId) {
-        return reply;
-      }
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
       const result = await proxyWorkerRequest({
@@ -126,7 +139,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
   );
 
   app.get<{
-    Params: { id: string };
+    Params: ManualTakeoverRouteParams;
   }>(
     '/:id/manual-takeover',
     {
@@ -135,21 +148,11 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         summary: 'Read manual Claude Remote Control takeover state for a managed session',
       },
       config: { rateLimit: manualTakeoverFastifyRateLimit },
-      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit)],
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = await requireManualTakeoverSession(
-        managedSessionStore,
-        request.params.id,
-        reply,
-      );
-      if (!session) {
-        return reply;
-      }
+      const session = getAuthorizedManualTakeoverSession(request);
       const nativeSessionId = session.nativeSessionId;
-      if (!nativeSessionId) {
-        return reply;
-      }
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
       const result = await proxyWorkerRequest({
@@ -238,7 +241,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
   );
 
   app.delete<{
-    Params: { id: string };
+    Params: ManualTakeoverRouteParams;
   }>(
     '/:id/manual-takeover',
     {
@@ -247,21 +250,11 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
         summary: 'Revoke a manual Claude Remote Control takeover for a managed session',
       },
       config: { rateLimit: manualTakeoverFastifyRateLimit },
-      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit)],
+      preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = await requireManualTakeoverSession(
-        managedSessionStore,
-        request.params.id,
-        reply,
-      );
-      if (!session) {
-        return reply;
-      }
+      const session = getAuthorizedManualTakeoverSession(request);
       const nativeSessionId = session.nativeSessionId;
-      if (!nativeSessionId) {
-        return reply;
-      }
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
       const result = await proxyWorkerRequest({
@@ -296,12 +289,23 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
   );
 };
 
+function getAuthorizedManualTakeoverSession(
+  request: FastifyRequest,
+): AuthorizedManualTakeoverSession {
+  const session = (request as FastifyRequest & ManualTakeoverRequestContext).manualTakeoverSession;
+  if (!session) {
+    throw new ControlPlaneError(
+      'MISSING_MANUAL_TAKEOVER_AUTH_CONTEXT',
+      'Manual takeover route was called without an authorized session context',
+    );
+  }
+  return session;
+}
+
 async function requireManualTakeoverSession(
   managedSessionStore: Pick<ManagedSessionStore, 'get'>,
   sessionId: string,
-  reply: {
-    code: (statusCode: number) => { send: (payload: Record<string, string>) => unknown };
-  },
+  reply: FastifyReply,
 ): Promise<ManagedSessionRecord | null> {
   const session = await managedSessionStore.get(sessionId);
 
