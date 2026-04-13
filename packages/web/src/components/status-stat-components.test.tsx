@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { StatCard } from './StatCard';
-import { StatusBadge } from './StatusBadge';
+import { describeStatus, STATUS_DESCRIPTIONS, StatusBadge } from './StatusBadge';
 
 // ---------------------------------------------------------------------------
 // Mock SimpleTooltip so we can verify tooltip content without Radix overhead
@@ -108,6 +108,33 @@ describe('StatusBadge', () => {
   it('renders the status string as visible text', () => {
     render(<StatusBadge status="degraded" />);
     expect(screen.getByText('degraded')).toBeDefined();
+  });
+
+  // -- Accessible tooltip descriptions --------------------------------------
+  it('exposes a descriptive aria-label including both the status and its meaning', () => {
+    const { container } = render(<StatusBadge status="handing_off" />);
+    const badge = container.firstElementChild as HTMLElement;
+    const ariaLabel = badge.getAttribute('aria-label') ?? '';
+    expect(ariaLabel).toContain('handing_off');
+    expect(ariaLabel).toContain(STATUS_DESCRIPTIONS.handing_off ?? '');
+  });
+
+  it('describeStatus returns a human-readable string for every known status', () => {
+    for (const [status, description] of Object.entries(STATUS_DESCRIPTIONS)) {
+      expect(describeStatus(status)).toBe(description);
+      expect(description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('describeStatus falls back to a generic label for unknown status values', () => {
+    expect(describeStatus('not_a_real_status')).toBe('Status: not_a_real_status');
+  });
+
+  it('marks the status dot as decorative so screen readers read the aria-label once', () => {
+    const { container } = render(<StatusBadge status="running" />);
+    const badge = container.firstElementChild as HTMLElement;
+    const dot = badge.querySelector('span');
+    expect(dot?.getAttribute('aria-hidden')).toBe('true');
   });
 });
 
