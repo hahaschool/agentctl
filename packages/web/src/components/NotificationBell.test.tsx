@@ -93,7 +93,7 @@ describe('NotificationBell', () => {
 
     it('sets correct aria-label with unread count', () => {
       render(<NotificationBell {...defaultProps} unreadCount={3} />);
-      expect(screen.getByRole('button', { name: 'Notifications (3 unread)' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Notifications (3)' })).toBeDefined();
     });
 
     it('sets aria-label without unread info when count is 0', () => {
@@ -169,7 +169,7 @@ describe('NotificationBell', () => {
 
       const content = screen.getByRole('dialog', { name: 'Notifications' });
       expect(content?.className).toContain('w-full');
-      expect(content?.className).toContain('sm:w-80');
+      expect(content?.className).toContain('sm:w-[28rem]');
     });
   });
 

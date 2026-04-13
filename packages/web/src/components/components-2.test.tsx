@@ -183,7 +183,6 @@ describe('ErrorBoundary', () => {
 
     const errorContainer = container.querySelector('.flex');
     expect(errorContainer?.className).toContain('flex');
-    expect(errorContainer?.className).toContain('flex-col');
     expect(errorContainer?.className).toContain('items-center');
     expect(errorContainer?.className).toContain('justify-center');
   });

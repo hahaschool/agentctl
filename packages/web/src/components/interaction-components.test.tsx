@@ -113,7 +113,7 @@ describe('NotificationBell', () => {
 
   it('includes unread count in aria-label when unreadCount > 0', () => {
     render(<NotificationBell {...baseProps} unreadCount={3} />);
-    const btn = screen.getByRole('button', { name: /3 unread/ });
+    const btn = screen.getByRole('button', { name: /Notifications \(3\)/ });
     expect(btn).toBeDefined();
   });
 
@@ -228,7 +228,7 @@ describe('NotificationBell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(screen.getByText('No notifications')).toBeDefined();
 
-    fireEvent.mouseDown(screen.getByTestId('outside'));
+    fireEvent.pointerDown(screen.getByTestId('outside'));
     expect(screen.queryByText('No notifications')).toBeNull();
   });
 
@@ -451,7 +451,8 @@ describe('ErrorBoundary — additional coverage', () => {
     );
 
     const catchCall = consoleSpy.mock.calls.find(
-      (call) => typeof call[0] === 'string' && call[0].includes('ErrorBoundary caught'),
+      (call) =>
+        typeof call[0] === 'string' && call[0].includes('[ErrorBoundary] Caught render error'),
     );
     expect(catchCall).toBeDefined();
 
