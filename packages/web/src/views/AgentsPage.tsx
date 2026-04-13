@@ -25,6 +25,7 @@ import {
   type AgentFormEditData,
 } from '../components/AgentFormDialog';
 import { ConfirmButton } from '../components/ConfirmButton';
+import { EmergencyStopAllButton } from '../components/EmergencyStopAllButton';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
@@ -288,6 +289,7 @@ export function AgentsPage(): React.JSX.Element {
             onClick={() => void agents.refetch()}
             isFetching={agents.isFetching && !agents.isLoading}
           />
+          <EmergencyStopAllButton />
           <Button size="sm" onClick={() => setShowCreateDialog(true)}>
             New Agent
           </Button>

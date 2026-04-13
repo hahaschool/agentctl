@@ -13,6 +13,7 @@ import { AgentHealthBadge } from '@/components/AgentHealthBadge';
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { ConfirmButton } from '@/components/ConfirmButton';
 import { CopyableText } from '@/components/CopyableText';
+import { EmergencyStopButton } from '@/components/EmergencyStopButton';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { FetchingBar } from '@/components/FetchingBar';
@@ -351,14 +352,17 @@ function AgentDetailPageContent(): React.JSX.Element {
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             {data.status === 'running' ? (
-              <ConfirmButton
-                label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
-                confirmLabel="Confirm Stop"
-                onConfirm={handleStop}
-                disabled={stopAgent.isPending}
-                className="px-3 py-1.5 text-sm font-medium rounded-md bg-destructive text-destructive-foreground cursor-pointer"
-                confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
-              />
+              <>
+                <ConfirmButton
+                  label={stopAgent.isPending ? 'Stopping...' : 'Stop'}
+                  confirmLabel="Confirm Stop"
+                  onConfirm={handleStop}
+                  disabled={stopAgent.isPending}
+                  className="px-3 py-1.5 text-sm font-medium rounded-md bg-destructive text-destructive-foreground cursor-pointer"
+                  confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
+                />
+                <EmergencyStopButton agentId={agentId} agentName={data.name} />
+              </>
             ) : (
               <Button size="sm" onClick={() => setStartDialogOpen(true)} disabled={isStarting}>
                 Start

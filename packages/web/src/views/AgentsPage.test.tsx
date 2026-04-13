@@ -245,6 +245,11 @@ vi.mock('@/lib/queries', () => ({
   useStartAgent: () => mockStartAgent(),
   useStopAgent: () => mockStopAgent(),
   useUpdateAgent: () => mockUpdateAgent(),
+  useEmergencyStopAll: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+  }),
 }));
 
 // ---------------------------------------------------------------------------
