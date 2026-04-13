@@ -514,6 +514,11 @@ describe('AgentsPage', () => {
   it('shows prompt textarea in create dialog', async () => {
     renderAgentsPage();
     fireEvent.click(screen.getByText('New Agent'));
+    // The dialog opens at the template-picker step; advance to the form step.
+    await waitFor(() => {
+      expect(screen.getByText('Start from scratch')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Start from scratch'));
     await waitFor(() => {
       expect(screen.getByPlaceholderText('What do you want the agent to do?')).toBeDefined();
     });
@@ -523,6 +528,10 @@ describe('AgentsPage', () => {
     renderAgentsPage();
     fireEvent.click(screen.getByText('New Agent'));
     await waitFor(() => {
+      expect(screen.getByText('Start from scratch')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Start from scratch'));
+    await waitFor(() => {
       expect(screen.getByLabelText('Project')).toBeDefined();
     });
   });
@@ -530,6 +539,10 @@ describe('AgentsPage', () => {
   it('shows machine selector in create dialog', async () => {
     renderAgentsPage();
     fireEvent.click(screen.getByText('New Agent'));
+    await waitFor(() => {
+      expect(screen.getByText('Start from scratch')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Start from scratch'));
     await waitFor(() => {
       // The Machine label is associated with a Radix Select (not a native input),
       // so we look for the label text directly.
@@ -541,6 +554,10 @@ describe('AgentsPage', () => {
     renderAgentsPage();
     fireEvent.click(screen.getByText('New Agent'));
     await waitFor(() => {
+      expect(screen.getByText('Start from scratch')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Start from scratch'));
+    await waitFor(() => {
       expect(screen.getByText('Advanced')).toBeDefined();
     });
   });
@@ -548,6 +565,10 @@ describe('AgentsPage', () => {
   it('shows Start Agent and Cancel buttons in create dialog', async () => {
     renderAgentsPage();
     fireEvent.click(screen.getByText('New Agent'));
+    await waitFor(() => {
+      expect(screen.getByText('Start from scratch')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('Start from scratch'));
     await waitFor(() => {
       expect(screen.getByText('Start Agent')).toBeDefined();
       expect(screen.getByText('Cancel')).toBeDefined();

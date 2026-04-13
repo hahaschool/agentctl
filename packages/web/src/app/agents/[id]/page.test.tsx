@@ -252,6 +252,11 @@ vi.mock('@/lib/queries', () => ({
   sessionsQuery: (params?: Record<string, unknown>) => mockSessionsQuery(params),
   accountsQuery: () => mockAccountsQuery(),
   machinesQuery: () => mockMachinesQuery(),
+  // Memory section queries — return empty list to keep the rendered tree quiet.
+  memoryFactsQuery: () => ({
+    queryKey: ['memory-facts'],
+    queryFn: () => Promise.resolve([]),
+  }),
   useStartAgent: () => mockStartAgent(),
   useStopAgent: () => mockStopAgent(),
   useUpdateAgent: () => mockUpdateAgent(),
@@ -260,6 +265,45 @@ vi.mock('@/lib/queries', () => ({
     isPending: false,
     error: null,
   }),
+}));
+
+// Mock heavy sub-components that pull in real Radix primitives or extra
+// queries — they are not the focus of these tests and would otherwise force
+// us to mock a much larger surface (Tooltip, AlertDialog, additional queries).
+vi.mock('@/components/AgentHealthBadge', () => ({
+  AgentHealthBadge: ({ agentId }: { agentId: string }) => (
+    <span data-testid={`agent-health-badge-${agentId}`} />
+  ),
+}));
+
+vi.mock('@/components/EmergencyStopButton', () => ({
+  EmergencyStopButton: ({ agentId }: { agentId: string }) => (
+    <button type="button" data-testid={`emergency-stop-${agentId}`}>
+      Emergency Stop
+    </button>
+  ),
+}));
+
+vi.mock('@/components/RunHistoryChart', () => ({
+  RunHistoryChart: () => <div data-testid="run-history-chart" />,
+}));
+
+vi.mock('@/components/GroupedRunHistory', () => ({
+  GroupedRunHistory: ({ runs }: { runs: { id: string; prompt?: string | null }[] }) => (
+    <div data-testid="grouped-run-history">
+      {runs.map((run) => (
+        <div key={run.id} data-testid={`run-row-${run.id}`}>
+          {run.prompt ?? '-'}
+        </div>
+      ))}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/memory/AgentMemorySection', () => ({
+  AgentMemorySection: ({ agentId }: { agentId: string }) => (
+    <div data-testid={`memory-section-${agentId}`} />
+  ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -543,7 +587,9 @@ describe('AgentDetailPage', () => {
   it('displays schedule', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('*/15 * * * *')).toBeDefined();
+      // Schedule is rendered both in the InfoField and the CronScheduleCard,
+      // so use getAllByText.
+      expect(screen.getAllByText('*/15 * * * *').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -781,197 +827,10 @@ describe('AgentDetailPage', () => {
     });
   });
 
-  it('shows "Starting..." when startAgent is pending', async () => {
-    mockStartAgent.mockReturnValue(makeMutationHook({ isPending: true }));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Start')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Start'));
-    await waitFor(() => {
-      expect(screen.getByText('Starting...')).toBeDefined();
-    });
-  });
-
-  // =========================================================================
-  // 6. Edit agent dialog
-  // =========================================================================
-
-  it('opens edit dialog when Edit button is clicked', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByTestId('dialog')).toBeDefined();
-      expect(screen.getByText('Edit Agent')).toBeDefined();
-    });
-  });
-
-  it('populates edit dialog with agent name', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      const nameInput = screen.getByDisplayValue('test-agent') as HTMLInputElement;
-      expect(nameInput).toBeDefined();
-    });
-  });
-
-  it('populates edit dialog with model from config', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      const modelInput = screen.getByDisplayValue('claude-sonnet-4-20250514') as HTMLInputElement;
-      expect(modelInput).toBeDefined();
-    });
-  });
-
-  it('populates edit dialog with maxTurns from config', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      const maxTurnsInput = screen.getByDisplayValue('50') as HTMLInputElement;
-      expect(maxTurnsInput).toBeDefined();
-    });
-  });
-
-  it('populates edit dialog with systemPrompt from config', async () => {
-    mockAgentQuery.mockReturnValue(
-      makeQueryResult(
-        'agent',
-        createAgent({
-          config: {
-            model: 'claude-sonnet-4-20250514',
-            maxTurns: 50,
-            systemPrompt: 'Always be polite',
-          },
-        }),
-      ),
-    );
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      const textarea = screen.getByDisplayValue('Always be polite') as HTMLTextAreaElement;
-      expect(textarea).toBeDefined();
-      expect(textarea.tagName).toBe('TEXTAREA');
-    });
-  });
-
-  it('shows empty systemPrompt when config has no systemPrompt', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      const label = screen.getByText('System Prompt');
-      expect(label).toBeDefined();
-      const textarea = document.getElementById('edit-agent-sysprompt') as HTMLTextAreaElement;
-      expect(textarea).not.toBeNull();
-      expect(textarea.value).toBe('');
-    });
-  });
-
-  it('shows Save Changes and Cancel buttons in edit dialog', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByText('Save Changes')).toBeDefined();
-      const cancelButtons = screen.getAllByText('Cancel');
-      expect(cancelButtons.length).toBeGreaterThan(0);
-    });
-  });
-
-  it('calls updateAgent.mutate when Save Changes is clicked', async () => {
-    const mutateFn = vi.fn();
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByText('Save Changes')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Save Changes'));
-    expect(mutateFn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'agent-1',
-        name: 'test-agent',
-      }),
-      expect.any(Object),
-    );
-  });
-
-  it('disables Save Changes when name is empty', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('test-agent')).toBeDefined();
-    });
-    const nameInput = screen.getByDisplayValue('test-agent');
-    fireEvent.change(nameInput, { target: { value: '' } });
-    const saveBtn = screen.getByText('Save Changes') as HTMLButtonElement;
-    expect(saveBtn.disabled).toBe(true);
-  });
-
-  it('shows "Saving..." when updateAgent is pending', async () => {
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ isPending: true }));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByText('Saving...')).toBeDefined();
-    });
-  });
-
-  it('shows schedule field when type is cron', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByText('Schedule (cron)')).toBeDefined();
-    });
-  });
-
-  it('shows model and max turns fields in edit dialog', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      // AgentFormDialog renders the edit form inside a dialog
-      const dialog = screen.getByTestId('dialog');
-      expect(dialog).toBeDefined();
-      // The dialog contains input fields for model and max turns
-      expect(dialog.querySelector('#edit-agent-model')).toBeDefined();
-      expect(dialog.querySelector('#edit-agent-maxturns')).toBeDefined();
-    });
-  });
+  // NOTE: The agent detail page no longer hosts an inline "Edit" dialog —
+  // editing has moved to the dedicated `/agents/:id/settings` route. The
+  // legacy "Edit dialog" tests that used to live here have been removed
+  // (the corresponding dialog UI no longer exists on this page).
 
   // =========================================================================
   // 7. Sessions list for this agent
@@ -1010,7 +869,7 @@ describe('AgentDetailPage', () => {
     );
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('No sessions found for this agent.')).toBeDefined();
+      expect(screen.getByText('No sessions yet for this agent.')).toBeDefined();
     });
   });
 
@@ -1049,52 +908,30 @@ describe('AgentDetailPage', () => {
   });
 
   // =========================================================================
-  // 8. Recent runs table
+  // 8. Run history (delegated to GroupedRunHistory — mocked in this file)
   // =========================================================================
 
-  it('renders Recent Runs card', async () => {
+  it('renders Execution History card', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Recent Runs')).toBeDefined();
+      expect(screen.getByText('Execution History')).toBeDefined();
     });
   });
 
-  it('renders runs table with column headers', async () => {
+  it('passes runs into GroupedRunHistory', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Status', { selector: 'th' })).toBeDefined();
-      expect(screen.getByText('Prompt', { selector: 'th' })).toBeDefined();
-      expect(screen.getByText('Duration', { selector: 'th' })).toBeDefined();
-      expect(screen.getByText('Cost', { selector: 'th' })).toBeDefined();
+      // Mocked GroupedRunHistory renders one row per run with data-testid.
+      expect(screen.getByTestId('grouped-run-history')).toBeDefined();
+      expect(screen.getByTestId('run-row-run-1')).toBeDefined();
     });
   });
 
   it('renders run prompt text', async () => {
     renderPage();
     await waitFor(() => {
-      // Appears in both mobile card and desktop table layouts
-      const matches = screen.getAllByText('Fix the bug in auth module');
-      expect(matches.length).toBeGreaterThanOrEqual(1);
-    });
-  });
-
-  it('truncates long prompts', async () => {
-    const longPrompt = 'A'.repeat(80);
-    mockAgentRunsQuery.mockReturnValue(
-      makeQueryResult('agent-runs', [createRun({ prompt: longPrompt })]),
-    );
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText(`${'A'.repeat(50)}...`)).toBeDefined();
-    });
-  });
-
-  it('renders run status badge', async () => {
-    renderPage();
-    await waitFor(() => {
-      // Appears in both mobile card and desktop table layouts
-      const badges = screen.getAllByTestId('status-badge-completed');
-      expect(badges.length).toBeGreaterThanOrEqual(1);
+      // Mocked GroupedRunHistory renders the prompt text.
+      expect(screen.getByText('Fix the bug in auth module')).toBeDefined();
     });
   });
 
@@ -1140,38 +977,17 @@ describe('AgentDetailPage', () => {
     mockAgentRunsQuery.mockReturnValue(makeQueryResult('agent-runs', []));
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText(/No runs recorded yet/)).toBeDefined();
+      expect(screen.getByText(/No runs yet for this agent\./)).toBeDefined();
     });
   });
 
-  it('renders run cost', async () => {
+  it('renders run cost in cost cards', async () => {
     renderPage();
     await waitFor(() => {
-      // Cost appears in run table/cards and last-run cost card
+      // Cost appears in last-run cost card; per-run cost is now inside the
+      // mocked GroupedRunHistory and not asserted here.
       const costs = screen.getAllByText('$0.42');
       expect(costs.length).toBeGreaterThanOrEqual(1);
-    });
-  });
-
-  it('renders run error message when present', async () => {
-    mockAgentRunsQuery.mockReturnValue(
-      makeQueryResult('agent-runs', [createRun({ errorMessage: 'Rate limit exceeded' })]),
-    );
-    renderPage();
-    await waitFor(() => {
-      // Error appears in both mobile card and desktop table layouts
-      const errors = screen.getAllByText('Rate limit exceeded');
-      expect(errors.length).toBeGreaterThanOrEqual(1);
-    });
-  });
-
-  it('shows "In progress" for runs without finishedAt', async () => {
-    mockAgentRunsQuery.mockReturnValue(
-      makeQueryResult('agent-runs', [createRun({ finishedAt: undefined })]),
-    );
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('In progress')).toBeDefined();
     });
   });
 
@@ -1189,7 +1005,7 @@ describe('AgentDetailPage', () => {
     });
   });
 
-  it('renders multiple runs', async () => {
+  it('renders multiple runs through GroupedRunHistory', async () => {
     mockAgentRunsQuery.mockReturnValue(
       makeQueryResult('agent-runs', [
         createRun({ id: 'run-1', status: 'success' }),
@@ -1198,11 +1014,9 @@ describe('AgentDetailPage', () => {
     );
     renderPage();
     await waitFor(() => {
-      // Each status appears in both mobile card and desktop table
-      const success = screen.getAllByTestId('status-badge-success');
-      const failure = screen.getAllByTestId('status-badge-failure');
-      expect(success.length).toBeGreaterThanOrEqual(1);
-      expect(failure.length).toBeGreaterThanOrEqual(1);
+      // Mocked GroupedRunHistory renders one data-testid="run-row-<id>" per run.
+      expect(screen.getByTestId('run-row-run-1')).toBeDefined();
+      expect(screen.getByTestId('run-row-run-2')).toBeDefined();
     });
   });
 
@@ -1224,7 +1038,8 @@ describe('AgentDetailPage', () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText('Total Cost')).toBeDefined();
-      expect(screen.getByText('$12.75')).toBeDefined();
+      // $12.75 may appear in additional cost cards; just assert presence.
+      expect(screen.getAllByText('$12.75').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -1371,12 +1186,8 @@ describe('AgentDetailPage', () => {
     });
   });
 
-  it('renders runs table aria-label', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByLabelText('Recent agent runs')).toBeDefined();
-    });
-  });
+  // NOTE: The legacy "Recent agent runs" table aria-label is gone — runs
+  // are rendered through the GroupedRunHistory component (mocked above).
 
   // =========================================================================
   // 12. Prompt input keyboard shortcuts
@@ -1426,182 +1237,9 @@ describe('AgentDetailPage', () => {
   });
 
   // =========================================================================
-  // 13. Edit dialog close and machine handling
+  // 13. Edit dialog tests removed — see note above. Edit lives at
+  //     /agents/:id/settings now and is covered by that page's tests.
   // =========================================================================
-
-  it('closes edit dialog when Cancel button is clicked', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByTestId('dialog')).toBeDefined();
-    });
-    // Click Cancel in the dialog footer
-    const cancelButtons = screen.getAllByText('Cancel');
-    const lastCancel = cancelButtons[cancelButtons.length - 1];
-    if (lastCancel) fireEvent.click(lastCancel);
-    await waitFor(() => {
-      expect(screen.queryByTestId('dialog')).toBeNull();
-    });
-  });
-
-  it('opens edit dialog when edit button is clicked with no machines', async () => {
-    mockMachinesQuery.mockReturnValue(makeQueryResult('machines', []));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      // AgentFormDialog always renders the dialog with form fields
-      expect(screen.getByTestId('dialog')).toBeDefined();
-      expect(screen.getByText('Edit Agent')).toBeDefined();
-    });
-  });
-
-  it('shows machine select items when machines are available', async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByTestId('select-item-machine-1')).toBeDefined();
-    });
-  });
-
-  it('updateAgent.mutate includes config with model when provided', async () => {
-    const mutateFn = vi.fn();
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('claude-sonnet-4-20250514')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Save Changes'));
-    expect(mutateFn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        config: expect.objectContaining({
-          model: 'claude-sonnet-4-20250514',
-          maxTurns: 50,
-        }),
-      }),
-      expect.any(Object),
-    );
-  });
-
-  it('updateAgent.mutate removes model from config when cleared', async () => {
-    const mutateFn = vi.fn();
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    const modelInput = await waitFor(() => screen.getByDisplayValue('claude-sonnet-4-20250514'));
-    fireEvent.change(modelInput, { target: { value: '' } });
-    fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0]?.[0];
-    expect(callArgs.config.model).toBeUndefined();
-  });
-
-  it('updateAgent.mutate removes maxTurns from config when cleared', async () => {
-    const mutateFn = vi.fn();
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    const maxTurnsInput = await waitFor(() => screen.getByDisplayValue('50'));
-    fireEvent.change(maxTurnsInput, { target: { value: '' } });
-    fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0]?.[0];
-    expect(callArgs.config.maxTurns).toBeUndefined();
-  });
-
-  it('updateAgent.mutate includes systemPrompt when provided', async () => {
-    const mutateFn = vi.fn();
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    mockAgentQuery.mockReturnValue(
-      makeQueryResult(
-        'agent',
-        createAgent({
-          config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Be helpful' },
-        }),
-      ),
-    );
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('Be helpful')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0]?.[0] as { config: Record<string, unknown> };
-    expect(callArgs.config.systemPrompt).toBe('Be helpful');
-  });
-
-  it('updateAgent.mutate removes systemPrompt when cleared', async () => {
-    const mutateFn = vi.fn();
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    mockAgentQuery.mockReturnValue(
-      makeQueryResult(
-        'agent',
-        createAgent({
-          config: { model: 'claude-sonnet-4-20250514', maxTurns: 50, systemPrompt: 'Old prompt' },
-        }),
-      ),
-    );
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    const textarea = await waitFor(() => screen.getByDisplayValue('Old prompt'));
-    fireEvent.change(textarea, { target: { value: '' } });
-    fireEvent.click(screen.getByText('Save Changes'));
-    const callArgs = mutateFn.mock.calls[0]?.[0] as { config: Record<string, unknown> };
-    expect(callArgs.config.systemPrompt).toBeUndefined();
-  });
-
-  it('does not call updateAgent.mutate when name is whitespace only', async () => {
-    const mutateFn = vi.fn();
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    const nameInput = await waitFor(() => screen.getByDisplayValue('test-agent'));
-    fireEvent.change(nameInput, { target: { value: '   ' } });
-    fireEvent.click(screen.getByText('Save Changes'));
-    expect(mutateFn).not.toHaveBeenCalled();
-  });
-
-  it('passes schedule as null when schedule input is empty', async () => {
-    const mutateFn = vi.fn();
-    mockUpdateAgent.mockReturnValue(makeMutationHook({ mutate: mutateFn }));
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    const scheduleInput = await waitFor(() => screen.getByDisplayValue('*/15 * * * *'));
-    fireEvent.change(scheduleInput, { target: { value: '' } });
-    fireEvent.click(screen.getByText('Save Changes'));
-    expect(mutateFn).toHaveBeenCalledWith(
-      expect.objectContaining({ schedule: null }),
-      expect.any(Object),
-    );
-  });
 
   // =========================================================================
   // 14. Prompt input aria-label
@@ -1630,7 +1268,7 @@ describe('AgentDetailPage', () => {
     );
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Recent Runs')).toBeDefined();
+      expect(screen.getByText('Execution History')).toBeDefined();
       const skeletons = screen.getAllByTestId('skeleton');
       expect(skeletons.length).toBeGreaterThan(0);
     });
@@ -1655,15 +1293,13 @@ describe('AgentDetailPage', () => {
   // =========================================================================
 
   it('handles agent with empty config object', async () => {
+    // With no model in config, the page should still render normally —
+    // the Settings link replaces the legacy inline Edit dialog.
     mockAgentQuery.mockReturnValue(makeQueryResult('agent', createAgent({ config: {} })));
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Edit')).toBeDefined();
-    });
-    fireEvent.click(screen.getByText('Edit'));
-    await waitFor(() => {
-      const modelInput = screen.getByLabelText('Model') as HTMLInputElement;
-      expect(modelInput.value).toBe('');
+      // The Settings link still renders for any config shape.
+      expect(screen.getByTestId('link-/agents/agent-1/settings')).toBeDefined();
     });
   });
 
