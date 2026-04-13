@@ -141,13 +141,9 @@ describe('McpServersTab', () => {
     ).toBeDefined();
   });
 
-  it('shows message when runtime is not set', () => {
+  it('defaults to Claude Code discovery when runtime is not set', () => {
     renderTab(makeAgent({ runtime: undefined }));
-    expect(
-      screen.getByText(
-        'MCP discovery is only available for managed runtimes (claude-code, codex).',
-      ),
-    ).toBeDefined();
+    expect(screen.getByText('MCP Servers')).toBeDefined();
   });
 
   it('renders save button', () => {

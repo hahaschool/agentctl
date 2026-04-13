@@ -1,5 +1,5 @@
 import type { ConsolidationItem, MemoryFact } from '@agentctl/shared';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mock React Query
@@ -184,8 +184,8 @@ describe('ConsolidationBoardView', () => {
     setupQueries(items, []);
     render(<ConsolidationBoardView />);
 
-    // The "All" tab badge should show 2
-    expect(screen.getByText('2')).toBeDefined();
+    const allTab = screen.getByRole('button', { name: /^All/ });
+    expect(within(allTab).getByText('2')).toBeDefined();
   });
 
   it('filters items by category when a tab is clicked', () => {
@@ -222,8 +222,12 @@ describe('ConsolidationBoardView', () => {
     setupQueries(items, []);
     render(<ConsolidationBoardView />);
 
-    expect(screen.getByText('3')).toBeDefined(); // "3 pending"
-    expect(screen.getByText('2')).toBeDefined(); // "2 high"
+    expect(
+      screen.getByText((_content, element) => element?.textContent?.trim() === '3 pending'),
+    ).toBeDefined();
+    expect(
+      screen.getByText((_content, element) => element?.textContent?.trim() === '2 high'),
+    ).toBeDefined();
   });
 
   it('renders the Refresh button', () => {

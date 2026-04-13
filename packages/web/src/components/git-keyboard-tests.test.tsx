@@ -284,9 +284,8 @@ describe('KeyboardHelpOverlay', () => {
 
   it('backdrop click calls onClose', () => {
     const onClose = vi.fn();
-    const { container } = render(<KeyboardHelpOverlay open={true} onClose={onClose} />);
-    // The outermost div is the backdrop wrapper
-    const backdrop = container.firstChild as HTMLElement;
+    render(<KeyboardHelpOverlay open={true} onClose={onClose} />);
+    const backdrop = screen.getByRole('button', { name: 'Close keyboard shortcuts overlay' });
     fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
   });

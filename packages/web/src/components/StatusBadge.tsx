@@ -29,7 +29,7 @@ const STATUS_VARIANTS: Record<string, string> = {
   timeout: 'bg-red-500/10 text-red-500 border-red-500/20',
 };
 
-const PULSE_STATUSES = new Set(['online', 'running', 'active', 'ok', 'success', 'completed']);
+const PULSE_STATUSES = new Set(['online', 'running', 'active', 'starting', 'restarting']);
 
 /**
  * Human-readable descriptions for each status. Surfaced via the badge's

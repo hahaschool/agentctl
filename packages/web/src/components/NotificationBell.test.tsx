@@ -169,7 +169,7 @@ describe('NotificationBell', () => {
 
       const content = screen.getByRole('dialog', { name: 'Notifications' });
       expect(content?.className).toContain('w-full');
-      expect(content?.className).toContain('sm:w-80');
+      expect(content?.className).toContain('sm:w-[28rem]');
     });
   });
 

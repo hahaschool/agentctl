@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -45,6 +45,10 @@ import { SteerInput } from './SteerInput';
 // ---------------------------------------------------------------------------
 
 describe('SteerInput', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   function setup(isRunning: boolean) {
     mockUseSteerAgent.mockReturnValue({
       mutate: mockSteerMutate,

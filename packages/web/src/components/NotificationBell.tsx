@@ -122,6 +122,10 @@ export function NotificationBell({
   const pendingRequests = pendingRequestsQuery.data ?? [];
   const pendingCount = pendingRequests.length;
   const badgeCount = pendingCount > 0 ? pendingCount : unreadCount;
+  const badgeLabel =
+    pendingCount > 0
+      ? `${badgeCount} pending ${badgeCount === 1 ? 'approval' : 'approvals'}`
+      : `${badgeCount} unread`;
 
   useEffect(() => {
     if (!open || pendingCount === 0) return;
@@ -181,7 +185,7 @@ export function NotificationBell({
             'relative rounded-md px-1.5 py-0.5 text-lg text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground',
             open && 'bg-muted text-foreground',
           )}
-          aria-label={`Notifications${badgeCount > 0 ? ` (${badgeCount})` : ''}`}
+          aria-label={`Notifications${badgeCount > 0 ? ` (${badgeLabel})` : ''}`}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={contentId}

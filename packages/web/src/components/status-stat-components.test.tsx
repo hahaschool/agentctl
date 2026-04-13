@@ -79,22 +79,22 @@ describe('StatusBadge', () => {
 
   // -- Pulse animation for active statuses ----------------------------------
   const pulseStatuses = ['running', 'active', 'starting', 'online', 'restarting'];
-  it.each(pulseStatuses)('shows pulse animation for "%s"', (status) => {
+  it.each(pulseStatuses)('shows status dot animation for "%s"', (status) => {
     const { container } = render(<StatusBadge status={status} />);
     // The dot is the inner span with h-1.5/w-1.5; select it as the span inside the badge
     const badge = container.firstElementChild as HTMLElement;
     const dot = badge.querySelector('span');
     expect(dot).toBeDefined();
-    expect(dot?.className).toContain('animate-pulse');
+    expect(dot?.className).toContain('animate-status-dot');
   });
 
   const noPulseStatuses = ['offline', 'error', 'paused', 'stopped', 'completed'];
-  it.each(noPulseStatuses)('does NOT show pulse animation for "%s"', (status) => {
+  it.each(noPulseStatuses)('does NOT show status dot animation for "%s"', (status) => {
     const { container } = render(<StatusBadge status={status} />);
     const badge = container.firstElementChild as HTMLElement;
     const dot = badge.querySelector('span');
     expect(dot).toBeDefined();
-    expect(dot?.className).not.toContain('animate-pulse');
+    expect(dot?.className).not.toContain('animate-status-dot');
   });
 
   // -- Capitalize class is applied ------------------------------------------

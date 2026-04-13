@@ -401,8 +401,11 @@ export function SessionDetailView(): React.JSX.Element {
 
             {/* Input area — steer (agent) or message (session) */}
             {/* Disabled during takeover — user controls session directly via the terminal */}
-            {isActive && s.agentId ? (
-              <SteerInput agentId={s.agentId} isRunning={isActive && takeoverPhase !== 'active'} />
+            {s.status === 'active' && s.agentId ? (
+              <SteerInput
+                agentId={s.agentId}
+                isRunning={s.status === 'active' && takeoverPhase !== 'active'}
+              />
             ) : (
               <MessageInput session={s} onOptimisticSend={addOptimisticMessage} />
             )}

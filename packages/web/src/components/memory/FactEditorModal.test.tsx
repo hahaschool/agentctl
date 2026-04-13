@@ -209,8 +209,15 @@ describe('FactEditorModal — edit mode', () => {
 describe('FactEditorModal — existing edges', () => {
   it('renders existing edges', () => {
     renderModal({ mode: 'edit', initialFact: FACT, existingEdges: [EDGE] });
-    expect(screen.getByText('depends on')).toBeDefined();
-    expect(screen.getByText(/fact-xyz/)).toBeDefined();
+    expect(
+      screen.getByText((_, element) => {
+        return (
+          element?.tagName === 'LI' &&
+          element.textContent?.includes('depends on') === true &&
+          element.textContent?.includes('fact-xyz') === true
+        );
+      }),
+    ).toBeDefined();
   });
 
   it('marks an existing edge for removal when trash icon is clicked', () => {
@@ -249,7 +256,11 @@ describe('FactEditorModal — pending edges', () => {
       target: { value: 'fact-xyz' },
     });
     fireEvent.click(screen.getByRole('button', { name: /add edge/i }));
-    expect(screen.getByText('fact-xyz')).toBeDefined();
+    expect(
+      screen.getByText((_, element) => {
+        return element?.tagName === 'LI' && element.textContent?.includes('fact-xyz') === true;
+      }),
+    ).toBeDefined();
   });
 
   it('adds a pending edge when Enter is pressed in the target field', () => {
@@ -257,7 +268,11 @@ describe('FactEditorModal — pending edges', () => {
     const targetInput = screen.getByRole('textbox', { name: /target fact id/i });
     fireEvent.change(targetInput, { target: { value: 'fact-enter' } });
     fireEvent.keyDown(targetInput, { key: 'Enter' });
-    expect(screen.getByText('fact-enter')).toBeDefined();
+    expect(
+      screen.getByText((_, element) => {
+        return element?.tagName === 'LI' && element.textContent?.includes('fact-enter') === true;
+      }),
+    ).toBeDefined();
   });
 
   it('clears the target input after adding an edge', () => {
@@ -276,10 +291,22 @@ describe('FactEditorModal — pending edges', () => {
       target: { value: 'fact-to-remove' },
     });
     fireEvent.click(screen.getByRole('button', { name: /add edge/i }));
-    expect(screen.getByText('fact-to-remove')).toBeDefined();
+    expect(
+      screen.getByText((_, element) => {
+        return (
+          element?.tagName === 'LI' && element.textContent?.includes('fact-to-remove') === true
+        );
+      }),
+    ).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: /remove pending edge/i }));
-    expect(screen.queryByText('fact-to-remove')).toBeNull();
+    expect(
+      screen.queryByText((_, element) => {
+        return (
+          element?.tagName === 'LI' && element.textContent?.includes('fact-to-remove') === true
+        );
+      }),
+    ).toBeNull();
   });
 
   it('does not add a duplicate pending edge with same target and relation', () => {
