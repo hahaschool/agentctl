@@ -179,6 +179,7 @@ export async function createServer({
   const app = Fastify({
     logger: false,
     genReqId: () => crypto.randomUUID(),
+    routerOptions: { maxParamLength: 256 },
   });
 
   const registry = externalRegistry ?? new AgentRegistry();

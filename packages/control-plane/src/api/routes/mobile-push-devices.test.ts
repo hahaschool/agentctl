@@ -33,7 +33,7 @@ function createMockStore(): MobilePushDeviceStore {
 }
 
 async function buildApp(store: MobilePushDeviceStore): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, routerOptions: { maxParamLength: 256 } });
   await app.register(mobilePushDeviceRoutes, {
     prefix: '/api/mobile-push-devices',
     mobilePushDeviceStore: store,
@@ -185,6 +185,28 @@ describe('mobilePushDeviceRoutes', () => {
       expect(response.json()).toMatchObject({ error: 'INVALID_USER_ID' });
     });
 
+    it('returns 400 when userId exceeds the query length bound', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/api/mobile-push-devices?userId=${'u'.repeat(1024)}`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_USER_ID' });
+      expect(store.listDevices).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when includeDisabled is not a supported boolean literal', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/mobile-push-devices?userId=operator-1&includeDisabled=yes',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_INCLUDE_DISABLED' });
+      expect(store.listDevices).not.toHaveBeenCalled();
+    });
+
     it('lists devices for a user and passes includeDisabled through', async () => {
       vi.mocked(store.listDevices).mockResolvedValueOnce([
         makeDevice(),
@@ -234,6 +256,17 @@ describe('mobilePushDeviceRoutes', () => {
 
       expect(response.statusCode).toBe(404);
       expect(response.json()).toMatchObject({ error: 'MOBILE_PUSH_DEVICE_NOT_FOUND' });
+    });
+
+    it('returns 400 when deviceId exceeds the path length bound', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/mobile-push-devices/${'d'.repeat(129)}/deactivate`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_DEVICE_ID' });
+      expect(store.deactivateDevice).not.toHaveBeenCalled();
     });
   });
 });
