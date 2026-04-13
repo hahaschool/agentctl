@@ -625,6 +625,30 @@ export type SyncConflictItem = {
   createdAt: string;
 };
 
+export type SyncPeer = {
+  machineId: string;
+  hostname: string;
+  tailscaleIp: string | null;
+  syncUrl: string | null;
+  role: string;
+  syncStatus: string;
+  syncIntervalMs: number;
+  isSelf: boolean;
+  publicKey: string | null;
+  lastSeen: string | null;
+  createdAt: string | null;
+};
+
+export type SyncPeersResponse = {
+  peers: SyncPeer[];
+};
+
+export type PingSyncPeerResponse = {
+  ok: boolean;
+  status: 'reachable' | 'unreachable';
+  peer: SyncPeer | null;
+};
+
 export class ApiError extends Error {
   public hint?: string;
   constructor(
@@ -1737,6 +1761,14 @@ export const api = {
     ),
 
   getSyncConflictCount: () => request<{ count: number }>('/api/sync/conflicts/count'),
+
+  // Mesh sync peers
+  listSyncPeers: () => request<SyncPeersResponse>('/api/sync/peers'),
+
+  pingSyncPeer: (machineId: string) =>
+    request<PingSyncPeerResponse>(`/api/sync/peers/${encodeURIComponent(machineId)}/ping`, {
+      method: 'POST',
+    }),
 };
 
 // ---------------------------------------------------------------------------
