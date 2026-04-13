@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sun,
+  Webhook,
   Wifi,
   X,
 } from 'lucide-react';
@@ -72,6 +73,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/conflicts', label: 'Conflicts', icon: GitMerge },
   { href: '/mesh-peers', label: 'Mesh Peers', icon: Wifi },
   { href: '/security-findings', label: 'Security', icon: ShieldAlert },
+  { href: '/webhooks', label: 'Webhooks', icon: Webhook },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};

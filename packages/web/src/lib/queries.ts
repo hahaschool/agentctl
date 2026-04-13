@@ -148,6 +148,7 @@ export const queryKeys = {
   syncConflict: (id: string) => ['sync-conflicts', id] as const,
   syncConflictCount: ['sync-conflict-count'] as const,
   syncPeers: ['sync-peers'] as const,
+  webhooks: ['webhooks'] as const,
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
@@ -1699,5 +1700,57 @@ export function useResolveSyncConflict() {
       void qc.invalidateQueries({ queryKey: ['sync-conflicts'] });
       void qc.invalidateQueries({ queryKey: queryKeys.syncConflictCount });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Webhook subscriptions
+// ---------------------------------------------------------------------------
+
+const WEBHOOK_POLL_INTERVAL = 30_000;
+
+export function webhooksQuery() {
+  return queryOptions({
+    queryKey: queryKeys.webhooks,
+    queryFn: api.listWebhooks,
+    refetchInterval: WEBHOOK_POLL_INTERVAL,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useCreateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createWebhook,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.webhooks });
+    },
+  });
+}
+
+export function useUpdateWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...input }: { id: string } & Parameters<typeof api.updateWebhook>[1]) =>
+      api.updateWebhook(id, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.webhooks });
+    },
+  });
+}
+
+export function useDeleteWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteWebhook(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.webhooks });
+    },
+  });
+}
+
+export function useTestWebhook() {
+  return useMutation({
+    mutationFn: (id: string) => api.testWebhook(id),
   });
 }
