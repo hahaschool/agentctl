@@ -1,7 +1,7 @@
 # Agent Detail Page UX Redesign
 
 **Date**: 2026-03-12
-**Status**: Draft
+**Status**: Delivered / implementation record
 **Scope**: §11.1-11.7 — Fix 7 user-reported issues on the agent detail page
 
 ## Problem Statement
