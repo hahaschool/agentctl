@@ -150,7 +150,9 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
       config: { rateLimit: manualTakeoverFastifyRateLimit },
       preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
-    // codeql[js/missing-rate-limiting] @fastify/rate-limit is installed before authorizeManualTakeover; CodeQL only models legacy fastify-rate-limit here.
+
+    // @fastify/rate-limit runs before authorizeManualTakeover; CodeQL only models legacy fastify-rate-limit here.
+    // codeql[js/missing-rate-limiting]
     async (request, reply) => {
       const session = readManualTakeoverSessionContext(request);
       const nativeSessionId = session.nativeSessionId;
