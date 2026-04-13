@@ -171,6 +171,16 @@ vi.mock('@/lib/queries', () => ({
   runtimeSessionsQuery: () => mockRuntimeSessionsQuery(),
   runtimeHandoffSummaryQuery: () => mockRuntimeHandoffSummaryQuery(),
   memoryStatsQuery: () => mockMemoryStatsQuery(),
+  agentRunsQuery: (agentId: string) => ({
+    queryKey: ['agent', agentId, 'runs'],
+    queryFn: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
+    enabled: false,
+  }),
+  notificationPreferencesQuery: (userId: string) => ({
+    queryKey: ['notification-preferences', userId],
+    queryFn: vi.fn().mockResolvedValue({ email: false, push: false }),
+    enabled: false,
+  }),
 }));
 
 vi.mock('../components/memory/DashboardMemoryCard', () => ({

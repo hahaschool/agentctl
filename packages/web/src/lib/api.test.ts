@@ -686,7 +686,7 @@ describe('api.stopRuntimeSessionManualTakeover', () => {
 });
 
 describe('api.getRuntimeSessionTerminalTakeover', () => {
-  it('calls GET /api/sessions/:id/takeover', async () => {
+  it('calls GET /api/session-takeover/:id/takeover', async () => {
     vi.mocked(fetch).mockResolvedValue(
       makeFetchResponse({ active: true, sessionId: 'rc-1', terminalId: 'term-1' }),
     );
@@ -694,13 +694,13 @@ describe('api.getRuntimeSessionTerminalTakeover', () => {
     await api.getRuntimeSessionTerminalTakeover('rc-1');
 
     const [url, init] = lastFetchCall();
-    expect(url).toBe('/api/sessions/rc-1/takeover');
+    expect(url).toBe('/api/session-takeover/rc-1/takeover');
     expect(init?.method).toBeUndefined();
   });
 });
 
 describe('api.startRuntimeSessionTerminalTakeover', () => {
-  it('calls POST /api/sessions/:id/takeover with an explicit empty JSON body', async () => {
+  it('calls POST /api/session-takeover/:id/takeover with an explicit empty JSON body', async () => {
     vi.mocked(fetch).mockResolvedValue(
       makeFetchResponse({
         ok: true,
@@ -714,7 +714,7 @@ describe('api.startRuntimeSessionTerminalTakeover', () => {
     await api.startRuntimeSessionTerminalTakeover('rc-1');
 
     const [url, init] = lastFetchCall();
-    expect(url).toBe('/api/sessions/rc-1/takeover');
+    expect(url).toBe('/api/session-takeover/rc-1/takeover');
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual({});
     expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
@@ -722,13 +722,13 @@ describe('api.startRuntimeSessionTerminalTakeover', () => {
 });
 
 describe('api.stopRuntimeSessionTerminalTakeover', () => {
-  it('calls POST /api/sessions/:id/release with an explicit empty JSON body by default', async () => {
+  it('calls POST /api/session-takeover/:id/release with an explicit empty JSON body by default', async () => {
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, resumed: false }));
 
     await api.stopRuntimeSessionTerminalTakeover('rc-1');
 
     const [url, init] = lastFetchCall();
-    expect(url).toBe('/api/sessions/rc-1/release');
+    expect(url).toBe('/api/session-takeover/rc-1/release');
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual({});
     expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');
@@ -740,7 +740,7 @@ describe('api.stopRuntimeSessionTerminalTakeover', () => {
     await api.stopRuntimeSessionTerminalTakeover('rc-1', { resume: true });
 
     const [url, init] = lastFetchCall();
-    expect(url).toBe('/api/sessions/rc-1/release?resume=true');
+    expect(url).toBe('/api/session-takeover/rc-1/release?resume=true');
     expect(init?.method).toBe('POST');
     expect(JSON.parse(init?.body as string)).toEqual({});
     expect((init?.headers as Record<string, string>)['Content-Type']).toBe('application/json');

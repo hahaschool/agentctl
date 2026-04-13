@@ -150,6 +150,19 @@ vi.mock('@/lib/queries', () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  runtimeSessionTerminalTakeoverQuery: (id: string) => ({
+    queryKey: ['runtime-session', id, 'terminal-takeover'],
+    queryFn: vi.fn().mockResolvedValue(null),
+    enabled: false,
+  }),
+  useStartRuntimeSessionTerminalTakeover: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useStopRuntimeSessionTerminalTakeover: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 function createRuntimeSession(overrides?: Record<string, unknown>) {
@@ -338,6 +351,17 @@ function setupUseQuery(options?: {
         error: null,
         refetch: vi.fn(),
         dataUpdatedAt: 400,
+      };
+    }
+
+    if (queryKey[0] === 'runtime-session' && queryKey[2] === 'terminal-takeover') {
+      return {
+        data: null,
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        refetch: vi.fn(),
+        dataUpdatedAt: 0,
       };
     }
 

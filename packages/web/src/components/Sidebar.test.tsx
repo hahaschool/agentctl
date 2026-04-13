@@ -1,4 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, type RenderOptions, render as rtlRender, screen } from '@testing-library/react';
+
+function render(ui: React.ReactElement, options?: RenderOptions) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: Number.POSITIVE_INFINITY, enabled: false },
+    },
+  });
+  const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return rtlRender(ui, { wrapper: Wrapper, ...options });
+}
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before importing the component under test
