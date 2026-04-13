@@ -422,6 +422,8 @@ export function SessionHeader({
                   : 'bg-muted text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground',
               )}
               title="Toggle file browser"
+              aria-label={showFiles ? 'Hide file browser' : 'Show file browser'}
+              aria-pressed={showFiles}
             >
               Files
             </button>
@@ -432,6 +434,7 @@ export function SessionHeader({
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="px-3 py-1 bg-muted text-muted-foreground border border-border rounded-md text-xs cursor-pointer hover:bg-accent hover:text-accent-foreground"
               title="Export session (E: JSON, M: Markdown)"
+              aria-label="Export session"
               aria-haspopup="menu"
               aria-expanded={showExportMenu}
             >
@@ -479,6 +482,8 @@ export function SessionHeader({
               onClick={() => void handleOpenForkPicker()}
               disabled={contextPickerLoading}
               title="Fork session (F)"
+              aria-label={contextPickerLoading ? 'Loading session for fork' : 'Fork session'}
+              aria-busy={contextPickerLoading}
               className="px-3 py-1 bg-blue-100/50 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border border-blue-300/50 dark:border-blue-800/50 rounded-md text-xs cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-900 disabled:opacity-50"
             >
               {contextPickerLoading ? 'Loading...' : 'Fork'}
@@ -505,6 +510,8 @@ export function SessionHeader({
                 disabled={takeoverPhase === 'initiating'}
                 className="flex items-center gap-1 px-3 py-1 bg-amber-600/80 dark:bg-amber-700/80 text-white border border-amber-500/60 rounded-md text-xs cursor-pointer hover:bg-amber-600 dark:hover:bg-amber-600 disabled:opacity-50"
                 title="Take interactive control of this session"
+                aria-label="Take interactive control of this session"
+                aria-busy={takeoverPhase === 'initiating'}
               >
                 {takeoverPhase === 'initiating' ? 'Taking over…' : 'Takeover'}
               </button>
@@ -523,8 +530,10 @@ export function SessionHeader({
                 }
               }}
               className="flex items-center gap-1 px-3 py-1 bg-red-700/80 dark:bg-red-800/80 text-white border border-red-600/60 rounded-md text-xs cursor-pointer hover:bg-red-700 dark:hover:bg-red-700 disabled:opacity-50"
+              title="Force kill the CLI process for this session"
+              aria-label="Force kill session"
             >
-              <XCircle className="size-3.5" />
+              <XCircle className="size-3.5" aria-hidden="true" />
               Force Kill
             </button>
           )}
