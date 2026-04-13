@@ -678,3 +678,91 @@ describe('Account routes — /api/settings/accounts', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Rate limiting — account write paths + the credential-decrypting list
+// endpoint. These routes touch the encrypted credential store on every call,
+// so abuse protection must hold regardless of auth state.
+// ---------------------------------------------------------------------------
+
+describe('Account routes rate limiting — /api/settings/accounts', () => {
+  const originalMax = process.env.ACCOUNTS_RATE_LIMIT_MAX;
+  const originalWindow = process.env.ACCOUNTS_RATE_LIMIT_WINDOW_MS;
+
+  beforeAll(() => {
+    process.env.ACCOUNTS_RATE_LIMIT_MAX = '3';
+    process.env.ACCOUNTS_RATE_LIMIT_WINDOW_MS = '60000';
+  });
+
+  afterAll(() => {
+    if (originalMax === undefined) delete process.env.ACCOUNTS_RATE_LIMIT_MAX;
+    else process.env.ACCOUNTS_RATE_LIMIT_MAX = originalMax;
+    if (originalWindow === undefined) delete process.env.ACCOUNTS_RATE_LIMIT_WINDOW_MS;
+    else process.env.ACCOUNTS_RATE_LIMIT_WINDOW_MS = originalWindow;
+  });
+
+  it('returns 429 after exceeding the configured limit on POST /', async () => {
+    const mockDb = createMockDb();
+    const app = await buildApp(mockDb);
+    try {
+      mockDb.setRows([makeAccount({ credential: 'mock-encrypted', credentialIv: 'mock-iv' })]);
+      const payload = {
+        name: 'Flooder',
+        provider: 'anthropic_api',
+        credential: 'sk-ant-api03-flood-key',
+      };
+      for (let i = 0; i < 3; i += 1) {
+        const ok = await app.inject({
+          method: 'POST',
+          url: '/api/settings/accounts',
+          payload,
+          headers: { 'x-forwarded-for': '10.0.0.50' },
+          remoteAddress: '10.0.0.50',
+        });
+        expect(ok.statusCode).toBe(201);
+      }
+
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/settings/accounts',
+        payload,
+        headers: { 'x-forwarded-for': '10.0.0.50' },
+        remoteAddress: '10.0.0.50',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns 429 after exceeding the configured limit on DELETE /:id', async () => {
+    const mockDb = createMockDb();
+    const app = await buildApp(mockDb);
+    try {
+      // Empty rows -> handler returns 404 ACCOUNT_NOT_FOUND, but each request
+      // still counts toward the rate-limit bucket.
+      mockDb.setRows([]);
+      for (let i = 0; i < 3; i += 1) {
+        const resp = await app.inject({
+          method: 'DELETE',
+          url: '/api/settings/accounts/acct-rl',
+          headers: { 'x-forwarded-for': '10.0.0.51' },
+          remoteAddress: '10.0.0.51',
+        });
+        expect([200, 404]).toContain(resp.statusCode);
+      }
+
+      const blocked = await app.inject({
+        method: 'DELETE',
+        url: '/api/settings/accounts/acct-rl',
+        headers: { 'x-forwarded-for': '10.0.0.51' },
+        remoteAddress: '10.0.0.51',
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json().error).toBe('RATE_LIMITED');
+    } finally {
+      await app.close();
+    }
+  });
+});
