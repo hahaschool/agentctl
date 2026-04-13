@@ -36,7 +36,8 @@
       "yaml": ">=2.8.3",
       "happy-dom": ">=20.8.8",
       "node-forge": ">=1.4.0",
-      "smol-toml": ">=1.6.1"
+      "smol-toml": ">=1.6.1",
+      "vite": ">=7.3.2"
     }
   },
   "devDependencies": {
