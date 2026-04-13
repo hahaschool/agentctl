@@ -439,10 +439,10 @@ jobs:
         continue-on-error: true
         run: pnpm audit --audit-level=high
 
-      # Non-blocking: surface Biome security-related lint warnings
+      # Keep this focused on Biome's security domain; the main lint job
+      # already runs the full check across formatting and suspicious rules.
       - name: Biome security lint
-        continue-on-error: true
-        run: npx @biomejs/biome lint --rule-categories=suspicious,security packages/
+        run: npx @biomejs/biome lint --only=security --diagnostic-level=warn --max-diagnostics=50 packages/
 
       # Secret scanning on PRs (full history on push to main)
       - name: Gitleaks secret scan
