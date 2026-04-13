@@ -8,6 +8,7 @@ import type {
   MemoryReportType,
   NotificationChannel,
   NotificationPriority,
+  SecurityFindingSeverity,
   SpaceEventType,
   SpaceMemberRole,
   SpaceMemberType,
@@ -21,6 +22,7 @@ import { STORAGE_KEYS } from './storage-keys';
 type RuntimeSessionsQueryParams = Parameters<typeof api.listRuntimeSessions>[0];
 type MemoryFactsQueryParams = Parameters<typeof api.searchMemoryFacts>[0];
 type MemoryGraphQueryParams = Parameters<typeof api.getMemoryGraph>[0];
+type SecurityFindingsQueryParams = Parameters<typeof api.listSecurityFindings>[0];
 
 export type TaskGraphSummary = {
   id: string;
@@ -115,6 +117,9 @@ export const queryKeys = {
   }) => (params ? (['audit', params] as const) : (['audit'] as const)),
   auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
     params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
+  securityFindings: (params?: SecurityFindingsQueryParams) =>
+    params ? (['security-findings', params] as const) : (['security-findings'] as const),
+  securityFindingsSummary: ['security-findings', 'summary'] as const,
   gitStatus: (machineId: string, path: string) => ['git-status', machineId, path] as const,
   mcpDiscover: (machineId: string, runtime: string, projectPath?: string) =>
     projectPath
@@ -488,6 +493,30 @@ export function auditSummaryQuery(params?: { agentId?: string; from?: string; to
   return queryOptions({
     queryKey: queryKeys.auditSummary(params),
     queryFn: () => api.getAuditSummary(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function securityFindingsQuery(params?: {
+  severity?: SecurityFindingSeverity;
+  category?: string;
+  agentId?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return queryOptions({
+    queryKey: queryKeys.securityFindings(params),
+    queryFn: () => api.listSecurityFindings(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function securityFindingsSummaryQuery() {
+  return queryOptions({
+    queryKey: queryKeys.securityFindingsSummary,
+    queryFn: api.getSecurityFindingsSummary,
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });
