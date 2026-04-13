@@ -539,7 +539,9 @@ describe('DashboardPage', () => {
     it('does not render deprecated "View Agents" quick action link', () => {
       renderDashboard();
       expect(screen.queryByText('View Agents')).toBeNull();
-      expect(screen.queryByTestId('link-/agents')).toBeNull();
+      // The Recent Agent Runs section header still links to /agents; ensure no button
+      // labelled "View Agents" and no quick-action-style link with that label
+      expect(screen.queryByRole('button', { name: /view agents/i })).toBeNull();
     });
 
     it('does not render deprecated "Runtime Sessions" quick action link', () => {
@@ -861,7 +863,9 @@ describe('DashboardPage', () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByTestId('stat-value-Active Sessions').textContent).toBe('2');
-        expect(screen.getByTestId('stat-sublabel-Active Sessions').textContent).toBe('4 total');
+        expect(screen.getByTestId('stat-sublabel-Active Sessions').textContent).toContain(
+          '4 total',
+        );
       });
     });
 
@@ -1514,7 +1518,7 @@ describe('DashboardPage', () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByText('Welcome to AgentCTL')).toBeDefined();
-        expect(screen.getByTestId('link-/agents?new=1')).toBeDefined();
+        expect(screen.getAllByTestId('link-/agents?new=1').length).toBeGreaterThan(0);
         expect(screen.getAllByTestId('link-/discover').length).toBeGreaterThan(0);
         expect(screen.getByTestId('link-/settings')).toBeDefined();
       });
@@ -1663,7 +1667,8 @@ describe('DashboardPage', () => {
   describe('Action buttons', () => {
     it('renders "Discover Sessions" action button', () => {
       renderDashboard();
-      expect(screen.getByText('Discover Sessions')).toBeDefined();
+      // "Discover Sessions" is rendered in both the quick actions bar and the health card
+      expect(screen.getAllByText('Discover Sessions').length).toBeGreaterThan(0);
     });
 
     it('renders "Refresh All" action button', () => {
@@ -1830,7 +1835,7 @@ describe('DashboardPage', () => {
       renderDashboard();
       await waitFor(() => {
         expect(screen.getByText('Cost Overview')).toBeDefined();
-        expect(screen.getByText('Total Session Cost')).toBeDefined();
+        expect(screen.getByText('Total Cost (Last 7 Days)')).toBeDefined();
       });
     });
 

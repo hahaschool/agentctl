@@ -448,7 +448,8 @@ describe('SessionDetailView', () => {
   it('renders session model badge', async () => {
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('claude-sonnet-4-20250514')).toBeDefined();
+      // Model name renders in both the header badge and the MetricCard
+      expect(screen.getAllByText('claude-sonnet-4-20250514').length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -782,18 +783,19 @@ describe('SessionDetailView', () => {
   // 8. Send message input
   // =========================================================================
 
-  it('shows send message input for active sessions', async () => {
+  it('shows steer input for active sessions with an agent', async () => {
+    // Default session has agentId='agent-1' + status='active', so SteerInput renders
     renderView();
     await waitFor(() => {
-      const textarea = screen.getByPlaceholderText('Send a message... (paste images with Ctrl+V)');
+      const textarea = screen.getByPlaceholderText(/Steer the agent/i);
       expect(textarea).toBeDefined();
     });
   });
 
-  it('shows Send button for active sessions', async () => {
+  it('shows Steer button for active sessions with an agent', async () => {
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('Send')).toBeDefined();
+      expect(screen.getByText('Steer')).toBeDefined();
     });
   });
 
@@ -813,10 +815,12 @@ describe('SessionDetailView', () => {
     });
   });
 
-  it('shows starting message for starting sessions', async () => {
+  it('shows starting message for starting sessions without an agent', async () => {
+    // Without an agentId the SteerInput path is skipped and MessageInput renders instead,
+    // which shows the "Session is starting..." notice for status='starting'.
     mockSessionQuery.mockReturnValue({
       queryKey: ['session', 'ses-123'],
-      queryFn: vi.fn().mockResolvedValue(createSession({ status: 'starting' })),
+      queryFn: vi.fn().mockResolvedValue(createSession({ status: 'starting', agentId: null })),
     });
 
     renderView();
@@ -1018,12 +1022,12 @@ describe('SessionDetailView', () => {
     mockUseSessionStream.mockReturnValue({
       ...defaultStreamMock(),
       connected: true,
-      latestCost: { totalCostUsd: 0.1234, inputTokens: 10000, outputTokens: 3000 },
+      latestCost: { turnCost: 0.0234, totalCost: 0.1234 },
     });
 
     renderView();
     await waitFor(() => {
-      // Streaming cost may appear in both the header and metadata badges
+      // SessionHeader renders streamCost.totalCost via .toFixed(4) → "$0.1234"
       const costElements = screen.getAllByText('$0.1234');
       expect(costElements.length).toBeGreaterThan(0);
     });
