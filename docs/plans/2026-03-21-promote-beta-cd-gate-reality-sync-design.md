@@ -1,5 +1,8 @@
 # Promote Beta CD Gate Reality-Sync Design
 
+> Date: 2026-03-21
+> Status: Delivered (PR #355) — see [ROADMAP.md §12.6](../ROADMAP.md#126-github-actions-cd-gate--partial). Section stays "Partial" until the dedicated `agentctl-beta` self-hosted runner lands and `BETA_SELF_HOSTED_RUNNER_READY` is enabled.
+
 ## Context
 
 Section 12.6 is only partially delivered. The repository already has

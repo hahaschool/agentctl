@@ -1,7 +1,7 @@
 # Design: Astro Agent Patterns Adoption
 
 > Date: 2026-03-10
-> Status: Draft
+> Status: Delivered — see [ROADMAP.md §2.5–§2.9, §3.3](../ROADMAP.md#25-structured-execution-summary--p1-)
 > Scope: Worker runtime, control plane orchestration, shared protocol
 > Reference: [astro-anywhere/astro-agent](https://github.com/astro-anywhere/astro-agent)
 

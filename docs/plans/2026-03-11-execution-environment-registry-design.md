@@ -1,7 +1,7 @@
 # Design: Execution Environment Registry
 
 > Date: 2026-03-11
-> Status: Proposed
+> Status: Delivered — see [ROADMAP.md §2.9](../ROADMAP.md#29-execution-environment-registry--p3)
 > Scope: Roadmap `2.9 Execution Environment Registry` for `direct` and `docker` environments only. No SSH, Slurm, or Kubernetes in this slice.
 
 ## Summary

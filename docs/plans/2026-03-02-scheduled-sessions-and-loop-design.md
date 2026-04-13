@@ -1,7 +1,7 @@
 # Design: Scheduled Sessions & Continuous Loop
 
 > Date: 2026-03-02
-> Status: Approved
+> Status: Delivered (archived) — see [ROADMAP.md §2.1, §2.2](../ROADMAP.md#21-scheduled-sessions)
 
 ## Problem
 

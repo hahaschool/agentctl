@@ -1,7 +1,7 @@
 # Design: Codex and Claude Runtime Unification
 
 > Date: 2026-03-09
-> Status: Approved
+> Status: Delivered — see [ROADMAP.md §3.1, §3.2](../ROADMAP.md#31-codex-cli-core-integration)
 > Scope: Control plane + worker runtime management; no UI implementation in this slice
 
 ## Summary

@@ -1,7 +1,7 @@
 # Dev / Beta / Prod Environment Isolation & CD Strategy
 
 > Date: 2026-03-12
-> Status: Draft (v2 — incorporates Codex gpt-5.4/xhigh review feedback)
+> Status: Delivered for §12.0–§12.5; §12.6 beta CD gate remains partial (self-hosted runner prerequisite). See [ROADMAP.md §12](../ROADMAP.md#12-environment-isolation--continuous-deployment)
 > Scope: Local multi-tier development environment isolation + continuous deployment gates
 
 ## Problem

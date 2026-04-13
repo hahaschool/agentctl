@@ -1,7 +1,7 @@
 # Design: Unified Sessions UI
 
 > Date: 2026-03-10
-> Status: Approved
+> Status: Delivered — see [ROADMAP.md §4.6](../ROADMAP.md#46-unified-session-browser--p0-)
 > Scope: Merge `/sessions` and `/runtime-sessions` into a single web session browser while keeping the current backend session models separate.
 
 ## Summary

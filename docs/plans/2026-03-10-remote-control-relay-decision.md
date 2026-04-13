@@ -1,7 +1,7 @@
 # Decision Memo: Claude Code Remote Control Relay
 
 > Date: 2026-03-10
-> Status: Decision made
+> Status: Delivered (decision + manual takeover shipped) — see [ROADMAP.md §2.4](../ROADMAP.md#24-remote-control-integration-relay-decision--manual-takeover--p2-)
 > Scope: `2.4 Remote Control Integration (Optional Enhancement) — P2`
 
 ## 1. Current state
