@@ -151,6 +151,7 @@ export const queryKeys = {
     graph: (params?: MemoryGraphQueryParams) =>
       params ? (['memory', 'graph', params] as const) : (['memory', 'graph'] as const),
     stats: ['memory', 'stats'] as const,
+    decayStats: ['memory', 'decay', 'stats'] as const,
     timeline: (sessionId: string) => ['memory', 'timeline', sessionId] as const,
     observation: (id: number) => ['memory', 'observation', id] as const,
     reports: (params?: { reportType?: MemoryReportType; scope?: string; limit?: number }) =>
@@ -609,6 +610,15 @@ export function memoryStatsQuery() {
   return queryOptions({
     queryKey: queryKeys.memory.stats,
     queryFn: api.getMemoryStats,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function memoryDecayStatsQuery() {
+  return queryOptions({
+    queryKey: queryKeys.memory.decayStats,
+    queryFn: api.getMemoryDecayStats,
     staleTime: 30_000,
     refetchInterval: 60_000,
   });
@@ -1577,6 +1587,21 @@ export function syncConflictCountQuery() {
     queryFn: api.getSyncConflictCount,
     refetchInterval: CONFLICT_POLL_INTERVAL,
     refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Trigger a memory-decay cycle. Invalidates both decay stats and the global
+ * memory stats so the dashboard reflects the new strength distribution.
+ */
+export function useRunMemoryDecay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.runMemoryDecay,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.memory.decayStats });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.memory.stats });
+    },
   });
 }
 

@@ -7,6 +7,7 @@ import { useMemo } from 'react';
 
 import { ActivityFeed } from '@/components/memory/ActivityFeed';
 import { KpiCard } from '@/components/memory/KpiCard';
+import { MemoryDecayCard } from '@/components/memory/MemoryDecayCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatNumber } from '@/lib/format-utils';
 import { memoryFactsQuery, memoryStatsQuery } from '@/lib/queries';
@@ -347,15 +348,19 @@ export function MemoryDashboardView(): React.JSX.Element {
         </Card>
       </div>
 
-      {/* Recent Activity Feed */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ActivityFeed items={recentItems} isLoading={recentFactsQuery.isLoading} />
-        </CardContent>
-      </Card>
+      {/* Recent Activity + Memory Decay */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ActivityFeed items={recentItems} isLoading={recentFactsQuery.isLoading} />
+          </CardContent>
+        </Card>
+
+        <MemoryDecayCard />
+      </div>
     </div>
   );
 }
