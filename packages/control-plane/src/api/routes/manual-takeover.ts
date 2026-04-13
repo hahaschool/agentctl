@@ -25,9 +25,9 @@ export type ManualTakeoverRoutesOptions = {
 };
 
 type ManualTakeoverRouteParams = { id: string };
-type AuthorizedManualTakeoverSession = ManagedSessionRecord & { nativeSessionId: string };
+type ManualTakeoverSessionWithNativeId = ManagedSessionRecord & { nativeSessionId: string };
 type ManualTakeoverRequestContext = {
-  manualTakeoverSession?: AuthorizedManualTakeoverSession;
+  manualTakeoverSession?: ManualTakeoverSessionWithNativeId;
 };
 
 /**
@@ -92,7 +92,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
     }
 
     (request as FastifyRequest & ManualTakeoverRequestContext).manualTakeoverSession =
-      session as AuthorizedManualTakeoverSession;
+      session as ManualTakeoverSessionWithNativeId;
   };
 
   app.post<{
@@ -109,7 +109,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
       preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = getAuthorizedManualTakeoverSession(request);
+      const session = readManualTakeoverSessionContext(request);
       const nativeSessionId = session.nativeSessionId;
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
@@ -151,7 +151,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
       preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = getAuthorizedManualTakeoverSession(request);
+      const session = readManualTakeoverSessionContext(request);
       const nativeSessionId = session.nativeSessionId;
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
@@ -253,7 +253,7 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
       preHandler: [app.rateLimit(manualTakeoverFastifyRateLimit), authorizeManualTakeover],
     },
     async (request, reply) => {
-      const session = getAuthorizedManualTakeoverSession(request);
+      const session = readManualTakeoverSessionContext(request);
       const nativeSessionId = session.nativeSessionId;
 
       const workerBaseUrl = await resolveWorker(session.machineId, dbRegistry, workerPort);
@@ -289,14 +289,14 @@ export const manualTakeoverRoutes: FastifyPluginAsync<ManualTakeoverRoutesOption
   );
 };
 
-function getAuthorizedManualTakeoverSession(
+function readManualTakeoverSessionContext(
   request: FastifyRequest,
-): AuthorizedManualTakeoverSession {
+): ManualTakeoverSessionWithNativeId {
   const session = (request as FastifyRequest & ManualTakeoverRequestContext).manualTakeoverSession;
   if (!session) {
     throw new ControlPlaneError(
-      'MISSING_MANUAL_TAKEOVER_AUTH_CONTEXT',
-      'Manual takeover route was called without an authorized session context',
+      'MISSING_MANUAL_TAKEOVER_SESSION_CONTEXT',
+      'Manual takeover route was called without a session context',
     );
   }
   return session;
