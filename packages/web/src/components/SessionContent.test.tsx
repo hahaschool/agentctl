@@ -378,9 +378,10 @@ describe('SessionContent', () => {
       const toolsBtn = screen.getByRole('button', { name: /tool/i });
       fireEvent.click(toolsBtn);
 
+      // ToolUseBlock renders toolName (e.g. "Read") for tool_use and "Result" for tool_result
       await waitFor(() => {
-        expect(screen.getByText('Tool Call')).toBeDefined();
-        expect(screen.getByText('Tool Result')).toBeDefined();
+        expect(screen.getByText('Read')).toBeDefined();
+        expect(screen.getByText('Result')).toBeDefined();
       });
     });
 

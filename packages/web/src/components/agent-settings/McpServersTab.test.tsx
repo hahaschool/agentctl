@@ -132,22 +132,16 @@ describe('McpServersTab', () => {
     expect(screen.queryByText('+ Add MCP Server')).toBeNull();
   });
 
-  it('shows message for non-managed runtime agents', () => {
+  it('falls back to claude-code picker for non-managed runtime agents', () => {
     renderTab(makeAgent({ runtime: 'nanoclaw' as Agent['runtime'] }));
-    expect(
-      screen.getByText(
-        'MCP discovery is only available for managed runtimes (claude-code, codex).',
-      ),
-    ).toBeDefined();
+    // Component now defaults to 'claude-code' picker instead of showing a guard message
+    expect(screen.getByText('MCP Servers')).toBeDefined();
   });
 
-  it('shows message when runtime is not set', () => {
+  it('falls back to claude-code picker when runtime is not set', () => {
     renderTab(makeAgent({ runtime: undefined }));
-    expect(
-      screen.getByText(
-        'MCP discovery is only available for managed runtimes (claude-code, codex).',
-      ),
-    ).toBeDefined();
+    // Component now defaults to 'claude-code' picker instead of showing a guard message
+    expect(screen.getByText('MCP Servers')).toBeDefined();
   });
 
   it('renders save button', () => {
