@@ -6,9 +6,48 @@ import {
 } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 
 import type { MobilePushDeviceStore } from '../../notifications/mobile-push-device-store.js';
 import { readRateLimitEnv } from '../rate-limit.js';
+
+// Field length caps on push-device writes prevent memory-exhaustion abuse
+// (arbitrary-size strings stored per-user) and keep downstream logs bounded.
+// Expo push tokens are ~50 chars; 256 is a generous safety margin.
+const MAX_USER_ID_LENGTH = 128;
+const MAX_PUSH_TOKEN_LENGTH = 256;
+const MAX_APP_ID_LENGTH = 128;
+const MAX_DEVICE_ID_LENGTH = 128;
+
+const trimmedNonEmptyString = (max: number) =>
+  z
+    .string()
+    .transform((value) => value.trim())
+    .pipe(z.string().min(1).max(max));
+
+// Unknown keys are stripped (default Zod behavior) so forward-compatible
+// callers that add new optional fields are not rejected on older servers.
+const upsertDeviceBodySchema = z.object({
+  userId: trimmedNonEmptyString(MAX_USER_ID_LENGTH),
+  platform: z.string().refine(isMobilePushPlatform, {
+    message: 'platform must be one of: ios',
+  }),
+  provider: z.string().refine(isMobilePushProvider, {
+    message: 'provider must be one of: expo',
+  }),
+  pushToken: trimmedNonEmptyString(MAX_PUSH_TOKEN_LENGTH),
+  appId: trimmedNonEmptyString(MAX_APP_ID_LENGTH),
+  lastSeenAt: z.string().datetime({ offset: true }).optional(),
+});
+
+const listDevicesQuerySchema = z.object({
+  userId: trimmedNonEmptyString(MAX_USER_ID_LENGTH),
+  includeDisabled: z.enum(['true', 'false']).optional(),
+});
+
+const deviceIdParamsSchema = z.object({
+  deviceId: trimmedNonEmptyString(MAX_DEVICE_ID_LENGTH),
+});
 
 export type MobilePushDeviceRoutesOptions = {
   mobilePushDeviceStore: MobilePushDeviceStore;
@@ -22,10 +61,6 @@ const MOBILE_PUSH_DEVICES_RATE_LIMIT = {
   timeWindow: 60_000,
 } as const;
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
 function parseOptionalDate(value: string | undefined): Date | null {
   if (value === undefined) {
     return null;
@@ -35,17 +70,52 @@ function parseOptionalDate(value: string | undefined): Date | null {
   return Number.isNaN(parsed.valueOf()) ? null : parsed;
 }
 
-function parseIncludeDisabled(value: string | undefined): boolean | null {
-  if (value === undefined) {
-    return false;
+// Map Zod upsert-device body issues back to the stable, per-field error codes
+// that existing clients (mobile app, iOS relay) already handle. Keeping the
+// error vocabulary stable lets us tighten the schema without breaking
+// downstream consumers.
+function mapUpsertDeviceIssue(issue: z.ZodIssue | undefined): {
+  error: string;
+  message: string;
+} {
+  const field = issue?.path[0];
+  switch (field) {
+    case 'userId':
+      return {
+        error: 'INVALID_USER_ID',
+        message: 'A non-empty "userId" string is required',
+      };
+    case 'platform':
+      return {
+        error: 'INVALID_PLATFORM',
+        message: 'platform must be one of: ios',
+      };
+    case 'provider':
+      return {
+        error: 'INVALID_PROVIDER',
+        message: 'provider must be one of: expo',
+      };
+    case 'pushToken':
+      return {
+        error: 'INVALID_PUSH_TOKEN',
+        message: 'A non-empty "pushToken" string is required',
+      };
+    case 'appId':
+      return {
+        error: 'INVALID_APP_ID',
+        message: 'A non-empty "appId" string is required',
+      };
+    case 'lastSeenAt':
+      return {
+        error: 'INVALID_LAST_SEEN_AT',
+        message: '"lastSeenAt" must be a valid ISO-8601 timestamp',
+      };
+    default:
+      return {
+        error: 'INVALID_UPSERT_DEVICE_BODY',
+        message: 'Invalid mobile push device registration body',
+      };
   }
-  if (value === 'true') {
-    return true;
-  }
-  if (value === 'false') {
-    return false;
-  }
-  return null;
 }
 
 export const mobilePushDeviceRoutes: FastifyPluginAsync<MobilePushDeviceRoutesOptions> = async (
@@ -94,58 +164,22 @@ export const mobilePushDeviceRoutes: FastifyPluginAsync<MobilePushDeviceRoutesOp
       preHandler: [app.rateLimit(mobilePushDevicesFastifyRateLimit)],
     },
     async (request, reply) => {
-      const { userId, platform, provider, pushToken, appId, lastSeenAt } = request.body;
-
-      if (!isNonEmptyString(userId)) {
-        return reply.code(400).send({
-          error: 'INVALID_USER_ID',
-          message: 'A non-empty "userId" string is required',
-        });
+      const parsed = upsertDeviceBodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        const mapped = mapUpsertDeviceIssue(parsed.error.issues[0]);
+        return reply.code(400).send(mapped);
       }
-
-      if (!isNonEmptyString(platform) || !isMobilePushPlatform(platform)) {
-        return reply.code(400).send({
-          error: 'INVALID_PLATFORM',
-          message: 'platform must be one of: ios',
-        });
-      }
-
-      if (!isNonEmptyString(provider) || !isMobilePushProvider(provider)) {
-        return reply.code(400).send({
-          error: 'INVALID_PROVIDER',
-          message: 'provider must be one of: expo',
-        });
-      }
-
-      if (!isNonEmptyString(pushToken)) {
-        return reply.code(400).send({
-          error: 'INVALID_PUSH_TOKEN',
-          message: 'A non-empty "pushToken" string is required',
-        });
-      }
-
-      if (!isNonEmptyString(appId)) {
-        return reply.code(400).send({
-          error: 'INVALID_APP_ID',
-          message: 'A non-empty "appId" string is required',
-        });
-      }
+      const { userId, platform, provider, pushToken, appId, lastSeenAt } = parsed.data;
 
       const parsedLastSeenAt = parseOptionalDate(lastSeenAt);
-      if (lastSeenAt !== undefined && parsedLastSeenAt === null) {
-        return reply.code(400).send({
-          error: 'INVALID_LAST_SEEN_AT',
-          message: '"lastSeenAt" must be a valid ISO-8601 timestamp',
-        });
-      }
 
       try {
         const device = await mobilePushDeviceStore.upsertDevice({
-          userId: userId.trim(),
+          userId,
           platform,
           provider,
-          pushToken: pushToken.trim(),
-          appId: appId.trim(),
+          pushToken,
+          appId,
           lastSeenAt: parsedLastSeenAt,
         });
 
@@ -169,26 +203,26 @@ export const mobilePushDeviceRoutes: FastifyPluginAsync<MobilePushDeviceRoutesOp
       },
     },
     async (request, reply) => {
-      const { userId, includeDisabled } = request.query;
-
-      if (!isNonEmptyString(userId)) {
+      const parsed = listDevicesQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        const firstPath = parsed.error.issues[0]?.path[0];
+        if (firstPath === 'includeDisabled') {
+          return reply.code(400).send({
+            error: 'INVALID_INCLUDE_DISABLED',
+            message: '"includeDisabled" must be "true" or "false" when provided',
+          });
+        }
         return reply.code(400).send({
           error: 'INVALID_USER_ID',
           message: 'A non-empty "userId" query parameter is required',
         });
       }
-
-      const parsedIncludeDisabled = parseIncludeDisabled(includeDisabled);
-      if (parsedIncludeDisabled === null) {
-        return reply.code(400).send({
-          error: 'INVALID_INCLUDE_DISABLED',
-          message: '"includeDisabled" must be "true" or "false" when provided',
-        });
-      }
+      const { userId, includeDisabled } = parsed.data;
+      const parsedIncludeDisabled = includeDisabled === 'true';
 
       try {
         const devices = await mobilePushDeviceStore.listDevices({
-          userId: userId.trim(),
+          userId,
           includeDisabled: parsedIncludeDisabled,
         });
 
@@ -214,17 +248,18 @@ export const mobilePushDeviceRoutes: FastifyPluginAsync<MobilePushDeviceRoutesOp
       preHandler: [app.rateLimit(mobilePushDevicesFastifyRateLimit)],
     },
     async (request, reply) => {
-      const { deviceId } = request.params;
-
-      if (!isNonEmptyString(deviceId)) {
+      const parsed = deviceIdParamsSchema.safeParse(request.params);
+      if (!parsed.success) {
         return reply.code(400).send({
           error: 'INVALID_DEVICE_ID',
           message: 'A non-empty "deviceId" path parameter is required',
+          details: parsed.error.issues,
         });
       }
+      const { deviceId } = parsed.data;
 
       try {
-        const device = await mobilePushDeviceStore.deactivateDevice(deviceId.trim());
+        const device = await mobilePushDeviceStore.deactivateDevice(deviceId);
         return { ok: true, device };
       } catch (error: unknown) {
         if (error instanceof ControlPlaneError && error.code === 'MOBILE_PUSH_DEVICE_NOT_FOUND') {

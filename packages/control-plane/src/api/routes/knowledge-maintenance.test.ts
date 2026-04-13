@@ -290,6 +290,29 @@ describe('knowledge-maintenance routes', () => {
 
       expect(res.statusCode).toBe(500);
     });
+
+    it('returns 400 when scope exceeds the length bound', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/maintenance',
+        payload: { scope: 'x'.repeat(1024) },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_MAINTENANCE_BODY');
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when scope is not a string', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/maintenance',
+        payload: { scope: 42 },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_MAINTENANCE_BODY');
+    });
   });
 });
 

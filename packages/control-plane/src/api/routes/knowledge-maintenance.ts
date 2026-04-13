@@ -12,10 +12,23 @@ import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
+import { z } from 'zod';
 
 import { KnowledgeMaintenance } from '../../memory/knowledge-maintenance.js';
 import type { MemoryStore } from '../../memory/memory-store.js';
 import { readRateLimitEnv } from '../rate-limit.js';
+
+// Cap the free-form "scope" selector so a malformed/oversized body cannot
+// fan out into a pathologically large SQL LIKE or log payload. 256 chars is
+// generous for directory-style scopes like "packages/control-plane/src".
+const MAX_SCOPE_LENGTH = 256;
+
+// Unknown keys are stripped (default Zod behavior) rather than rejected so
+// existing callers that include ignored fields (e.g. `projectRoot`) continue
+// to work. Length-bounded `scope` is the only field we act on.
+const maintenanceBodySchema = z.object({
+  scope: z.string().max(MAX_SCOPE_LENGTH).optional(),
+});
 
 export type KnowledgeMaintenanceRoutesOptions = {
   pool: Pool;
@@ -75,8 +88,16 @@ export const knowledgeMaintenanceRoutes: FastifyPluginAsync<
       config: { rateLimit: knowledgeMaintenanceFastifyRateLimit },
       preHandler: [app.rateLimit(knowledgeMaintenanceFastifyRateLimit)],
     },
-    async (request) => {
-      const scope = typeof request.body?.scope === 'string' ? request.body.scope : undefined;
+    async (request, reply) => {
+      const parsed = maintenanceBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'INVALID_MAINTENANCE_BODY',
+          message: 'Invalid maintenance request body',
+          details: parsed.error.issues,
+        });
+      }
+      const scope = parsed.data.scope;
 
       const maintenance = new KnowledgeMaintenance({
         pool: opts.pool,
