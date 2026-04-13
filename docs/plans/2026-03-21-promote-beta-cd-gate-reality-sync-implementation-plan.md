@@ -1,5 +1,8 @@
 # Promote Beta CD Gate Reality-Sync Implementation Plan
 
+> Date: 2026-03-21
+> Status: Delivered (PR #355) — see [ROADMAP.md §12.6](../ROADMAP.md#126-github-actions-cd-gate--partial). Section stays "Partial" until the dedicated `agentctl-beta` self-hosted runner lands and `BETA_SELF_HOSTED_RUNNER_READY` is enabled.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Make section 12.6 honest by failing `promote-beta.yml` before approval unless a self-hosted beta runner is explicitly marked ready, and sync the roadmap/setup docs to that behavior.

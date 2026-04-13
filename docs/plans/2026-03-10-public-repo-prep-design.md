@@ -1,7 +1,7 @@
 # Design: Public Repository Preparation
 
 > Date: 2026-03-10
-> Status: Approved
+> Status: Delivered — see [ROADMAP.md §13](../ROADMAP.md#13-open-source--community)
 > Scope: Repository-wide — license, contribution guidelines, security policy, GitHub templates, README
 
 ## Context

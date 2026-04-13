@@ -1,7 +1,7 @@
 # Design: Runtime Settings and Config Consistency UI
 
 > Date: 2026-03-10
-> Status: Approved
+> Status: Subsumed by runtime-centric settings redesign (Delivered) — see [ROADMAP.md §4.5](../ROADMAP.md#45-runtime-centric-settings-redesign)
 > Scope: Web settings UI for machine-local Claude Code / Codex access and managed config consistency
 
 ## Summary

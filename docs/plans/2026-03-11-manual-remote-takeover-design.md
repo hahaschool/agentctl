@@ -1,7 +1,7 @@
 # Design: Manual Remote Takeover for Claude Runtime Sessions
 
 > Date: 2026-03-11
-> Status: Approved
+> Status: Delivered — see [ROADMAP.md §2.4](../ROADMAP.md#24-remote-control-integration-relay-decision--manual-takeover--p2-)
 > Scope: Add a narrow manual takeover surface for existing Claude managed runtime sessions without replacing the current `claude -p` managed-session path.
 
 ## Summary

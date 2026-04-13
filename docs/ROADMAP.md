@@ -970,6 +970,9 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ### 12.6 GitHub Actions CD Gate — Partial
 
+> Design doc: [promote-beta-cd-gate-reality-sync-design](plans/2026-03-21-promote-beta-cd-gate-reality-sync-design.md)
+> Impl plan: [promote-beta-cd-gate-reality-sync-implementation-plan](plans/2026-03-21-promote-beta-cd-gate-reality-sync-implementation-plan.md)
+
 - [ ] Dedicated `agentctl-beta` self-hosted runner on the beta deployment target
 - [ ] Repository variable `BETA_SELF_HOSTED_RUNNER_READY` enabled after the self-hosted runner is validated
 - [x] `promote-beta.yml` workflow scaffold with environment protection rules and fail-fast reality-sync until the beta self-hosted runner exists *(PR #136, PR #355; still future-gated until the prerequisites above land)*
@@ -2144,6 +2147,8 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; the remaining machines / terminal coverage now lives in the dedicated section 29 follow-up | 25.1-25.3 |
 | [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Delivered — PR #346 added the dedicated machine terminal Playwright coverage on `main`; no page-level hardening was required beyond the focused e2e spec | 29 |
+| [promote-beta-cd-gate-reality-sync-design](plans/2026-03-21-promote-beta-cd-gate-reality-sync-design.md) | Delivered (PR #355) — workflow now fail-fast-gates on `BETA_SELF_HOSTED_RUNNER_READY`; §12.6 stays Partial until the self-hosted runner lands | 12.6 |
+| [promote-beta-cd-gate-reality-sync-implementation-plan](plans/2026-03-21-promote-beta-cd-gate-reality-sync-implementation-plan.md) | Delivered (PR #355) — readiness gate, pre-approval host-verification job, and roadmap/setup doc sync shipped | 12.6 |
 | [agent-worker-container-security-remediation-plan](plans/2026-03-20-agent-worker-container-security-remediation-plan.md) | Delivered — PRs #307, #314, #322, and #326 are on `main`; as of 2026-03-20 GitHub code scanning shows `0` open alerts and both worker Trivy categories upload `0`-result analyses on recent `main` commits (`cdd63b8`, `3e38d87`, `4c82efb`) | 26.1 |
 | [worker-runtime-surface-reduction-plan](plans/2026-03-20-worker-runtime-surface-reduction-plan.md) | Delivered — PR #322 landed the git-capability hardening slice on `main`; post-#326 worker scans converged to `0` open alerts without removing `git` from the standard worker image | 26.2 |
 | [terminal-takeover-gap-implementation-plan](plans/2026-03-20-terminal-takeover-gap-implementation-plan.md) | Delivered — PRs #340-#344 and #350 shipped the live managed-session terminal attach feature plus focused runtime-session attach e2e coverage on `main`; this plan now remains only as the implementation record | 27.3 |

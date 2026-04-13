@@ -1,7 +1,7 @@
 # Runtime-centric settings redesign
 
 > Date: 2026-03-10
-> Status: Approved
+> Status: Delivered — see [ROADMAP.md §4.5](../ROADMAP.md#45-runtime-centric-settings-redesign)
 > Scope: Settings IA, runtime-centric access model, multi-machine runtime inventory, and mixed managed/local credential handling
 
 ## Summary

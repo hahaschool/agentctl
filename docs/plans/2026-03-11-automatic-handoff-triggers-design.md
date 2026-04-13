@@ -1,7 +1,7 @@
 # Design: Automatic Handoff Triggers
 
 > Date: 2026-03-11
-> Status: Proposed
+> Status: Delivered — see [ROADMAP.md §3.5](../ROADMAP.md#35-automatic-handoff-triggers--p2)
 > Scope: Control-plane orchestration, managed runtime sessions, run history, handoff policy evaluation
 
 ## Summary
