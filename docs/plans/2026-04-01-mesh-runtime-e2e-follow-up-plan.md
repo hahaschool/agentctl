@@ -12,7 +12,9 @@
 > `main`: PR #389 (initial `/conflicts` page + Config-tab Playwright
 > coverage), PR #395 (session `Config` tab detail-state coverage), and
 > PR #396 (`/conflicts` resolution-flow coverage). PR #397 synced this
-> tracking doc.
+> tracking doc. PR #431 later extended the same browser-coverage push to
+> `/mesh-peers`, covering render, empty, ping-success, and ping-failure
+> states for the section 33.4 peer-registry UI.
 
 ---
 
