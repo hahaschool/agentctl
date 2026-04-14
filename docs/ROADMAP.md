@@ -1,10 +1,10 @@
 # Project Roadmap
 
-> Last updated: 2026-04-14 (post-PR #468 spaces/tasks detail E2E + webhook delivery history + memory browser-depth follow-up). The 2026-04-13/14 landing set includes PR #395 through PR #468, including the latest memory/web follow-ups: PR #457 (`/memory/import` wizard completion/cancellation coverage), PR #458 (`/settings` notification preferences backend-independent coverage), PR #459 (`/discover` grouped/filter/import/new-session coverage), PR #460 (roadmap checkpoint sync), PR #461 (`/memory` index redirect/sidebar coverage), PR #462 (`/memory/consolidation` queue/action coverage), PR #465 (`/memory/scopes` broader render/create/rename/promote/merge/delete/error/empty coverage), PR #466 (`/memory/graph` table/SVG/detail/empty coverage), PR #467 (webhook delivery history viewer over the existing delivery-list API), and PR #468 (`/spaces/[id]` + `/tasks/[id]` detail-route coverage). CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
+> Last updated: 2026-04-14 (post-PR #474 web feature batch covering memory synthesis/maintenance pages, push-device settings surface, memory fact feedback, and tasks auto-decompose action). The 2026-04-13/14 landing set includes PR #395 through PR #474, including the latest memory/web follow-ups: PR #457 (`/memory/import` wizard completion/cancellation coverage), PR #458 (`/settings` notification preferences backend-independent coverage), PR #459 (`/discover` grouped/filter/import/new-session coverage), PR #460 (roadmap checkpoint sync), PR #461 (`/memory` index redirect/sidebar coverage), PR #462 (`/memory/consolidation` queue/action coverage), PR #465 (`/memory/scopes` broader render/create/rename/promote/merge/delete/error/empty coverage), PR #466 (`/memory/graph` table/SVG/detail/empty coverage), PR #467 (webhook delivery history viewer over the existing delivery-list API), PR #468 (`/spaces/[id]` + `/tasks/[id]` detail-route coverage), PR #470 (`/memory/synthesis` structural-lint page over `POST /api/memory/synthesis`), PR #471 (Settings → Notifications **Registered Push Devices** section over `/api/mobile-push-devices`), PR #472 (memory fact thumbs-up / irrelevant / outdated feedback buttons over `PATCH /api/memory/facts/:id/feedback`), PR #473 (`/memory/maintenance` page over `POST /api/memory/maintenance`), and PR #474 (tasks auto-decompose action wiring `POST /api/decompose` + `/preview` with two-step preview/apply UX). CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
 >
-> Current checkpoint: PR #461, PR #462, PR #465, PR #466, PR #467, and PR #468 are merged through `main@4291f520`; GitHub currently reports 0 open PRs, 0 open code-scanning alerts, 0 open Dependabot alerts, and 0 open secret-scanning alerts.
+> Current checkpoint: PR #470, PR #471, PR #472, PR #473, and PR #474 are merged through `main@a8189309`; GitHub currently reports 2 open PRs (#475, #476 — not yet merged), 0 open code-scanning alerts, 0 open Dependabot alerts, and 0 open secret-scanning alerts.
 >
-> Coordination note: PR #461 merged as `e6fd4c2e`, PR #462 as `193e6b02`, PR #465 as `2b950c96`, PR #466 as `9fbc2fe9`, PR #467 as `620de798`, and PR #468 as `4291f520`; duplicate PRs #463 and #464 were closed after their stronger sibling branches merged.
+> Coordination note: PR #461 merged as `e6fd4c2e`, PR #462 as `193e6b02`, PR #465 as `2b950c96`, PR #466 as `9fbc2fe9`, PR #467 as `620de798`, PR #468 as `4291f520`, PR #470 as `5a480a23`, PR #471 as `2d61cb8a`, PR #472 as `7b2f9b8c`, PR #473 as `22fbe6ae`, and PR #474 as `a8189309`; duplicate PRs #463 and #464 were closed after their stronger sibling branches merged.
 
 ## Current State
 
@@ -503,6 +503,9 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Import Wizard (`/memory/import`) — 4-step claude-mem migration wizard (source detection → preview/mapping → progress → summary); dedup via embedding similarity; rollback support *(PR #55)*
 - [x] Fact Editor (modal) — accessible from Browser/Graph/command palette; content, entity type, scope, confidence, pinned toggle, relationships editor *(PR #53)*
 - [x] Scope Manager (`/memory/scopes`) — scope hierarchy tree with fact counts; promote, merge, rename, delete scope operations *(PR #55)*
+- [x] Synthesis Page (`/memory/synthesis`) — structural-lint surface for near-duplicates, stale facts, orphan facts, and synthesis groups over `POST /api/memory/synthesis` *(PR #470)*
+- [x] Maintenance Page (`/memory/maintenance`) — stale references, deleted-file references, synthesis clusters, and coverage gaps over `POST /api/memory/maintenance` *(PR #473)*
+- [x] Memory Browser fact feedback buttons — thumbs-up / irrelevant / outdated signals on facts via `PATCH /api/memory/facts/:id/feedback` *(PR #472)*
 
 **Integration points (memory woven into existing pages):**
 
@@ -866,6 +869,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 - [x] Smart Routing: capability match + load + cost + historical success scoring → ranked candidate selection (Phase 5a) — PR #113
 - [x] Auto-Decompose: LLM-based natural-language task → TaskGraph with DAG validation (Phase 5b) — PR #111
+- [x] Auto-Decompose web UI: **Auto-decompose** action on `/tasks/[id]` with two-step preview/apply dialog over `POST /api/decompose` + `/preview`, including subtask/dependency rendering, token/cost estimates, and post-apply navigation to the new graph *(PR #474)*
 - [x] Outcome Learning: sliding-window stats from task completions → refine routing scores + approval timeouts (Phase 5c) — PR #113
 - [x] Notification Routing: priority classification + per-user channel preferences + quiet hours (Phase 5d) — PR #112
 
@@ -1530,6 +1534,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 - [x] Frontend settings panel for notification-preferences API *(PR #272)*
 - [x] Channels, quiet hours, priority threshold configuration *(PR #272)*
+- [x] **Registered Push Devices** section in Settings → Notifications, listing iOS push registrations and exposing revoke via confirm dialog over `GET /api/mobile-push-devices` + `POST /api/mobile-push-devices/:deviceId/deactivate` *(PR #471; relates to [plans/2026-03-19-approval-push-notifications-impl-plan.md](plans/2026-03-19-approval-push-notifications-impl-plan.md))*
 
 ### 20.9 Webhooks Management Page — Delivered
 
@@ -1568,6 +1573,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Notification tap path lands user on the approval inbox *(PR #290)*
 - [x] Initial single-operator routing model documented until durable user ownership lands *(PR #285 + 21.2 docs)*
 - [x] Device registry validation negative coverage for invalid methods, malformed JSON, invalid tokens/platforms, oversized route params, deactivate error paths, and Fastify `routerOptions.maxParamLength = 256` behavior *(PR #447)*
+- [x] Operator-facing **Registered Push Devices** UI in Settings → Notifications for listing/revoking registrations over the existing `/api/mobile-push-devices` endpoints *(PR #471; tracked in §20.8)*
 
 ## 22. Remaining Route Tests + Frontend Integration
 
