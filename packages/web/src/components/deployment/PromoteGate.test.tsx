@@ -102,4 +102,23 @@ describe('PromoteGate', () => {
       expect(api.runPreflight).toHaveBeenCalledWith('dev-1');
     });
   });
+
+  it('explains that GitHub beta promotion remains gated while local dev-tier promotion is available', () => {
+    const onPromoteStarted = vi.fn();
+
+    render(<PromoteGate tiers={mockTiers} onPromoteStarted={onPromoteStarted} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(
+      screen.getByText(
+        /GitHub-triggered beta promotion remains gated until the beta host has a dedicated agentctl-beta self-hosted runner/i,
+      ),
+    ).toBeDefined();
+    expect(screen.getByText(/BETA_SELF_HOSTED_RUNNER_READY/i)).toBeDefined();
+    expect(
+      screen.getByText(/Use local\/manual promotion from dev-1 or dev-2 as the safe path/i),
+    ).toBeDefined();
+    expect(screen.getByText('./scripts/env-promote.sh --from dev-1|dev-2')).toBeDefined();
+  });
 });

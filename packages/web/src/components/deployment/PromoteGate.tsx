@@ -101,6 +101,20 @@ export function PromoteGate({ tiers, onPromoteStarted }: PromoteGateProps): Reac
     <div className="rounded-lg border border-border bg-card p-4">
       <h3 className="text-sm font-semibold tracking-tight mb-3">Promote to Beta</h3>
 
+      <div className="mb-4 border-l-2 border-amber-500 pl-3 text-xs text-muted-foreground">
+        <p className="font-medium text-foreground">
+          GitHub-triggered beta promotion remains gated until the beta host has a dedicated
+          agentctl-beta self-hosted runner and BETA_SELF_HOSTED_RUNNER_READY is enabled.
+        </p>
+        <p className="mt-1">
+          Use local/manual promotion from dev-1 or dev-2 as the safe path:{' '}
+          <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
+            ./scripts/env-promote.sh --from dev-1|dev-2
+          </code>
+          . GitHub-hosted automation must not touch beta.
+        </p>
+      </div>
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
         <label className="text-xs text-muted-foreground shrink-0" htmlFor="source-tier-select">
           Source tier

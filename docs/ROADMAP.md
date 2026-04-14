@@ -998,6 +998,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 > Impl plan: [deployment-page](superpowers/plans/2026-03-13-deployment-page.md)
 >
 > Delivered in PR #144. Full deployment page with tier status, gated promotion, and history.
+> Follow-up: the promote panel now mirrors §12.6 by making the GitHub-triggered beta gate explicit: beta promotion stays local/manual from `dev-1` / `dev-2` until the `agentctl-beta` self-hosted runner and `BETA_SELF_HOSTED_RUNNER_READY` are both live.
 
 - [x] Tier status cards (dev-1, dev-2, beta, production) with health indicators *(PR #144)*
 - [x] Dev-tier cards now surface health-derived MEM/UPTIME and prefer PM2 metrics when PM2 data is available *(PR #230)*
