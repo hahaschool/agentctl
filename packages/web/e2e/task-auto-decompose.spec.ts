@@ -310,6 +310,37 @@ test.describe('Task auto-decompose dialog', () => {
     await expect(page.getByTestId('auto-decompose-dialog')).toBeHidden({ timeout: 10_000 });
   });
 
+  test('requires a fresh preview when the description changes after preview', async ({ page }) => {
+    const state = makeState();
+    await mountMocks(page, state);
+
+    await openDialog(page);
+
+    const textarea = page.getByTestId('auto-decompose-description-input');
+    await textarea.fill('Break down release orchestration into phases.');
+
+    await page.getByTestId('auto-decompose-preview-button').click();
+    await expect(page.getByTestId('proposed-task-temp-scaffold')).toBeVisible();
+    expect(state.previewRequests).toHaveLength(1);
+
+    await textarea.fill('Break down release orchestration into launch, rollback, and cleanup.');
+
+    await expect(page.getByTestId('auto-decompose-stale-preview')).toBeVisible();
+    await expect(page.getByTestId('auto-decompose-apply-button')).toBeDisabled();
+    await expect(page.getByTestId('proposed-task-temp-scaffold')).toBeHidden();
+    expect(state.applyRequests).toEqual([]);
+
+    await page.getByTestId('auto-decompose-preview-button').click();
+    await expect(page.getByTestId('proposed-task-temp-scaffold')).toBeVisible();
+    await expect(page.getByTestId('auto-decompose-stale-preview')).toBeHidden();
+    await expect(page.getByTestId('auto-decompose-apply-button')).toBeEnabled();
+
+    expect(state.previewRequests).toHaveLength(2);
+    expect(state.previewRequests[1]?.body?.description).toBe(
+      'Break down release orchestration into launch, rollback, and cleanup.',
+    );
+  });
+
   test('renders validation warnings returned from the preview endpoint', async ({ page }) => {
     const state = makeState({ previewMode: 'with-validation' });
     await mountMocks(page, state);
