@@ -1,9 +1,9 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Play } from 'lucide-react';
+import { ArrowLeft, Play, Sparkles } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import type React from 'react';
 import { useState } from 'react';
 
@@ -12,6 +12,7 @@ import { FetchingBar } from '@/components/FetchingBar';
 import { LastUpdated } from '@/components/LastUpdated';
 import { PageContainer } from '@/components/PageContainer';
 import { RefreshButton } from '@/components/RefreshButton';
+import { AutoDecomposeDialog } from '@/components/tasks/AutoDecomposeDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -298,10 +299,13 @@ function StartRunPanel({ definitions }: StartRunPanelProps): React.JSX.Element |
 
 export default function TaskGraphDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const graphId = params.id;
 
   const graphQuery = useQuery(taskGraphQuery(graphId));
   const runsQuery = useQuery(taskRunsQuery());
+
+  const [decomposeOpen, setDecomposeOpen] = useState(false);
 
   const graph = graphQuery.data;
   const definitions = graph?.definitions ?? [];
@@ -378,6 +382,16 @@ export default function TaskGraphDetailPage(): React.JSX.Element {
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDecomposeOpen(true)}
+                  data-testid="auto-decompose-trigger"
+                  className="gap-1.5"
+                >
+                  <Sparkles size={13} aria-hidden="true" />
+                  Auto-decompose
+                </Button>
                 <LastUpdated dataUpdatedAt={graphQuery.dataUpdatedAt} />
                 <RefreshButton onClick={handleRefetch} isFetching={isFetching} />
               </div>
@@ -426,6 +440,15 @@ export default function TaskGraphDetailPage(): React.JSX.Element {
           </>
         )}
       </PageContainer>
+
+      <AutoDecomposeDialog
+        open={decomposeOpen}
+        onOpenChange={setDecomposeOpen}
+        initialDescription={graph?.name ?? ''}
+        onApplied={(newGraphId) => {
+          router.push(`/tasks/${newGraphId}`);
+        }}
+      />
     </div>
   );
 }
