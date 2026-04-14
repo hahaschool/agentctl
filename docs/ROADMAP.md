@@ -2210,7 +2210,6 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [memory-ui-design](plans/2026-03-11-memory-ui-design.md) | Delivered | 4.8 |
 | [memory-ui-implementation](plans/2026-03-11-memory-ui-implementation.md) | Delivered | 4.8 |
 | [memory-browser-provenance-filters-plan](plans/2026-04-14-memory-browser-provenance-filters-plan.md) | Delivered in PR #486 — expose existing memory fact source filters in `/memory/browser` | 4.8 |
-
 | [multi-agent-collaboration-design](plans/2026-03-12-multi-agent-collaboration-design.md) | Delivered | 10.1-10.5 |
 | [multi-agent-collaboration-phase1-impl-plan](plans/2026-03-12-multi-agent-collaboration-phase1-impl-plan.md) | Delivered | 10.1 |
 | [multi-agent-communication-impl-plan](plans/2026-03-12-multi-agent-communication-impl-plan.md) | Delivered | 10.2 |
