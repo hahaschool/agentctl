@@ -1,7 +1,7 @@
 # Audit Trail Page Plan
 
 Date: 2026-04-14
-Status: Delivered in PR #507 (`main@d3fb1a0b`)
+Status: Delivered in PR #507 (`main@d3fb1a0b`); plan registered in PR #509 (`main@b0464f2c`)
 Owner: Claude/Codex coordination lane
 
 ## Context
@@ -36,6 +36,7 @@ PR #507 closed that gap by extracting the audit trail into a dedicated `/audit` 
 
 - PR #507 GitHub checks covered lint, build, unit tests, and security audit before merge.
 - Post-merge `main@d3fb1a0b` checks passed: CI, Security Audit, and Build & Publish Docker Images.
+- Plan registration landed in PR #509; post-merge `main@b0464f2c` checks passed: CI `24405567418`, Security Audit `24405567419`, and Build & Publish Docker Images `24405567447`.
 - Local docs sync validation: `git diff --check`.
 
 ## Follow-Up
