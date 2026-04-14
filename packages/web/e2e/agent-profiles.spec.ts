@@ -319,7 +319,12 @@ test.describe('Agent Profiles page', () => {
     const confirm = page.getByTestId('agent-profile-delete-confirm');
     await expect(confirm).toBeVisible();
 
+    const deleteRequest = page.waitForRequest(
+      (r) =>
+        r.method() === 'DELETE' && new URL(r.url()).pathname === '/api/agent-profiles/profile-busy',
+    );
     await confirm.getByTestId('confirm-delete-agent-profile').click();
+    await deleteRequest;
 
     expect(state.deleteCalls).toEqual(['profile-busy']);
     await expect(confirm).toBeHidden();
