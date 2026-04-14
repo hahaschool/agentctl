@@ -17,7 +17,7 @@
 
 import { AlertCircle, Loader2, Sparkles } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
@@ -192,6 +192,14 @@ export function AutoDecomposeDialog({
   const applyMutation = useDecomposeTask();
 
   const [description, setDescription] = useState<string>(initialDescription);
+  const wasOpenRef = useRef(open);
+
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      setDescription(initialDescription);
+    }
+    wasOpenRef.current = open;
+  }, [initialDescription, open]);
 
   const preview = previewMutation.data;
   const isPreviewing = previewMutation.isPending;

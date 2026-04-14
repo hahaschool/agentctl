@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -149,6 +149,27 @@ describe('AutoDecomposeDialog', () => {
 
     const textarea = screen.getByTestId('auto-decompose-description-input') as HTMLTextAreaElement;
     expect(textarea.value).toBe('Refactor the auth module');
+  });
+
+  it('seeds the description when async graph data arrives before the dialog opens', async () => {
+    const { rerender } = render(
+      <AutoDecomposeDialog open={false} onOpenChange={vi.fn()} initialDescription="" />,
+    );
+
+    rerender(
+      <AutoDecomposeDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        initialDescription="Loaded graph name"
+      />,
+    );
+
+    await waitFor(() => {
+      const textarea = screen.getByTestId(
+        'auto-decompose-description-input',
+      ) as HTMLTextAreaElement;
+      expect(textarea.value).toBe('Loaded graph name');
+    });
   });
 
   it('fires preview mutation with the trimmed description when Preview clicked', () => {
