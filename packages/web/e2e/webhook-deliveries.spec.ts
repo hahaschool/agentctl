@@ -47,6 +47,7 @@ type Delivery = {
 type MockState = {
   webhooks: Webhook[];
   deliveriesById: Map<string, Delivery[]>;
+  deliveryFailuresById?: Map<string, number>;
   deliveriesCalls: string[];
 };
 
@@ -104,6 +105,19 @@ async function mountApiMocks(page: Page, state: MockState): Promise<void> {
     if (method === 'GET' && deliveriesMatch) {
       const id = decodeURIComponent(deliveriesMatch[1] ?? '');
       state.deliveriesCalls.push(id);
+      const remainingFailures = state.deliveryFailuresById?.get(id) ?? 0;
+      if (remainingFailures > 0) {
+        state.deliveryFailuresById?.set(id, remainingFailures - 1);
+        await fulfillJson(
+          route,
+          {
+            error: 'DELIVERIES_UNAVAILABLE',
+            message: 'Delivery history unavailable',
+          },
+          500,
+        );
+        return;
+      }
       const deliveries = state.deliveriesById.get(id) ?? [];
       await fulfillJson(route, { deliveries });
       return;
@@ -272,5 +286,53 @@ test.describe('Webhook deliveries drawer', () => {
 
     // No row elements should exist when empty.
     await expect(page.locator('[data-testid^="delivery-row-"]')).toHaveCount(0);
+  });
+
+  test('shows a delivery-list error and retries to render rows', async ({ page }) => {
+    const deliveries: Delivery[] = [
+      makeDelivery({
+        id: 'd-retry',
+        subscriptionId: 'wh-retry',
+        eventType: 'deploy.failure',
+        status: 'failed',
+        statusCode: 503,
+        attempts: 2,
+      }),
+    ];
+    const state: MockState = {
+      webhooks: [makeWebhook({ id: 'wh-retry', url: 'https://example.com/retry' })],
+      deliveriesById: new Map([['wh-retry', deliveries]]),
+      // Production query defaults retry 5xx twice before exposing the final error state.
+      deliveryFailuresById: new Map([['wh-retry', 3]]),
+      deliveriesCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/webhooks');
+    await page.getByTestId('deliveries-wh-retry').click();
+
+    const error = page.getByTestId('deliveries-error');
+    await expect(error).toBeVisible();
+    await expect(error).toContainText('Delivery history unavailable');
+    expect(state.deliveriesCalls).toEqual(['wh-retry', 'wh-retry', 'wh-retry']);
+
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === 'GET' &&
+          new URL(response.url()).pathname === '/api/webhooks/wh-retry/deliveries' &&
+          response.status() === 200,
+      ),
+      error.getByRole('button', { name: 'Retry' }).click(),
+    ]);
+
+    const row = page.getByTestId('delivery-row-d-retry');
+    await expect(row).toBeVisible();
+    await expect(row).toContainText('deploy.failure');
+    await expect(row).toContainText('failed');
+    await expect(row).toContainText('503');
+    await expect(row).toContainText('×2');
+    await expect(page.getByTestId('deliveries-error')).toHaveCount(0);
+    expect(state.deliveriesCalls).toEqual(['wh-retry', 'wh-retry', 'wh-retry', 'wh-retry']);
   });
 });
