@@ -10,7 +10,7 @@ set -euo pipefail
 
 TIER="${1:-}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK_DIR="/tmp/agentctl-tier-locks"
+LOCK_DIR="${LOCK_DIR_OVERRIDE:-/tmp/agentctl-tier-locks}"
 
 if [[ -z "$TIER" ]]; then
   echo "Usage: $0 <tier>"
@@ -52,20 +52,60 @@ for port in "$CP_PORT" "$WORKER_PORT" "$WEB_PORT"; do
   fi
 done
 
-# Acquire flock (fd-based, auto-releases on process death)
+# Acquire a tier lock. Prefer flock when available; fall back to an atomic
+# mkdir lock on platforms such as stock macOS where flock may be absent.
 mkdir -p "$LOCK_DIR"
 LOCK_FILE="${LOCK_DIR}/${TIER}.lock"
-exec 200>"$LOCK_FILE"
-if ! flock -n 200; then
-  echo "Error: tier ${TIER} is already in use (lock held)."
-  cat "$LOCK_FILE" 2>/dev/null || true
-  exit 1
-fi
+LOCK_SENTINEL="${LOCK_FILE}.d"
+PORTABLE_LOCK_HELD=false
 
-# Write metadata to lock file (for debugging, not for lock ownership)
-echo "pid=$$" >&200
-echo "tier=${TIER}" >&200
-echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >&200
+write_lock_metadata() {
+  {
+    echo "pid=$$"
+    echo "tier=${TIER}"
+    echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } >"$LOCK_FILE"
+}
+
+portable_lock_owner_alive() {
+  local lock_pid
+  lock_pid=$(grep '^pid=' "$LOCK_FILE" 2>/dev/null | cut -d= -f2- || true)
+  [[ -n "$lock_pid" ]] && kill -0 "$lock_pid" 2>/dev/null
+}
+
+cleanup_portable_lock() {
+  if [[ "$PORTABLE_LOCK_HELD" == "true" ]]; then
+    rm -rf "$LOCK_SENTINEL" "$LOCK_FILE"
+  fi
+}
+
+if [[ "${AGENTCTL_FORCE_PORTABLE_LOCK:-}" != "1" ]] && command -v flock >/dev/null 2>&1; then
+  exec 200>"$LOCK_FILE"
+  if ! flock -n 200; then
+    echo "Error: tier ${TIER} is already in use (lock held)."
+    cat "$LOCK_FILE" 2>/dev/null || true
+    exit 1
+  fi
+  write_lock_metadata
+else
+  if ! mkdir "$LOCK_SENTINEL" 2>/dev/null; then
+    if portable_lock_owner_alive; then
+      echo "Error: tier ${TIER} is already in use (lock held)."
+      cat "$LOCK_FILE" 2>/dev/null || true
+      exit 1
+    fi
+    echo "Warning: removing stale tier lock for ${TIER}."
+    rm -rf "$LOCK_SENTINEL" "$LOCK_FILE"
+    if ! mkdir "$LOCK_SENTINEL" 2>/dev/null; then
+      echo "Error: tier ${TIER} is already in use (lock held)."
+      cat "$LOCK_FILE" 2>/dev/null || true
+      exit 1
+    fi
+  fi
+  PORTABLE_LOCK_HELD=true
+  trap cleanup_portable_lock EXIT INT TERM
+  write_lock_metadata
+fi
 
 echo "Starting tier: ${TIER}"
 echo "  CP:     http://localhost:${CP_PORT}"
@@ -88,16 +128,13 @@ DATABASE_URL="$DATABASE_URL" pnpm drizzle-kit migrate 2>&1 || {
 # Start services in background
 cd "$REPO_ROOT"
 echo "Starting control plane on :${CP_PORT}..."
-env $(grep -v '^#' "$ENV_FILE" | grep -v '^$' | xargs) \
-  pnpm --filter @agentctl/control-plane dev &
+SKIP_MIGRATIONS=true pnpm --filter @agentctl/control-plane dev &
 
 echo "Starting worker on :${WORKER_PORT}..."
-env $(grep -v '^#' "$ENV_FILE" | grep -v '^$' | xargs) \
-  pnpm --filter @agentctl/agent-worker dev &
+pnpm --filter @agentctl/agent-worker dev &
 
 echo "Starting web on :${WEB_PORT}..."
-env $(grep -v '^#' "$ENV_FILE" | grep -v '^$' | xargs) \
-  pnpm --filter @agentctl/web dev -- --port "$WEB_PORT" &
+pnpm --filter @agentctl/web dev &
 
 echo ""
 echo "✅ Tier ${TIER} is starting. Services will be ready in ~10s."

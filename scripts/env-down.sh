@@ -7,7 +7,7 @@ set -euo pipefail
 
 TIER="${1:-}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK_DIR="/tmp/agentctl-tier-locks"
+LOCK_DIR="${LOCK_DIR_OVERRIDE:-/tmp/agentctl-tier-locks}"
 
 if [[ -z "$TIER" ]]; then
   echo "Usage: $0 <tier>"
@@ -47,9 +47,14 @@ done
 
 # Clean up lock file
 LOCK_FILE="${LOCK_DIR}/${TIER}.lock"
+LOCK_SENTINEL="${LOCK_FILE}.d"
 if [[ -f "$LOCK_FILE" ]]; then
   rm -f "$LOCK_FILE"
   echo "Lock released: ${LOCK_FILE}"
+fi
+if [[ -d "$LOCK_SENTINEL" ]]; then
+  rm -rf "$LOCK_SENTINEL"
+  echo "Lock released: ${LOCK_SENTINEL}"
 fi
 
 if [[ $stopped -gt 0 ]]; then
