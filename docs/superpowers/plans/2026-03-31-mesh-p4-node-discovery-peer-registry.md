@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p4-node-discovery-peer-registry-design.md` (v3)
 
-> Status note (2026-04-14): the backend P4 peer registry, discovery, health check, auth foundation, and REST API shipped earlier in PR #376. PR #425 added the missing standalone `/mesh-peers` web read + ping surface using the existing `GET /api/sync/peers` and `POST /api/sync/peers/:machineId/ping` endpoints; PR #431 added focused Playwright coverage for render, empty, ping-success, and ping-failure states; PR #452 hardened peer registration and ping URL validation against unsafe protocols plus local/metadata SSRF targets. The 2026-04-14 follow-up adds the remaining `/mesh-peers` Add/Delete UI over the existing `POST/DELETE /api/sync/peers` registry API, plus backend-independent Playwright coverage for create, delete, and validation/error states.
+> Status note (2026-04-14): the backend P4 peer registry, discovery, health check, auth foundation, and REST API shipped earlier in PR #376. PR #425 added the missing standalone `/mesh-peers` web read + ping surface using the existing `GET /api/sync/peers` and `POST /api/sync/peers/:machineId/ping` endpoints; PR #431 added focused Playwright coverage for render, empty, ping-success, and ping-failure states; PR #452 hardened peer registration and ping URL validation against unsafe protocols plus local/metadata SSRF targets. PR #483 delivered the remaining `/mesh-peers` Add/Delete UI over the existing `POST/DELETE /api/sync/peers` registry API, plus backend-independent Playwright coverage for create, delete, and validation/error states.
 
 ---
 
@@ -393,18 +393,20 @@ describe('computeNextInterval', () => {
 
 ---
 
-### Task 6: Wire into Startup + Frontend
+### Task 6: Wire into Startup + Frontend — Delivered via PRs #425, #431, #452, #483
 
-- [ ] **Step 1: Start discovery + health loops in index.ts** (with cleanup in shutdown handler)
-- [ ] **Step 2: Add API methods to web/src/lib/api.ts** (listSyncPeers, addSyncPeer, removeSyncPeer, pingSyncPeer)
-- [ ] **Step 3: Add MeshPeersSection component** to MachinesPage
-- [ ] **Step 4: Build all packages + commit**
+- [x] **Step 1: Start discovery + health loops in index.ts** (with cleanup in shutdown handler)
+- [x] **Step 2: Add API methods to web API client** (`listSyncPeers`, `upsertSyncPeer`, `deleteSyncPeer`, `pingSyncPeer`; split into `packages/web/src/lib/api/sync.ts` by PR #481)
+- [x] **Step 3: Add standalone `/mesh-peers` page** with sidebar entry, status table, ping action, Add peer dialog, and Delete confirmation
+- [x] **Step 4: Verify with unit, type, lint, and backend-independent Playwright coverage**
 
 ---
 
-### Task 7: Push + PR
+### Task 7: Push + PR — Delivered
 
 ```bash
 git push -u origin agent/claude/feat/mesh-p4-peer-registry
 gh pr create --base main --title "feat(mesh): P4 — node discovery + peer registry (§33.4)"
 ```
+
+Follow-up PRs: #376 delivered the backend registry, #425/#431 delivered the initial web read/ping surface and browser coverage, #452 hardened URL/SSRF validation, and #483 completed Add/Delete registry actions.
