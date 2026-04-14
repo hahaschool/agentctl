@@ -71,7 +71,7 @@ The current codebase has hardcoded port references that must be made configurabl
 
 | File | Current | Fix |
 |------|---------|-----|
-| `packages/web/package.json` scripts | `--port 5173` hardcoded | Read from `WEB_PORT` env var |
+| `packages/web/package.json` scripts | Delivered in PR #445 | `dev` / `start` now read `WEB_PORT` with `5173` fallback |
 | `packages/web/next.config.ts` rewrites | `http://localhost:8080` hardcoded | Read from `NEXT_PUBLIC_API_URL` env var |
 | `packages/web/src/hooks/use-websocket.ts:114,119` | `ws://localhost:8080/api/ws` | Read from `NEXT_PUBLIC_WS_URL` env var |
 | `packages/web/src/components/InteractiveTerminal.tsx:98` | `ws://localhost:8080/api/machines/...` | Read from `NEXT_PUBLIC_WS_URL` env var |
@@ -93,12 +93,12 @@ Run a repo-wide grep for `:8080`, `:9000`, `:5173`, `localhost:8080`, `localhost
 
 ### Phase 0: De-Hardcode Ports (MUST DO FIRST)
 
-1. **Web package.json**: Change `"dev"` and `"start"` scripts to read `WEB_PORT`:
+1. **Web package.json**: Delivered in PR #445. `"dev"` and `"start"` scripts now read `WEB_PORT`:
    ```json
    "dev": "next dev --port ${WEB_PORT:-5173}",
    "start": "next start --port ${WEB_PORT:-5173}"
    ```
-   (Or use a small wrapper script since package.json doesn't expand env vars natively.)
+   This closes the deferred package-script gap that `env-up.sh` had previously worked around.
 
 2. **next.config.ts**: Make rewrite destination configurable:
    ```typescript

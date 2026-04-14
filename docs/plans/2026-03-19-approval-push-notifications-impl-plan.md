@@ -2,7 +2,7 @@
 
 > Goal: execute roadmap `21.2 iOS Push Notifications for Pending Approvals` without disrupting the current beta workflow.
 >
-> Status as of 2026-03-20: Tasks 1-5 are on `main` via PRs #290, #291, and #295, so roadmap `21.2` is now delivered. Task 6 is this follow-up docs sync recording the shipped state.
+> Status as of 2026-03-20: Tasks 1-5 are on `main` via PRs #290, #291, and #295, so roadmap `21.2` is now delivered. Task 6 is this follow-up docs sync recording the shipped state. Later validation hardening in PR #447 added negative coverage for the mobile-push device registry query/path/body surfaces and set Fastify `routerOptions.maxParamLength = 256` so oversized `deviceId` values reach the route-level `INVALID_DEVICE_ID` response.
 
 ## Architecture
 
@@ -50,6 +50,7 @@ Use Expo Push Service as the first real iOS push transport. The control plane ow
 
 - Focused Fastify route/store tests
 - `pnpm --filter @agentctl/control-plane test -- ...mobile-push-devices...`
+- Later PR #447 coverage verifies invalid methods, malformed JSON, invalid tokens/platforms, query/path validation, oversized `deviceId` route params, and deactivate error paths.
 
 ## Task 3: Add Expo push dispatcher in control plane — Delivered on `main` (PR #295)
 

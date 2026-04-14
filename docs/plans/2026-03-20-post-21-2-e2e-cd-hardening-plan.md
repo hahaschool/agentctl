@@ -3,6 +3,8 @@
 > Goal: turn the post-21.2 backlog into four isolated follow-up slices that can run in parallel without touching the beta stage.
 >
 > Status note: Workstreams A-D are now on `main` via PRs #299, #297, #298, and #301. Release workflow `23307749638` exposed the final CD hardening gap, and PR #301 closed it by guarding production deploys when required secrets are missing.
+>
+> Later follow-up: PR #445 moved the backend-independent `/webhooks` Playwright slice into CI and hardened the webhooks browser mocks, extending the same focused e2e-gating approach beyond the original post-21.2 workstreams without touching beta promotion.
 
 ## Why This Batch
 

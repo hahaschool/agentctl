@@ -10,7 +10,7 @@
 
 > Status note (2026-04-13): this stabilization/security wave remains complete on `main` for the historical CI + CodeQL + Dependabot + DAST backlog through PR #230. The later 2026-04-01 and 2026-04-13 loops re-closed current CI, CodeQL, Dependabot, DAST, web test infrastructure, rate-limiting, and e2e coverage follow-ups; the roadmap now carries the detailed merged-PR ledger.
 
-> Follow-up sync (2026-04-14): PR #436 extended `/security-findings` browser coverage, PR #438 shipped the `/webhooks` management page, PR #439 closed the remaining route-rate-limit audit, PR #440 cleaned up CI/security scan annotations by fixing Biome security lint syntax and gating empty Grype SARIF uploads, PR #442 landed the SessionHeader/GitStatusBadge accessibility follow-up, PR #443 introduced Zod input validation and bounded strings on three write surfaces, and PR #444 added focused `/webhooks` Playwright coverage.
+> Follow-up sync (2026-04-14): PR #436 extended `/security-findings` browser coverage, PR #438 shipped the `/webhooks` management page, PR #439 closed the remaining route-rate-limit audit, PR #440 cleaned up CI/security scan annotations by fixing Biome security lint syntax and gating empty Grype SARIF uploads, PR #442 landed the SessionHeader/GitStatusBadge accessibility follow-up, PR #443 introduced Zod input validation and bounded strings on three write surfaces, PR #444 added focused `/webhooks` Playwright coverage, PR #445 moved the backend-independent webhooks Playwright slice into CI, PR #447 added mobile-push validation negative coverage, and PR #448 tightened batch-2 input validation across six control-plane surfaces.
 
 ---
 
@@ -182,6 +182,9 @@ Current final state after PR #227 merged and DAST rerun `23131047045` succeeded:
 - PR #427 added explicit `@fastify/rate-limit` coverage to the accounts credential-listing and create/update/delete routes, closing the local encrypted credential store abuse gap with `ACCOUNTS_RATE_LIMIT_*` overrides.
 - PR #429 added explicit `@fastify/rate-limit` coverage to the account verification test route, preventing repeated credential decrypt and outbound provider probes before `POST /api/settings/accounts/:id/test` enters provider-specific logic.
 - PR #431 added focused Playwright coverage for the `/mesh-peers` page render, empty, ping-success, and ping-failure states.
+- PR #445 moved the backend-independent `/webhooks` Playwright slice into CI so browser coverage now gates pull requests instead of remaining only a local/manual check.
+- PR #447 added mobile-push device validation negative tests for invalid methods, malformed JSON, invalid tokens/platforms, oversized route params, and deactivate error paths.
+- PR #448 tightened batch-2 input validation across `webhooks`, `permission-requests`, `approvals`, `handoffs`, `sync-conflicts`, and `memory-facts`, including enum checks, pagination bounds, source-size limits, and focused 400-path coverage.
 - PR #391 added direct control-plane route coverage for the session `dispatch-config` endpoint and `sync-conflicts` list/detail/resolve/count handlers on current `main`.
 - The direct `72c618c6` follow-up added `docs/QUICKSTART-MESH.md` for the already-delivered mesh bootstrap flow.
 - PRs #398/#400/#401/#402 cleared the 2026-04-13 dependency-audit and DAST WebSocket fuzz follow-ups, and PR #404 synced this status back into roadmap/plans.
