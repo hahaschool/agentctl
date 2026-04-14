@@ -78,15 +78,22 @@ type UpdateRequest = {
   readonly body: unknown;
 };
 
+type FeedbackRequest = {
+  readonly id: string;
+  readonly body: unknown;
+};
+
 async function mockMemoryBrowserApis(page: Page): Promise<{
   readonly listRequests: ListRequest[];
   readonly updateRequests: UpdateRequest[];
   readonly deleteRequests: string[];
+  readonly feedbackRequests: FeedbackRequest[];
 }> {
   const factsById = new Map(INITIAL_FACTS.map((fact) => [fact.id, fact]));
   const listRequests: ListRequest[] = [];
   const updateRequests: UpdateRequest[] = [];
   const deleteRequests: string[] = [];
+  const feedbackRequests: FeedbackRequest[] = [];
 
   await page.route('**/api/**', async (route) => {
     const request = route.request();
@@ -119,6 +126,22 @@ async function mockMemoryBrowserApis(page: Page): Promise<{
             growthTrend: [{ date: '2026-04-14', count: 3 }],
           },
         }),
+      });
+      return;
+    }
+
+    const feedbackMatch = pathname.match(/^\/api\/memory\/facts\/([^/]+)\/feedback$/);
+    if (feedbackMatch && request.method() === 'POST') {
+      const id = decodeURIComponent(feedbackMatch[1]);
+      const body = request.postDataJSON();
+      feedbackRequests.push({ id, body });
+      const current = factsById.get(id);
+      await route.fulfill({
+        status: current ? 200 : 404,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          current ? { ok: true, fact: current } : { ok: false, error: 'NOT_FOUND' },
+        ),
       });
       return;
     }
@@ -211,7 +234,7 @@ async function mockMemoryBrowserApis(page: Page): Promise<{
     });
   });
 
-  return { listRequests, updateRequests, deleteRequests };
+  return { listRequests, updateRequests, deleteRequests, feedbackRequests };
 }
 
 async function openMemoryBrowser(page: Page): Promise<void> {
@@ -320,5 +343,28 @@ test.describe('Memory browser facts flow', () => {
       page.getByText('Old worker crash reports usually point at a stale cache'),
     ).toBeVisible();
     await expect(page.getByText('Vector search policy prefers BM25 fallback')).toBeHidden();
+  });
+
+  test('submits a "used" feedback signal when the thumbs-up button is clicked', async ({
+    page,
+  }) => {
+    const state = await mockMemoryBrowserApis(page);
+
+    await openMemoryBrowser(page);
+
+    await expect(page.getByText('3 facts')).toBeVisible();
+
+    const usefulButtons = page.getByRole('button', { name: 'Useful: used' });
+    await expect(usefulButtons.first()).toBeVisible();
+    await usefulButtons.first().click();
+
+    await expect
+      .poll(() => state.feedbackRequests, { message: 'feedback POST captured' })
+      .toEqual([
+        {
+          id: 'fact-decision',
+          body: { signal: 'used' },
+        },
+      ]);
   });
 });

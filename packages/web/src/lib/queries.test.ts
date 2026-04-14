@@ -49,6 +49,7 @@ import {
   sessionsQuery,
   useStartRuntimeSessionTerminalTakeover,
   useStopRuntimeSessionTerminalTakeover,
+  useSubmitFactFeedback,
 } from './queries';
 
 beforeEach(() => {
@@ -911,5 +912,41 @@ describe('useStopRuntimeSessionTerminalTakeover', () => {
     expect(mockInvalidateQueries).toHaveBeenNthCalledWith(2, {
       queryKey: queryKeys.runtimeSessionTerminalTakeover('rc-123'),
     });
+  });
+});
+
+describe('useSubmitFactFeedback', () => {
+  it('calls the submit feedback API and invalidates fact caches on success', async () => {
+    const response = { ok: true, fact: { id: 'fact-1' } as never };
+    const apiSpy = vi.spyOn(api, 'submitFactFeedback').mockResolvedValue(response);
+
+    const mutation = useSubmitFactFeedback();
+    const result = await mutation.mutationFn({ id: 'fact-1', signal: 'used' });
+
+    expect(result).toEqual(response);
+    expect(apiSpy).toHaveBeenCalledWith('fact-1', 'used');
+
+    await mutation.onSuccess?.(response, { id: 'fact-1', signal: 'used' }, undefined);
+
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(1, {
+      queryKey: queryKeys.memory.facts(),
+    });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: queryKeys.memory.fact('fact-1'),
+    });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(3, {
+      queryKey: queryKeys.memory.stats,
+    });
+  });
+
+  it('forwards the signal value to the API', async () => {
+    const apiSpy = vi
+      .spyOn(api, 'submitFactFeedback')
+      .mockResolvedValue({ ok: true, fact: { id: 'fact-2' } as never });
+
+    const mutation = useSubmitFactFeedback();
+    await mutation.mutationFn({ id: 'fact-2', signal: 'outdated' });
+
+    expect(apiSpy).toHaveBeenCalledWith('fact-2', 'outdated');
   });
 });

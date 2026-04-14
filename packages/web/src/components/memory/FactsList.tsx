@@ -1,10 +1,12 @@
 'use client';
 
-import type { MemoryFact } from '@agentctl/shared';
-import { Trash2Icon } from 'lucide-react';
+import type { FeedbackSignal, MemoryFact } from '@agentctl/shared';
+import { ClockIcon, ThumbsDownIcon, ThumbsUpIcon, Trash2Icon } from 'lucide-react';
 import type React from 'react';
 import { useCallback } from 'react';
 
+import { toast } from '@/components/Toast';
+import { useSubmitFactFeedback } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 import { Button } from '../ui/button';
@@ -80,6 +82,80 @@ export function FactsList({
   );
 }
 
+const FEEDBACK_CONFIG: readonly {
+  readonly signal: FeedbackSignal;
+  readonly label: string;
+  readonly icon: typeof ThumbsUpIcon;
+  readonly hoverClass: string;
+}[] = [
+  {
+    signal: 'used',
+    label: 'Useful',
+    icon: ThumbsUpIcon,
+    hoverClass: 'hover:text-emerald-500 dark:hover:text-emerald-400',
+  },
+  {
+    signal: 'irrelevant',
+    label: 'Not relevant',
+    icon: ThumbsDownIcon,
+    hoverClass: 'hover:text-red-500 dark:hover:text-red-400',
+  },
+  {
+    signal: 'outdated',
+    label: 'Outdated',
+    icon: ClockIcon,
+    hoverClass: 'hover:text-amber-500 dark:hover:text-amber-400',
+  },
+];
+
+function FactFeedbackButtons({ factId }: { factId: string }): React.JSX.Element {
+  const submitFeedback = useSubmitFactFeedback();
+  const isPending = submitFeedback.isPending;
+
+  const handleClick = useCallback(
+    (signal: FeedbackSignal, event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      submitFeedback.mutate(
+        { id: factId, signal },
+        {
+          onSuccess: () => {
+            toast.success('Thanks for the feedback');
+          },
+          onError: (error) => {
+            const message = error instanceof Error ? error.message : 'Failed to submit feedback';
+            toast.error(message);
+          },
+        },
+      );
+    },
+    [factId, submitFeedback],
+  );
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {FEEDBACK_CONFIG.map(({ signal, label, icon: Icon, hoverClass }) => (
+        <button
+          key={signal}
+          type="button"
+          disabled={isPending}
+          onClick={(event) => handleClick(signal, event)}
+          className={cn(
+            'rounded p-1 text-muted-foreground transition-colors',
+            'hover:bg-accent/20',
+            hoverClass,
+            'disabled:cursor-not-allowed disabled:opacity-50',
+            'focus:outline-none focus:ring-1 focus:ring-primary',
+          )}
+          aria-label={`${label}: ${signal}`}
+          title={label}
+        >
+          <Icon className="size-3.5" aria-hidden="true" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function FactRow({
   fact,
   isSelected,
@@ -137,6 +213,7 @@ function FactRow({
           </span>
         </div>
       </button>
+      <FactFeedbackButtons factId={fact.id} />
     </div>
   );
 }

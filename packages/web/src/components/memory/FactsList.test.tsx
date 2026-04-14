@@ -1,7 +1,16 @@
 import type { MemoryFact } from '@agentctl/shared';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type React from 'react';
+
+import { api } from '@/lib/api';
 
 import { FactsList } from './FactsList';
+
+function renderWithClient(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 function makeFact(overrides: Partial<MemoryFact> = {}): MemoryFact {
   return {
@@ -49,7 +58,7 @@ describe('FactsList', () => {
   });
 
   it('renders fact content', () => {
-    render(<FactsList {...defaultProps} />);
+    renderWithClient(<FactsList {...defaultProps} />);
 
     expect(screen.getByText('First fact')).toBeDefined();
     expect(screen.getByText('Second fact')).toBeDefined();
@@ -65,13 +74,13 @@ describe('FactsList', () => {
   });
 
   it('shows empty message when no facts', () => {
-    render(<FactsList {...defaultProps} facts={[]} />);
+    renderWithClient(<FactsList {...defaultProps} facts={[]} />);
 
     expect(screen.getByText('No facts found matching your filters.')).toBeDefined();
   });
 
   it('calls onSelectFact when a row is clicked', () => {
-    render(<FactsList {...defaultProps} />);
+    renderWithClient(<FactsList {...defaultProps} />);
 
     fireEvent.click(screen.getByText('First fact'));
 
@@ -80,7 +89,7 @@ describe('FactsList', () => {
 
   it('shows bulk action bar when items are selected', () => {
     const selectedIds = new Set(['fact-1', 'fact-2']);
-    render(<FactsList {...defaultProps} selectedIds={selectedIds} />);
+    renderWithClient(<FactsList {...defaultProps} selectedIds={selectedIds} />);
 
     expect(screen.getByText('2 selected')).toBeDefined();
     expect(screen.getByText('Delete')).toBeDefined();
@@ -88,7 +97,7 @@ describe('FactsList', () => {
 
   it('calls onDeleteSelected when bulk delete is clicked', () => {
     const selectedIds = new Set(['fact-1']);
-    render(<FactsList {...defaultProps} selectedIds={selectedIds} />);
+    renderWithClient(<FactsList {...defaultProps} selectedIds={selectedIds} />);
 
     fireEvent.click(screen.getByText('Delete'));
 
@@ -96,10 +105,50 @@ describe('FactsList', () => {
   });
 
   it('applies selected styling to active fact', () => {
-    const { container } = render(<FactsList {...defaultProps} selectedFactId="fact-1" />);
+    const { container } = renderWithClient(<FactsList {...defaultProps} selectedFactId="fact-1" />);
 
     const selectedRow = container.querySelector('[data-selected]');
     expect(selectedRow).not.toBeNull();
     expect(selectedRow?.textContent).toContain('First fact');
+  });
+
+  it('renders feedback buttons for each fact', () => {
+    renderWithClient(<FactsList {...defaultProps} />);
+
+    // Each fact gets three feedback buttons (Useful / Not relevant / Outdated)
+    expect(screen.getAllByLabelText(/Useful: used/).length).toBe(FACTS.length);
+    expect(screen.getAllByLabelText(/Not relevant: irrelevant/).length).toBe(FACTS.length);
+    expect(screen.getAllByLabelText(/Outdated: outdated/).length).toBe(FACTS.length);
+  });
+
+  it('submits a feedback signal when a thumbs-up button is clicked', async () => {
+    const spy = vi.spyOn(api, 'submitFactFeedback').mockResolvedValue({
+      ok: true,
+      fact: FACTS[0],
+    });
+
+    renderWithClient(<FactsList {...defaultProps} />);
+
+    const usefulButtons = screen.getAllByLabelText(/Useful: used/);
+    fireEvent.click(usefulButtons[0]);
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith('fact-1', 'used');
+    });
+    // Clicking feedback must not open the detail pane
+    expect(defaultProps.onSelectFact).not.toHaveBeenCalled();
+  });
+
+  it('submits an outdated signal when the outdated button is clicked', async () => {
+    const spy = vi.spyOn(api, 'submitFactFeedback').mockResolvedValue({ ok: true, fact: FACTS[1] });
+
+    renderWithClient(<FactsList {...defaultProps} />);
+
+    const outdatedButtons = screen.getAllByLabelText(/Outdated: outdated/);
+    fireEvent.click(outdatedButtons[1]);
+
+    await waitFor(() => {
+      expect(spy).toHaveBeenCalledWith('fact-2', 'outdated');
+    });
   });
 });
