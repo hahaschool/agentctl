@@ -19,6 +19,11 @@ const MEMORY_NAV_ITEMS = [
     label: 'Consolidation',
     description: 'Review cleanup candidates',
   },
+  {
+    href: '/memory/synthesis',
+    label: 'Synthesis',
+    description: 'Preview structural lint and clusters',
+  },
   { href: '/memory/reports', label: 'Reports', description: 'Generated summaries and exports' },
   { href: '/memory/import', label: 'Import', description: 'Bring in external memory sources' },
   { href: '/memory/scopes', label: 'Scopes', description: 'Inspect scope boundaries' },

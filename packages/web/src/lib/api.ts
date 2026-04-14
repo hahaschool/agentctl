@@ -527,6 +527,52 @@ export type GeneratedMemoryReport = {
   generatedAt: string;
 };
 
+// ---------------------------------------------------------------------------
+// Memory knowledge synthesis — §3.6
+//
+// POST /api/memory/synthesis returns structural candidates that a reviewer
+// (human or downstream LLM step) can act on. No LLM is invoked server-side.
+// ---------------------------------------------------------------------------
+
+export type MemorySynthesisNearDuplicate = {
+  factIdA: string;
+  factIdB: string;
+  similarity: number;
+  contentA: string;
+  contentB: string;
+};
+
+export type MemorySynthesisStaleFact = {
+  factId: string;
+  content: string;
+  lastAccessedDaysAgo: number;
+};
+
+export type MemorySynthesisOrphanFact = {
+  factId: string;
+  content: string;
+  entityType: string;
+  createdAt: string;
+};
+
+export type MemorySynthesisGroup = {
+  entityType: string;
+  factIds: readonly string[];
+  factContents: readonly string[];
+  proposalHint: string;
+};
+
+export type MemorySynthesisLint = {
+  nearDuplicates: readonly MemorySynthesisNearDuplicate[];
+  staleFacts: readonly MemorySynthesisStaleFact[];
+  orphanFacts: readonly MemorySynthesisOrphanFact[];
+};
+
+export type MemorySynthesisResult = {
+  lint: MemorySynthesisLint;
+  synthesisGroups: readonly MemorySynthesisGroup[];
+};
+
 export type SpaceWithMembers = Space & { members: SpaceMember[] };
 
 export type McpDiscoverResponse = {
@@ -1539,6 +1585,12 @@ export const api = {
       `/api/memory/reports${suffix}`,
     );
   },
+
+  runMemorySynthesis: (body?: { scope?: string }) =>
+    request<{ ok: boolean; result: MemorySynthesisResult }>('/api/memory/synthesis', {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
 
   getConsolidationItems: (params?: { type?: string; status?: string; limit?: number }) => {
     const qs = new URLSearchParams();
