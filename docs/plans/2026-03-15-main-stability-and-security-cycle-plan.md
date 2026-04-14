@@ -20,6 +20,8 @@
 
 > Follow-up sync (2026-04-14): after PR #504 landed on `main@8a9cda1b`, Build & Publish Docker Images run `24403340306` first failed twice in `Build control-plane` setup because GitHub returned 429 while downloading `github/codeql-action/upload-sarif`; later reruns restored the latest main checks to green. The active CI hotfix removes duplicate Security-tab SARIF uploads from `build-images.yml`, keeps Trivy/Grype/SBOM outputs as artifacts, leaves Security Audit as the single workflow responsible for Security-tab SARIF uploads, and caps Security Audit's container-scan matrix at one concurrent image to reduce repeated `codeql-action` setup downloads during busy merge windows.
 
+> Follow-up sync (2026-04-14): PR #508 delivered that Docker publish SARIF artifact-only hotfix, PR #509 registered the missing audit-trail page plan, and post-merge `main@b0464f2c` checks passed: CI `24405567418`, Security Audit `24405567419`, and Build & Publish Docker Images `24405567447`. The remaining CI annotation on that Docker publish run is GitHub Actions' Node.js 20 JavaScript action deprecation warning for Docker/artifact/cache actions; the current follow-up opts `build-images.yml` and `security-audit.yml` into `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` so the repo exercises the upcoming runtime before GitHub flips the default.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
