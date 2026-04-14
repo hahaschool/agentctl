@@ -1114,6 +1114,7 @@ export function useSubmitFactFeedback() {
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
       void qc.invalidateQueries({ queryKey: queryKeys.memory.fact(variables.id) });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
     },
   });
 }

@@ -934,6 +934,9 @@ describe('useSubmitFactFeedback', () => {
     expect(mockInvalidateQueries).toHaveBeenNthCalledWith(2, {
       queryKey: queryKeys.memory.fact('fact-1'),
     });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(3, {
+      queryKey: queryKeys.memory.stats,
+    });
   });
 
   it('forwards the signal value to the API', async () => {
