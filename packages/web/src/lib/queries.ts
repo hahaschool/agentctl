@@ -1164,6 +1164,22 @@ export function useRunMemorySynthesis() {
 }
 
 // ---------------------------------------------------------------------------
+// Knowledge maintenance — section 7.4
+//
+// Maintenance is a full memory sweep (stale lint, deleted-file cross-ref,
+// synthesis clustering, coverage). It writes a maintenance report and can
+// enqueue consolidation items, so it's modeled as a mutation triggered by
+// the operator rather than a passive query. Rate-limited at 20 req/min on
+// the control plane; the UI should debounce button clicks too.
+// ---------------------------------------------------------------------------
+
+export function useRunMemoryMaintenance() {
+  return useMutation({
+    mutationFn: (body?: { scope?: string }) => api.runMemoryMaintenance(body),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Memory consolidation
 // ---------------------------------------------------------------------------
 
