@@ -54,6 +54,7 @@ import type {
   MemoryScopeRecord,
   MemoryScopeType,
   MemoryStats,
+  MobilePushDevice,
   NativeImportAttempt,
   NativeImportPreflightResponse,
   NotificationChannel,
@@ -94,6 +95,7 @@ export type {
   ApprovalTimeoutPolicy,
   ContextRef,
   CrossSpaceSubscription,
+  MobilePushDevice,
   NotificationChannel,
   NotificationPreference,
   NotificationPriority,
@@ -1294,6 +1296,22 @@ export const api = {
     request<{ ok: boolean; deletedId: string }>(
       `/api/notifications/preferences/${encodeURIComponent(id)}`,
       { method: 'DELETE' },
+    ),
+
+  // Mobile push devices — iOS push notification registrations.
+  // The backend scopes devices by userId; the web UI currently uses the
+  // 'local' sentinel, matching NotificationPreferencesPanel.
+  listPushDevices: (userId: string, includeDisabled = false) => {
+    const params = new URLSearchParams({ userId });
+    if (includeDisabled) params.set('includeDisabled', 'true');
+    return request<{ devices: MobilePushDevice[] }>(
+      `/api/mobile-push-devices?${params.toString()}`,
+    );
+  },
+  deactivatePushDevice: (id: string) =>
+    request<{ ok: boolean; device: MobilePushDevice }>(
+      `/api/mobile-push-devices/${encodeURIComponent(id)}/deactivate`,
+      { method: 'POST' },
     ),
 
   // Dashboard / Metrics (Prometheus text format → parsed object)

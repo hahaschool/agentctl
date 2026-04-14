@@ -143,6 +143,7 @@ export const queryKeys = {
   deploymentTiers: ['deployment-tiers'] as const,
   promotionHistory: ['promotion-history'] as const,
   notificationPreferences: (userId: string) => ['notification-preferences', userId] as const,
+  pushDevices: (userId: string) => ['push-devices', userId] as const,
   syncConflicts: (params?: { status?: string; table?: string; remoteNodeId?: string }) =>
     params ? (['sync-conflicts', params] as const) : (['sync-conflicts'] as const),
   syncConflict: (id: string) => ['sync-conflicts', id] as const,
@@ -1481,6 +1482,31 @@ export function useDeleteNotificationPreference() {
     onSuccess: (_data, variables) => {
       void qc.invalidateQueries({
         queryKey: queryKeys.notificationPreferences(variables.userId),
+      });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Mobile push devices
+// ---------------------------------------------------------------------------
+
+export function pushDevicesQuery(userId: string, includeDisabled = false) {
+  return queryOptions({
+    queryKey: queryKeys.pushDevices(userId),
+    queryFn: () => api.listPushDevices(userId, includeDisabled),
+    enabled: !!userId,
+  });
+}
+
+export function useDeactivatePushDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: string }) =>
+      api.deactivatePushDevice(id).then((res) => ({ ...res, userId })),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({
+        queryKey: queryKeys.pushDevices(variables.userId),
       });
     },
   });
