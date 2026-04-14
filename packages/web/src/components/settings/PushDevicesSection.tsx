@@ -3,6 +3,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Smartphone, Trash2 } from 'lucide-react';
 import type React from 'react';
+import { useState } from 'react';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { MobilePushDevice } from '@/lib/api';
 import { formatDateTime, timeAgo } from '@/lib/format-utils';
 import { pushDevicesQuery, useDeactivatePushDevice } from '@/lib/queries';
@@ -100,6 +102,7 @@ export function PushDevicesSection(): React.JSX.Element {
   const userId = CURRENT_USER_ID;
   const query = useQuery(pushDevicesQuery(userId));
   const deactivate = useDeactivatePushDevice();
+  const [pendingRevoke, setPendingRevoke] = useState<MobilePushDevice | null>(null);
 
   const devices = query.data?.devices ?? [];
 
@@ -109,15 +112,13 @@ export function PushDevicesSection(): React.JSX.Element {
   const activeDevices = devices.filter((d) => d.disabledAt === null);
 
   function handleRevoke(device: MobilePushDevice): void {
-    const platformLabel = PLATFORM_LABELS[device.platform] ?? device.platform;
-    const confirmed =
-      typeof window !== 'undefined' &&
-      window.confirm(
-        `Revoke this ${platformLabel} device? It will stop receiving push notifications until re-registered from the app.`,
-      );
-    if (!confirmed) return;
-    deactivate.mutate({ id: device.id, userId });
+    setPendingRevoke(device);
   }
+
+  const pendingPlatformLabel = pendingRevoke
+    ? (PLATFORM_LABELS[pendingRevoke.platform] ?? pendingRevoke.platform)
+    : '';
+  const pendingDeviceLabel = pendingPlatformLabel ? `${pendingPlatformLabel} device` : 'device';
 
   return (
     <div data-testid="push-devices-section">
@@ -199,6 +200,22 @@ export function PushDevicesSection(): React.JSX.Element {
           {deactivate.error instanceof Error ? deactivate.error.message : String(deactivate.error)}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        onOpenChange={(next) => {
+          if (!next) setPendingRevoke(null);
+        }}
+        title={`Revoke this ${pendingDeviceLabel}?`}
+        description="It will stop receiving push notifications until re-registered from the app."
+        confirmLabel="Revoke device"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={async () => {
+          if (!pendingRevoke) return;
+          await deactivate.mutateAsync({ id: pendingRevoke.id, userId });
+        }}
+      />
     </div>
   );
 }

@@ -121,4 +121,27 @@ describe('PromoteGate', () => {
     ).toBeDefined();
     expect(screen.getByText('./scripts/env-promote.sh --from dev-1|dev-2')).toBeDefined();
   });
+
+  it('requires dialog confirmation before triggering promotion', async () => {
+    const onPromoteStarted = vi.fn();
+    render(<PromoteGate tiers={mockTiers} onPromoteStarted={onPromoteStarted} />, {
+      wrapper: createWrapper(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run Preflight' }));
+    await waitFor(() => {
+      expect(api.runPreflight).toHaveBeenCalledWith('dev-1');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Promote to Beta' }));
+    expect(screen.getByTestId('confirm-dialog')).toBeDefined();
+    expect(api.triggerPromotion).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
+
+    await waitFor(() => {
+      expect(api.triggerPromotion).toHaveBeenCalledWith('dev-1');
+      expect(onPromoteStarted).toHaveBeenCalledWith('promo-1');
+    });
+  });
 });
