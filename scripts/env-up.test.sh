@@ -9,6 +9,13 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT="${REPO_ROOT}/scripts/env-up.sh"
 FAIL=0
+TEST_TIER="__env_up_test__"
+TEST_ENV="${REPO_ROOT}/.env.${TEST_TIER}"
+
+cleanup() {
+  rm -f "$TEST_ENV"
+}
+trap cleanup EXIT
 
 pass() { echo "  PASS: $1"; }
 fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
@@ -21,6 +28,17 @@ assert_contains() {
     pass "$label"
   else
     fail "$label (missing: ${needle})"
+  fi
+}
+
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local label="$3"
+  if [[ "$haystack" == *"$needle"* ]]; then
+    fail "$label (unexpected: ${needle})"
+  else
+    pass "$label"
   fi
 }
 
@@ -58,32 +76,40 @@ echo "Test 5: missing env file aborts"
 MISS_OUT="$("$SCRIPT" __no_such_tier__ --dry-run 2>&1 || true)"
 assert_contains "$MISS_OUT" "env file not found" "missing env file message"
 
-# ── 6. Dry run against an existing tier (only if .env.dev-1 exists) ──
-echo "Test 6: --dry-run on dev-1 (skipped if .env.dev-1 missing)"
-if [[ -f "${REPO_ROOT}/.env.dev-1" ]]; then
-  DRY_OUT="$("$SCRIPT" dev-1 --dry-run 2>&1)"
-  DRY_RC=$?
-  assert_contains "$DRY_OUT" "DRY RUN MODE" "banner present"
-  assert_contains "$DRY_OUT" "No services will be started" "no-start warning present"
-  assert_contains "$DRY_OUT" "Env file:" "env file line present"
-  assert_contains "$DRY_OUT" "CP port:" "cp port line present"
-  assert_contains "$DRY_OUT" "Worker port:" "worker port line present"
-  assert_contains "$DRY_OUT" "Web port:" "web port line present"
-  assert_contains "$DRY_OUT" "Database:" "database line present"
-  assert_contains "$DRY_OUT" "Would start:" "would-start section present"
-  assert_contains "$DRY_OUT" "Dry run complete" "completion message present"
-  if [[ "$DRY_RC" -eq 0 ]]; then
-    pass "dry-run exits 0"
-  else
-    fail "dry-run exit code was ${DRY_RC}"
-  fi
+# ── 6. Dry run against a temporary tier ───────────────────────────────
+echo "Test 6: --dry-run on a temporary tier"
+cat >"$TEST_ENV" <<EOF
+TIER=${TEST_TIER}
+PORT=18180
+WORKER_PORT=19100
+WEB_PORT=15273
+DATABASE_URL=postgres://agent:supersecret@127.0.0.1:15432/agentctl_test
+REDIS_URL=redis://:redis-secret@127.0.0.1:16379/0
+EOF
 
-  # Also verify flag order is flexible (--dry-run before tier)
-  REORDER_OUT="$("$SCRIPT" --dry-run dev-1 2>&1)"
-  assert_contains "$REORDER_OUT" "DRY RUN MODE" "flag-before-tier ordering accepted"
+DRY_OUT="$("$SCRIPT" "$TEST_TIER" --dry-run 2>&1)"
+DRY_RC=$?
+assert_contains "$DRY_OUT" "DRY RUN MODE" "banner present"
+assert_contains "$DRY_OUT" "No services will be started" "no-start warning present"
+assert_contains "$DRY_OUT" "Env file:" "env file line present"
+assert_contains "$DRY_OUT" "CP port:" "cp port line present"
+assert_contains "$DRY_OUT" "Worker port:" "worker port line present"
+assert_contains "$DRY_OUT" "Web port:" "web port line present"
+assert_contains "$DRY_OUT" "Database:      postgres://<redacted>@127.0.0.1:15432/agentctl_test" "database URL redacted"
+assert_contains "$DRY_OUT" "Redis:         redis://<redacted>@127.0.0.1:16379/0" "redis URL redacted"
+assert_not_contains "$DRY_OUT" "supersecret" "database password hidden"
+assert_not_contains "$DRY_OUT" "redis-secret" "redis password hidden"
+assert_contains "$DRY_OUT" "Would start:" "would-start section present"
+assert_contains "$DRY_OUT" "Dry run complete" "completion message present"
+if [[ "$DRY_RC" -eq 0 ]]; then
+  pass "dry-run exits 0"
 else
-  echo "  SKIP: .env.dev-1 not present"
+  fail "dry-run exit code was ${DRY_RC}"
 fi
+
+# Also verify flag order is flexible (--dry-run before tier)
+REORDER_OUT="$("$SCRIPT" --dry-run "$TEST_TIER" 2>&1)"
+assert_contains "$REORDER_OUT" "DRY RUN MODE" "flag-before-tier ordering accepted"
 
 echo ""
 if [[ "$FAIL" -eq 0 ]]; then

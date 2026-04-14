@@ -7,7 +7,7 @@
 # For beta tier, use PM2 directly:
 #   pm2 start infra/pm2/ecosystem.beta.config.cjs
 #
-# --dry-run prints what would happen (env file, ports, DB/Redis targets,
+# --dry-run prints what would happen (env file, ports, redacted DB/Redis targets,
 # preflight checks) and exits 0 without acquiring the flock or starting
 # any service. Matches the safety pattern in scripts/env-promote.sh.
 
@@ -24,6 +24,17 @@ usage() {
   echo "Usage: $0 <tier> [--dry-run]"
   echo "  tier:      dev-1, dev-2, etc. (use PM2 for beta)"
   echo "  --dry-run  Show planned actions without starting services"
+}
+
+redact_url_for_log() {
+  local value="$1"
+  if [[ -z "$value" ]]; then
+    echo "<unset>"
+  elif [[ "$value" =~ ^([^:/?#]+://)([^@/]+@)(.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}<redacted>@${BASH_REMATCH[3]}"
+  else
+    echo "$value"
+  fi
 }
 
 while [[ $# -gt 0 ]]; do
@@ -87,6 +98,8 @@ WEB_PORT=$(grep '^WEB_PORT=' "$ENV_FILE" | cut -d= -f2-)
 # Load DB/Redis URLs for reporting (dry-run only reads; startup uses sourced env later)
 DATABASE_URL_PEEK=$(grep '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2- || true)
 REDIS_URL_PEEK=$(grep '^REDIS_URL=' "$ENV_FILE" | cut -d= -f2- || true)
+DATABASE_URL_DISPLAY=$(redact_url_for_log "$DATABASE_URL_PEEK")
+REDIS_URL_DISPLAY=$(redact_url_for_log "$REDIS_URL_PEEK")
 
 # Check port availability and build a conflict report (used in dry-run too)
 PORT_CONFLICTS=()
@@ -109,14 +122,14 @@ if [[ "$DRY_RUN" == true ]]; then
   echo "  CP port:       ${CP_PORT:-<unset>}"
   echo "  Worker port:   ${WORKER_PORT:-<unset>}"
   echo "  Web port:      ${WEB_PORT:-<unset>}"
-  echo "  Database:      ${DATABASE_URL_PEEK:-<unset>}"
-  echo "  Redis:         ${REDIS_URL_PEEK:-<unset>}"
+  echo "  Database:      ${DATABASE_URL_DISPLAY}"
+  echo "  Redis:         ${REDIS_URL_DISPLAY}"
   echo ""
   echo "  Would start:"
   echo "    - control plane:  pnpm --filter @agentctl/control-plane dev (port ${CP_PORT})"
   echo "    - agent worker:   pnpm --filter @agentctl/agent-worker dev (port ${WORKER_PORT})"
   echo "    - web:            pnpm --filter @agentctl/web dev (port ${WEB_PORT})"
-  echo "  Would run migrations against: ${DATABASE_URL_PEEK:-<unset>}"
+  echo "  Would run migrations against: ${DATABASE_URL_DISPLAY}"
   echo ""
   if [[ ${#PORT_CONFLICTS[@]} -gt 0 ]]; then
     echo "  Port conflicts detected: ${PORT_CONFLICTS[*]}"
