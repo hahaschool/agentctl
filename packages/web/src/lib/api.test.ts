@@ -314,7 +314,9 @@ describe('api.searchMemoryFacts', () => {
       q: 'memory',
       scope: 'project:agentctl',
       entityType: 'decision',
+      sessionId: 'session-1',
       agentId: 'agent-1',
+      machineId: 'machine-1',
       minConfidence: 0.7,
       limit: 20,
       offset: 5,
@@ -326,7 +328,9 @@ describe('api.searchMemoryFacts', () => {
     expect(parsed.searchParams.get('q')).toBe('memory');
     expect(parsed.searchParams.get('scope')).toBe('project:agentctl');
     expect(parsed.searchParams.get('entityType')).toBe('decision');
+    expect(parsed.searchParams.get('sessionId')).toBe('session-1');
     expect(parsed.searchParams.get('agentId')).toBe('agent-1');
+    expect(parsed.searchParams.get('machineId')).toBe('machine-1');
     expect(parsed.searchParams.get('minConfidence')).toBe('0.7');
     expect(parsed.searchParams.get('limit')).toBe('20');
     expect(parsed.searchParams.get('offset')).toBe('5');
