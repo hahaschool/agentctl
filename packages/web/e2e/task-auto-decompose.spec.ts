@@ -310,6 +310,42 @@ test.describe('Task auto-decompose dialog', () => {
     await expect(page.getByTestId('auto-decompose-dialog')).toBeHidden({ timeout: 10_000 });
   });
 
+  test('shows an apply error and keeps the preview available when apply fails', async ({
+    page,
+  }) => {
+    const state = makeState({ applyMode: 'error' });
+    await mountMocks(page, state);
+
+    await openDialog(page);
+
+    const textarea = page.getByTestId('auto-decompose-description-input');
+    await textarea.fill('Break down release orchestration into phases.');
+
+    await page.getByTestId('auto-decompose-preview-button').click();
+    await expect(page.getByTestId('proposed-task-temp-scaffold')).toBeVisible();
+
+    const applyResponse = page.waitForResponse(
+      (r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/api/decompose',
+    );
+    await page.getByTestId('auto-decompose-apply-button').click();
+    const response = await applyResponse;
+
+    expect(response.status()).toBe(500);
+    expect(state.applyRequests).toHaveLength(1);
+    expect(state.applyRequests[0]?.body?.description).toBe(
+      'Break down release orchestration into phases.',
+    );
+    expect(state.previewRequests).toHaveLength(1);
+
+    await expect(page.getByTestId('auto-decompose-dialog')).toBeVisible();
+    await expect(page.getByTestId('auto-decompose-apply-error')).toBeVisible();
+    await expect(page.getByTestId('auto-decompose-apply-error')).toContainText(
+      'Could not persist graph',
+    );
+    await expect(page.getByTestId('proposed-task-temp-scaffold')).toBeVisible();
+    await expect(page.getByTestId('auto-decompose-apply-button')).toBeEnabled();
+  });
+
   test('requires a fresh preview when the description changes after preview', async ({ page }) => {
     const state = makeState();
     await mountMocks(page, state);
