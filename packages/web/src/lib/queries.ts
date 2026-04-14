@@ -1101,6 +1101,23 @@ export function useDeleteMemoryFact() {
   });
 }
 
+export function useSubmitFactFeedback() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      signal,
+    }: {
+      id: string;
+      signal: import('@agentctl/shared').FeedbackSignal;
+    }) => api.submitFactFeedback(id, signal),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.fact(variables.id) });
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Memory reports
 // ---------------------------------------------------------------------------

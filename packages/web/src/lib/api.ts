@@ -30,6 +30,7 @@ import type {
   EventVisibility,
   ExecutionSummary,
   FactSource,
+  FeedbackSignal,
   FleetOverview,
   ForkManagedSessionRequest,
   HandoffManagedSessionRequest,
@@ -1508,6 +1509,15 @@ export const api = {
     request<{ ok: boolean; id: string }>(`/api/memory/facts/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+
+  submitFactFeedback: (id: string, signal: FeedbackSignal) =>
+    request<{ ok: boolean; fact: MemoryFact }>(
+      `/api/memory/facts/${encodeURIComponent(id)}/feedback`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ signal }),
+      },
+    ),
 
   getMemoryGraph: (params?: { scope?: MemoryScope; entityType?: EntityType; limit?: number }) => {
     const qs = new URLSearchParams();

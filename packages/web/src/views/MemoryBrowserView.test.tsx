@@ -44,6 +44,7 @@ vi.mock('@/lib/queries', () => ({
   useCreateMemoryFact: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateMemoryFact: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteMemoryFact: () => ({ mutate: vi.fn(), isPending: false }),
+  useSubmitFactFeedback: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { MemoryBrowserView } from './MemoryBrowserView';
