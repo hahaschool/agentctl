@@ -1,14 +1,14 @@
 # Project Roadmap
 
-> Last updated: 2026-04-14 (post-PR #509 checkpoint plus Docker/Security Audit Node 24 action-runtime hardening). The latest landing set now includes PR #495 (backend-independent `/agents/[id]/settings` coverage), PR #496 (portable dev-tier `env-up` locking and `WEB_PORT`-safe Next startup), PR #497 (routing API payload bounds hardening), PR #499 (backend-independent `/machines` list/detail coverage), PR #498 (`/agent-profiles` CRUD page with create/delete UI and API-client wiring), PR #500 (`env-up.sh --dry-run` preflight with redacted DB/Redis output), PR #501 (agent-profiles plan record plus Web E2E timeout headroom), PR #503/#504 (roadmap-only cleanup and checkpoint sync), PR #505 (backend-independent `/agent-profiles` browser coverage), PR #506 (`/agent-profiles` PATCH endpoint and Edit dialog), PR #507 (`/audit` trail page with sidebar wiring and focused unit coverage), PR #508 (Docker publish SARIF artifact-only hotfix), and PR #509 (audit trail page plan registration). Earlier 2026-04-13/14 memory, webhook, settings, discovery, mesh, and agent browser coverage follow-ups remain represented below. CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
+> Last updated: 2026-04-14 (post-PR #513 checkpoint). The latest landing set now includes PR #495 (backend-independent `/agents/[id]/settings` coverage), PR #496 (portable dev-tier `env-up` locking and `WEB_PORT`-safe Next startup), PR #497 (routing API payload bounds hardening), PR #499 (backend-independent `/machines` list/detail coverage), PR #498 (`/agent-profiles` CRUD page with create/delete UI and API-client wiring), PR #500 (`env-up.sh --dry-run` preflight with redacted DB/Redis output), PR #501 (agent-profiles plan record plus Web E2E timeout headroom), PR #503/#504 (roadmap-only cleanup and checkpoint sync), PR #505 (backend-independent `/agent-profiles` browser coverage), PR #506 (`/agent-profiles` PATCH endpoint and Edit dialog), PR #507 (`/audit` trail page with sidebar wiring and focused unit coverage), PR #508 (Docker publish SARIF artifact-only hotfix), PR #509 (audit trail page plan registration), PR #510 (Docker/Security Audit Node 24 JavaScript action runtime opt-in), PR #512 (Node 20 compat type fix for the agent runtime mapping), and PR #513 (backend-independent `/audit` Playwright coverage). Earlier 2026-04-13/14 memory, webhook, settings, discovery, mesh, and agent browser coverage follow-ups remain represented below. CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
 >
-> Current checkpoint: PR #470 through PR #509 are represented on `main@b0464f2c`. The open PR list is empty at this checkpoint, GitHub reports 0 open code-scanning, 0 open Dependabot, and 0 open secret-scanning alerts, and post-merge main checks are green: CI `24405567418`, Security Audit `24405567419`, and Build & Publish Docker Images `24405567447`.
+> Current checkpoint: PR #470 through PR #513 are represented on `main@5eb844ff`. GitHub reports 0 open code-scanning, 0 open Dependabot, and 0 open secret-scanning alerts. Post-#513 main checks passed: CI `24407474324`, Security Audit `24407474322`, and Build & Publish Docker Images `24407474278`.
 >
-> Post-#509 work note: PR #508 removed the nonblocking SARIF-upload dependency from the Docker publish workflow after `github/codeql-action/upload-sarif` download 429s, kept scanner reports as artifacts, left Security Audit responsible for Security-tab uploads, and serialized Security Audit's container-scan matrix. PR #509 added the missing audit-trail page plan and roadmap links. The current CI hardening pass opts `build-images.yml` and `security-audit.yml` into GitHub Actions' Node 24 JavaScript action runtime after Build & Publish Docker Images run `24405567447` passed but still emitted Node.js 20 deprecation annotations for Docker/artifact/cache actions.
+> Post-#513 work note: PR #508 removed the nonblocking SARIF-upload dependency from the Docker publish workflow after `github/codeql-action/upload-sarif` download 429s, kept scanner reports as artifacts, left Security Audit responsible for Security-tab uploads, and serialized Security Audit's container-scan matrix. PR #509 added the missing audit-trail page plan and roadmap links. PR #510 opted `build-images.yml` and `security-audit.yml` into GitHub Actions' Node 24 JavaScript action runtime after Build & Publish Docker Images run `24405567447` passed but still emitted Node.js 20 deprecation annotations for Docker/artifact/cache actions. PR #512 fixed the subsequent Node 20 compat TypeScript failure in the control-plane agent runtime mapping. PR #513 added backend-independent `/audit` Playwright coverage. None of these follow-ups touched dev-1/dev-2 or beta promotion state.
 >
-> Coordination note: PR #461 merged as `e6fd4c2e`, PR #462 as `193e6b02`, PR #465 as `2b950c96`, PR #466 as `9fbc2fe9`, PR #467 as `620de798`, PR #468 as `4291f520`, PR #470 as `5a480a23`, PR #471 as `2d61cb8a`, PR #472 as `7b2f9b8c`, PR #473 as `22fbe6ae`, PR #474 as `a8189309`, PR #475 as `1f4007c1`, PR #476 as `fa632acd`, PR #477 as `be1765d3`, PR #478 as `082deedb`, PR #479 as `9f984523`, PR #480 as `0f9fb538`, PR #481 as `0668db95`, PR #482 as `04e1e80d`, PR #483 as `88ccf816`, PR #485 as `071b7e3d`, PR #486 as `bfd9e74f`, PR #487 as `f28a2a85`, PR #488 as `eb9ae933`, PR #489 as `c01300b2`, PR #490 as `d868742b`, PR #491 as `f3ad66dc`, PR #492 as `8b716d6f`, PR #493 as `808556b0`, PR #494 as `95e7c8a2`, PR #495 as `5635abdf`, PR #496 as `64de9152`, PR #497 as `1b95f9f8`, PR #499 as `05972feb`, PR #498 as `3eebce46`, PR #500 as `e20e5682`, PR #501 as `d1c9635c`, PR #503 as `3b3ecf3f`, PR #504 as `8a9cda1b`, PR #505 as `bde0f343`, PR #506 as `caf3038f`, PR #507 as `d3fb1a0b`, PR #508 as `547fe24b`, and PR #509 as `b0464f2c`; duplicate PRs #463 and #464 were closed after their stronger sibling branches merged.
+> Coordination note: PR #461 merged as `e6fd4c2e`, PR #462 as `193e6b02`, PR #465 as `2b950c96`, PR #466 as `9fbc2fe9`, PR #467 as `620de798`, PR #468 as `4291f520`, PR #470 as `5a480a23`, PR #471 as `2d61cb8a`, PR #472 as `7b2f9b8c`, PR #473 as `22fbe6ae`, PR #474 as `a8189309`, PR #475 as `1f4007c1`, PR #476 as `fa632acd`, PR #477 as `be1765d3`, PR #478 as `082deedb`, PR #479 as `9f984523`, PR #480 as `0f9fb538`, PR #481 as `0668db95`, PR #482 as `04e1e80d`, PR #483 as `88ccf816`, PR #485 as `071b7e3d`, PR #486 as `bfd9e74f`, PR #487 as `f28a2a85`, PR #488 as `eb9ae933`, PR #489 as `c01300b2`, PR #490 as `d868742b`, PR #491 as `f3ad66dc`, PR #492 as `8b716d6f`, PR #493 as `808556b0`, PR #494 as `95e7c8a2`, PR #495 as `5635abdf`, PR #496 as `64de9152`, PR #497 as `1b95f9f8`, PR #499 as `05972feb`, PR #498 as `3eebce46`, PR #500 as `e20e5682`, PR #501 as `d1c9635c`, PR #503 as `3b3ecf3f`, PR #504 as `8a9cda1b`, PR #505 as `bde0f343`, PR #506 as `caf3038f`, PR #507 as `d3fb1a0b`, PR #508 as `547fe24b`, PR #509 as `b0464f2c`, PR #510 as `3c694d79`, PR #512 as `62a06878`, and PR #513 as `5eb844ff`; duplicate PRs #463 and #464 were closed after their stronger sibling branches merged.
 >
-> Current follow-up note: this pass records the post-#509 green checkpoint and the remaining GitHub Actions Node 20 deprecation annotation in Docker publish, then starts the focused Node 24 runtime opt-in lane without touching dev-1/dev-2 or beta promotion state.
+> Current follow-up note: this pass records the post-#513 green checkpoint and the audit browser-depth follow-up now landed without touching dev-1/dev-2 or beta promotion state. Security Audit still emits GitHub's Node.js 20 deprecation annotation for Docker/cache/artifact actions running under the forced Node 24 runtime; the annotation is informational and the workflow passed.
 
 ## Current State
 
@@ -21,7 +21,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - **CI/CD**: 11 GitHub Actions workflows (build, test, deploy, promotion, cleanup, security, DAST, fleet)
 - **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
-**7,260+ unit tests** across 111+ files + **215+ Playwright e2e checks**, with the backend-independent webhooks and agent-profiles slices now gated in CI. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
+**7,260+ unit tests** across 111+ files + **218+ Playwright e2e checks**, with the backend-independent webhooks, agent-profiles, and audit slices now gated in CI. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
 
 ---
 
@@ -62,29 +62,30 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > job timeout from 10 to 20 minutes after a main push exhausted the old limit
 > during Playwright Chromium installation before tests started. PR #505 then
 > added the backend-independent `/agent-profiles` Playwright spec to the same
-> CI lane. The current
-> Docker publish hotfix removes duplicate Security-tab SARIF uploads from
+> CI lane. PR #508 removes duplicate Security-tab SARIF uploads from
 > `build-images.yml` so image publication no longer depends on
 > `github/codeql-action` setup availability; scanner reports remain attached as
 > artifacts, Security Audit keeps the Security-tab upload responsibility, and
 > the Security Audit container-scan matrix is capped at one concurrent image to
 > avoid duplicate `codeql-action` setup downloads during busy merge windows.
-> This follow-up opts `build-images.yml` and `security-audit.yml` into
+> PR #510 opted `build-images.yml` and `security-audit.yml` into
 > `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` after the post-#509 Docker publish run
 > still emitted Node.js 20 deprecation annotations for Docker/artifact/cache
-> actions despite passing.
+> actions despite passing. PR #512 then fixed the follow-on Node 20 compat
+> TypeScript failure in the control-plane agent runtime mapping. PR #513 added
+> backend-independent `/audit` Playwright coverage to the same web e2e CI lane.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
 - [x] Security scanning: `pnpm audit`, `gitleaks`, Biome security lint
-- [x] Backend-independent web Playwright CI gating for `/webhooks` and `/agent-profiles` using `WEB_PORT`-aware web scripts *(PRs #445, #505)*
+- [x] Backend-independent web Playwright CI gating for `/webhooks`, `/agent-profiles`, and `/audit` using `WEB_PORT`-aware web scripts *(PRs #445, #505, #513)*
 
 ### 1.2 Docker Build & Registry
 
 - [x] Multi-stage Docker build (`node:22-alpine`, non-root uid 1001)
 - [x] Image tagging: `sha-<commit>`, `main-latest`/`dev-latest`, semver `v*.*.*`
 - [x] Trivy + Grype container scanning, SBOM generation
-- [x] Docker publish scanner artifacts kept independent from CodeQL SARIF upload setup *(active CI hotfix)*
+- [x] Docker publish scanner artifacts kept independent from CodeQL SARIF upload setup *(PR #508)*
 
 ### 1.3 Deployment Pipeline
 

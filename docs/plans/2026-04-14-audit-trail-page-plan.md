@@ -1,7 +1,7 @@
 # Audit Trail Page Plan
 
 Date: 2026-04-14
-Status: Delivered in PR #507 (`main@d3fb1a0b`)
+Status: Delivered in PR #507 (`main@d3fb1a0b`); plan registered in PR #509 (`main@b0464f2c`); browser-depth follow-up delivered in PR #513 (`main@5eb844ff`)
 Owner: Claude/Codex coordination lane
 
 ## Context
@@ -30,15 +30,17 @@ PR #507 closed that gap by extracting the audit trail into a dedicated `/audit` 
 - `packages/web/src/components/Sidebar.tsx`
 - `packages/web/src/views/AuditPage.tsx`
 - `packages/web/src/views/AuditPage.test.tsx`
+- `packages/web/e2e/audit.spec.ts`
 - `docs/ROADMAP.md`
 
 ## Validation
 
 - PR #507 GitHub checks covered lint, build, unit tests, and security audit before merge.
 - Post-merge `main@d3fb1a0b` checks passed: CI, Security Audit, and Build & Publish Docker Images.
+- Plan registration landed in PR #509; post-merge `main@b0464f2c` checks passed: CI `24405567418`, Security Audit `24405567419`, and Build & Publish Docker Images `24405567447`.
+- Backend-independent `/audit` Playwright coverage landed in PR #513; PR checks passed before merge, and post-merge `main@5eb844ff` checks passed: CI `24407474324`, Security Audit `24407474322`, and Build & Publish Docker Images `24407474278`.
 - Local docs sync validation: `git diff --check`.
 
 ## Follow-Up
 
-- Add backend-independent `/audit` Playwright coverage if the next browser-depth batch targets audit forensics.
 - Keep the Logs tab and dedicated `/audit` page behavior aligned when audit filters or row rendering change.
