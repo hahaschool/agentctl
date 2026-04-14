@@ -1,6 +1,6 @@
 # Task Auto-Decompose Apply-Failure E2E Plan
 
-Status: In progress in PR #487 on 2026-04-14
+Status: Delivered in PR #487 on 2026-04-14
 Owner: Codex
 Roadmap: §10.5, §20.5
 
@@ -24,11 +24,11 @@ The UI already renders `data-testid="auto-decompose-apply-error"` when the apply
 - The dialog remains visible after the 500 response.
 - `auto-decompose-apply-error` displays the backend message `Could not persist graph`.
 - The proposed preview remains visible and the preview endpoint is not called a second time.
-- Focused Playwright, lint, and diff-check verification pass before PR handoff.
+- Focused Playwright, lint, and diff-check verification passed before PR handoff.
 
 ## Verification
 
-Planned commands:
+Verified commands:
 
 ```bash
 WEB_PORT=5374 pnpm --filter @agentctl/web exec playwright test e2e/task-auto-decompose.spec.ts
