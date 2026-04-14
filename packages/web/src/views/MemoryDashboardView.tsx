@@ -1,14 +1,16 @@
 'use client';
 
-import type { MemoryStats } from '@agentctl/shared';
+import type { MemoryFact, MemoryStats } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
 import { useMemo } from 'react';
 
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { ActivityFeed } from '@/components/memory/ActivityFeed';
 import { KpiCard } from '@/components/memory/KpiCard';
 import { MemoryDecayCard } from '@/components/memory/MemoryDecayCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { formatNumber } from '@/lib/format-utils';
 import { memoryFactsQuery, memoryStatsQuery } from '@/lib/queries';
 
@@ -215,6 +217,39 @@ function StrengthDistribution({ distribution }: StrengthDistributionProps): Reac
 // Main view
 // ---------------------------------------------------------------------------
 
+// Initial loading state — shown when neither query has returned any data yet.
+// Uses card-sized skeletons matching the post-load layout so the page keeps
+// its shape instead of flashing blank while the first fetch is in flight.
+function InitialLoadingSkeleton(): React.JSX.Element {
+  return (
+    <div
+      className="space-y-6"
+      aria-busy="true"
+      aria-live="polite"
+      data-testid="memory-dashboard-loading"
+    >
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton
+          <Skeleton key={i} className="h-24 w-full" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-40 w-full" />
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Skeleton className="h-64 w-full lg:col-span-2" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    </div>
+  );
+}
+
 export function MemoryDashboardView(): React.JSX.Element {
   const statsQuery = useQuery(memoryStatsQuery());
   const recentFactsQuery = useQuery(memoryFactsQuery({ limit: 10 }));
@@ -227,6 +262,28 @@ export function MemoryDashboardView(): React.JSX.Element {
     [recentFactsQuery.data],
   );
 
+  // Surface the first failing required query. Stats is the primary data source,
+  // so prefer its error. Facts power the activity feed and are also required.
+  const failedQuery = statsQuery.isError
+    ? statsQuery
+    : recentFactsQuery.isError
+      ? recentFactsQuery
+      : null;
+  const failureMessage = failedQuery?.error
+    ? failedQuery.error instanceof Error
+      ? failedQuery.error.message
+      : String(failedQuery.error)
+    : null;
+
+  // Show the full-page skeleton only on the first load, before any data has
+  // arrived. Subsequent refetches reuse the already-loaded content and let
+  // the inner Card-level skeletons (for isLoading) handle the visual cue.
+  const showInitialSkeleton =
+    !failedQuery &&
+    !statsQuery.data &&
+    !recentFactsQuery.data &&
+    (statsQuery.isLoading || recentFactsQuery.isLoading);
+
   return (
     <div className="space-y-6 p-6 md:p-8">
       <div>
@@ -236,6 +293,44 @@ export function MemoryDashboardView(): React.JSX.Element {
         </p>
       </div>
 
+      {failureMessage && (
+        <ErrorBanner
+          message={`Failed to load memory dashboard: ${failureMessage}`}
+          onRetry={() => {
+            void failedQuery?.refetch();
+          }}
+        />
+      )}
+
+      {showInitialSkeleton && <InitialLoadingSkeleton />}
+
+      {!showInitialSkeleton && !failureMessage && (
+        <MemoryDashboardContent
+          stats={stats}
+          isLoading={isLoading}
+          recentItems={recentItems}
+          recentFactsLoading={recentFactsQuery.isLoading}
+        />
+      )}
+    </div>
+  );
+}
+
+type MemoryDashboardContentProps = {
+  stats: MemoryStats | undefined;
+  isLoading: boolean;
+  recentItems: ReadonlyArray<{ fact: MemoryFact }>;
+  recentFactsLoading: boolean;
+};
+
+function MemoryDashboardContent({
+  stats,
+  isLoading,
+  recentItems,
+  recentFactsLoading,
+}: MemoryDashboardContentProps): React.JSX.Element {
+  return (
+    <>
       {/* KPI Cards */}
       <section aria-label="Key performance indicators">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -355,12 +450,12 @@ export function MemoryDashboardView(): React.JSX.Element {
             <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ActivityFeed items={recentItems} isLoading={recentFactsQuery.isLoading} />
+            <ActivityFeed items={recentItems} isLoading={recentFactsLoading} />
           </CardContent>
         </Card>
 
         <MemoryDecayCard />
       </div>
-    </div>
+    </>
   );
 }

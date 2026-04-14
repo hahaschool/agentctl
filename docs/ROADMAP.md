@@ -1,10 +1,10 @@
 # Project Roadmap
 
-> Last updated: 2026-04-14 (post-PR #468 spaces/tasks detail E2E + webhook delivery history + memory browser-depth follow-up). The 2026-04-13/14 landing set includes PR #395 through PR #468, including the latest memory/web follow-ups: PR #457 (`/memory/import` wizard completion/cancellation coverage), PR #458 (`/settings` notification preferences backend-independent coverage), PR #459 (`/discover` grouped/filter/import/new-session coverage), PR #460 (roadmap checkpoint sync), PR #461 (`/memory` index redirect/sidebar coverage), PR #462 (`/memory/consolidation` queue/action coverage), PR #465 (`/memory/scopes` broader render/create/rename/promote/merge/delete/error/empty coverage), PR #466 (`/memory/graph` table/SVG/detail/empty coverage), PR #467 (webhook delivery history viewer over the existing delivery-list API), and PR #468 (`/spaces/[id]` + `/tasks/[id]` detail-route coverage). CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
+> Last updated: 2026-04-14 (post-PR #479 web feature/E2E + agent-worker type-hygiene batch). The 2026-04-13/14 landing set includes PR #395 through PR #479, including the latest memory/web follow-ups: PR #457 (`/memory/import` wizard completion/cancellation coverage), PR #458 (`/settings` notification preferences backend-independent coverage), PR #459 (`/discover` grouped/filter/import/new-session coverage), PR #460 (roadmap checkpoint sync), PR #461 (`/memory` index redirect/sidebar coverage), PR #462 (`/memory/consolidation` queue/action coverage), PR #465 (`/memory/scopes` broader render/create/rename/promote/merge/delete/error/empty coverage), PR #466 (`/memory/graph` table/SVG/detail/empty coverage), PR #467 (webhook delivery history viewer over the existing delivery-list API), PR #468 (`/spaces/[id]` + `/tasks/[id]` detail-route coverage), PR #470 (`/memory/synthesis` structural-lint page over `POST /api/memory/synthesis`), PR #471 (Settings → Notifications **Registered Push Devices** section over `/api/mobile-push-devices`), PR #472 (memory fact thumbs-up / irrelevant / outdated feedback buttons over `PATCH /api/memory/facts/:id/feedback`), PR #473 (`/memory/maintenance` page over `POST /api/memory/maintenance`), PR #474 (tasks auto-decompose action wiring `POST /api/decompose` + `/preview` with two-step preview/apply UX), PR #475 (browser coverage for memory synthesis, webhook deliveries, and push-device registration/revoke flows), PR #476 (shared ConfirmDialog primitive plus memory dashboard first-load/error states), PR #478 (browser coverage for memory maintenance and task auto-decompose, including the stale-preview guard), and PR #479 (removal of stale agent-worker discovery type stubs now that shared `DiscoveredSkill` / `DiscoveredMcpServer.configFile` types are canonical). CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
 >
-> Current checkpoint: PR #461, PR #462, PR #465, PR #466, PR #467, and PR #468 are merged through `main@4291f520`; GitHub currently reports 0 open PRs, 0 open code-scanning alerts, 0 open Dependabot alerts, and 0 open secret-scanning alerts.
+> Current checkpoint: PR #470 through PR #479 are represented, and the docs sync itself merged as PR #477 through `main@be1765d3`; GitHub reports no open PRs at this sync point, plus 0 open code-scanning alerts, 0 open Dependabot alerts, and 0 open secret-scanning alerts.
 >
-> Coordination note: PR #461 merged as `e6fd4c2e`, PR #462 as `193e6b02`, PR #465 as `2b950c96`, PR #466 as `9fbc2fe9`, PR #467 as `620de798`, and PR #468 as `4291f520`; duplicate PRs #463 and #464 were closed after their stronger sibling branches merged.
+> Coordination note: PR #461 merged as `e6fd4c2e`, PR #462 as `193e6b02`, PR #465 as `2b950c96`, PR #466 as `9fbc2fe9`, PR #467 as `620de798`, PR #468 as `4291f520`, PR #470 as `5a480a23`, PR #471 as `2d61cb8a`, PR #472 as `7b2f9b8c`, PR #473 as `22fbe6ae`, PR #474 as `a8189309`, PR #475 as `1f4007c1`, PR #476 as `fa632acd`, PR #478 as `082deedb`, and PR #479 as `9f984523`; duplicate PRs #463 and #464 were closed after their stronger sibling branches merged.
 
 ## Current State
 
@@ -17,7 +17,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - **CI/CD**: 11 GitHub Actions workflows (build, test, deploy, promotion, cleanup, security, DAST, fleet)
 - **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
-**7,255+ unit tests** across 111+ files + **200+ Playwright e2e checks**, with the backend-independent webhooks slice now gated in CI. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
+**7,255+ unit tests** across 111+ files + **205+ Playwright e2e checks**, with the backend-independent webhooks slice now gated in CI. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
 
 ---
 
@@ -490,7 +490,8 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 > Impl plan: [plans/2026-03-11-memory-ui-implementation.md](plans/2026-03-11-memory-ui-implementation.md)
 >
 > Full-stack vertical implementation: each page ships API route → component → test.
-> Top-level `/memory` route with left sidebar, 8 sub-pages, plus memory data
+> Top-level `/memory` route with left sidebar, the original 8 memory sub-pages plus the
+> synthesis and maintenance follow-up pages, plus memory data
 > surfaced contextually across existing agent/session/machine pages.
 
 **Pages (priority order):**
@@ -503,6 +504,10 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 - [x] Import Wizard (`/memory/import`) — 4-step claude-mem migration wizard (source detection → preview/mapping → progress → summary); dedup via embedding similarity; rollback support *(PR #55)*
 - [x] Fact Editor (modal) — accessible from Browser/Graph/command palette; content, entity type, scope, confidence, pinned toggle, relationships editor *(PR #53)*
 - [x] Scope Manager (`/memory/scopes`) — scope hierarchy tree with fact counts; promote, merge, rename, delete scope operations *(PR #55)*
+- [x] Synthesis Page (`/memory/synthesis`) — structural-lint surface for near-duplicates, stale facts, orphan facts, and synthesis groups over `POST /api/memory/synthesis` *(PR #470)*
+- [x] Maintenance Page (`/memory/maintenance`) — stale references, deleted-file references, synthesis clusters, and coverage gaps over `POST /api/memory/maintenance` *(PR #473)*
+- [x] Memory Browser fact feedback buttons — thumbs-up / irrelevant / outdated signals on facts via `PATCH /api/memory/facts/:id/feedback` *(PR #472)*
+- [x] Browser coverage for the new memory feature surfaces — `/memory/synthesis`, `/memory/maintenance`, fact feedback, and maintenance action flows now have backend-independent Playwright coverage where applicable *(PRs #475, #478)*
 
 **Integration points (memory woven into existing pages):**
 
@@ -866,6 +871,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 - [x] Smart Routing: capability match + load + cost + historical success scoring → ranked candidate selection (Phase 5a) — PR #113
 - [x] Auto-Decompose: LLM-based natural-language task → TaskGraph with DAG validation (Phase 5b) — PR #111
+- [x] Auto-Decompose web UI: **Auto-decompose** action on `/tasks/[id]` with two-step preview/apply dialog over `POST /api/decompose` + `/preview`, including subtask/dependency rendering, token/cost estimates, post-apply navigation to the new graph, fresh initial-description seeding, and stale-preview protection when the source task text changes after preview *(PRs #474, #478)*
 - [x] Outcome Learning: sliding-window stats from task completions → refine routing scores + approval timeouts (Phase 5c) — PR #113
 - [x] Notification Routing: priority classification + per-user channel preferences + quiet hours (Phase 5d) — PR #112
 
@@ -962,8 +968,8 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ### 12.2 Database Isolation — Partial
 
-- [ ] Create per-tier PG databases — **user manual step** (see USER-SETUP-CD-TIERS.md)
-- [ ] Per-tier PG roles with least-privilege grants (deferred — not critical for local dev)
+- [x] Dry-run-first `scripts/db-provision-tier.ts` helper for dev-1/dev-2 databases and least-privilege app roles (PR #482)
+- [ ] Run per-tier PG database/role provisioning locally with admin credentials — **user manual step** (see USER-SETUP-CD-TIERS.md)
 - [x] `scripts/env-migrate.sh` with `--tier` flag and beta safety gate (PR #104)
 
 ### 12.3 PM2 Beta Process Management — ✅ Delivered (PR #104)
@@ -1073,6 +1079,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Extend `MachineCapabilities` with discovery provenance fields (`mcpServerSources`, `skillSources`, `lastDiscoveredAt`) *(PR #146)*
 - [x] Extend `ManagedSkill` with display metadata (`name`, `description`, `source`) *(PR #146)*
 - [x] Add `DiscoveredSkill` type and `configFile` field on `DiscoveredMcpServer` *(PR #146)*
+- [x] Remove the agent-worker-local `_type-stubs.ts` bridge and import canonical shared discovery types directly from `@agentctl/shared` *(PR #479)*
 - [x] Add `CustomMcpServer`, `AgentMcpOverride`, `AgentSkillOverride` types on `AgentConfig` *(PR #146)*
 - [x] Pure-function override resolution: `resolveEffectiveMcpServers()`, `resolveEffectiveSkills()` — opt-out model (defaults - excluded + custom) *(PR #146)*
 
@@ -1173,6 +1180,7 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - Status note: The historical CI/CodeQL/Dependabot/DAST recovery through PR #227 remains delivered on `main`; the 2026-04-01 and 2026-04-13 follow-up loops are represented in the stability plan and current checklist below. Follow-up note (2026-04-14): PR #440 removed the red Biome security-lint annotation and skipped empty invalid Grype SARIF uploads, PR #442 landed the SessionHeader/GitStatusBadge accessibility follow-up, PR #443 introduced Zod validation and bounded strings on checkpoint/mobile-push/knowledge-maintenance write surfaces, PR #444 added focused `/webhooks` Playwright coverage, PR #445 moved the backend-independent webhooks Playwright slice into CI, PR #447 added mobile-push validation negative coverage, PR #448 tightened batch-2 input validation across six control-plane surfaces, PR #452 hardened sync-peer registration/ping validation against unsafe peer URLs and metadata/local SSRF targets, PR #454 added `/logs` Security Findings Playwright coverage, PR #455 added `/memory/browser` facts-flow Playwright coverage, PR #457 adds backend-independent `/memory/import` browser coverage for the import wizard's JSONL completion and cancellation paths, PR #458 makes the `/settings` Playwright slice fully backend-independent while covering add/remove notification preferences, and PR #459 adds backend-independent `/discover` browser coverage for grouped discovered sessions, filters, imports, and new-session request paths.
 - Latest sync note (2026-04-14): PR #461 added backend-independent `/memory` index redirect/sidebar coverage, PR #462 added `/memory/consolidation` queue/action coverage, PR #465 added the broader `/memory/scopes` browser suite, PR #466 added the broader `/memory/graph` browser suite, and PR #467 added the webhook delivery-history viewer with unit coverage over loading/populated/empty/error/expanded-row states.
 - Latest E2E note (2026-04-14): PR #468 added backend-independent dynamic detail-route coverage for `/spaces/[id]` and `/tasks/[id]`, covering detail render, not-found paths, space thread/event/member actions, task empty state, run start payloads, and back navigation.
+- Latest memory/tasks sync note (2026-04-14): PR #470-#474 shipped the memory synthesis page, push-device settings surface, fact feedback buttons, memory maintenance page, and task auto-decompose web action; PR #475 then added browser coverage for memory synthesis, webhook delivery-history, and push-device registration/revoke flows; PR #476 added the shared ConfirmDialog primitive plus memory dashboard loading/error/retry states; PR #478 added browser coverage for memory maintenance and the auto-decompose stale-preview guard; PR #479 removed stale agent-worker discovery type stubs after shared types became canonical.
 
 - [x] Add explicit rate limiting to the sync pull/ack routes newly flagged by CodeQL on current `main` (`#560`, `js/missing-rate-limiting`, `packages/control-plane/src/api/routes/sync.ts`) *(PR #386)*
 - [x] Add explicit rate limiting to the OAuth PKCE initiate/callback/refresh routes, covering memory-flow allocation, public redirect probing, and outbound token-refresh amplification *(PR #423)*
@@ -1530,6 +1538,8 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 - [x] Frontend settings panel for notification-preferences API *(PR #272)*
 - [x] Channels, quiet hours, priority threshold configuration *(PR #272)*
+- [x] **Registered Push Devices** section in Settings → Notifications, listing iOS push registrations and exposing revoke via confirm dialog over `GET /api/mobile-push-devices` + `POST /api/mobile-push-devices/:deviceId/deactivate` *(PR #471; relates to [plans/2026-03-19-approval-push-notifications-impl-plan.md](plans/2026-03-19-approval-push-notifications-impl-plan.md))*
+- [x] Backend-independent browser coverage for registering, listing, and revoking push devices through the Settings notification surface *(PR #475)*
 
 ### 20.9 Webhooks Management Page — Delivered
 
@@ -1539,6 +1549,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Playwright coverage for `/webhooks` row rendering, Add Webhook request payload/refresh, empty-URL validation, delete confirmation, and test success/failure toasts *(PR #444)*
 - [x] Webhook edit/PATCH Playwright coverage, stricter unexpected `/api/**` mock handling, and CI execution for the backend-independent webhooks browser slice *(PR #445)*
 - [x] Delivery history modal over `GET /api/webhooks/:id/deliveries`, with a reusable `WebhookDeliveriesPanel` and unit coverage for loading, populated, empty, error, and expanded-row states *(PR #467)*
+- [x] Browser coverage for delivery-history loading, populated, empty/error, and expanded-row paths from the `/webhooks` surface *(PR #475)*
 
 ## 21. Mobile Approval Follow-up
 
@@ -1568,6 +1579,8 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Notification tap path lands user on the approval inbox *(PR #290)*
 - [x] Initial single-operator routing model documented until durable user ownership lands *(PR #285 + 21.2 docs)*
 - [x] Device registry validation negative coverage for invalid methods, malformed JSON, invalid tokens/platforms, oversized route params, deactivate error paths, and Fastify `routerOptions.maxParamLength = 256` behavior *(PR #447)*
+- [x] Operator-facing **Registered Push Devices** UI in Settings → Notifications for listing/revoking registrations over the existing `/api/mobile-push-devices` endpoints *(PR #471; tracked in §20.8)*
+- [x] Settings push-device registration/revoke browser coverage over the shipped registry endpoints *(PR #475)*
 
 ## 22. Remaining Route Tests + Frontend Integration
 
@@ -1934,7 +1947,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Peer auth foundation: `peer-auth.ts` with Ed25519 signing/verification (reuses dispatch signing)
 - [x] Per-peer health check with adaptive interval (30s default → 5min backoff on failure)
 - [x] REST API: `GET/POST/DELETE /api/sync/peers`, `POST /:machineId/ping`
-- [x] Standalone `/mesh-peers` web page with sidebar entry, peer status table, 30s polling, and per-peer ping action over the existing list/ping APIs *(PR #425; render/empty/ping-success/ping-failure Playwright coverage in PR #431; sync peer URL/SSRF validation hardening in PR #452; upsert/delete UI intentionally deferred)*
+- [x] Standalone `/mesh-peers` web page with sidebar entry, peer status table, 30s polling, per-peer ping action, and Add/Delete peer UI over the existing registry APIs *(PR #425; render/empty/ping-success/ping-failure Playwright coverage in PR #431; sync peer URL/SSRF validation hardening in PR #452; Add/Delete UI plus create/delete/validation Playwright coverage in PR pending from `agent/codex-mesh-peers-ui`)*
 
 ### 33.5 Unified CP + Worker per Machine (P5) — Delivered
 
@@ -1989,7 +2002,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
-| **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — 8 pages + integration points + MCP tools (PRs #47,#50,#52-#59); backend routes for consolidation, reports, and decay all landed |
+| **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — original 8 pages plus synthesis/maintenance follow-ups, integration points, and MCP tools (PRs #47,#50,#52-#59,#470,#473); backend routes for consolidation, reports, decay, synthesis, and maintenance all landed |
 | **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all original ARIA items complete (PRs #51,#54,#59), StatusBadge descriptions refreshed in PR #417, slash-search/hotkey discoverability improved in PRs #446/#449, and shared Sidebar/Sessions `?` event ownership centralized in PR #450 |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
@@ -2058,7 +2071,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~MCP & Skill Auto-Discovery: E2E Testing~~ | 14.6 | ✅ Delivered (PR #152) |
 | **P0** | ~~Codex Parity: Runtime Selector Penetration~~ | 15.1 | ✅ Delivered (PRs #148, #150) |
 | **P1** | ~~Codex Parity: Config Capabilities Exposure~~ | 15.2 | ✅ Delivered (PR #156) |
-| **P0** | Agent Run Quality | 16.1 | Current loop closed — PR #385 plus PRs #386-#388 finished the 2026-04-01 CI/security follow-up on `main`; PRs #398/#400/#401/#402/#404 cleared the 2026-04-13 dependency-audit + DAST WebSocket fuzz loop; PRs #410/#413 plus formal dismissal closed CodeQL #579; PRs #411/#414 repaired web test infrastructure; PR #415 added `/memory/reports` e2e depth; PR #416 surfaced security findings in Logs; PR #418/#422 covered NotificationBell approval-popover e2e depth and aria-label drift; PR #420 cleared the residual web unit failures; PR #423 added OAuth PKCE route rate limiting; PR #426 tightened web accessibility labels/titles; PR #427 added accounts route rate limiting; PR #429 covered account verification rate limiting; PR #431 added mesh peers browser coverage; PR #436 added security-findings browser coverage; PR #439 closed the remaining route-rate-limit audit; PR #440 cleaned up CI/security scan annotations; PR #442 landed a11y follow-up semantics; PR #443 added Zod input bounds to three write surfaces; PR #445 moved the webhooks Playwright slice into CI; PR #447 added mobile-push validation negative coverage; PR #448 tightened six control-plane input surfaces; PR #452 hardened sync-peer URL/SSRF validation; PR #454 covered the `/logs` Security Findings tab; and PR #455 covered the `/memory/browser` facts flow |
+| **P0** | Agent Run Quality | 16.1 | Current loop closed — PR #385 plus PRs #386-#388 finished the 2026-04-01 CI/security follow-up on `main`; PRs #398/#400/#401/#402/#404 cleared the 2026-04-13 dependency-audit + DAST WebSocket fuzz loop; PRs #410/#413 plus formal dismissal closed CodeQL #579; PRs #411/#414 repaired web test infrastructure; PR #415 added `/memory/reports` e2e depth; PR #416 surfaced security findings in Logs; PR #418/#422 covered NotificationBell approval-popover e2e depth and aria-label drift; PR #420 cleared the residual web unit failures; PR #423 added OAuth PKCE route rate limiting; PR #426 tightened web accessibility labels/titles; PR #427 added accounts route rate limiting; PR #429 covered account verification rate limiting; PR #431 added mesh peers browser coverage; PR #436 added security-findings browser coverage; PR #439 closed the remaining route-rate-limit audit; PR #440 cleaned up CI/security scan annotations; PR #442 landed a11y follow-up semantics; PR #443 added Zod input bounds to three write surfaces; PR #445 moved the webhooks Playwright slice into CI; PR #447 added mobile-push validation negative coverage; PR #448 tightened six control-plane input surfaces; PR #452 hardened sync-peer URL/SSRF validation; PR #454 covered the `/logs` Security Findings tab; PR #455 covered the `/memory/browser` facts flow; PRs #470-#478 shipped and tested the latest memory/tasks/webhook/push-device web feature batch; and PR #479 removed stale agent-worker discovery type stubs |
 | **P0** | ~~Dev Environment Infrastructure~~ | 16.2 | ✅ Delivered — dev-1/dev-2 isolation, PM2 configs, Next.js middleware proxy, version display |
 | **P0** | ~~Frontend UI Polish (dashboard, agent detail, cards)~~ | 16.3 | ✅ Delivered — PRs #158-#165, #212-#213, #229-#246; all critique items resolved |
 | **P1** | ~~Agent Settings Config Preview Sidebar~~ | 16.4 | ✅ Delivered (PR #163) |
@@ -2086,7 +2099,7 @@ runtime mgmt:    config sync → managed sessions → native import preflight �
 mcp/skill:       machine config scan → discover MCP servers (JSON/TOML) + skills (SKILL.md) → machine defaults → per-agent opt-out overrides → picker UX
 codex parity:    RuntimeSelector (radio/dropdown) → RuntimeAwareModelSelect → RuntimeAwareMachineSelect → unified create/edit/filter flows for claude-code + codex
 memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+graph RRF) → 3-tier injection
-memory UI:       /memory (8 pages) → browser/graph/dashboard/consolidation/reports/import/editor/scopes
+memory UI:       /memory → browser/graph/dashboard/consolidation/reports/import/editor/scopes/synthesis/maintenance
 memory integ:    session/agent/machine/dashboard/context-picker/cmd-palette → contextual memory data
 knowledge:       extract → lint (dedup+contradict) → synthesize (LLM propose) → human review → promote
 feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) → adjust strength/ranking
@@ -2098,7 +2111,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
 | ~~Unified Memory Layer (P1)~~ | None | ✅ Delivered — all knowledge engineering items complete, decay module landed (PR #76) |
-| ~~Unified Memory System UI (P1)~~ | Unified Memory Layer (§3.6) backend routes | ✅ Delivered — 8 pages + integration + all backend routes (consolidation, reports, decay) |
+| ~~Unified Memory System UI (P1)~~ | Unified Memory Layer (§3.6) backend routes | ✅ Delivered — original 8 pages plus synthesis/maintenance follow-ups + integration + all backend routes (consolidation, reports, decay, synthesis, maintenance) |
 | ~~UI Quality & Accessibility (P1)~~ | None | ✅ Delivered — all original ARIA items complete; StatusBadge descriptions refreshed in PR #417; slash-search/hotkey discoverability improved in PRs #446/#449; shared Sidebar/Sessions `?` ownership centralized in PR #450 |
 | ~~Execution Summary (P1)~~ | None | ✅ Delivered (PRs #32, #39) |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
@@ -2197,13 +2210,13 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [config-preview-sidebar](superpowers/plans/2026-03-15-config-preview-sidebar.md) | Delivered (PR #163) | 16.4 |
 | [agent-coordination-board-design](plans/2026-03-15-agent-coordination-board-design.md) | Delivered (PRs #193, #201) | 16.1 |
 | [agent-coordination-board-impl-plan](plans/2026-03-15-agent-coordination-board-impl-plan.md) | Delivered (PRs #193, #201) | 16.1 |
-| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered on historical scope; PR #385 and PRs #386-#388 closed the 2026-04-01 CI/security follow-up, PRs #398/#400/#401/#402 closed the 2026-04-13 dependency-audit + DAST WebSocket fuzz follow-up on `main`, PR #404 reconciled roadmap/plan state after merge, PRs #410/#413 plus formal dismissal closed CodeQL #579, PRs #411/#414 repaired web test infrastructure, PR #415 added `/memory/reports` Playwright depth, PR #416 surfaced security findings in Logs, PR #418/#422 covered NotificationBell approval-popover e2e depth and aria-label drift, PR #419 reconciled plan status drift, PR #420 cleared the residual web unit failures, PR #423 added OAuth PKCE route rate limiting, PR #426 tightened web accessibility labels/titles, PR #427 added accounts route rate limiting, PR #429 covered account verification rate limiting, PR #431 added mesh peers Playwright coverage, PR #439 closed the route-rate-limit audit, PR #440 cleaned up CI/security scan annotations, PR #443 added Zod input bounds to three write surfaces, PR #445 moved the webhooks Playwright slice into CI, PR #447 added mobile-push validation negative coverage, PR #448 tightened six control-plane input surfaces, PR #452 hardened sync-peer URL/SSRF validation, PR #454 covered `/logs` Security Findings, PR #455 covered `/memory/browser` facts flow, and PR #467 added webhook delivery-history UI coverage | 16.1-16.3 |
+| [main-stability-and-security-cycle-plan](plans/2026-03-15-main-stability-and-security-cycle-plan.md) | Delivered on historical scope; PR #385 and PRs #386-#388 closed the 2026-04-01 CI/security follow-up, PRs #398/#400/#401/#402 closed the 2026-04-13 dependency-audit + DAST WebSocket fuzz follow-up on `main`, PR #404 reconciled roadmap/plan state after merge, PRs #410/#413 plus formal dismissal closed CodeQL #579, PRs #411/#414 repaired web test infrastructure, PR #415 added `/memory/reports` Playwright depth, PR #416 surfaced security findings in Logs, PR #418/#422 covered NotificationBell approval-popover e2e depth and aria-label drift, PR #419 reconciled plan status drift, PR #420 cleared the residual web unit failures, PR #423 added OAuth PKCE route rate limiting, PR #426 tightened web accessibility labels/titles, PR #427 added accounts route rate limiting, PR #429 covered account verification rate limiting, PR #431 added mesh peers Playwright coverage, PR #439 closed the route-rate-limit audit, PR #440 cleaned up CI/security scan annotations, PR #443 added Zod input bounds to three write surfaces, PR #445 moved the webhooks Playwright slice into CI, PR #447 added mobile-push validation negative coverage, PR #448 tightened six control-plane input surfaces, PR #452 hardened sync-peer URL/SSRF validation, PR #454 covered `/logs` Security Findings, PR #455 covered `/memory/browser` facts flow, PR #467 added webhook delivery-history UI coverage, PRs #470-#478 closed the latest memory/tasks/webhook/push-device feature and browser-coverage batch, and PR #479 removed stale worker discovery type stubs | 16.1-16.3 |
 | [mesh-runtime-e2e-follow-up-plan](plans/2026-04-01-mesh-runtime-e2e-follow-up-plan.md) | Delivered — PR #395 (session `Config` tab detail-state coverage) + PR #396 (`/conflicts` resolution-flow coverage) both merged 2026-04-13; PR #397 synced the tracking doc; PR #431 extended coverage to `/mesh-peers` render/empty/ping states | 16.1, 31.3, 33.3, 33.4 |
-| [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main`; later §20.5 browser-depth follow-ups added `/logs` Security Findings coverage in PR #454, `/memory/browser` facts-flow coverage in PR #455, `/memory/import` wizard completion/cancellation coverage in PR #457, backend-independent `/settings` notification preference coverage in PR #458, `/discover` grouped/filter/import/new-session coverage in PR #459, `/memory` index coverage in PR #461, `/memory/consolidation` coverage in PR #462, `/memory/scopes` coverage in PR #465, `/memory/graph` coverage in PR #466, and `/spaces/[id]` + `/tasks/[id]` detail coverage in PR #468 | 20.1-20.8 |
+| [coverage-feature-depth-batch-plan](plans/2026-03-19-coverage-feature-depth-batch-plan.md) | Delivered — §20.1-20.8 shipped on `main`; later §20.5 browser-depth follow-ups added `/logs` Security Findings coverage in PR #454, `/memory/browser` facts-flow coverage in PR #455, `/memory/import` wizard completion/cancellation coverage in PR #457, backend-independent `/settings` notification preference coverage in PR #458, `/discover` grouped/filter/import/new-session coverage in PR #459, `/memory` index coverage in PR #461, `/memory/consolidation` coverage in PR #462, `/memory/scopes` coverage in PR #465, `/memory/graph` coverage in PR #466, `/spaces/[id]` + `/tasks/[id]` detail coverage in PR #468, `/memory/synthesis` plus webhook-delivery plus push-device coverage in PR #475, and `/memory/maintenance` plus auto-decompose coverage in PR #478 | 20.1-20.8 |
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
 | [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Delivered — PRs #290, #291, and #295 shipped the full 21.2 slice on `main` | 21.2 |
-| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing; PR #447 added validation hardening coverage for the registry route | 21.2 |
+| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing; PR #447 added validation hardening coverage for the registry route; PR #471 added the operator-facing Registered Push Devices UI; PR #475 added backend-independent registration/list/revoke browser coverage | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; the remaining machines / terminal coverage now lives in the dedicated section 29 follow-up | 25.1-25.3 |
 | [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Delivered — PR #346 added the dedicated machine terminal Playwright coverage on `main`; no page-level hardening was required beyond the focused e2e spec | 29 |

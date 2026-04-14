@@ -7,8 +7,7 @@ import { expect, type Page, type Route, test } from '@playwright/test';
  *   GET  /api/mobile-push-devices?userId=local
  *   POST /api/mobile-push-devices/:id/deactivate
  *
- * The component guards revoke behind window.confirm() — tests accept/dismiss the
- * native dialog via page.on('dialog', ...).
+ * The component guards revoke behind the branded ConfirmDialog primitive.
  */
 
 type MobilePushDevice = {
@@ -170,7 +169,7 @@ test.describe('Settings — Push Devices section', () => {
     await expect(page.locator('[data-testid^="push-device-row-"]')).toHaveCount(0);
   });
 
-  test('revoking a device requires confirm() and POSTs the deactivate endpoint with the correct id', async ({
+  test('revoking a device requires confirmation and POSTs the deactivate endpoint with the correct id', async ({
     page,
   }) => {
     const state: MockState = {
@@ -181,31 +180,25 @@ test.describe('Settings — Push Devices section', () => {
     };
     await mountApiMocks(page, state);
 
-    // First, cancel the confirm dialog — no POST should fire.
-    page.once('dialog', async (dialog) => {
-      expect(dialog.type()).toBe('confirm');
-      expect(dialog.message()).toMatch(/Revoke this iOS device/i);
-      await dialog.dismiss();
-    });
-
     await openPushDevicesSection(page);
     await page.getByTestId('push-device-revoke-dev-revoke-me').click();
+    await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+    await expect(page.getByText(/Revoke this iOS device/i)).toBeVisible();
+    await page.getByTestId('confirm-dialog-cancel').click();
 
     // Brief wait — if a POST were fired it would appear here.
     await page.waitForTimeout(200);
     expect(state.deactivateCalls).toEqual([]);
 
-    // Now accept the confirm — the POST must fire with the correct id.
-    page.once('dialog', async (dialog) => {
-      await dialog.accept();
-    });
-
+    // Now confirm — the POST must fire with the correct id.
     const deactivateRequest = page.waitForRequest(
       (r) =>
         r.method() === 'POST' &&
         new URL(r.url()).pathname === '/api/mobile-push-devices/dev-revoke-me/deactivate',
     );
     await page.getByTestId('push-device-revoke-dev-revoke-me').click();
+    await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+    await page.getByTestId('confirm-dialog-confirm').click();
     await deactivateRequest;
 
     expect(state.deactivateCalls).toEqual([{ id: 'dev-revoke-me' }]);
@@ -224,10 +217,6 @@ test.describe('Settings — Push Devices section', () => {
     };
     await mountApiMocks(page, state);
 
-    page.on('dialog', async (dialog) => {
-      await dialog.accept();
-    });
-
     await openPushDevicesSection(page);
 
     const deactivateRequest = page.waitForRequest(
@@ -236,8 +225,11 @@ test.describe('Settings — Push Devices section', () => {
         new URL(r.url()).pathname === '/api/mobile-push-devices/dev-fail/deactivate',
     );
     await page.getByTestId('push-device-revoke-dev-fail').click();
+    await expect(page.getByTestId('confirm-dialog')).toBeVisible();
+    await page.getByTestId('confirm-dialog-confirm').click();
     await deactivateRequest;
 
+    await expect(page.getByTestId('confirm-dialog-error')).toBeVisible();
     await expect(page.getByTestId('push-devices-revoke-error')).toBeVisible();
     expect(state.deactivateCalls).toEqual([{ id: 'dev-fail' }]);
 

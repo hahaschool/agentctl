@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockAccountsQuery, mockMappingsQuery, mockUpsert, mockRemove, mockToast } = vi.hoisted(
@@ -19,7 +19,7 @@ vi.mock('@/components/ui/button', () => ({
     disabled,
     ...rest
   }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; size?: string }) => (
-    <button type="button" onClick={onClick} disabled={disabled} aria-label={rest['aria-label']}>
+    <button type="button" onClick={onClick} disabled={disabled} {...rest}>
       {children}
     </button>
   ),
@@ -172,5 +172,28 @@ describe('ProjectAccountsSection', () => {
   it('renders the "Add override" button', () => {
     renderComponent();
     expect(screen.getByText('Add override')).toBeDefined();
+  });
+
+  it('requires dialog confirmation before removing an override', async () => {
+    const mutate = vi.fn();
+    mockRemove.mockReturnValue({
+      mutate,
+      isPending: false,
+      isError: false,
+      error: null,
+    });
+
+    renderComponent();
+
+    fireEvent.click(screen.getByLabelText('Remove mapping for /home/user/project-a'));
+    expect(screen.getByTestId('confirm-dialog')).toBeDefined();
+    expect(screen.getByText('Remove project override?')).toBeDefined();
+    expect(mutate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
+
+    await waitFor(() => {
+      expect(mutate).toHaveBeenCalledWith('map-1', expect.any(Object));
+    });
   });
 });

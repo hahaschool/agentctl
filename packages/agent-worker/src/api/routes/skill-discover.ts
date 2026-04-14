@@ -1,11 +1,10 @@
 import { homedir } from 'node:os';
 
-import type { ManagedRuntime } from '@agentctl/shared';
+import type { DiscoveredSkill, ManagedRuntime } from '@agentctl/shared';
 import { isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
-import type { DiscoveredSkill } from '../../runtime/discovery/_type-stubs.js';
 import { DiscoveryCache } from '../../runtime/discovery/discovery-cache.js';
 import { discoverSkills } from '../../runtime/discovery/skill-discovery.js';
 

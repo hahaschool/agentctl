@@ -170,7 +170,7 @@ CREATE DATABASE agentctl_dev2;      -- dev-2
 ```
 
 **Security hardening:**
-- Create per-tier PG roles with least-privilege grants (dev roles cannot touch beta DB)
+- Use `scripts/db-provision-tier.ts` to dry-run and then explicitly create dev-1/dev-2 databases plus least-privilege app roles (dev roles cannot touch beta DB; beta/prod are intentionally unsupported by the helper)
 - Lower per-tier connection pool max to 10 (default is 20) — prevents 3 tiers from exhausting the 100-connection PG default
 
 **Migration strategy:**
@@ -349,10 +349,17 @@ These are things the developer (you) needs to do manually:
 
 ### One-Time Setup (15 minutes)
 
-1. **Create dev databases:**
+1. **Create dev databases and app roles:**
    ```bash
-   psql -p 5433 -c "CREATE DATABASE agentctl_dev1;"
-   psql -p 5433 -c "CREATE DATABASE agentctl_dev2;"
+   pnpm tsx scripts/db-provision-tier.ts --tier dev-1
+   pnpm tsx scripts/db-provision-tier.ts --tier dev-2
+
+   export ADMIN_DATABASE_URL="postgresql://postgres@localhost:5433/postgres"
+   export AGENTCTL_DEV1_DATABASE_PASSWORD="<choose-a-dev-1-password>"
+   export AGENTCTL_DEV2_DATABASE_PASSWORD="<choose-a-dev-2-password>"
+
+   pnpm tsx scripts/db-provision-tier.ts --tier dev-1 --execute
+   pnpm tsx scripts/db-provision-tier.ts --tier dev-2 --execute
    ```
 
 2. **Review and adjust `.env.beta`** after we create it (verify your current settings are captured)

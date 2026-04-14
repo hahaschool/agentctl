@@ -6,6 +6,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 // Card removed — parent SettingsGroup provides visual grouping
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -36,6 +37,9 @@ export function ProjectAccountsSection(): React.JSX.Element {
   const toast = useToast();
   const [newPath, setNewPath] = useState('');
   const [newAccountId, setNewAccountId] = useState('');
+  const [pendingRemoval, setPendingRemoval] = useState<{ id: string; projectPath: string } | null>(
+    null,
+  );
 
   const isLoading = accounts.isLoading || mappings.isLoading;
 
@@ -114,11 +118,9 @@ export function ProjectAccountsSection(): React.JSX.Element {
                         <Button
                           variant="ghost"
                           size="icon-xs"
-                          onClick={() => {
-                            if (window.confirm(`Remove mapping for "${m.projectPath}"?`)) {
-                              handleRemove(m.id);
-                            }
-                          }}
+                          onClick={() =>
+                            setPendingRemoval({ id: m.id, projectPath: m.projectPath })
+                          }
                           disabled={remove.isPending}
                           aria-label={`Remove mapping for ${m.projectPath}`}
                         >
@@ -188,6 +190,26 @@ export function ProjectAccountsSection(): React.JSX.Element {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(next) => {
+          if (!next) setPendingRemoval(null);
+        }}
+        title="Remove project override?"
+        description={
+          pendingRemoval
+            ? `The managed credential binding for "${pendingRemoval.projectPath}" will be removed.`
+            : undefined
+        }
+        confirmLabel="Remove override"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={() => {
+          if (!pendingRemoval) return;
+          handleRemove(pendingRemoval.id);
+        }}
+      />
     </div>
   );
 }

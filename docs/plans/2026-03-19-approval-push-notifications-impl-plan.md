@@ -2,7 +2,7 @@
 
 > Goal: execute roadmap `21.2 iOS Push Notifications for Pending Approvals` without disrupting the current beta workflow.
 >
-> Status as of 2026-03-20: Tasks 1-5 are on `main` via PRs #290, #291, and #295, so roadmap `21.2` is now delivered. Task 6 is this follow-up docs sync recording the shipped state. Later validation hardening in PR #447 added negative coverage for the mobile-push device registry query/path/body surfaces and set Fastify `routerOptions.maxParamLength = 256` so oversized `deviceId` values reach the route-level `INVALID_DEVICE_ID` response.
+> Status as of 2026-03-20: Tasks 1-5 are on `main` via PRs #290, #291, and #295, so roadmap `21.2` is now delivered. Task 6 is this follow-up docs sync recording the shipped state. Later validation hardening in PR #447 added negative coverage for the mobile-push device registry query/path/body surfaces and set Fastify `routerOptions.maxParamLength = 256` so oversized `deviceId` values reach the route-level `INVALID_DEVICE_ID` response. PR #471 added the operator-facing Registered Push Devices settings section, and PR #475 added backend-independent browser coverage for registration, listing, and revoke flows.
 
 ## Architecture
 

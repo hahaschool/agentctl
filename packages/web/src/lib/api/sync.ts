@@ -37,6 +37,28 @@ export type SyncPeersResponse = {
   peers: SyncPeer[];
 };
 
+export type UpsertSyncPeerInput = {
+  machineId: string;
+  hostname: string;
+  tailscaleIp?: string | null;
+  syncUrl: string;
+  role?: string;
+  syncStatus?: string;
+  syncIntervalMs?: number;
+  isSelf?: boolean;
+  publicKey?: string | null;
+};
+
+export type UpsertSyncPeerResponse = {
+  ok: boolean;
+  peer: SyncPeer | null;
+};
+
+export type DeleteSyncPeerResponse = {
+  ok: boolean;
+  peer: SyncPeer;
+};
+
 export type PingSyncPeerResponse = {
   ok: boolean;
   status: 'reachable' | 'unreachable';
@@ -75,6 +97,17 @@ export const syncApi = {
 
   // Mesh sync peers
   listSyncPeers: () => request<SyncPeersResponse>('/api/sync/peers'),
+
+  upsertSyncPeer: (input: UpsertSyncPeerInput) =>
+    request<UpsertSyncPeerResponse>('/api/sync/peers', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  deleteSyncPeer: (machineId: string) =>
+    request<DeleteSyncPeerResponse>(`/api/sync/peers/${encodeURIComponent(machineId)}`, {
+      method: 'DELETE',
+    }),
 
   pingSyncPeer: (machineId: string) =>
     request<PingSyncPeerResponse>(`/api/sync/peers/${encodeURIComponent(machineId)}/ping`, {
