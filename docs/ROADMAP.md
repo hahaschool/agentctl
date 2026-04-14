@@ -968,8 +968,8 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 
 ### 12.2 Database Isolation — Partial
 
-- [ ] Create per-tier PG databases — **user manual step** (see USER-SETUP-CD-TIERS.md)
-- [ ] Per-tier PG roles with least-privilege grants (deferred — not critical for local dev)
+- [x] Dry-run-first `scripts/db-provision-tier.ts` helper for dev-1/dev-2 databases and least-privilege app roles (PR #482)
+- [ ] Run per-tier PG database/role provisioning locally with admin credentials — **user manual step** (see USER-SETUP-CD-TIERS.md)
 - [x] `scripts/env-migrate.sh` with `--tier` flag and beta safety gate (PR #104)
 
 ### 12.3 PM2 Beta Process Management — ✅ Delivered (PR #104)
