@@ -875,6 +875,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 > auto-decomposition, outcome learning (sliding-window feedback loop), and priority-based notification routing.
 
 - [x] Smart Routing: capability match + load + cost + historical success scoring → ranked candidate selection (Phase 5a) — PR #113
+- [x] Routing API input bounds hardening: rank/assign/outcome payloads validate bounded strings/arrays, capped rank limits, non-negative finite numeric fields, and breakdown object shape before engine/store calls *(PR #497)*.
 - [x] Auto-Decompose: LLM-based natural-language task → TaskGraph with DAG validation (Phase 5b) — PR #111
 - [x] Auto-Decompose web UI: **Auto-decompose** action on `/tasks/[id]` with two-step preview/apply dialog over `POST /api/decompose` + `/preview`, including subtask/dependency rendering, token/cost estimates, post-apply navigation to the new graph, fresh initial-description seeding, stale-preview protection when the source task text changes after preview, and browser coverage for apply failure keeping the preview available *(PRs #474, #478, #487)*
 - [x] Outcome Learning: sliding-window stats from task completions → refine routing scores + approval timeouts (Phase 5c) — PR #113

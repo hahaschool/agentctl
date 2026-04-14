@@ -18,6 +18,7 @@ import { routingRoutes } from './routing.js';
 // ── Helpers ─────────────────────────────────────────────────
 
 const NOW = new Date().toISOString();
+const OVERLONG_ID = 'x'.repeat(513);
 
 function makeProfile(overrides: Partial<AgentProfile> = {}): AgentProfile {
   return {
@@ -205,6 +206,61 @@ describe('routing routes', () => {
 
       expect(res.statusCode).toBe(400);
     });
+
+    it('rejects oversized rank payload arrays before querying stores', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/routing/rank',
+        payload: {
+          taskDefinitionId: 'td-1',
+          requiredCapabilities: Array.from({ length: 65 }, (_, index) => `cap-${index}`),
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(mockAgentProfileStore.listProfiles).not.toHaveBeenCalled();
+      expect(mockWorkerNodeStore.listNodes).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid rank numeric and string fields before querying stores', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/routing/rank',
+        payload: {
+          taskDefinitionId: OVERLONG_ID,
+          requiredCapabilities: ['typescript'],
+          machineRequirements: ['linux'],
+          estimatedTokens: -1,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(mockAgentProfileStore.listProfiles).not.toHaveBeenCalled();
+      expect(mockWorkerNodeStore.listNodes).not.toHaveBeenCalled();
+    });
+
+    it('caps oversized rank limits before invoking the routing engine', async () => {
+      const rankSpy = vi.spyOn(routingEngine, 'rankCandidates');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/routing/rank',
+        payload: {
+          taskDefinitionId: 'td-1',
+          requiredCapabilities: ['typescript'],
+          limit: 500,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(rankSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 50 }),
+        expect.any(Array),
+        expect.any(Array),
+        expect.any(Array),
+        expect.any(Map),
+      );
+    });
   });
 
   describe('POST /api/routing/assign', () => {
@@ -235,6 +291,44 @@ describe('routing routes', () => {
       });
 
       expect(res.statusCode).toBe(400);
+    });
+
+    it('rejects invalid assignment numeric fields and breakdown values', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/routing/assign',
+        payload: {
+          taskRunId: 'run-1',
+          taskDefinitionId: 'td-1',
+          profileId: 'profile-1',
+          nodeId: 'node-1',
+          score: -0.1,
+          breakdown: { ...mockBreakdown, loadScore: -1 },
+          mode: 'auto',
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(mockRoutingStore.recordDecision).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed assignment breakdown objects', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/routing/assign',
+        payload: {
+          taskRunId: 'run-1',
+          taskDefinitionId: 'td-1',
+          profileId: 'profile-1',
+          nodeId: 'node-1',
+          score: 0.78,
+          breakdown: { capabilityMatch: { nested: true }, weightedTotal: 0.78 },
+          mode: 'auto',
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(mockRoutingStore.recordDecision).not.toHaveBeenCalled();
     });
   });
 
@@ -309,6 +403,38 @@ describe('routing routes', () => {
       });
 
       expect(res.statusCode).toBe(404);
+    });
+
+    it('rejects invalid outcome numeric fields before loading the task run', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/routing/outcomes',
+        payload: {
+          taskRunId: 'run-1',
+          status: 'completed',
+          durationMs: -1,
+          costUsd: 0.5,
+          tokensUsed: 10000,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(mockTaskRunStore.getRun).not.toHaveBeenCalled();
+    });
+
+    it('rejects overlong outcome identifiers before loading the task run', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/routing/outcomes',
+        payload: {
+          taskRunId: 'run-1',
+          status: 'failed',
+          errorCode: OVERLONG_ID,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(mockTaskRunStore.getRun).not.toHaveBeenCalled();
     });
   });
 });
