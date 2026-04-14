@@ -345,4 +345,19 @@ describe('memory fact routes', () => {
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ error: 'NOT_FOUND' });
   });
+
+  it('rejects overlong content on POST / with 400 INVALID_CONTENT', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts',
+      payload: {
+        content: 'x'.repeat(10_000),
+        scope: 'project:agentctl',
+        entityType: 'decision',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_CONTENT');
+  });
 });

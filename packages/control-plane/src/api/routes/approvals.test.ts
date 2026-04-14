@@ -396,4 +396,35 @@ describe('approval routes', () => {
       expect(res.json().error).toBe('GATE_NOT_FOUND');
     });
   });
+
+  // ── Input-validation guardrails (length caps) ──────────────────────────────
+  describe('input validation bounds', () => {
+    it('rejects overlong comment on POST /:id/decisions with 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/approvals/${GATE_ID}/decisions`,
+        payload: {
+          decidedBy: 'user-1',
+          action: 'approved',
+          comment: 'x'.repeat(10_000),
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_COMMENT');
+    });
+
+    it('rejects overlong taskDefinitionId on POST / with 400', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/approvals',
+        payload: {
+          taskDefinitionId: 'x'.repeat(500),
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe('INVALID_TASK_DEFINITION_ID');
+    });
+  });
 });

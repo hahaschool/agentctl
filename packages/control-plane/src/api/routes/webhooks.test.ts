@@ -1283,6 +1283,22 @@ describe('Webhook routes — /api/webhooks', () => {
       }
     });
   });
+
+  describe('input validation bounds', () => {
+    it('rejects overlong URL on POST / with 400 URL_TOO_LONG', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/webhooks',
+        payload: {
+          url: `https://example.com/${'x'.repeat(3000)}`,
+          eventTypes: ['agent.started'],
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toBe('URL_TOO_LONG');
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

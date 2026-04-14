@@ -649,6 +649,82 @@ describe('handoffRoutes', () => {
     await appWithTargetRegistry.close();
   });
 
+  it('POST /api/runtime-sessions/:id/handoff treats null targetMachineId as source-machine fallback', async () => {
+    managedSessionStore.get.mockResolvedValue(makeManagedSession());
+    managedSessionStore.create.mockResolvedValue(
+      makeManagedSession({
+        id: 'ms-target',
+        runtime: 'claude-code',
+        machineId: 'machine-1',
+        nativeSessionId: null,
+        status: 'starting',
+        handoffStrategy: 'snapshot-handoff',
+        handoffSourceSessionId: 'ms-source',
+      }),
+    );
+    managedSessionStore.updateStatus.mockImplementation(
+      async (id: string, status: ManagedSessionRecord['status'], patch?: Record<string, unknown>) =>
+        makeManagedSession({
+          id,
+          nativeSessionId:
+            (patch?.nativeSessionId as string | null | undefined) ?? 'claude-native-1',
+          status,
+          handoffStrategy:
+            (patch?.handoffStrategy as ManagedSessionRecord['handoffStrategy'] | undefined) ??
+            'snapshot-handoff',
+          handoffSourceSessionId: id === 'ms-target' ? 'ms-source' : null,
+        }),
+    );
+    handoffStore.create.mockResolvedValue(makeHandoffRecord());
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'snapshot-handoff',
+          snapshot: makeSnapshot(),
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          strategy: 'snapshot-handoff',
+          attemptedStrategies: ['snapshot-handoff'],
+          session: {
+            runtime: 'claude-code',
+            sessionId: 'worker-1',
+            nativeSessionId: 'claude-native-1',
+            agentId: 'agent-1',
+            projectPath: '/workspace/app',
+            model: 'sonnet',
+            status: 'active',
+          },
+        }),
+      });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/ms-source/handoff',
+      payload: {
+        targetRuntime: 'claude-code',
+        targetMachineId: null,
+        reason: 'manual',
+        prompt: 'Continue on source machine',
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(managedSessionStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        machineId: 'machine-1',
+      }),
+    );
+  });
+
   it('POST /api/runtime-sessions/:id/handoff preserves native-import strategy across machines', async () => {
     const appWithTargetRegistry = await buildApp(
       managedSessionStore,
@@ -814,5 +890,22 @@ describe('handoffRoutes', () => {
     expect(response.json().count).toBe(2);
     expect(response.json().handoffs[0].id).toBe('handoff-1');
     expect(handoffStore.listForSession).toHaveBeenCalledWith('ms-source', 20);
+  });
+
+  it('POST /api/runtime-sessions/:id/handoff rejects overlong prompt with 400', async () => {
+    managedSessionStore.get.mockResolvedValue(makeManagedSession());
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/runtime-sessions/ms-source/handoff',
+      payload: {
+        targetRuntime: 'claude-code',
+        reason: 'manual',
+        prompt: 'x'.repeat(10_000),
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_PROMPT');
   });
 });
