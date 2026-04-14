@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-13-deployment-page-design.md`
 
+> Status note (2026-04-14): the original deployment page shipped in PR #144. PR #453 added explicit beta gate clarity copy and focused unit/Playwright assertions for the still-local/manual `dev-1` / `dev-2` promotion path; it did not change promotion APIs, workflows, or beta automation behavior.
+
 ---
 
 ## File Map

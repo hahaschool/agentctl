@@ -4,7 +4,7 @@
 >
 > Status note: Workstreams A-D are now on `main` via PRs #299, #297, #298, and #301. Release workflow `23307749638` exposed the final CD hardening gap, and PR #301 closed it by guarding production deploys when required secrets are missing.
 >
-> Later follow-up: PR #445 moved the backend-independent `/webhooks` Playwright slice into CI and hardened the webhooks browser mocks, extending the same focused e2e-gating approach beyond the original post-21.2 workstreams without touching beta promotion.
+> Later follow-up: PR #453 made the Deployment promote panel explicit about the still-local/manual beta promotion path and the missing `agentctl-beta` runner gate without changing promotion APIs or workflows. PR #445 moved the backend-independent `/webhooks` Playwright slice into CI and hardened the webhooks browser mocks, extending the same focused e2e-gating approach beyond the original post-21.2 workstreams without touching beta promotion.
 
 ## Why This Batch
 
