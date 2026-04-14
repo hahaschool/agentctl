@@ -48,6 +48,7 @@ function createMockStore(): AgentProfileStore {
     listProfiles: vi.fn().mockResolvedValue([]),
     createProfile: vi.fn().mockResolvedValue(makeProfile()),
     getProfile: vi.fn().mockResolvedValue(makeProfile()),
+    updateProfile: vi.fn().mockResolvedValue(makeProfile()),
     deleteProfile: vi.fn().mockResolvedValue(undefined),
     listInstancesByProfile: vi.fn().mockResolvedValue([]),
     createInstance: vi.fn().mockResolvedValue(makeInstance()),
@@ -272,6 +273,42 @@ describe('agent-profiles routes', () => {
       const res = await app.inject({
         method: 'GET',
         url: `/api/agent-profiles/${PROFILE_ID}`,
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(res.json().error).toBe('PROFILE_NOT_FOUND');
+    });
+  });
+
+  // ── PATCH /:id ────────────────────────────────────────────────────────────
+
+  describe('PATCH /api/agent-profiles/:id', () => {
+    it('updates the profile and returns the updated row', async () => {
+      const updated = makeProfile({ name: 'Renamed Profile', modelId: 'claude-opus-4-5' });
+      vi.mocked(store.updateProfile).mockResolvedValueOnce(updated as never);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/agent-profiles/${PROFILE_ID}`,
+        payload: { name: 'Renamed Profile', modelId: 'claude-opus-4-5' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().name).toBe('Renamed Profile');
+      expect(res.json().modelId).toBe('claude-opus-4-5');
+      expect(store.updateProfile).toHaveBeenCalledWith(
+        PROFILE_ID,
+        expect.objectContaining({ name: 'Renamed Profile', modelId: 'claude-opus-4-5' }),
+      );
+    });
+
+    it('returns 404 when profile does not exist', async () => {
+      vi.mocked(store.updateProfile).mockResolvedValueOnce(null as never);
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/agent-profiles/${PROFILE_ID}`,
+        payload: { name: 'New Name' },
       });
 
       expect(res.statusCode).toBe(404);
