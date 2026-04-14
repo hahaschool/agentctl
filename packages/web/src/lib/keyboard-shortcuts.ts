@@ -42,7 +42,7 @@ const GLOBAL_SHORTCUTS: ShortcutEntry[] = [
   { keys: ['\u2318N / Ctrl+N'], desc: 'New agent' },
   { keys: ['\u2318S / Ctrl+S'], desc: 'Save settings' },
   { keys: ['r'], desc: 'Refresh current page' },
-  { keys: ['/'], desc: 'Focus search (Discover)' },
+  { keys: ['/'], desc: 'Focus page search' },
   { keys: ['Esc'], desc: 'Close dialogs / Cancel' },
   { keys: ['?'], desc: 'Toggle keyboard help' },
 ];
@@ -77,6 +77,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     shortcuts: [
       { keys: ['r'], desc: 'Refresh' },
       { keys: ['n'], desc: 'New session' },
+      { keys: ['/'], desc: 'Focus search' },
       { keys: ['\u2191', '\u2193'], desc: 'Navigate list' },
       { keys: ['\u23CE'], desc: 'Open selected' },
       { keys: ['Esc'], desc: 'Back' },

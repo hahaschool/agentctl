@@ -309,6 +309,8 @@ export function SessionsPage(): React.JSX.Element {
 
   // --- Keyboard help overlay state ---
   const [showHelp, setShowHelp] = useState(false);
+  const openHelp = useCallback(() => setShowHelp(true), []);
+  const closeHelp = useCallback(() => setShowHelp(false), []);
   const toggleHelp = useCallback(() => setShowHelp((v) => !v), []);
 
   // Clean up ?create=true and ?agentId= from the URL after reading them
@@ -358,15 +360,24 @@ export function SessionsPage(): React.JSX.Element {
       () => ({
         r: () => void refreshSessions(),
         n: () => setShowCreateForm(true),
-        '?': toggleHelp,
+        '?': () => {
+          if (showHelp) closeHelp();
+          else openHelp();
+        },
+        slash: (e) => {
+          e.preventDefault();
+          const input = document.getElementById('session-search') as HTMLInputElement | null;
+          input?.focus();
+          input?.select();
+        },
         Escape: () => {
-          if (showHelp) setShowHelp(false);
+          if (showHelp) closeHelp();
           else if (checkedIds.size > 0) setCheckedIds(new Set());
           else if (showCreateForm) setShowCreateForm(false);
           else setSelectedId(null);
         },
       }),
-      [refreshSessions, showCreateForm, checkedIds.size, showHelp, toggleHelp],
+      [refreshSessions, showCreateForm, checkedIds.size, showHelp, openHelp, closeHelp],
     ),
   );
 
@@ -888,7 +899,7 @@ export function SessionsPage(): React.JSX.Element {
 
   return (
     <div className="relative flex h-full animate-page-enter">
-      <KeyboardHelpOverlay open={showHelp} onClose={toggleHelp} />
+      <KeyboardHelpOverlay open={showHelp} onClose={closeHelp} />
       <FetchingBar isFetching={sessions.isFetching && !sessions.isLoading} />
       {/* Session list panel */}
       <div
@@ -979,7 +990,8 @@ export function SessionsPage(): React.JSX.Element {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search sessions..."
-              aria-label="Search sessions"
+              aria-label="Search sessions (press / to focus)"
+              aria-keyshortcuts="/"
               className="w-full h-7 px-2.5 pr-12 bg-muted text-foreground border border-border rounded-md text-[11px] outline-none box-border transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 placeholder:text-muted-foreground/50"
             />
             {!searchQuery && (

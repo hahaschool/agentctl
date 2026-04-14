@@ -5,7 +5,7 @@ import { Filter, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -119,12 +119,18 @@ export function AgentsPage(): React.JSX.Element {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<AgentStatusFilter>('all');
   const [sortOrder, setSortOrder] = useState<AgentSortOrder>('name');
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useHotkeys(
     useMemo(
       () => ({
         r: () => void agents.refetch(),
         n: () => setShowCreateDialog(true),
+        slash: (e) => {
+          e.preventDefault();
+          searchRef.current?.focus();
+          searchRef.current?.select();
+        },
         Escape: () => {
           if (startDialogAgent) {
             setStartDialogAgent(null);
@@ -386,14 +392,23 @@ export function AgentsPage(): React.JSX.Element {
 
       {/* Filter / Sort controls */}
       <div className="flex gap-2.5 items-center mb-4 flex-wrap">
-        <input
-          type="search"
-          placeholder="Search agents..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search agents"
-          className="px-2.5 py-1.5 bg-muted text-foreground border border-border rounded-md text-xs outline-none min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px] transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
-        />
+        <div className="relative min-w-[120px] flex-1 sm:flex-none sm:min-w-[180px]">
+          <input
+            ref={searchRef}
+            type="search"
+            placeholder="Search agents..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search agents (press / to focus)"
+            aria-keyshortcuts="/"
+            className="w-full px-2.5 py-1.5 pr-8 bg-muted text-foreground border border-border rounded-md text-xs outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
+          />
+          {!search && (
+            <kbd className="absolute right-2 top-1/2 -translate-y-1/2 px-1 py-px text-[9px] font-mono text-muted-foreground/40 bg-background border border-border/50 rounded pointer-events-none">
+              /
+            </kbd>
+          )}
+        </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as AgentStatusFilter)}
