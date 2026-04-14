@@ -12,6 +12,8 @@ After PR #498 initially failed the web E2E CI lane, the follow-up fix kept `AGEN
 
 PR #505 added backend-independent Playwright coverage for `/agent-profiles`, including populated table render, empty-state create flow, required-name validation, sanitized comma-list payloads, delete confirmation success, delete API-error handling, and list-error retry recovery.
 
+The PR also added `agent-profiles.spec.ts` to the web `test:e2e:ci` script so the focused backend-independent browser lane now gates both the original `/webhooks` slice and this `/agent-profiles` follow-up.
+
 ## Scope
 
 - Add `packages/web/src/lib/api/agent-profiles.ts` and re-export it from the public `@/lib/api` barrel.
@@ -33,6 +35,7 @@ PR #505 added backend-independent Playwright coverage for `/agent-profiles`, inc
 - `packages/web/src/app/agent-profiles/page.tsx`
 - `packages/web/src/app/agent-profiles/page.test.tsx`
 - `packages/web/e2e/agent-profiles.spec.ts`
+- `packages/web/package.json`
 - `packages/web/src/components/Sidebar.tsx`
 - `packages/web/src/lib/api.ts`
 - `packages/web/src/lib/api/agent-profiles.ts`
@@ -42,6 +45,7 @@ PR #505 added backend-independent Playwright coverage for `/agent-profiles`, inc
 
 - `pnpm --filter @agentctl/web test -- agent-profiles`
 - `WEB_PORT=5437 pnpm --filter @agentctl/web exec playwright test e2e/agent-profiles.spec.ts --project=chromium --reporter=line`
+- `WEB_PORT=5437 pnpm --filter @agentctl/web test:e2e:ci`
 - `WEB_PORT=5394 pnpm --filter @agentctl/web exec playwright test e2e/webhooks.spec.ts --project=chromium --reporter=line`
 - `pnpm lint`
 - `git diff --check HEAD`

@@ -21,7 +21,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - **CI/CD**: 11 GitHub Actions workflows (build, test, deploy, promotion, cleanup, security, DAST, fleet)
 - **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
-**7,260+ unit tests** across 111+ files + **215+ Playwright e2e checks**, with the backend-independent webhooks slice now gated in CI. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
+**7,260+ unit tests** across 111+ files + **215+ Playwright e2e checks**, with the backend-independent webhooks and agent-profiles slices now gated in CI. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
 
 ---
 
@@ -60,13 +60,15 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > using `WEB_PORT`-aware web scripts so browser coverage can run without
 > disturbing dev-1/dev-2 or beta promotion state. PR #501 raised the Web E2E
 > job timeout from 10 to 20 minutes after a main push exhausted the old limit
-> during Playwright Chromium installation before tests started. As of this
-> update, the workflow stack remains green on current `main`.
+> during Playwright Chromium installation before tests started. PR #505 then
+> added the backend-independent `/agent-profiles` Playwright spec to the same
+> CI lane. As of this update, the workflow stack remains green on current
+> `main`.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
 - [x] Security scanning: `pnpm audit`, `gitleaks`, Biome security lint
-- [x] Backend-independent web Playwright CI gating for `/webhooks` using `WEB_PORT`-aware web scripts *(PR #445)*
+- [x] Backend-independent web Playwright CI gating for `/webhooks` and `/agent-profiles` using `WEB_PORT`-aware web scripts *(PRs #445, #505)*
 
 ### 1.2 Docker Build & Registry
 
@@ -1542,7 +1544,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Backend-independent `/agents/[id]/settings` coverage for the settings shell/config preview plus General, Model & Prompts, and Runtime Config save payloads *(PR #495; see [plans/2026-04-14-agent-settings-e2e-plan.md](plans/2026-04-14-agent-settings-e2e-plan.md))*
 - [x] Backend-independent `/machines` list/detail coverage for fleet list render, stale/offline states, search/status filters, detail capability/runtime cards, memory stats, agent/session tables, and worker-node hostname/Tailscale-IP matching *(PR #499; see [plans/2026-04-14-machines-e2e-plan.md](plans/2026-04-14-machines-e2e-plan.md))*
 - [x] `/agent-profiles` CRUD page over the existing backend, including sidebar entry, list/error/empty states, create dialog payload wiring, and delete confirmation coverage *(PR #498; see [plans/2026-04-14-agent-profiles-web-plan.md](plans/2026-04-14-agent-profiles-web-plan.md))*
-- [x] Backend-independent `/agent-profiles` Playwright coverage for table render, empty/create validation, sanitized create payloads, delete success and API-error handling, plus list-error retry recovery *(PR #505; see [plans/2026-04-14-agent-profiles-web-plan.md](plans/2026-04-14-agent-profiles-web-plan.md))*
+- [x] Backend-independent `/agent-profiles` Playwright coverage for table render, empty/create validation, sanitized create payloads, delete success and API-error handling, plus list-error retry recovery; the spec also runs in the web E2E CI lane *(PR #505; see [plans/2026-04-14-agent-profiles-web-plan.md](plans/2026-04-14-agent-profiles-web-plan.md))*
 
 ### 20.6 React Performance — Delivered
 
