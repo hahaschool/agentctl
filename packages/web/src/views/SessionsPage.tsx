@@ -12,7 +12,6 @@ import { CreateSessionForm } from '../components/CreateSessionForm';
 import { ContextPickerDialog, type ForkSubmitConfig } from '../components/context-picker';
 import { EmptyState } from '../components/EmptyState';
 import { FetchingBar } from '../components/FetchingBar';
-import { KeyboardHelpOverlay } from '../components/KeyboardHelpOverlay';
 import { LastUpdated } from '../components/LastUpdated';
 import { RefreshButton } from '../components/RefreshButton';
 import { SessionDetailPanel } from '../components/SessionDetailPanel';
@@ -29,6 +28,7 @@ import {
   formatNumber,
   shortenPath,
 } from '../lib/format-utils';
+import { KEYBOARD_HELP_OPEN_EVENT } from '../lib/keyboard-shortcuts';
 import type { AgentRuntime } from '../lib/model-options';
 import {
   accountsQuery,
@@ -307,11 +307,9 @@ export function SessionsPage(): React.JSX.Element {
     return new URLSearchParams(window.location.search).get('create') === 'true';
   });
 
-  // --- Keyboard help overlay state ---
-  const [showHelp, setShowHelp] = useState(false);
-  const openHelp = useCallback(() => setShowHelp(true), []);
-  const closeHelp = useCallback(() => setShowHelp(false), []);
-  const toggleHelp = useCallback(() => setShowHelp((v) => !v), []);
+  const openKeyboardHelp = useCallback(() => {
+    window.dispatchEvent(new Event(KEYBOARD_HELP_OPEN_EVENT));
+  }, []);
 
   // Clean up ?create=true and ?agentId= from the URL after reading them
   useEffect(() => {
@@ -360,10 +358,6 @@ export function SessionsPage(): React.JSX.Element {
       () => ({
         r: () => void refreshSessions(),
         n: () => setShowCreateForm(true),
-        '?': () => {
-          if (showHelp) closeHelp();
-          else openHelp();
-        },
         slash: (e) => {
           e.preventDefault();
           const input = document.getElementById('session-search') as HTMLInputElement | null;
@@ -371,13 +365,12 @@ export function SessionsPage(): React.JSX.Element {
           input?.select();
         },
         Escape: () => {
-          if (showHelp) closeHelp();
-          else if (checkedIds.size > 0) setCheckedIds(new Set());
+          if (checkedIds.size > 0) setCheckedIds(new Set());
           else if (showCreateForm) setShowCreateForm(false);
           else setSelectedId(null);
         },
       }),
-      [refreshSessions, showCreateForm, checkedIds.size, showHelp, openHelp, closeHelp],
+      [refreshSessions, showCreateForm, checkedIds.size],
     ),
   );
 
@@ -899,7 +892,6 @@ export function SessionsPage(): React.JSX.Element {
 
   return (
     <div className="relative flex h-full animate-page-enter">
-      <KeyboardHelpOverlay open={showHelp} onClose={closeHelp} />
       <FetchingBar isFetching={sessions.isFetching && !sessions.isLoading} />
       {/* Session list panel */}
       <div
@@ -942,8 +934,10 @@ export function SessionsPage(): React.JSX.Element {
             <SimpleTooltip content="Keyboard shortcuts (?)">
               <button
                 type="button"
-                onClick={toggleHelp}
+                onClick={openKeyboardHelp}
                 aria-label="Show keyboard shortcuts"
+                aria-controls="keyboard-shortcuts-dialog"
+                aria-haspopup="dialog"
                 className="h-7 w-7 p-0 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors shrink-0"
               >
                 <Keyboard className="w-3.5 h-3.5" aria-hidden="true" />

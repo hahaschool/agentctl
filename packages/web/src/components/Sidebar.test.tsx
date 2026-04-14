@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, type RenderOptions, render as rtlRender, screen } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  type RenderOptions,
+  render as rtlRender,
+  screen,
+} from '@testing-library/react';
 
 function render(ui: React.ReactElement, options?: RenderOptions) {
   const queryClient = new QueryClient({
@@ -52,7 +58,8 @@ vi.mock('./CommandPalette', () => ({
 }));
 
 vi.mock('./KeyboardHelpOverlay', () => ({
-  KeyboardHelpOverlay: () => <div data-testid="keyboard-help-overlay" />,
+  KeyboardHelpOverlay: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="keyboard-help-overlay" /> : null,
 }));
 
 vi.mock('./NotificationBell', () => ({
@@ -310,9 +317,9 @@ describe('Sidebar', () => {
       expect(screen.getByTestId('command-palette')).toBeDefined();
     });
 
-    it('renders the KeyboardHelpOverlay component', () => {
+    it('does not show the keyboard help overlay by default', () => {
       render(<Sidebar />);
-      expect(screen.getByTestId('keyboard-help-overlay')).toBeDefined();
+      expect(screen.queryByTestId('keyboard-help-overlay')).toBeNull();
     });
 
     it('renders the NotificationBell component', () => {
@@ -337,6 +344,26 @@ describe('Sidebar', () => {
   // =========================================================================
 
   describe('keyboard navigation', () => {
+    it('opens keyboard help from the global keyboard help event', () => {
+      render(<Sidebar />);
+
+      act(() => {
+        window.dispatchEvent(new Event('agentctl:open-keyboard-help'));
+      });
+
+      expect(screen.getByTestId('keyboard-help-overlay')).toBeDefined();
+    });
+
+    it('toggles keyboard help when "?" key is pressed', () => {
+      render(<Sidebar />);
+
+      fireEvent.keyDown(document, { key: '?' });
+      expect(screen.getByTestId('keyboard-help-overlay')).toBeDefined();
+
+      fireEvent.keyDown(document, { key: '?' });
+      expect(screen.queryByTestId('keyboard-help-overlay')).toBeNull();
+    });
+
     it('navigates to Dashboard when "1" key is pressed', () => {
       render(<Sidebar />);
       fireEvent.keyDown(document, { key: '1' });

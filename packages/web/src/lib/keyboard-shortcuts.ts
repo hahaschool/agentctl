@@ -21,6 +21,8 @@ export type ShortcutGroup = {
   shortcuts: ShortcutEntry[];
 };
 
+export const KEYBOARD_HELP_OPEN_EVENT = 'agentctl:open-keyboard-help';
+
 /**
  * Navigation page shortcuts (number keys 1-8).
  * Order must match the sidebar nav order.

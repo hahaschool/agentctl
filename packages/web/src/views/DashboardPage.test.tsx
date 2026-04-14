@@ -1621,32 +1621,22 @@ describe('DashboardPage', () => {
       expect(screen.queryByTestId('keyboard-help-overlay')).toBeNull();
     });
 
-    it('opens overlay when keyboard shortcuts button is clicked', async () => {
+    it('asks the app shell to open keyboard help when the keyboard shortcuts button is clicked', () => {
+      const onOpenKeyboardHelp = vi.fn();
+      window.addEventListener('agentctl:open-keyboard-help', onOpenKeyboardHelp);
       renderDashboard();
+
       fireEvent.click(screen.getByLabelText('Show keyboard shortcuts'));
-      await waitFor(() => {
-        expect(screen.getByTestId('keyboard-help-overlay')).toBeDefined();
-      });
+
+      expect(onOpenKeyboardHelp).toHaveBeenCalledTimes(1);
+      window.removeEventListener('agentctl:open-keyboard-help', onOpenKeyboardHelp);
     });
 
-    it('closes overlay when close button is clicked', async () => {
-      renderDashboard();
-      fireEvent.click(screen.getByLabelText('Show keyboard shortcuts'));
-      await waitFor(() => {
-        expect(screen.getByTestId('keyboard-help-overlay')).toBeDefined();
-      });
-      fireEvent.click(screen.getByTestId('close-help'));
-      await waitFor(() => {
-        expect(screen.queryByTestId('keyboard-help-overlay')).toBeNull();
-      });
-    });
-
-    it('registers ? hotkey via useHotkeys', () => {
+    it('does not register a page-local ? hotkey', () => {
       renderDashboard();
       expect(mockUseHotkeys).toHaveBeenCalled();
       const hotkeyMap = mockUseHotkeys.mock.calls[0]?.[0];
-      expect(hotkeyMap).toHaveProperty('?');
-      expect(typeof hotkeyMap['?']).toBe('function');
+      expect(hotkeyMap).not.toHaveProperty('?');
     });
 
     it('registers r hotkey for refresh via useHotkeys', () => {

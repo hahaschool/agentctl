@@ -97,6 +97,19 @@ describe('KeyboardHelpOverlay', () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('prevents the close hotkey from reaching later document listeners', () => {
+      const onClose = vi.fn();
+      const downstream = vi.fn();
+      render(<KeyboardHelpOverlay open={true} onClose={onClose} />);
+      document.addEventListener('keydown', downstream);
+
+      fireEvent.keyDown(document, { key: '?' });
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(downstream).not.toHaveBeenCalled();
+      document.removeEventListener('keydown', downstream);
+    });
+
     it('calls onClose when backdrop is clicked', () => {
       const onClose = vi.fn();
       render(<KeyboardHelpOverlay open={true} onClose={onClose} />);
