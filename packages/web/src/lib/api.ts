@@ -718,15 +718,24 @@ export type UpdateWebhookInput = {
   active?: boolean;
 };
 
+export type WebhookDeliveryStatus = 'pending' | 'delivered' | 'failed';
+
 export type WebhookDelivery = {
   id: string;
   subscriptionId: string;
   eventType: string;
-  status: string;
+  status: WebhookDeliveryStatus | string;
   statusCode: number | null;
   responseBody: string | null;
+  payload?: Record<string, unknown> | null;
+  attempts?: number | null;
+  nextRetryAt?: string | null;
   createdAt: string;
   deliveredAt: string | null;
+};
+
+export type WebhookDeliveriesResponse = {
+  deliveries: WebhookDelivery[];
 };
 
 export type TestWebhookResponse = {
@@ -1879,6 +1888,9 @@ export const api = {
     request<TestWebhookResponse>(`/api/webhooks/${encodeURIComponent(id)}/test`, {
       method: 'POST',
     }),
+
+  listWebhookDeliveries: (id: string) =>
+    request<WebhookDeliveriesResponse>(`/api/webhooks/${encodeURIComponent(id)}/deliveries`),
 };
 
 // ---------------------------------------------------------------------------

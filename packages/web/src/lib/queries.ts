@@ -149,6 +149,7 @@ export const queryKeys = {
   syncConflictCount: ['sync-conflict-count'] as const,
   syncPeers: ['sync-peers'] as const,
   webhooks: ['webhooks'] as const,
+  webhookDeliveries: (id: string) => ['webhook-deliveries', id] as const,
   memory: {
     search: (q: string, opts?: { project?: string; type?: string }) =>
       ['memory', 'search', q, opts] as const,
@@ -1752,5 +1753,14 @@ export function useDeleteWebhook() {
 export function useTestWebhook() {
   return useMutation({
     mutationFn: (id: string) => api.testWebhook(id),
+  });
+}
+
+export function webhookDeliveriesQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.webhookDeliveries(id),
+    queryFn: () => api.listWebhookDeliveries(id),
+    enabled: id.length > 0,
+    refetchOnWindowFocus: true,
   });
 }

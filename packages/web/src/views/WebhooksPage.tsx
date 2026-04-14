@@ -9,6 +9,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
+import { WebhookDeliveriesPanel } from '@/components/webhooks/WebhookDeliveriesPanel';
 import {
   type CreateWebhookInput,
   type UpdateWebhookInput,
@@ -339,6 +340,7 @@ type WebhookRowProps = {
   onEdit: (w: Webhook) => void;
   onDelete: (w: Webhook) => void;
   onTest: (w: Webhook) => void;
+  onViewDeliveries: (w: Webhook) => void;
   testingId: string | null;
 };
 
@@ -347,6 +349,7 @@ export function WebhookRow({
   onEdit,
   onDelete,
   onTest,
+  onViewDeliveries,
   testingId,
 }: WebhookRowProps): React.JSX.Element {
   const isTesting = testingId === webhook.id;
@@ -410,6 +413,14 @@ export function WebhookRow({
           </button>
           <button
             type="button"
+            onClick={() => onViewDeliveries(webhook)}
+            data-testid={`deliveries-${webhook.id}`}
+            className="px-2 py-1 rounded-md text-[11px] border border-border bg-muted text-foreground hover:bg-accent/10"
+          >
+            Deliveries
+          </button>
+          <button
+            type="button"
             onClick={() => onEdit(webhook)}
             data-testid={`edit-${webhook.id}`}
             className="px-2 py-1 rounded-md text-[11px] border border-border bg-muted text-foreground hover:bg-accent/10"
@@ -443,6 +454,7 @@ export function WebhooksPage(): React.JSX.Element {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Webhook | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Webhook | null>(null);
+  const [deliveriesTarget, setDeliveriesTarget] = useState<Webhook | null>(null);
 
   const webhooks = webhooksQ.data?.subscriptions ?? [];
   const activeCount = webhooks.filter((w) => w.active).length;
@@ -459,6 +471,10 @@ export function WebhooksPage(): React.JSX.Element {
 
   const handleDelete = useCallback((w: Webhook) => {
     setPendingDelete(w);
+  }, []);
+
+  const handleViewDeliveries = useCallback((w: Webhook) => {
+    setDeliveriesTarget(w);
   }, []);
 
   const confirmDelete = useCallback(() => {
@@ -581,6 +597,7 @@ export function WebhooksPage(): React.JSX.Element {
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onTest={handleTest}
+                    onViewDeliveries={handleViewDeliveries}
                     testingId={testingId}
                   />
                 ))}
@@ -595,6 +612,43 @@ export function WebhooksPage(): React.JSX.Element {
         webhook={editTarget}
         onClose={() => setDialogOpen(false)}
       />
+
+      {deliveriesTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="webhook-deliveries-title"
+          data-testid="webhook-deliveries-dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="w-full max-w-2xl rounded-md border border-border bg-card shadow-xl flex flex-col max-h-[85vh]">
+            <div className="flex items-start justify-between gap-3 px-5 py-3 border-b border-border">
+              <div className="min-w-0">
+                <h2 id="webhook-deliveries-title" className="text-sm font-semibold text-foreground">
+                  Delivery history
+                </h2>
+                <p
+                  className="mt-0.5 text-[11px] font-mono text-muted-foreground truncate"
+                  title={deliveriesTarget.url}
+                >
+                  {deliveriesTarget.url}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeliveriesTarget(null)}
+                data-testid="deliveries-close"
+                className="px-2 py-1 rounded-md border border-border bg-muted text-[11px] text-foreground hover:bg-accent/10"
+              >
+                Close
+              </button>
+            </div>
+            <div className="px-5 py-4 overflow-y-auto">
+              <WebhookDeliveriesPanel subscriptionId={deliveriesTarget.id} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendingDelete && (
         <div
