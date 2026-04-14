@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Filter, MessageSquare } from 'lucide-react';
+import { Filter, Keyboard, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { CreateSessionForm } from '../components/CreateSessionForm';
 import { ContextPickerDialog, type ForkSubmitConfig } from '../components/context-picker';
 import { EmptyState } from '../components/EmptyState';
 import { FetchingBar } from '../components/FetchingBar';
+import { KeyboardHelpOverlay } from '../components/KeyboardHelpOverlay';
 import { LastUpdated } from '../components/LastUpdated';
 import { RefreshButton } from '../components/RefreshButton';
 import { SessionDetailPanel } from '../components/SessionDetailPanel';
@@ -306,6 +307,12 @@ export function SessionsPage(): React.JSX.Element {
     return new URLSearchParams(window.location.search).get('create') === 'true';
   });
 
+  // --- Keyboard help overlay state ---
+  const [showHelp, setShowHelp] = useState(false);
+  const openHelp = useCallback(() => setShowHelp(true), []);
+  const closeHelp = useCallback(() => setShowHelp(false), []);
+  const toggleHelp = useCallback(() => setShowHelp((v) => !v), []);
+
   // Clean up ?create=true and ?agentId= from the URL after reading them
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -353,6 +360,10 @@ export function SessionsPage(): React.JSX.Element {
       () => ({
         r: () => void refreshSessions(),
         n: () => setShowCreateForm(true),
+        '?': () => {
+          if (showHelp) closeHelp();
+          else openHelp();
+        },
         slash: (e) => {
           e.preventDefault();
           const input = document.getElementById('session-search') as HTMLInputElement | null;
@@ -360,12 +371,13 @@ export function SessionsPage(): React.JSX.Element {
           input?.select();
         },
         Escape: () => {
-          if (checkedIds.size > 0) setCheckedIds(new Set());
+          if (showHelp) closeHelp();
+          else if (checkedIds.size > 0) setCheckedIds(new Set());
           else if (showCreateForm) setShowCreateForm(false);
           else setSelectedId(null);
         },
       }),
-      [refreshSessions, showCreateForm, checkedIds.size],
+      [refreshSessions, showCreateForm, checkedIds.size, showHelp, openHelp, closeHelp],
     ),
   );
 
@@ -887,6 +899,7 @@ export function SessionsPage(): React.JSX.Element {
 
   return (
     <div className="relative flex h-full animate-page-enter">
+      <KeyboardHelpOverlay open={showHelp} onClose={closeHelp} />
       <FetchingBar isFetching={sessions.isFetching && !sessions.isLoading} />
       {/* Session list panel */}
       <div
@@ -926,6 +939,16 @@ export function SessionsPage(): React.JSX.Element {
               label=""
               className="h-7 w-7 p-0 text-[11px] justify-center"
             />
+            <SimpleTooltip content="Keyboard shortcuts (?)">
+              <button
+                type="button"
+                onClick={toggleHelp}
+                aria-label="Show keyboard shortcuts"
+                className="h-7 w-7 p-0 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors shrink-0"
+              >
+                <Keyboard className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            </SimpleTooltip>
           </div>
           <div className="flex items-center gap-1.5 text-[10px]">
             <span className="truncate min-w-0">

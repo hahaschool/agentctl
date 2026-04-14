@@ -1,9 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { useHotkeys } from '@/hooks/use-hotkeys';
 import type { ApiAccount, Machine, RuntimeSession, Session } from '@/lib/api';
 import { SessionsPage } from './SessionsPage';
 
@@ -30,6 +29,7 @@ const {
   mockDeleteSession,
   mockGetSessionContent,
   mockPathBadge,
+  mockUseHotkeys,
 } = vi.hoisted(() => ({
   mockSessionsQuery: vi.fn(),
   mockRuntimeSessionsQuery: vi.fn(),
@@ -48,6 +48,7 @@ const {
   mockDeleteSession: vi.fn(),
   mockGetSessionContent: vi.fn(),
   mockPathBadge: vi.fn(),
+  mockUseHotkeys: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -55,7 +56,18 @@ const {
 // ---------------------------------------------------------------------------
 
 vi.mock('@/hooks/use-hotkeys', () => ({
-  useHotkeys: vi.fn(),
+  useHotkeys: (...args: unknown[]) => mockUseHotkeys(...args),
+}));
+
+vi.mock('@/components/KeyboardHelpOverlay', () => ({
+  KeyboardHelpOverlay: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
+    open ? (
+      <div data-testid="keyboard-help-overlay">
+        <button type="button" onClick={onClose} data-testid="close-help">
+          Close Help
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock('@/hooks/use-session-stream', () => ({
@@ -605,8 +617,7 @@ describe('SessionsPage', () => {
   it('registers slash hotkey that focuses the search input', () => {
     renderSessions();
 
-    const mocked = vi.mocked(useHotkeys);
-    const hotkeys = mocked.mock.calls.find((call) => {
+    const hotkeys = mockUseHotkeys.mock.calls.find((call) => {
       const map = call[0] as Record<string, unknown>;
       return typeof map.slash === 'function';
     })?.[0] as Record<string, (e: KeyboardEvent) => void> | undefined;
@@ -1821,5 +1832,68 @@ describe('SessionsPage', () => {
     renderSessions();
     expect(screen.queryByText(/Load more/)).toBeNull();
     expect(screen.queryByText(/sessions loaded/)).toBeNull();
+  });
+
+  // =========================================================================
+  // Keyboard help overlay
+  // =========================================================================
+
+  describe('Keyboard help overlay', () => {
+    it('registers the ? hotkey to toggle the help overlay', () => {
+      renderSessions();
+      expect(mockUseHotkeys).toHaveBeenCalled();
+      const hotkeyMap = mockUseHotkeys.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(hotkeyMap).toHaveProperty('?');
+      expect(typeof hotkeyMap?.['?']).toBe('function');
+    });
+
+    it('does not render the help overlay by default', () => {
+      renderSessions();
+      expect(screen.queryByTestId('keyboard-help-overlay')).toBeNull();
+    });
+
+    it('opens the help overlay when the keyboard shortcuts button is clicked', async () => {
+      renderSessions();
+      fireEvent.click(screen.getByLabelText('Show keyboard shortcuts'));
+      await waitFor(() => {
+        expect(screen.getByTestId('keyboard-help-overlay')).toBeDefined();
+      });
+    });
+
+    it('closes the help overlay when the ? hotkey runs while open', async () => {
+      renderSessions();
+
+      const openHotkeyMap = mockUseHotkeys.mock.calls.at(-1)?.[0] as
+        | Record<string, () => void>
+        | undefined;
+      act(() => {
+        openHotkeyMap?.['?']?.();
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('keyboard-help-overlay')).toBeDefined();
+      });
+
+      const closeHotkeyMap = mockUseHotkeys.mock.calls.at(-1)?.[0] as
+        | Record<string, () => void>
+        | undefined;
+      act(() => {
+        closeHotkeyMap?.['?']?.();
+      });
+      await waitFor(() => {
+        expect(screen.queryByTestId('keyboard-help-overlay')).toBeNull();
+      });
+    });
+
+    it('closes the help overlay via the overlay onClose callback', async () => {
+      renderSessions();
+      fireEvent.click(screen.getByLabelText('Show keyboard shortcuts'));
+      await waitFor(() => {
+        expect(screen.getByTestId('keyboard-help-overlay')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('close-help'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('keyboard-help-overlay')).toBeNull();
+      });
+    });
   });
 });

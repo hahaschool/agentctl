@@ -90,7 +90,7 @@ describe('ALL_SHORTCUTS', () => {
     expect(descs).toContain('New agent');
     expect(descs).toContain('Save settings');
     expect(descs).toContain('Refresh current page');
-    expect(descs).toContain('Focus search (Discover)');
+    expect(descs).toContain('Focus page search');
     expect(descs).toContain('Close dialogs / Cancel');
     expect(descs).toContain('Toggle keyboard help');
   });
@@ -137,6 +137,7 @@ describe('SHORTCUT_GROUPS', () => {
     const descs = sessions?.shortcuts.map((s) => s.desc) ?? [];
     expect(descs).toContain('Refresh');
     expect(descs).toContain('New session');
+    expect(descs).toContain('Focus search');
     expect(descs).toContain('Navigate list');
   });
 
