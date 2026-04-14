@@ -24,6 +24,8 @@
 
 > Follow-up sync (2026-04-14): after PR #510 landed, CI run `24406293113` exposed a Node 20 compat TypeScript error in `packages/control-plane/src/api/routes/agents.ts` (`AGENT_RUNTIMES.map` callback parameter inferred as `any`). PR #512 fixed the runtime mapping type, and post-merge `main@62a06878` checks passed: CI `24406979775`, Security Audit `24406979789`, and Build & Publish Docker Images `24406979766`. GitHub reports 0 open code-scanning, 0 open Dependabot, and 0 open secret-scanning alerts at this checkpoint.
 
+> Follow-up sync (2026-04-14): PR #513 added backend-independent `/audit` Playwright coverage and included it in the focused web e2e CI allowlist. Post-merge `main@5eb844ff` checks passed: CI `24407474324`, Security Audit `24407474322`, and Build & Publish Docker Images `24407474278`. Security Audit still emits GitHub's Node.js 20 deprecation annotation for Docker/cache/artifact actions running under the forced Node 24 runtime; the annotation is informational and the workflow passed.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
