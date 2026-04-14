@@ -1,20 +1,72 @@
 #!/usr/bin/env bash
 # env-up.sh — Start a development tier
-# Usage: ./scripts/env-up.sh <tier>
+# Usage: ./scripts/env-up.sh <tier> [--dry-run]
 # Example: ./scripts/env-up.sh dev-1
+#          ./scripts/env-up.sh dev-1 --dry-run
 #
 # For beta tier, use PM2 directly:
 #   pm2 start infra/pm2/ecosystem.beta.config.cjs
+#
+# --dry-run prints what would happen (env file, ports, redacted DB/Redis targets,
+# preflight checks) and exits 0 without acquiring the flock or starting
+# any service. Matches the safety pattern in scripts/env-promote.sh.
 
 set -euo pipefail
 
-TIER="${1:-}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOCK_DIR="${LOCK_DIR_OVERRIDE:-/tmp/agentctl-tier-locks}"
 
+# ── Parse arguments ──────────────────────────────────────────────────
+TIER=""
+DRY_RUN=false
+
+usage() {
+  echo "Usage: $0 <tier> [--dry-run]"
+  echo "  tier:      dev-1, dev-2, etc. (use PM2 for beta)"
+  echo "  --dry-run  Show planned actions without starting services"
+}
+
+redact_url_for_log() {
+  local value="$1"
+  if [[ -z "$value" ]]; then
+    echo "<unset>"
+  elif [[ "$value" =~ ^([^:/?#]+://)([^@/]+@)(.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}<redacted>@${BASH_REMATCH[3]}"
+  else
+    echo "$value"
+  fi
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --*)
+      echo "Unknown option: $1"
+      usage
+      exit 1
+      ;;
+    *)
+      if [[ -z "$TIER" ]]; then
+        TIER="$1"
+      else
+        echo "Unexpected positional argument: $1"
+        usage
+        exit 1
+      fi
+      shift
+      ;;
+  esac
+done
+
 if [[ -z "$TIER" ]]; then
-  echo "Usage: $0 <tier>"
-  echo "  tier: dev-1, dev-2, etc. (use PM2 for beta)"
+  usage
   exit 1
 fi
 
@@ -43,7 +95,54 @@ CP_PORT=$(grep '^PORT=' "$ENV_FILE" | cut -d= -f2-)
 WORKER_PORT=$(grep '^WORKER_PORT=' "$ENV_FILE" | cut -d= -f2-)
 WEB_PORT=$(grep '^WEB_PORT=' "$ENV_FILE" | cut -d= -f2-)
 
-# Check port availability
+# Load DB/Redis URLs for reporting (dry-run only reads; startup uses sourced env later)
+DATABASE_URL_PEEK=$(grep '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2- || true)
+REDIS_URL_PEEK=$(grep '^REDIS_URL=' "$ENV_FILE" | cut -d= -f2- || true)
+DATABASE_URL_DISPLAY=$(redact_url_for_log "$DATABASE_URL_PEEK")
+REDIS_URL_DISPLAY=$(redact_url_for_log "$REDIS_URL_PEEK")
+
+# Check port availability and build a conflict report (used in dry-run too)
+PORT_CONFLICTS=()
+for port in "$CP_PORT" "$WORKER_PORT" "$WEB_PORT"; do
+  if [[ -n "$port" ]] && lsof -i :"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    PORT_CONFLICTS+=("$port")
+  fi
+done
+
+if [[ "$DRY_RUN" == true ]]; then
+  LOCK_FILE_PREVIEW="${LOCK_DIR}/${TIER}.lock"
+  echo ""
+  echo "=== DRY RUN MODE ==="
+  echo "No services will be started. No locks will be acquired."
+  echo ""
+  echo "Plan for tier: ${TIER}"
+  echo "  Env file:      ${ENV_FILE}"
+  echo "  TIER var:      ${TIER_CHECK}"
+  echo "  Lock file:     ${LOCK_FILE_PREVIEW}"
+  echo "  CP port:       ${CP_PORT:-<unset>}"
+  echo "  Worker port:   ${WORKER_PORT:-<unset>}"
+  echo "  Web port:      ${WEB_PORT:-<unset>}"
+  echo "  Database:      ${DATABASE_URL_DISPLAY}"
+  echo "  Redis:         ${REDIS_URL_DISPLAY}"
+  echo ""
+  echo "  Would start:"
+  echo "    - control plane:  pnpm --filter @agentctl/control-plane dev (port ${CP_PORT})"
+  echo "    - agent worker:   pnpm --filter @agentctl/agent-worker dev (port ${WORKER_PORT})"
+  echo "    - web:            pnpm --filter @agentctl/web dev (port ${WEB_PORT})"
+  echo "  Would run migrations against: ${DATABASE_URL_DISPLAY}"
+  echo ""
+  if [[ ${#PORT_CONFLICTS[@]} -gt 0 ]]; then
+    echo "  Port conflicts detected: ${PORT_CONFLICTS[*]}"
+    echo "  (Real run would abort here.)"
+  else
+    echo "  Port conflicts: none detected"
+  fi
+  echo ""
+  echo "Dry run complete. No actions taken."
+  exit 0
+fi
+
+# Real startup path — abort on port conflicts (byte-identical to previous behavior)
 for port in "$CP_PORT" "$WORKER_PORT" "$WEB_PORT"; do
   if lsof -i :"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "Error: port ${port} is already in use."
