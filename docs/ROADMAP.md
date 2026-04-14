@@ -49,12 +49,16 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > install job's `actions/cache/save` step from `v4` to `v5`. PR #385 then
 > upgraded the remaining `pnpm/action-setup` uses in `ci.yml`,
 > `security-audit.yml`, and `promote-beta.yml` to `v5`, clearing the final
-> Node20 deprecation warnings without changing workflow logic. As of this
-> update, the workflow stack remains green on current `main`.
+> Node20 deprecation warnings without changing workflow logic. PR #445 then
+> added a backend-independent web Playwright CI lane for the webhooks slice,
+> using `WEB_PORT`-aware web scripts so browser coverage can run without
+> disturbing dev-1/dev-2 or beta promotion state. As of this update, the
+> workflow stack remains green on current `main`.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
 - [x] Security scanning: `pnpm audit`, `gitleaks`, Biome security lint
+- [x] Backend-independent web Playwright CI gating for `/webhooks` using `WEB_PORT`-aware web scripts *(PR #445)*
 
 ### 1.2 Docker Build & Registry
 
