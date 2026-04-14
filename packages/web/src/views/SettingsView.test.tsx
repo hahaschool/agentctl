@@ -31,12 +31,28 @@ vi.mock('@/lib/queries', () => ({
     queryFn: vi.fn().mockResolvedValue({ email: false, push: false }),
     enabled: false,
   }),
+  pushDevicesQuery: (userId: string) => ({
+    queryKey: ['push-devices', userId],
+    queryFn: vi.fn().mockResolvedValue({ devices: [] }),
+    enabled: false,
+  }),
+  useDeactivatePushDevice: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+    variables: undefined,
+  }),
 }));
 
 vi.mock('@/components/settings/NotificationPreferencesPanel', () => ({
   NotificationPreferencesPanel: () => (
     <div data-testid="notification-preferences-panel">NotificationPreferencesPanel</div>
   ),
+}));
+
+vi.mock('@/components/settings/PushDevicesSection', () => ({
+  PushDevicesSection: () => <div data-testid="push-devices-section">PushDevicesSection</div>,
 }));
 
 vi.mock('./AccountsSection', () => ({

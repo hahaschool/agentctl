@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
 import { NotificationPreferencesPanel } from '@/components/settings/NotificationPreferencesPanel';
+import { PushDevicesSection } from '@/components/settings/PushDevicesSection';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ALL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 import { cn } from '@/lib/utils';
@@ -176,7 +177,10 @@ export function SettingsView(): React.JSX.Element {
             title="Notifications"
             description="Define which channels receive agent event notifications and when to suppress them using quiet hours."
           >
-            <NotificationPreferencesPanel />
+            <div className="space-y-6">
+              <NotificationPreferencesPanel />
+              <PushDevicesSection />
+            </div>
           </SettingsSection>
         </SettingsShell>
       </div>
