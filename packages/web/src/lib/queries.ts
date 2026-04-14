@@ -1131,6 +1131,20 @@ export function useGenerateMemoryReport() {
 }
 
 // ---------------------------------------------------------------------------
+// Memory knowledge synthesis — §3.6
+//
+// Synthesis is expensive (four parallel scans over memory_facts / memory_edges)
+// and rate-limited at 20 req/min. Modeled as a mutation: the user explicitly
+// triggers a run rather than polling automatically on mount.
+// ---------------------------------------------------------------------------
+
+export function useRunMemorySynthesis() {
+  return useMutation({
+    mutationFn: (body?: { scope?: string }) => api.runMemorySynthesis(body),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Memory consolidation
 // ---------------------------------------------------------------------------
 
