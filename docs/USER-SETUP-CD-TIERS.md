@@ -26,11 +26,32 @@ Beta 层由 PM2 托管，自动重启，不受 dev 层影响。端口和数据�
 
 ## 你需要做的事
 
-### 1. 创建 Dev 数据库（一次性，2分钟）
+### 1. 创建 Dev 数据库和角色（一次性，5分钟）
 
 ```bash
-psql -p 5433 -c "CREATE DATABASE agentctl_dev1;"
-psql -p 5433 -c "CREATE DATABASE agentctl_dev2;"
+# 先看计划，不执行；默认就是 dry-run
+pnpm tsx scripts/db-provision-tier.ts --tier dev-1
+pnpm tsx scripts/db-provision-tier.ts --tier dev-2
+
+# 确认计划后，用 PostgreSQL admin 连接执行 dev tier 初始化
+export ADMIN_DATABASE_URL="postgresql://postgres@localhost:5433/postgres"
+export AGENTCTL_DEV1_DATABASE_PASSWORD="<choose-a-dev-1-password>"
+export AGENTCTL_DEV2_DATABASE_PASSWORD="<choose-a-dev-2-password>"
+
+pnpm tsx scripts/db-provision-tier.ts --tier dev-1 --execute
+pnpm tsx scripts/db-provision-tier.ts --tier dev-2 --execute
+```
+
+`scripts/db-provision-tier.ts` 只支持 `dev-1` / `dev-2`，会拒绝 `beta` / `prod`。它会为每个 dev tier 创建独立数据库和登录角色，并把 grants 限定在该 tier 数据库内；密码值不会出现在 dry-run 输出里。
+
+执行后，把 dev env 文件里的 `DATABASE_URL` 指向对应角色：
+
+```bash
+# .env.dev-1
+DATABASE_URL=postgresql://agentctl_dev1_app:<dev-1-password>@localhost:5433/agentctl_dev1
+
+# .env.dev-2
+DATABASE_URL=postgresql://agentctl_dev2_app:<dev-2-password>@localhost:5433/agentctl_dev2
 ```
 
 ### 2. 准备 `.env.beta` 文件（一次性，5分钟）
