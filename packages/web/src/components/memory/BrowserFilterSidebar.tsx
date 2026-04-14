@@ -31,6 +31,9 @@ export type BrowserFilters = {
   readonly scope: string;
   readonly entityTypes: readonly EntityType[];
   readonly minConfidence: number;
+  readonly sessionId: string;
+  readonly agentId: string;
+  readonly machineId: string;
 };
 
 export const INITIAL_FILTERS: BrowserFilters = {
@@ -38,6 +41,9 @@ export const INITIAL_FILTERS: BrowserFilters = {
   scope: '',
   entityTypes: [],
   minConfidence: 0,
+  sessionId: '',
+  agentId: '',
+  machineId: '',
 };
 
 export function BrowserFilterSidebar({
@@ -81,12 +87,39 @@ export function BrowserFilterSidebar({
     [filters, onFiltersChange],
   );
 
+  const handleSessionIdChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      onFiltersChange({ ...filters, sessionId: event.target.value });
+    },
+    [filters, onFiltersChange],
+  );
+
+  const handleAgentIdChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      onFiltersChange({ ...filters, agentId: event.target.value });
+    },
+    [filters, onFiltersChange],
+  );
+
+  const handleMachineIdChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      onFiltersChange({ ...filters, machineId: event.target.value });
+    },
+    [filters, onFiltersChange],
+  );
+
   const handleClearFilters = useCallback(() => {
     onFiltersChange(INITIAL_FILTERS);
   }, [onFiltersChange]);
 
   const hasActiveFilters =
-    filters.scope !== '' || filters.entityTypes.length > 0 || filters.minConfidence > 0;
+    filters.q !== '' ||
+    filters.scope !== '' ||
+    filters.entityTypes.length > 0 ||
+    filters.minConfidence > 0 ||
+    filters.sessionId !== '' ||
+    filters.agentId !== '' ||
+    filters.machineId !== '';
 
   return (
     <aside className={cn('space-y-5 border-r border-border p-4', className)}>
@@ -181,6 +214,30 @@ export function BrowserFilterSidebar({
             aria-label="Minimum confidence"
           />
         </div>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Provenance
+        </h3>
+        <Input
+          value={filters.sessionId}
+          onChange={handleSessionIdChange}
+          placeholder="Session ID"
+          aria-label="Session ID filter"
+        />
+        <Input
+          value={filters.agentId}
+          onChange={handleAgentIdChange}
+          placeholder="Agent ID"
+          aria-label="Agent ID filter"
+        />
+        <Input
+          value={filters.machineId}
+          onChange={handleMachineIdChange}
+          placeholder="Machine ID"
+          aria-label="Machine ID filter"
+        />
       </div>
 
       {hasActiveFilters ? (

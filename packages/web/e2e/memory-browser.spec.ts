@@ -70,6 +70,9 @@ type ListRequest = {
   readonly q: string | null;
   readonly scope: string | null;
   readonly entityType: string | null;
+  readonly sessionId: string | null;
+  readonly agentId: string | null;
+  readonly machineId: string | null;
   readonly minConfidence: string | null;
 };
 
@@ -197,8 +200,11 @@ async function mockMemoryBrowserApis(page: Page): Promise<{
       const q = searchParams.get('q');
       const scope = searchParams.get('scope');
       const entityType = searchParams.get('entityType');
+      const sessionId = searchParams.get('sessionId');
+      const agentId = searchParams.get('agentId');
+      const machineId = searchParams.get('machineId');
       const minConfidence = searchParams.get('minConfidence');
-      listRequests.push({ q, scope, entityType, minConfidence });
+      listRequests.push({ q, scope, entityType, sessionId, agentId, machineId, minConfidence });
 
       let facts = Array.from(factsById.values());
       if (q) {
@@ -210,6 +216,15 @@ async function mockMemoryBrowserApis(page: Page): Promise<{
       }
       if (entityType) {
         facts = facts.filter((fact) => fact.entity_type === entityType);
+      }
+      if (sessionId) {
+        facts = facts.filter((fact) => fact.source.session_id === sessionId);
+      }
+      if (agentId) {
+        facts = facts.filter((fact) => fact.source.agent_id === agentId);
+      }
+      if (machineId) {
+        facts = facts.filter((fact) => fact.source.machine_id === machineId);
       }
       if (minConfidence) {
         facts = facts.filter((fact) => fact.confidence >= Number(minConfidence));
@@ -269,15 +284,25 @@ test.describe('Memory browser facts flow', () => {
 
     await page.getByLabel('Scope filter').selectOption('global');
     await page.getByRole('button', { name: 'Toggle entity type: pattern' }).click();
+    await page.getByLabel('Session ID filter').fill('session-2');
+    await page.getByLabel('Agent ID filter').fill('agent-2');
+    await page.getByLabel('Machine ID filter').fill('machine-1');
+
+    await expect(page).toHaveURL(/sessionId=session-2/);
+    await expect(page).toHaveURL(/agentId=agent-2/);
+    await expect(page).toHaveURL(/machineId=machine-1/);
 
     await expect
       .poll(() => state.listRequests.at(-1), {
-        message: 'latest facts request includes the selected filters',
+        message: 'latest facts request includes the selected filters and provenance',
       })
       .toMatchObject({
         q: 'Vector search',
         scope: 'global',
         entityType: 'pattern',
+        sessionId: 'session-2',
+        agentId: 'agent-2',
+        machineId: 'machine-1',
       });
   });
 

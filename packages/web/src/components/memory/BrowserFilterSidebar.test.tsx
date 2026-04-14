@@ -15,6 +15,9 @@ describe('BrowserFilterSidebar', () => {
     expect(screen.getByLabelText('Search facts')).toBeDefined();
     expect(screen.getByLabelText('Scope filter')).toBeDefined();
     expect(screen.getByLabelText('Minimum confidence')).toBeDefined();
+    expect(screen.getByLabelText('Session ID filter')).toBeDefined();
+    expect(screen.getByLabelText('Agent ID filter')).toBeDefined();
+    expect(screen.getByLabelText('Machine ID filter')).toBeDefined();
     expect(screen.getByRole('button', { name: /toggle entity type: decision/i })).toBeDefined();
     expect(screen.getByRole('button', { name: /toggle entity type: pattern/i })).toBeDefined();
     expect(screen.getByRole('button', { name: /toggle entity type: error/i })).toBeDefined();
@@ -73,6 +76,31 @@ describe('BrowserFilterSidebar', () => {
     expect(screen.getByText('65%')).toBeDefined();
   });
 
+  it('calls onFiltersChange when provenance filters change', () => {
+    render(<BrowserFilterSidebar filters={INITIAL_FILTERS} onFiltersChange={onFiltersChange} />);
+
+    fireEvent.change(screen.getByLabelText('Session ID filter'), {
+      target: { value: 'session-1' },
+    });
+    fireEvent.change(screen.getByLabelText('Agent ID filter'), { target: { value: 'agent-1' } });
+    fireEvent.change(screen.getByLabelText('Machine ID filter'), {
+      target: { value: 'machine-1' },
+    });
+
+    expect(onFiltersChange).toHaveBeenNthCalledWith(1, {
+      ...INITIAL_FILTERS,
+      sessionId: 'session-1',
+    });
+    expect(onFiltersChange).toHaveBeenNthCalledWith(2, {
+      ...INITIAL_FILTERS,
+      agentId: 'agent-1',
+    });
+    expect(onFiltersChange).toHaveBeenNthCalledWith(3, {
+      ...INITIAL_FILTERS,
+      machineId: 'machine-1',
+    });
+  });
+
   it('shows clear filters button when filters are active', () => {
     const filters: BrowserFilters = { ...INITIAL_FILTERS, scope: 'global' };
     render(<BrowserFilterSidebar filters={filters} onFiltersChange={onFiltersChange} />);
@@ -92,6 +120,9 @@ describe('BrowserFilterSidebar', () => {
       scope: 'global',
       entityTypes: ['decision'],
       minConfidence: 0.5,
+      sessionId: 'session-1',
+      agentId: 'agent-1',
+      machineId: 'machine-1',
     };
     render(<BrowserFilterSidebar filters={filters} onFiltersChange={onFiltersChange} />);
 

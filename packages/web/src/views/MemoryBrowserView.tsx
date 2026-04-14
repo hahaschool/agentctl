@@ -38,6 +38,9 @@ function parseFiltersFromSearchParams(searchParams: URLSearchParams): BrowserFil
     scope: searchParams.get('scope') ?? '',
     entityTypes,
     minConfidence: Number.isFinite(minConfidence) ? minConfidence : 0,
+    sessionId: searchParams.get('sessionId') ?? '',
+    agentId: searchParams.get('agentId') ?? '',
+    machineId: searchParams.get('machineId') ?? '',
   };
 }
 
@@ -47,6 +50,9 @@ function filtersToSearchParams(filters: BrowserFilters): URLSearchParams {
   if (filters.scope) params.set('scope', filters.scope);
   if (filters.entityTypes.length > 0) params.set('entityTypes', filters.entityTypes.join(','));
   if (filters.minConfidence > 0) params.set('minConfidence', String(filters.minConfidence));
+  if (filters.sessionId) params.set('sessionId', filters.sessionId);
+  if (filters.agentId) params.set('agentId', filters.agentId);
+  if (filters.machineId) params.set('machineId', filters.machineId);
   return params;
 }
 
@@ -94,6 +100,9 @@ export function MemoryBrowserView(): React.JSX.Element {
       q?: string;
       scope?: MemoryScope;
       entityType?: EntityType;
+      sessionId?: string;
+      agentId?: string;
+      machineId?: string;
       minConfidence?: number;
       limit?: number;
       offset?: number;
@@ -120,8 +129,32 @@ export function MemoryBrowserView(): React.JSX.Element {
       params.minConfidence = filters.minConfidence;
     }
 
+    const sessionId = filters.sessionId.trim();
+    const agentId = filters.agentId.trim();
+    const machineId = filters.machineId.trim();
+
+    if (sessionId) {
+      params.sessionId = sessionId;
+    }
+
+    if (agentId) {
+      params.agentId = agentId;
+    }
+
+    if (machineId) {
+      params.machineId = machineId;
+    }
+
     return params;
-  }, [debouncedQ, filters.scope, filters.entityTypes, filters.minConfidence]);
+  }, [
+    debouncedQ,
+    filters.scope,
+    filters.entityTypes,
+    filters.minConfidence,
+    filters.sessionId,
+    filters.agentId,
+    filters.machineId,
+  ]);
 
   const factsQueryResult = useQuery(memoryFactsQuery(queryParams));
   const facts = factsQueryResult.data?.facts ?? [];
@@ -129,7 +162,10 @@ export function MemoryBrowserView(): React.JSX.Element {
     debouncedQ.trim().length > 0 ||
     filters.scope.length > 0 ||
     filters.entityTypes.length > 0 ||
-    filters.minConfidence > 0;
+    filters.minConfidence > 0 ||
+    filters.sessionId.trim().length > 0 ||
+    filters.agentId.trim().length > 0 ||
+    filters.machineId.trim().length > 0;
   const showZeroFactsGuidance =
     !factsQueryResult.isLoading && !hasActiveFilters && facts.length === 0;
 
