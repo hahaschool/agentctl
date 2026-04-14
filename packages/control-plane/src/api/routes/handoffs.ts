@@ -1,13 +1,16 @@
-import type {
-  ExportHandoffSnapshotRequest,
-  HandoffManagedSessionRequest,
-  HandoffSnapshot,
-  HandoffStrategy,
-  NativeImportPreflightRequest,
-  RuntimeHandoffSummaryResponse,
-  StartHandoffRequest,
+import {
+  type ExportHandoffSnapshotRequest,
+  HANDOFF_REASONS,
+  type HandoffManagedSessionRequest,
+  type HandoffSnapshot,
+  type HandoffStrategy,
+  MANAGED_RUNTIMES,
+  type NativeImportPreflightRequest,
+  type RuntimeHandoffSummaryResponse,
+  type StartHandoffRequest,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
 import type { HandoffStore, SessionHandoffRecord } from '../../runtime-management/handoff-store.js';
@@ -19,6 +22,88 @@ import type { RuntimeConfigStore } from '../../runtime-management/runtime-config
 import { WORKER_REQUEST_TIMEOUT_MS } from '../constants.js';
 import { proxyWorkerRequest } from '../proxy-worker-request.js';
 import { resolveWorkerUrlByMachineIdOrThrow } from '../resolve-worker-url.js';
+
+// Handoff bodies/queries drive cross-machine worker RPCs with strings baked
+// into URLs and worker payloads. Caps guard against unbounded prompts/reasons
+// being persisted in handoff history and keep pagination limits in a safe
+// range — callers cannot DoS the summary query by requesting millions of rows.
+const MAX_HANDOFF_ID_LENGTH = 128;
+const MAX_HANDOFF_PROMPT_LENGTH = 8_192;
+const MAX_HANDOFF_LIMIT = 500;
+
+const handoffSummaryQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(MAX_HANDOFF_LIMIT).optional(),
+});
+
+const handoffListQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(MAX_HANDOFF_LIMIT).optional(),
+});
+
+const handoffPreflightQuerySchema = z.object({
+  targetRuntime: z.enum(MANAGED_RUNTIMES),
+  targetMachineId: z.string().min(1).max(MAX_HANDOFF_ID_LENGTH).optional(),
+});
+
+const handoffRequestBodySchema = z.object({
+  targetRuntime: z.enum(MANAGED_RUNTIMES),
+  targetMachineId: z.string().min(1).max(MAX_HANDOFF_ID_LENGTH).nullable().optional(),
+  reason: z.enum(HANDOFF_REASONS),
+  prompt: z.string().max(MAX_HANDOFF_PROMPT_LENGTH).nullable().optional(),
+});
+
+function mapHandoffQueryIssue(issue: z.ZodIssue | undefined): {
+  error: string;
+  message: string;
+} {
+  const field = issue?.path[0];
+  if (field === 'limit') {
+    return {
+      error: 'INVALID_LIMIT',
+      message: `"limit" must be a positive integer ≤ ${MAX_HANDOFF_LIMIT}`,
+    };
+  }
+  if (field === 'targetRuntime') {
+    return {
+      error: 'INVALID_TARGET_RUNTIME',
+      message: `targetRuntime must be one of: ${MANAGED_RUNTIMES.join(', ')}`,
+    };
+  }
+  if (field === 'targetMachineId') {
+    return {
+      error: 'INVALID_TARGET_MACHINE_ID',
+      message: `"targetMachineId" must be a non-empty string of at most ${MAX_HANDOFF_ID_LENGTH} characters`,
+    };
+  }
+  return { error: 'INVALID_HANDOFF_QUERY', message: 'Invalid handoff query parameters' };
+}
+
+function mapHandoffBodyIssue(issue: z.ZodIssue | undefined): { error: string; message: string } {
+  const field = issue?.path[0];
+  switch (field) {
+    case 'targetRuntime':
+      return {
+        error: 'INVALID_TARGET_RUNTIME',
+        message: `targetRuntime must be one of: ${MANAGED_RUNTIMES.join(', ')}`,
+      };
+    case 'targetMachineId':
+      return {
+        error: 'INVALID_TARGET_MACHINE_ID',
+        message: `"targetMachineId" must be a non-empty string of at most ${MAX_HANDOFF_ID_LENGTH} characters`,
+      };
+    case 'reason':
+      return {
+        error: 'INVALID_REASON',
+        message: `reason must be one of: ${HANDOFF_REASONS.join(', ')}`,
+      };
+    case 'prompt':
+      return {
+        error: 'INVALID_PROMPT',
+        message: `"prompt" must be a string of at most ${MAX_HANDOFF_PROMPT_LENGTH} characters when provided`,
+      };
+    default:
+      return { error: 'INVALID_HANDOFF_BODY', message: 'Invalid handoff body' };
+  }
+}
 
 export type HandoffRoutesOptions = {
   managedSessionStore: Pick<ManagedSessionStore, 'get' | 'create' | 'updateStatus'>;
@@ -50,8 +135,13 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         summary: 'Summarize recent runtime handoff outcomes across the fleet',
       },
     },
-    async (request): Promise<RuntimeHandoffSummaryResponse> => {
-      const limit = request.query.limit ? Number(request.query.limit) : 100;
+    async (request, reply): Promise<RuntimeHandoffSummaryResponse | undefined> => {
+      const parsed = handoffSummaryQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        reply.code(400).send(mapHandoffQueryIssue(parsed.error.issues[0]));
+        return undefined;
+      }
+      const limit = parsed.data.limit ?? 100;
       const summary = await handoffStore.summarizeRecent(limit);
       return {
         ok: true,
@@ -72,8 +162,13 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         summary: 'List handoff history for a managed runtime session',
       },
     },
-    async (request) => {
-      const limit = request.query.limit ? Number(request.query.limit) : 20;
+    async (request, reply) => {
+      const parsed = handoffListQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        reply.code(400).send(mapHandoffQueryIssue(parsed.error.issues[0]));
+        return;
+      }
+      const limit = parsed.data.limit ?? 20;
       const handoffs = await handoffStore.listForSession(request.params.id, limit);
       return {
         handoffs,
@@ -94,6 +189,10 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
       },
     },
     async (request, reply) => {
+      const parsedQuery = handoffPreflightQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        return reply.code(400).send(mapHandoffQueryIssue(parsedQuery.error.issues[0]));
+      }
       const source = await managedSessionStore.get(request.params.id);
       if (!source) {
         return reply.code(404).send({
@@ -109,7 +208,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         });
       }
 
-      const targetMachineId = request.query.targetMachineId ?? source.machineId;
+      const targetMachineId = parsedQuery.data.targetMachineId ?? source.machineId;
       const targetWorkerBaseUrl = await resolveWorker(targetMachineId, dbRegistry, workerPort);
 
       const result = await proxyWorkerRequest({
@@ -117,7 +216,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         path: '/api/runtime-sessions/handoff/preflight',
         method: 'POST',
         body: {
-          targetRuntime: request.query.targetRuntime,
+          targetRuntime: parsedQuery.data.targetRuntime as ManagedSessionRecord['runtime'],
           projectPath: source.projectPath,
           snapshot: buildPreflightSnapshot(source),
         } satisfies NativeImportPreflightRequest,
@@ -147,6 +246,11 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
       },
     },
     async (request, reply) => {
+      const parsedBody = handoffRequestBodySchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.code(400).send(mapHandoffBodyIssue(parsedBody.error.issues[0]));
+      }
+      const { targetRuntime, reason, prompt } = parsedBody.data;
       const source = await managedSessionStore.get(request.params.id);
       if (!source) {
         return reply.code(404).send({
@@ -162,7 +266,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         });
       }
 
-      const targetMachineId = request.body.targetMachineId ?? source.machineId;
+      const targetMachineId = parsedBody.data.targetMachineId ?? source.machineId;
       const sourceWorkerBaseUrl = await resolveWorker(source.machineId, dbRegistry, workerPort);
       const targetWorkerBaseUrl = await resolveWorker(targetMachineId, dbRegistry, workerPort);
 
@@ -174,7 +278,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         workerBaseUrl: sourceWorkerBaseUrl,
         path: `/api/runtime-sessions/${encodeURIComponent(source.nativeSessionId)}/handoff/export`,
         method: 'POST',
-        body: buildExportRequest(source, request.body),
+        body: buildExportRequest(source, parsedBody.data),
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
       });
 
@@ -191,7 +295,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
       const snapshot = extractSnapshot(exportResult.data);
       const configRevision = await getActiveConfigRevision(runtimeConfigStore);
       const target = await managedSessionStore.create({
-        runtime: request.body.targetRuntime,
+        runtime: targetRuntime,
         nativeSessionId: null,
         machineId: targetMachineId,
         agentId: source.agentId,
@@ -201,7 +305,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         configRevision,
         handoffStrategy: 'snapshot-handoff',
         handoffSourceSessionId: source.id,
-        metadata: { reason: request.body.reason, sourceRuntime: source.runtime },
+        metadata: { reason, sourceRuntime: source.runtime },
       });
 
       const handoffResult = await proxyWorkerRequest({
@@ -209,10 +313,10 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         path: '/api/runtime-sessions/handoff',
         method: 'POST',
         body: {
-          targetRuntime: request.body.targetRuntime,
+          targetRuntime,
           agentId: source.agentId ?? 'adhoc',
           projectPath: source.projectPath,
-          prompt: request.body.prompt ?? null,
+          prompt: prompt ?? null,
           snapshot,
         } satisfies StartHandoffRequest,
         timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
@@ -229,8 +333,8 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
           sourceSessionId: source.id,
           targetSessionId: target.id,
           sourceRuntime: source.runtime,
-          targetRuntime: request.body.targetRuntime,
-          reason: request.body.reason,
+          targetRuntime,
+          reason,
           strategy: 'snapshot-handoff',
           status: 'failed',
           snapshot,
@@ -262,8 +366,8 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
         sourceSessionId: source.id,
         targetSessionId: updatedTarget.id,
         sourceRuntime: source.runtime,
-        targetRuntime: request.body.targetRuntime,
-        reason: request.body.reason,
+        targetRuntime,
+        reason,
         strategy: execution.strategy ?? 'snapshot-handoff',
         status: 'succeeded',
         snapshot,
