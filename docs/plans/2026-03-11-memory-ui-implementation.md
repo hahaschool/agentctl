@@ -10,6 +10,8 @@
 
 **Design Spec:** `docs/plans/2026-03-11-memory-ui-design.md`
 
+> Status sync (2026-04-14): this implementation plan remains a historical task breakdown, while `docs/ROADMAP.md` is the current status source. The latest delivered follow-ups are PR #470 (`/memory/synthesis`), PR #472 fact feedback, PR #473 (`/memory/maintenance`), PR #475 browser coverage for synthesis, and PR #478 browser coverage for maintenance.
+
 ---
 
 ## Chunk 1: Foundation — Types, API Core, Shared Components, Layout
