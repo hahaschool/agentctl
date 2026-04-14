@@ -116,6 +116,7 @@ function makeMutationMock(
     isPending: boolean;
     data: unknown;
     error: Error | null;
+    variables: { description: string } | undefined;
   }> = {},
 ) {
   return {
@@ -124,6 +125,7 @@ function makeMutationMock(
     isPending: overrides.isPending ?? false,
     data: overrides.data ?? undefined,
     error: overrides.error ?? null,
+    variables: overrides.variables,
   };
 }
 
@@ -198,7 +200,12 @@ describe('AutoDecomposeDialog', () => {
   });
 
   it('renders proposed subtasks after a successful preview', () => {
-    mockUseDecomposeTaskPreview.mockReturnValue(makeMutationMock({ data: makePreview() }));
+    mockUseDecomposeTaskPreview.mockReturnValue(
+      makeMutationMock({
+        data: makePreview(),
+        variables: { description: 'Ship a feature' },
+      }),
+    );
 
     render(
       <AutoDecomposeDialog
@@ -220,7 +227,12 @@ describe('AutoDecomposeDialog', () => {
 
   it('fires the apply mutation with description and spaceId when Apply clicked', () => {
     const applyMutate = vi.fn();
-    mockUseDecomposeTaskPreview.mockReturnValue(makeMutationMock({ data: makePreview() }));
+    mockUseDecomposeTaskPreview.mockReturnValue(
+      makeMutationMock({
+        data: makePreview(),
+        variables: { description: 'Build billing integration' },
+      }),
+    );
     mockUseDecomposeTask.mockReturnValue(makeMutationMock({ mutate: applyMutate }));
 
     render(
@@ -239,6 +251,36 @@ describe('AutoDecomposeDialog', () => {
       description: 'Build billing integration',
       spaceId: 'space-42',
     });
+  });
+
+  it('disables Apply and asks for a fresh preview when the description changes', () => {
+    const applyMutate = vi.fn();
+    mockUseDecomposeTaskPreview.mockReturnValue(
+      makeMutationMock({
+        data: makePreview(),
+        variables: { description: 'Build billing integration' },
+      }),
+    );
+    mockUseDecomposeTask.mockReturnValue(makeMutationMock({ mutate: applyMutate }));
+
+    render(
+      <AutoDecomposeDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        initialDescription="Build billing integration"
+      />,
+    );
+
+    const textarea = screen.getByTestId('auto-decompose-description-input') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'Build billing integration plus webhooks' } });
+
+    expect(screen.getByTestId('auto-decompose-stale-preview')).toBeTruthy();
+    expect(screen.queryByLabelText('Proposed decomposition')).toBeNull();
+
+    const applyBtn = screen.getByTestId('auto-decompose-apply-button') as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(true);
+    fireEvent.click(applyBtn);
+    expect(applyMutate).not.toHaveBeenCalled();
   });
 
   it('shows a preview error banner when preview fails', () => {
@@ -264,6 +306,7 @@ describe('AutoDecomposeDialog', () => {
   it('shows the empty-result message when the model returns zero tasks', () => {
     mockUseDecomposeTaskPreview.mockReturnValue(
       makeMutationMock({
+        variables: { description: 'Do the thing' },
         data: makePreview({
           result: {
             tasks: [],
@@ -300,7 +343,12 @@ describe('AutoDecomposeDialog', () => {
       },
     );
 
-    mockUseDecomposeTaskPreview.mockReturnValue(makeMutationMock({ data: makePreview() }));
+    mockUseDecomposeTaskPreview.mockReturnValue(
+      makeMutationMock({
+        data: makePreview(),
+        variables: { description: 'Build the thing' },
+      }),
+    );
     mockUseDecomposeTask.mockReturnValue(makeMutationMock({ mutate: applyMutate }));
 
     const onApplied = vi.fn();

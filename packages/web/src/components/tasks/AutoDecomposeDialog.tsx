@@ -192,6 +192,7 @@ export function AutoDecomposeDialog({
   const applyMutation = useDecomposeTask();
 
   const [description, setDescription] = useState<string>(initialDescription);
+  const [previewedDescription, setPreviewedDescription] = useState<string | null>(null);
   const wasOpenRef = useRef(open);
 
   useEffect(() => {
@@ -210,18 +211,26 @@ export function AutoDecomposeDialog({
   const trimmed = description.trim();
   const descriptionValid =
     trimmed.length >= MIN_DESCRIPTION_LENGTH && trimmed.length <= MAX_DESCRIPTION_LENGTH;
+  const activePreviewDescription = previewMutation.variables?.description ?? previewedDescription;
+  const previewMatchesDescription =
+    preview !== undefined && activePreviewDescription === trimmed && !isPreviewing;
+  const visiblePreview = previewMatchesDescription ? preview : undefined;
   const hasApplicablePreview = useMemo(
-    () => preview !== undefined && preview.result.tasks.length > 0,
-    [preview],
+    () => visiblePreview !== undefined && visiblePreview.result.tasks.length > 0,
+    [visiblePreview],
   );
 
   const handlePreview = useCallback(() => {
     if (!descriptionValid || isPreviewing) return;
     // Reset any stale apply error when starting a fresh preview.
     applyMutation.reset();
+    setPreviewedDescription(null);
     previewMutation.mutate(
       { description: trimmed },
       {
+        onSuccess: () => {
+          setPreviewedDescription(trimmed);
+        },
         onError: (err) => {
           toast.error(`Preview failed: ${errorMessage(err)}`);
         },
@@ -263,6 +272,7 @@ export function AutoDecomposeDialog({
         // Reset state on close so re-opening starts fresh.
         previewMutation.reset();
         applyMutation.reset();
+        setPreviewedDescription(null);
         setDescription(initialDescription);
       }
       onOpenChange(next);
@@ -300,7 +310,10 @@ export function AutoDecomposeDialog({
               id="auto-decompose-description"
               data-testid="auto-decompose-description-input"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value);
+                setPreviewedDescription(null);
+              }}
               rows={4}
               maxLength={MAX_DESCRIPTION_LENGTH}
               disabled={isPreviewing || isApplying}
@@ -344,6 +357,15 @@ export function AutoDecomposeDialog({
             </Button>
           </div>
 
+          {preview && !previewMatchesDescription ? (
+            <output
+              data-testid="auto-decompose-stale-preview"
+              className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300"
+            >
+              Description changed after preview. Preview again before applying.
+            </output>
+          ) : null}
+
           {/* Preview error */}
           {previewError && (
             <div
@@ -357,10 +379,10 @@ export function AutoDecomposeDialog({
           )}
 
           {/* Preview result */}
-          {preview && !previewError && (
+          {visiblePreview && !previewError && (
             <section aria-label="Proposed decomposition" className="border-t border-border pt-3">
               <h3 className="text-sm font-semibold mb-2">Proposed decomposition</h3>
-              <PreviewBlock preview={preview} />
+              <PreviewBlock preview={visiblePreview} />
             </section>
           )}
 
