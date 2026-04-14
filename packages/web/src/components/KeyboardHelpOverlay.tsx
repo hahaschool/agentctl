@@ -17,11 +17,13 @@ export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element
     const handler = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' || e.key === '?') {
         e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
         onClose();
       }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    document.addEventListener('keydown', handler, { capture: true });
+    return () => document.removeEventListener('keydown', handler, { capture: true });
   }, [open, onClose]);
 
   if (!open) return null;
@@ -37,6 +39,7 @@ export function KeyboardHelpOverlay({ open, onClose }: Props): React.JSX.Element
 
       {/* Panel */}
       <div
+        id="keyboard-shortcuts-dialog"
         role="dialog"
         aria-modal="true"
         aria-label="Keyboard shortcuts"

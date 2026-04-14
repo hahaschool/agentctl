@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 import { useNotificationContext } from '../contexts/notification-context';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import { useWebSocket } from '../hooks/use-websocket';
+import { KEYBOARD_HELP_OPEN_EVENT } from '../lib/keyboard-shortcuts';
 import { syncConflictCountQuery } from '../lib/queries';
 import { CommandPalette } from './CommandPalette';
 import { ConnectionBanner } from './ConnectionBanner';
@@ -141,6 +142,15 @@ export function Sidebar(): React.JSX.Element {
     setShowHelp(false);
     setShowCommandPalette(false);
   }, []);
+
+  const openKeyboardHelp = useCallback((): void => {
+    setShowHelp(true);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener(KEYBOARD_HELP_OPEN_EVENT, openKeyboardHelp);
+    return () => window.removeEventListener(KEYBOARD_HELP_OPEN_EVENT, openKeyboardHelp);
+  }, [openKeyboardHelp]);
 
   const isSettingsPath = useMemo(
     () => pathname.startsWith('/settings') || /^\/agents\/[^/]+\/settings$/.test(pathname),

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Keyboard } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,7 +21,6 @@ import { DashboardSectionHeader } from '../components/DashboardSectionHeader';
 import { DashboardSystemHealth } from '../components/DashboardSystemHealth';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
-import { KeyboardHelpOverlay } from '../components/KeyboardHelpOverlay';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
 import { DashboardMemoryCard } from '../components/memory/DashboardMemoryCard';
@@ -34,6 +33,7 @@ import { WsStatusIndicator } from '../components/WsStatusIndicator';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import { useWebSocket } from '../hooks/use-websocket';
 import { formatCost, formatDuration, formatNumber, truncate } from '../lib/format-utils';
+import { KEYBOARD_HELP_OPEN_EVENT } from '../lib/keyboard-shortcuts';
 import {
   agentsQuery,
   discoverQuery,
@@ -73,8 +73,9 @@ export function DashboardPage(): React.JSX.Element {
   const memoryStats = useQuery({ ...memoryStatsQuery(), retry: false });
 
   const { status: wsStatus } = useWebSocket();
-  const [showHelp, setShowHelp] = useState(false);
-  const toggleHelp = useCallback(() => setShowHelp((v) => !v), []);
+  const openKeyboardHelp = useCallback(() => {
+    window.dispatchEvent(new Event(KEYBOARD_HELP_OPEN_EVENT));
+  }, []);
 
   const machineList = machines.data ?? [];
   const agentList = agents.data ?? [];
@@ -159,7 +160,7 @@ export function DashboardPage(): React.JSX.Element {
     ],
   );
 
-  useHotkeys(useMemo(() => ({ r: refreshAll, '?': toggleHelp }), [refreshAll, toggleHelp]));
+  useHotkeys(useMemo(() => ({ r: refreshAll }), [refreshAll]));
 
   const anyFetching =
     health.isFetching ||
@@ -228,7 +229,6 @@ export function DashboardPage(): React.JSX.Element {
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1100px] animate-page-enter">
-      <KeyboardHelpOverlay open={showHelp} onClose={toggleHelp} />
       <FetchingBar isFetching={anyFetching} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
@@ -237,9 +237,11 @@ export function DashboardPage(): React.JSX.Element {
           <SimpleTooltip content="Keyboard shortcuts (?)">
             <button
               type="button"
-              onClick={toggleHelp}
+              onClick={openKeyboardHelp}
               className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors"
               aria-label="Show keyboard shortcuts"
+              aria-controls="keyboard-shortcuts-dialog"
+              aria-haspopup="dialog"
             >
               <Keyboard className="w-4 h-4" aria-hidden="true" />
             </button>
