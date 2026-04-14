@@ -1492,6 +1492,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 - [x] Playwright specs for /tasks, /spaces, /deployment pages *(PR #268)*
 - [x] CI executes the backend-independent `/webhooks` Playwright slice so web e2e coverage is no longer only a local/manual check *(PR #445)*
+- [x] Add backend-independent Playwright coverage for the embedded `/logs` Security Findings tab, including summary cards, latest finding badges/location, empty state, and API error handling *(PR #454)*
 
 ### 20.6 React Performance — Delivered
 
