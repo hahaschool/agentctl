@@ -119,4 +119,19 @@ describe('ConfirmDialog', () => {
       expect(onConfirm).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('keeps the dialog open and shows an inline error when async onConfirm rejects', async () => {
+    const onConfirm = vi.fn().mockRejectedValue(new Error('Network offline'));
+    const onOpenChange = vi.fn();
+    render(<Harness onConfirm={onConfirm} onOpenChange={onOpenChange} confirmLabel="Revoke" />);
+
+    fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('confirm-dialog')).toBeDefined();
+      expect(screen.getByTestId('confirm-dialog-error').textContent).toContain('Network offline');
+    });
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
 });

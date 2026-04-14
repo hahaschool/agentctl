@@ -44,6 +44,12 @@ export type ConfirmDialogProps = {
 
 const DESTRUCTIVE_CONFIRM_CLASS =
   'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600';
+const DEFAULT_DESCRIPTION = 'Confirm this action before continuing.';
+const DEFAULT_ERROR_MESSAGE = 'Unable to complete the confirmation. Please try again.';
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message.trim() ? error.message : DEFAULT_ERROR_MESSAGE;
+}
 
 export function ConfirmDialog({
   open,
@@ -56,6 +62,7 @@ export function ConfirmDialog({
   onConfirm,
 }: ConfirmDialogProps): React.JSX.Element {
   const [pending, setPending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleConfirm(event: React.MouseEvent<HTMLButtonElement>): Promise<void> {
     // Prevent AlertDialog's default auto-close so we can control timing and
@@ -64,9 +71,13 @@ export function ConfirmDialog({
     if (pending) return;
 
     try {
+      setErrorMessage(null);
       setPending(true);
       await onConfirm();
+      setErrorMessage(null);
       onOpenChange(false);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
     } finally {
       setPending(false);
     }
@@ -78,14 +89,28 @@ export function ConfirmDialog({
       onOpenChange={(next) => {
         // Guard: never allow external close (ESC / overlay) while pending.
         if (pending && !next) return;
+        if (next) {
+          setErrorMessage(null);
+        }
         onOpenChange(next);
       }}
     >
       <AlertDialogContent data-testid="confirm-dialog">
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
+          <AlertDialogDescription className={description ? undefined : 'sr-only'}>
+            {description ?? DEFAULT_DESCRIPTION}
+          </AlertDialogDescription>
         </AlertDialogHeader>
+        {errorMessage && (
+          <p
+            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+            data-testid="confirm-dialog-error"
+            role="alert"
+          >
+            {errorMessage}
+          </p>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending} data-testid="confirm-dialog-cancel">
             {cancelLabel}

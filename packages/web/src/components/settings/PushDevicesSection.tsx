@@ -118,6 +118,7 @@ export function PushDevicesSection(): React.JSX.Element {
   const pendingPlatformLabel = pendingRevoke
     ? (PLATFORM_LABELS[pendingRevoke.platform] ?? pendingRevoke.platform)
     : '';
+  const pendingDeviceLabel = pendingPlatformLabel ? `${pendingPlatformLabel} device` : 'device';
 
   return (
     <div data-testid="push-devices-section">
@@ -205,7 +206,7 @@ export function PushDevicesSection(): React.JSX.Element {
         onOpenChange={(next) => {
           if (!next) setPendingRevoke(null);
         }}
-        title={`Revoke this ${pendingPlatformLabel || 'device'}?`}
+        title={`Revoke this ${pendingDeviceLabel}?`}
         description="It will stop receiving push notifications until re-registered from the app."
         confirmLabel="Revoke device"
         cancelLabel="Cancel"
