@@ -1,7 +1,7 @@
 # Agent Profiles Web UI Plan
 
 Date: 2026-04-14
-Status: Delivered in PR #498 (`main@3eebce46`)
+Status: Delivered in PR #498 (`main@3eebce46`); Playwright follow-up delivered in PR #505
 Owner: Claude/Codex coordination lane
 
 ## Context
@@ -9,6 +9,8 @@ Owner: Claude/Codex coordination lane
 The control plane already shipped AgentProfile and AgentInstance backend support in PR #95, but the web app did not expose an operator-facing `/agent-profiles` surface. PR #498 closed that gap by adding the page, sidebar entry, API-client module, and focused unit coverage on top of the existing backend.
 
 After PR #498 initially failed the web E2E CI lane, the follow-up fix kept `AGENT_RUNTIME_TYPES` and `isAgentRuntimeType` local to the web API module. That prevents the Next dev server used by backend-independent Playwright runs from requiring built `@agentctl/shared` runtime output while preserving shared type imports.
+
+PR #505 added backend-independent Playwright coverage for `/agent-profiles`, including populated table render, empty-state create flow, required-name validation, sanitized comma-list payloads, delete confirmation success, delete API-error handling, and list-error retry recovery.
 
 ## Scope
 
@@ -30,6 +32,7 @@ After PR #498 initially failed the web E2E CI lane, the follow-up fix kept `AGEN
 
 - `packages/web/src/app/agent-profiles/page.tsx`
 - `packages/web/src/app/agent-profiles/page.test.tsx`
+- `packages/web/e2e/agent-profiles.spec.ts`
 - `packages/web/src/components/Sidebar.tsx`
 - `packages/web/src/lib/api.ts`
 - `packages/web/src/lib/api/agent-profiles.ts`
@@ -38,11 +41,12 @@ After PR #498 initially failed the web E2E CI lane, the follow-up fix kept `AGEN
 ## Validation
 
 - `pnpm --filter @agentctl/web test -- agent-profiles`
+- `WEB_PORT=5437 pnpm --filter @agentctl/web exec playwright test e2e/agent-profiles.spec.ts --project=chromium --reporter=line`
 - `WEB_PORT=5394 pnpm --filter @agentctl/web exec playwright test e2e/webhooks.spec.ts --project=chromium --reporter=line`
 - `pnpm lint`
 - `git diff --check HEAD`
 
 ## Follow-Up
 
-- Consider backend-independent Playwright coverage for `/agent-profiles` once the next web feature-depth batch is selected.
+- Backend-independent Playwright coverage for `/agent-profiles` is now represented by PR #505.
 - Keep future web API modules free of runtime imports from unbuilt workspace packages unless the dev server path is verified.
