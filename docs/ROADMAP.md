@@ -990,6 +990,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 ### 12.4 Lifecycle Scripts — ✅ Delivered (PR #104)
 
 - [x] `scripts/env-up.sh` — port check + flock + start services
+- [x] `scripts/env-up.sh --dry-run` — preview env file, ports, DB/Redis target, and port-conflict report without acquiring the flock or starting services
 - [x] `scripts/env-down.sh` — graceful shutdown + lock release
 - [x] `scripts/env-promote.sh` — build + schema parity + migrate + restart + rollback *(PR #130)*
 - [x] Dev-tier startup portability follow-up: `env-up.sh` now has a macOS-safe lock fallback, starts Web through the `WEB_PORT`-aware package script without duplicate `--port` args, and starts control-plane with `SKIP_MIGRATIONS=true` after the explicit migration step so already-migrated dev databases do not fail on legacy non-idempotent migrations.
