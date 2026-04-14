@@ -1,6 +1,6 @@
 # Project Roadmap
 
-> Last updated: 2026-04-14 (post-PR #498 checkpoint sync after the #495-#499 landing batch). The latest landing set now includes PR #495 (backend-independent `/agents/[id]/settings` coverage), PR #496 (portable dev-tier `env-up` locking and `WEB_PORT`-safe Next startup), PR #497 (routing API payload bounds hardening), PR #499 (backend-independent `/machines` list/detail coverage), and PR #498 (`/agent-profiles` CRUD page with create/delete UI and API-client wiring). Earlier 2026-04-13/14 memory, webhook, settings, discovery, mesh, and agent browser coverage follow-ups remain represented below. CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
+> Last updated: 2026-04-14 (post-PR #498 checkpoint sync after the #495-#499 landing batch, plus PR #501 Web E2E timeout headroom). The latest landing set now includes PR #495 (backend-independent `/agents/[id]/settings` coverage), PR #496 (portable dev-tier `env-up` locking and `WEB_PORT`-safe Next startup), PR #497 (routing API payload bounds hardening), PR #499 (backend-independent `/machines` list/detail coverage), and PR #498 (`/agent-profiles` CRUD page with create/delete UI and API-client wiring). Earlier 2026-04-13/14 memory, webhook, settings, discovery, mesh, and agent browser coverage follow-ups remain represented below. CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
 >
 > Current checkpoint: PR #470 through PR #498 are represented on `main@3eebce46`, including the PR #494 `/agents` index coverage, PR #495 agent settings coverage, PR #496 dev-tier startup portability, PR #497 routing input-bounds hardening, PR #499 machines browser coverage, and PR #498 agent-profiles web UI. GitHub reports 0 open PRs plus 0 open code-scanning, 0 open Dependabot, and 0 open secret-scanning alerts at this checkpoint.
 >
@@ -8,7 +8,7 @@
 >
 > Coordination note: PR #461 merged as `e6fd4c2e`, PR #462 as `193e6b02`, PR #465 as `2b950c96`, PR #466 as `9fbc2fe9`, PR #467 as `620de798`, PR #468 as `4291f520`, PR #470 as `5a480a23`, PR #471 as `2d61cb8a`, PR #472 as `7b2f9b8c`, PR #473 as `22fbe6ae`, PR #474 as `a8189309`, PR #475 as `1f4007c1`, PR #476 as `fa632acd`, PR #477 as `be1765d3`, PR #478 as `082deedb`, PR #479 as `9f984523`, PR #480 as `0f9fb538`, PR #481 as `0668db95`, PR #482 as `04e1e80d`, PR #483 as `88ccf816`, PR #485 as `071b7e3d`, PR #486 as `bfd9e74f`, PR #487 as `f28a2a85`, PR #488 as `eb9ae933`, PR #489 as `c01300b2`, PR #490 as `d868742b`, PR #491 as `f3ad66dc`, PR #492 as `8b716d6f`, PR #493 as `808556b0`, PR #494 as `95e7c8a2`, PR #495 as `5635abdf`, PR #496 as `64de9152`, PR #497 as `1b95f9f8`, PR #499 as `05972feb`, and PR #498 as `3eebce46`; duplicate PRs #463 and #464 were closed after their stronger sibling branches merged.
 >
-> PR #498 follow-up note: the agent-profiles web UI now has its delivered plan record in `docs/plans/2026-04-14-agent-profiles-web-plan.md`. The post-merge CI fix keeps runtime constants local to the web API module so backend-independent Next dev runs do not require built `@agentctl/shared` output.
+> PR #501 work note: the agent-profiles web UI now has its delivered plan record in `docs/plans/2026-04-14-agent-profiles-web-plan.md`. This PR also raises the Web E2E job timeout from 10 to 20 minutes after main CI timed out while installing Playwright Chromium before running tests.
 
 ## Current State
 
@@ -58,8 +58,10 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 > Node20 deprecation warnings without changing workflow logic. PR #445 then
 > added a backend-independent web Playwright CI lane for the webhooks slice,
 > using `WEB_PORT`-aware web scripts so browser coverage can run without
-> disturbing dev-1/dev-2 or beta promotion state. As of this update, the
-> workflow stack remains green on current `main`.
+> disturbing dev-1/dev-2 or beta promotion state. PR #501 raised the Web E2E
+> job timeout from 10 to 20 minutes after a main push exhausted the old limit
+> during Playwright Chromium installation before tests started. As of this
+> update, the workflow stack remains green on current `main`.
 
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
