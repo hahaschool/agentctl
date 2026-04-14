@@ -146,7 +146,7 @@ describe('PushDevicesSection', () => {
     expect(errEl.textContent).toContain('boom');
   });
 
-  it('calls deactivate when revoke button is clicked and confirmed', async () => {
+  it('calls deactivate when revoke is confirmed via the ConfirmDialog', async () => {
     mockListPushDevices.mockResolvedValue({
       devices: [makeDevice({ id: 'dev-1' })],
     });
@@ -155,34 +155,33 @@ describe('PushDevicesSection', () => {
       device: makeDevice({ id: 'dev-1', disabledAt: '2026-04-10T08:30:00.000Z' }),
     });
 
-    // Confirm → proceeds.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-
     renderSection();
 
     const revokeBtn = await screen.findByTestId('push-device-revoke-dev-1');
     fireEvent.click(revokeBtn);
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    // ConfirmDialog opens; the destructive confirm triggers the mutation.
+    const confirmBtn = await screen.findByTestId('confirm-dialog-confirm');
+    fireEvent.click(confirmBtn);
+
     await waitFor(() => {
       expect(mockDeactivatePushDevice).toHaveBeenCalledWith('dev-1');
     });
   });
 
-  it('does NOT call deactivate when revoke is cancelled in the confirm dialog', async () => {
+  it('does NOT call deactivate when revoke is cancelled in the ConfirmDialog', async () => {
     mockListPushDevices.mockResolvedValue({
       devices: [makeDevice({ id: 'dev-1' })],
     });
-
-    // Cancel → no mutation.
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
     renderSection();
 
     const revokeBtn = await screen.findByTestId('push-device-revoke-dev-1');
     fireEvent.click(revokeBtn);
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const cancelBtn = await screen.findByTestId('confirm-dialog-cancel');
+    fireEvent.click(cancelBtn);
+
     expect(mockDeactivatePushDevice).not.toHaveBeenCalled();
   });
 });

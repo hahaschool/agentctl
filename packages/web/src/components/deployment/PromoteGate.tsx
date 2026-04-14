@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { CheckCircle, Loader2, Minus, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { DeploymentPreflightCheck, DeploymentTierStatus } from '@/lib/api';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -53,6 +54,7 @@ export function PromoteGate({ tiers, onPromoteStarted }: PromoteGateProps): Reac
   const devTiers = tiers.filter((t) => t.name !== 'beta');
   const [source, setSource] = useState('');
   const [checks, setChecks] = useState<DeploymentPreflightCheck[]>(EMPTY_CHECKS);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const selectedSource = devTiers.some((tier) => tier.name === source)
     ? source
     : (devTiers[0]?.name ?? '');
@@ -88,13 +90,7 @@ export function PromoteGate({ tiers, onPromoteStarted }: PromoteGateProps): Reac
     if (!selectedSource) {
       return;
     }
-
-    const confirmed = window.confirm(
-      `Promote ${selectedSource} to beta? This will deploy the current ${selectedSource} build to the beta tier.`,
-    );
-    if (confirmed) {
-      promoteMutation.mutate(selectedSource);
-    }
+    setConfirmOpen(true);
   };
 
   return (
@@ -196,6 +192,23 @@ export function PromoteGate({ tiers, onPromoteStarted }: PromoteGateProps): Reac
           )}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`Promote ${selectedSource || 'source tier'} to beta?`}
+        description={
+          selectedSource
+            ? `This will deploy the current ${selectedSource} build to the beta tier.`
+            : undefined
+        }
+        confirmLabel="Promote to beta"
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          if (!selectedSource) return;
+          await promoteMutation.mutateAsync(selectedSource);
+        }}
+      />
     </div>
   );
 }

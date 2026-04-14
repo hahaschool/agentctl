@@ -75,6 +75,25 @@ vi.mock('@/components/ui/card', () => ({
   ),
 }));
 
+vi.mock('@/components/ui/skeleton', () => ({
+  Skeleton: ({ className }: { className?: string }) => (
+    <div data-testid="skeleton" className={className} />
+  ),
+}));
+
+vi.mock('@/components/ErrorBanner', () => ({
+  ErrorBanner: ({ message, onRetry }: { message: string; onRetry?: () => void }) => (
+    <div data-testid="error-banner">
+      <span data-testid="error-banner-message">{message}</span>
+      {onRetry && (
+        <button type="button" data-testid="error-banner-retry" onClick={onRetry}>
+          Retry
+        </button>
+      )}
+    </div>
+  ),
+}));
+
 import { render, screen } from '@testing-library/react';
 
 import { MemoryDashboardView } from './MemoryDashboardView';
@@ -126,16 +145,83 @@ describe('MemoryDashboardView', () => {
     vi.clearAllMocks();
   });
 
-  it('renders all four KPI cards in loading state when stats are loading', () => {
-    mockUseQuery.mockReturnValue({ data: null, isLoading: true });
+  it('renders the initial loading skeleton when no data has arrived yet', () => {
+    mockUseQuery.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    });
 
     render(<MemoryDashboardView />);
 
-    expect(screen.getByTestId('kpi-card-Total Facts')).toBeDefined();
-    expect(screen.getByTestId('kpi-card-New This Week')).toBeDefined();
-    expect(screen.getByTestId('kpi-card-Avg Confidence')).toBeDefined();
-    expect(screen.getByTestId('kpi-card-Pending Consolidation')).toBeDefined();
-    expect(screen.getAllByTestId('kpi-loading').length).toBe(4);
+    expect(screen.getByTestId('memory-dashboard-loading')).toBeDefined();
+    // Once the skeleton is up, the data-level KPI cards should not render.
+    expect(screen.queryByTestId('kpi-card-Total Facts')).toBeNull();
+  });
+
+  it('renders an error banner with retry when the stats query fails', () => {
+    const refetch = vi.fn();
+    mockUseQuery.mockImplementation((opts: { queryKey: unknown[] }) => {
+      if (Array.isArray(opts.queryKey) && opts.queryKey[1] === 'stats') {
+        return {
+          data: undefined,
+          isLoading: false,
+          isError: true,
+          error: new Error('stats blew up'),
+          refetch,
+        };
+      }
+      return {
+        data: { facts: [], total: 0 },
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      };
+    });
+
+    render(<MemoryDashboardView />);
+
+    const banner = screen.getByTestId('error-banner');
+    expect(banner).toBeDefined();
+    expect(screen.getByTestId('error-banner-message').textContent).toContain('stats blew up');
+
+    screen.getByTestId('error-banner-retry').click();
+    expect(refetch).toHaveBeenCalledTimes(1);
+
+    // Content should not render while the error is visible.
+    expect(screen.queryByTestId('kpi-card-Total Facts')).toBeNull();
+    expect(screen.queryByTestId('memory-dashboard-loading')).toBeNull();
+  });
+
+  it('renders an error banner when the facts query fails even if stats loaded', () => {
+    const refetch = vi.fn();
+    mockUseQuery.mockImplementation((opts: { queryKey: unknown[] }) => {
+      if (Array.isArray(opts.queryKey) && opts.queryKey[1] === 'stats') {
+        return {
+          data: { ok: true, stats: makeStats() },
+          isLoading: false,
+          isError: false,
+          error: null,
+          refetch: vi.fn(),
+        };
+      }
+      return {
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new Error('facts unavailable'),
+        refetch,
+      };
+    });
+
+    render(<MemoryDashboardView />);
+
+    expect(screen.getByTestId('error-banner-message').textContent).toContain('facts unavailable');
+    screen.getByTestId('error-banner-retry').click();
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it('renders KPI card values when stats are loaded', () => {
