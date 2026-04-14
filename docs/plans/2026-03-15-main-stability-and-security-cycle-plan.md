@@ -11,6 +11,8 @@
 > Status note (2026-04-13): this stabilization/security wave remains complete on `main` for the historical CI + CodeQL + Dependabot + DAST backlog through PR #230. The later 2026-04-01 and 2026-04-13 loops re-closed current CI, CodeQL, Dependabot, DAST, web test infrastructure, rate-limiting, and e2e coverage follow-ups; the roadmap now carries the detailed merged-PR ledger.
 
 > Follow-up sync (2026-04-14): PR #436 extended `/security-findings` browser coverage, PR #438 shipped the `/webhooks` management page, PR #439 closed the remaining route-rate-limit audit, PR #440 cleaned up CI/security scan annotations by fixing Biome security lint syntax and gating empty Grype SARIF uploads, PR #442 landed the SessionHeader/GitStatusBadge accessibility follow-up, PR #443 introduced Zod input validation and bounded strings on three write surfaces, PR #444 added focused `/webhooks` Playwright coverage, PR #445 moved the backend-independent webhooks Playwright slice into CI, PR #447 added mobile-push validation negative coverage, PR #448 tightened batch-2 input validation across six control-plane surfaces, PR #452 hardened sync-peer registration/ping validation against unsafe peer URLs and metadata/local SSRF targets, PR #454 added `/logs` Security Findings Playwright coverage, and PR #455 added `/memory/browser` facts-flow Playwright coverage. The current post-merge `main` head is `74a5bc44`.
+>
+> Follow-up sync (2026-04-14): PRs #457-#459 extended backend-independent browser coverage for `/memory/import`, `/settings`, and `/discover`; PR #461 added `/memory` index redirect/sidebar coverage; PR #462 added `/memory/consolidation` queue/action coverage; PR #465 and PR #466 added broader `/memory/scopes` and `/memory/graph` coverage; PR #467 added a webhook delivery-history viewer with unit coverage; and PR #468 added dynamic `/spaces/[id]` + `/tasks/[id]` detail-route coverage. The current post-merge `main` head is `4291f520`.
 
 ---
 
@@ -185,6 +187,9 @@ Current final state after PR #227 merged and DAST rerun `23131047045` succeeded:
 - PR #445 moved the backend-independent `/webhooks` Playwright slice into CI so browser coverage now gates pull requests instead of remaining only a local/manual check.
 - PR #447 added mobile-push device validation negative tests for invalid methods, malformed JSON, invalid tokens/platforms, oversized route params, and deactivate error paths.
 - PR #448 tightened batch-2 input validation across `webhooks`, `permission-requests`, `approvals`, `handoffs`, `sync-conflicts`, and `memory-facts`, including enum checks, pagination bounds, source-size limits, and focused 400-path coverage.
+- PRs #461/#462/#465/#466 extended backend-independent memory browser coverage across the `/memory` index, consolidation board, scopes manager, and knowledge graph.
+- PR #467 added the webhook delivery-history viewer over the existing delivery-list route with focused WebhookDeliveriesPanel unit coverage.
+- PR #468 added backend-independent browser coverage for dynamic `/spaces/[id]` and `/tasks/[id]` detail routes.
 - PR #391 added direct control-plane route coverage for the session `dispatch-config` endpoint and `sync-conflicts` list/detail/resolve/count handlers on current `main`.
 - The direct `72c618c6` follow-up added `docs/QUICKSTART-MESH.md` for the already-delivered mesh bootstrap flow.
 - PRs #398/#400/#401/#402 cleared the 2026-04-13 dependency-audit and DAST WebSocket fuzz follow-ups, and PR #404 synced this status back into roadmap/plans.
