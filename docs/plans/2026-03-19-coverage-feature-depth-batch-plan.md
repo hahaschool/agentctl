@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 >
-> **Status update (2026-04-14):** Roadmap §20.1-§20.8 are delivered on `main`: task batches 1-5 landed via PRs #259, #256, #261, #258, and #257; §20.2 and §20.3 landed via PRs #266 and #265; §20.4 Memory Dashboard activation landed later; and §20.5 gained additional browser-depth follow-ups with `/logs` Security Findings Playwright coverage in PR #454 and `/memory/browser` facts-flow coverage in PR #455.
+> **Status update (2026-04-14):** Roadmap §20.1-§20.8 are delivered on `main`: task batches 1-5 landed via PRs #259, #256, #261, #258, and #257; §20.2 and §20.3 landed via PRs #266 and #265; §20.4 Memory Dashboard activation landed later; and §20.5 gained additional browser-depth follow-ups with `/logs` Security Findings Playwright coverage in PR #454, `/memory/browser` facts-flow coverage in PR #455, and `/memory/import` wizard completion/cancellation coverage in PR #457.
 
 **Goal:** Land the highest-value backlog from roadmap section 20 without destabilizing `main`, starting with isolated control-plane route coverage that can run in parallel and merge cleanly.
 
