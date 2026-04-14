@@ -5,6 +5,8 @@
 **Branch**: `feat/collaboration-phase5-intelligence`
 **Depends on**: Phase 1 (Spaces), Phase 2 (Agent Bus), Phase 3 (Task Graph + Fleet), Phase 4 (Context Bridge) -- all delivered
 
+> Status sync (2026-04-14): roadmap §10.5 is delivered. PR #474 added the `/tasks/[id]` auto-decompose web action over the existing decomposition routes, and PR #478 added browser coverage for preview/apply plus the stale-preview guard after editing the task description.
+
 ## Problem
 
 Today, task-to-agent assignment is manual. A human creates a TaskGraph, manually assigns TaskDefinitions to agent profiles, and hopes the capabilities match. There is no feedback loop: the system does not learn which agents are effective at which tasks, approval gates always use the same hardcoded timeouts, and notifications are broadcast uniformly regardless of urgency or recipient preference.
