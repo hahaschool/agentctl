@@ -6,6 +6,7 @@ import {
   Compass,
   Database,
   ExternalLink,
+  FileClock,
   Gauge,
   GitMerge,
   ListTree,
@@ -76,6 +77,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/conflicts', label: 'Conflicts', icon: GitMerge },
   { href: '/mesh-peers', label: 'Mesh Peers', icon: Wifi },
   { href: '/security-findings', label: 'Security', icon: ShieldAlert },
+  { href: '/audit', label: 'Audit', icon: FileClock },
   { href: '/webhooks', label: 'Webhooks', icon: Webhook },
 ];
 
