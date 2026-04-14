@@ -31,7 +31,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      security-events: write
 
     strategy:
       fail-fast: false
@@ -112,15 +111,18 @@ jobs:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
-      # ── Upload SARIF to GitHub Security tab ──────────────────────
-      # Non-blocking: Code Scanning may not be enabled on the repo
-      - name: Upload Trivy SARIF to GitHub Security
+      # ── Preserve scanner outputs ─────────────────────────────────
+      # Security-tab SARIF uploads are covered by security-audit.yml.
+      # Keeping this publish workflow artifact-only avoids making image
+      # publication depend on github/codeql-action setup availability.
+      - name: Upload Trivy SARIF artifact
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
-          sarif_file: trivy-${{ matrix.package }}.sarif
-          category: trivy-${{ matrix.package }}
+          name: trivy-sarif-${{ matrix.package }}
+          path: trivy-${{ matrix.package }}.sarif
+          retention-days: 90
 
       # ── Grype vulnerability scan ─────────────────────────────────
       - name: Run Grype vulnerability scanner
@@ -146,16 +148,8 @@ jobs:
             echo "::warning::Grype SARIF is missing, empty, or invalid at '$sarif'; skipping SARIF upload and artifact."
           fi
 
-      - name: Upload Grype SARIF to GitHub Security
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
-        if: always() && steps.grype-sarif.outputs.path != ''
-        with:
-          sarif_file: ${{ steps.grype-sarif.outputs.path }}
-          category: grype-${{ matrix.package }}
-
       - name: Upload Grype report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         continue-on-error: true
         if: always() && steps.grype-sarif.outputs.path != ''
         with:
@@ -178,7 +172,7 @@ jobs:
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: sbom-${{ matrix.package }}
