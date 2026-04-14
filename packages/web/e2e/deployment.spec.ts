@@ -115,6 +115,15 @@ test.describe('Deployment page', () => {
       timeout: 15_000,
     });
     await expect(page.getByRole('heading', { name: /promote to beta/i })).toBeVisible();
+    await expect(
+      page.getByText(
+        /GitHub-triggered beta promotion remains gated until the beta host has a dedicated agentctl-beta self-hosted runner/i,
+      ),
+    ).toBeVisible();
+    await expect(page.getByText(/BETA_SELF_HOSTED_RUNNER_READY/i)).toBeVisible();
+    await expect(
+      page.getByText(/Use local\/manual promotion from dev-1 or dev-2 as the safe path/i),
+    ).toBeVisible();
     await expect(page.getByText('db:agentctl_dev_1')).toBeVisible();
     await expect(page.getByText('db:agentctl_dev_2')).toBeVisible();
     await expect(page.getByText('db:agentctl_beta')).toBeVisible();
