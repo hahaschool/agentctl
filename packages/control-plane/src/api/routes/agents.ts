@@ -198,7 +198,7 @@ export const agentRoutes: FastifyPluginAsync<AgentRoutesOptions> = async (app, o
   // Agent CRUD (only available when dbRegistry is configured)
   // ---------------------------------------------------------------------------
 
-  const VALID_RUNTIMES = AGENT_RUNTIMES.map((r) => r.value);
+  const VALID_RUNTIMES = AGENT_RUNTIMES.map((runtime: { value: AgentRuntime }) => runtime.value);
 
   app.post<{
     Body: {
