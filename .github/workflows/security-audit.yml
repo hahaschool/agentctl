@@ -19,6 +19,10 @@ permissions:
   actions: read
   pull-requests: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ── CodeQL static analysis ──────────────────────────────────────
   codeql:
@@ -214,6 +218,7 @@ jobs:
 
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - image: agentctl-control-plane
@@ -267,7 +272,7 @@ jobs:
           output: sbom-${{ matrix.image }}.cdx.json
 
       - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sbom-${{ matrix.image }}
           path: sbom-${{ matrix.image }}.cdx.json

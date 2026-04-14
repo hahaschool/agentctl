@@ -18,6 +18,8 @@
 
 > Follow-up sync (2026-04-14): PR #486 added `/memory/browser` provenance filters, PR #487 added task auto-decompose apply-failure browser coverage, PR #488 added webhook delivery-list retry coverage, and PRs #489/#490 synced roadmap status through `main@d868742b`. GitHub reported 0 open code-scanning alerts, 0 open Dependabot alerts, and 0 open secret-scanning alerts at that checkpoint.
 
+> Follow-up sync (2026-04-14): after PR #504 landed on `main@8a9cda1b`, Build & Publish Docker Images run `24403340306` first failed twice in `Build control-plane` setup because GitHub returned 429 while downloading `github/codeql-action/upload-sarif`; later reruns restored the latest main checks to green. The active CI hotfix removes duplicate Security-tab SARIF uploads from `build-images.yml`, keeps Trivy/Grype/SBOM outputs as artifacts, leaves Security Audit as the single workflow responsible for Security-tab SARIF uploads, and caps Security Audit's container-scan matrix at one concurrent image to reduce repeated `codeql-action` setup downloads during busy merge windows.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
