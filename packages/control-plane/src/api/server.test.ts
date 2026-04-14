@@ -1,10 +1,37 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createMockLogger } from './routes/test-helpers.js';
 import { createServer } from './server.js';
 
 const logger = createMockLogger();
+
+const { mockMaintenanceRun } = vi.hoisted(() => ({
+  mockMaintenanceRun: vi.fn(),
+}));
+
+vi.mock('../memory/knowledge-maintenance.js', () => ({
+  KnowledgeMaintenance: vi.fn().mockImplementation(() => ({
+    run: mockMaintenanceRun,
+  })),
+}));
+
+function makeMaintenanceResult() {
+  return {
+    staleEntries: [],
+    deletedFileEntries: [],
+    synthesisClusters: [],
+    coverageReport: {
+      covered: [],
+      gaps: [],
+      totalDirectories: 0,
+      coveredCount: 0,
+      gapCount: 0,
+    },
+    consolidationItems: [],
+    report: null,
+  };
+}
 
 // ===========================================================================
 // Production CORS behaviour
@@ -293,6 +320,10 @@ describe('metrics tracking self-exclusion', () => {
 // ===========================================================================
 
 describe('conditional route registration', () => {
+  afterEach(() => {
+    mockMaintenanceRun.mockReset();
+  });
+
   describe('without optional dependencies', () => {
     let app: FastifyInstance;
 
@@ -383,6 +414,49 @@ describe('conditional route registration', () => {
       // Should not be 404 — the route exists even if it returns an error
       // because repeatableJobs is null
       expect(response.statusCode).not.toBe(404);
+    });
+  });
+
+  describe('with memory maintenance dependencies', () => {
+    it('registers POST /api/memory/maintenance on the control-plane server', async () => {
+      mockMaintenanceRun.mockResolvedValueOnce(makeMaintenanceResult());
+      const app = await createServer({
+        logger,
+        pgPool: { query: vi.fn() } as never,
+        memoryStore: {
+          addConsolidationItem: vi.fn(),
+          recordFeedback: vi.fn(),
+        } as never,
+      });
+      await app.ready();
+
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/memory/maintenance',
+          payload: { scope: 'global' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          ok: true,
+          summary: {
+            staleEntries: 0,
+            deletedFileEntries: 0,
+            synthesisClusters: 0,
+            consolidationItems: 0,
+            coverageReport: {
+              totalDirectories: 0,
+              covered: 0,
+              gaps: 0,
+            },
+            reportId: null,
+          },
+        });
+        expect(mockMaintenanceRun).toHaveBeenCalledWith('global');
+      } finally {
+        await app.close();
+      }
     });
   });
 });

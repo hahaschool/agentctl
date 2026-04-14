@@ -71,6 +71,7 @@ import { fileProxyRoutes } from './routes/files.js';
 import { gitProxyRoutes } from './routes/git.js';
 import { handoffRoutes } from './routes/handoffs.js';
 import { healthRoutes } from './routes/health.js';
+import { knowledgeMaintenanceRoutes } from './routes/knowledge-maintenance.js';
 import { loopProxyRoutes } from './routes/loop.js';
 import { machineCapabilitiesRoutes } from './routes/machine-capabilities.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
@@ -131,6 +132,7 @@ type CreateServerOptions = {
     MemoryStore,
     | 'addEdge'
     | 'addFact'
+    | 'addConsolidationItem'
     | 'deleteEdge'
     | 'deleteFact'
     | 'getFact'
@@ -522,6 +524,15 @@ export async function createServer({
       pool: pgPool,
       logger,
     });
+
+    if (memoryStore) {
+      await app.register(knowledgeMaintenanceRoutes, {
+        prefix: '/api/memory/maintenance',
+        pool: pgPool,
+        memoryStore,
+        logger,
+      });
+    }
   }
 
   // Register memory import routes (in-memory job tracking, no DB required).

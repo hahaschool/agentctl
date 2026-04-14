@@ -30,9 +30,14 @@ const maintenanceBodySchema = z.object({
   scope: z.string().max(MAX_SCOPE_LENGTH).optional(),
 });
 
+type KnowledgeMaintenanceRouteMemoryStore = Pick<
+  MemoryStore,
+  'addConsolidationItem' | 'addFact' | 'recordFeedback'
+>;
+
 export type KnowledgeMaintenanceRoutesOptions = {
   pool: Pool;
-  memoryStore: MemoryStore;
+  memoryStore: KnowledgeMaintenanceRouteMemoryStore;
   logger: Logger;
   projectRoot?: string;
 };

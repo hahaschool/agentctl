@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -179,7 +179,9 @@ describe('MemoryMaintenancePage', () => {
 
     render(<MemoryMaintenancePage />);
     fireEvent.click(screen.getByRole('button', { name: /run memory maintenance/i }));
-    capturedOnSuccess?.(sampleResponse);
+    act(() => {
+      capturedOnSuccess?.(sampleResponse);
+    });
 
     await waitFor(() => {
       expect(screen.getByText('Stale path references')).toBeDefined();
@@ -206,30 +208,32 @@ describe('MemoryMaintenancePage', () => {
 
     render(<MemoryMaintenancePage />);
     fireEvent.click(screen.getByRole('button', { name: /run memory maintenance/i }));
-    capturedOnSuccess?.({
-      ok: true,
-      summary: {
-        staleEntries: 0,
-        deletedFileEntries: 0,
-        synthesisClusters: 0,
-        consolidationItems: 0,
-        coverageReport: { totalDirectories: 5, covered: 5, gaps: 0 },
-        reportId: null,
-      },
-      result: {
-        staleEntries: [],
-        deletedFileEntries: [],
-        synthesisClusters: [],
-        coverageReport: {
-          covered: [],
-          gaps: [],
-          totalDirectories: 5,
-          coveredCount: 5,
-          gapCount: 0,
+    act(() => {
+      capturedOnSuccess?.({
+        ok: true,
+        summary: {
+          staleEntries: 0,
+          deletedFileEntries: 0,
+          synthesisClusters: 0,
+          consolidationItems: 0,
+          coverageReport: { totalDirectories: 5, covered: 5, gaps: 0 },
+          reportId: null,
         },
-        consolidationItems: [],
-        report: null,
-      },
+        result: {
+          staleEntries: [],
+          deletedFileEntries: [],
+          synthesisClusters: [],
+          coverageReport: {
+            covered: [],
+            gaps: [],
+            totalDirectories: 5,
+            coveredCount: 5,
+            gapCount: 0,
+          },
+          consolidationItems: [],
+          report: null,
+        },
+      });
     });
 
     await waitFor(() => {

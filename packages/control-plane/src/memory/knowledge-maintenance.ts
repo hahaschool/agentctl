@@ -108,9 +108,14 @@ export type MaintenanceResult = {
   report: MemoryReport | null;
 };
 
+type KnowledgeMaintenanceMemoryStore = Pick<
+  MemoryStore,
+  'addConsolidationItem' | 'addFact' | 'recordFeedback'
+>;
+
 export type KnowledgeMaintenanceOptions = {
   pool: Pool;
-  memoryStore: MemoryStore;
+  memoryStore: KnowledgeMaintenanceMemoryStore;
   logger: Logger;
   /** Absolute path to the git repository root. Defaults to cwd. */
   projectRoot?: string;
@@ -135,7 +140,7 @@ function sanitizeGitEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 export class KnowledgeMaintenance {
   private readonly pool: Pool;
-  private readonly memoryStore: MemoryStore;
+  private readonly memoryStore: KnowledgeMaintenanceMemoryStore;
   private readonly logger: Logger;
   private readonly projectRoot: string;
 
