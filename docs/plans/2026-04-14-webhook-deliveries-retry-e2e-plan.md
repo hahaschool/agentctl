@@ -1,6 +1,6 @@
 # Webhook Deliveries Retry E2E Plan
 
-Status: In progress in PR #488 on 2026-04-14
+Status: Delivered in PR #488 on 2026-04-14
 Owner: Codex
 Roadmap: §16.1, §20.5, §20.9
 
@@ -23,11 +23,11 @@ The remaining browser gap is the operator recovery path after the delivery-list 
 - The delivery-list error state shows the backend message `Delivery history unavailable`.
 - Clicking **Retry** sends another GET request and renders the recovered delivery row.
 - The recovered row shows the expected event, failed status, HTTP status, and attempt count.
-- Focused Playwright, lint, and diff-check verification pass before PR handoff.
+- Focused Playwright, lint, and diff-check verification passed before PR handoff.
 
 ## Verification
 
-Planned commands:
+Verified commands:
 
 ```bash
 WEB_PORT=5385 pnpm --filter @agentctl/web exec playwright test e2e/webhook-deliveries.spec.ts
