@@ -8,14 +8,21 @@ import type { SyncPeer } from '@/lib/api';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockSyncPeersQuery, mockUsePingSyncPeer, mockToastSuccess, mockToastError } = vi.hoisted(
-  () => ({
-    mockSyncPeersQuery: vi.fn(),
-    mockUsePingSyncPeer: vi.fn(),
-    mockToastSuccess: vi.fn(),
-    mockToastError: vi.fn(),
-  }),
-);
+const {
+  mockSyncPeersQuery,
+  mockUsePingSyncPeer,
+  mockUseUpsertSyncPeer,
+  mockUseDeleteSyncPeer,
+  mockToastSuccess,
+  mockToastError,
+} = vi.hoisted(() => ({
+  mockSyncPeersQuery: vi.fn(),
+  mockUsePingSyncPeer: vi.fn(),
+  mockUseUpsertSyncPeer: vi.fn(),
+  mockUseDeleteSyncPeer: vi.fn(),
+  mockToastSuccess: vi.fn(),
+  mockToastError: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Mock dependencies — BEFORE the component import
@@ -62,6 +69,8 @@ vi.mock('@/components/Toast', () => ({
 vi.mock('@/lib/queries', () => ({
   syncPeersQuery: () => mockSyncPeersQuery(),
   usePingSyncPeer: () => mockUsePingSyncPeer(),
+  useUpsertSyncPeer: () => mockUseUpsertSyncPeer(),
+  useDeleteSyncPeer: () => mockUseDeleteSyncPeer(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -132,6 +141,8 @@ describe('MeshPeersPage', () => {
       queryFn: vi.fn().mockResolvedValue({ peers: [makePeer()] }),
     });
     mockUsePingSyncPeer.mockReturnValue(makeMutationHook());
+    mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook());
+    mockUseDeleteSyncPeer.mockReturnValue(makeMutationHook());
   });
 
   afterEach(() => {
@@ -220,6 +231,8 @@ describe('MeshPeersPage', () => {
     await waitFor(() => {
       const btn = screen.getByTestId('ping-self-node') as HTMLButtonElement;
       expect(btn.disabled).toBe(true);
+      const deleteBtn = screen.getByTestId('delete-self-node') as HTMLButtonElement;
+      expect(deleteBtn.disabled).toBe(true);
     });
   });
 
@@ -253,6 +266,89 @@ describe('MeshPeersPage', () => {
 
     fireEvent.click(screen.getByTestId('ping-node-x'));
     expect(mutate).toHaveBeenCalledWith('node-x', expect.any(Object));
+  });
+
+  it('submits a new peer through the upsert mutation', async () => {
+    const mutate = vi.fn(
+      (_body: unknown, opts: { onSuccess?: (r: { ok: boolean; peer: SyncPeer }) => void }) => {
+        opts.onSuccess?.({ ok: true, peer: makePeer({ machineId: 'node-new' }) });
+      },
+    );
+    mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+    fireEvent.click(screen.getByTestId('add-mesh-peer'));
+
+    fireEvent.change(screen.getByLabelText('Machine ID'), { target: { value: 'node-new' } });
+    fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'node.tail.ts.net' } });
+    fireEvent.change(screen.getByLabelText('Sync URL'), {
+      target: { value: 'https://node.tail.ts.net:8080' },
+    });
+    fireEvent.change(screen.getByLabelText('Tailscale IP'), { target: { value: '100.64.0.12' } });
+    fireEvent.change(screen.getByLabelText('Sync interval seconds'), { target: { value: '45' } });
+    fireEvent.change(screen.getByLabelText('Public key'), { target: { value: 'pubkey' } });
+    fireEvent.click(screen.getByTestId('mesh-peer-submit'));
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        machineId: 'node-new',
+        hostname: 'node.tail.ts.net',
+        syncUrl: 'https://node.tail.ts.net:8080',
+        tailscaleIp: '100.64.0.12',
+        role: 'full',
+        syncStatus: 'unknown',
+        syncIntervalMs: 45_000,
+        isSelf: false,
+        publicKey: 'pubkey',
+      },
+      expect.any(Object),
+    );
+    expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('saved'));
+  });
+
+  it('shows add-peer validation errors before mutation', async () => {
+    const mutate = vi.fn();
+    mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+    fireEvent.click(screen.getByTestId('add-mesh-peer'));
+    fireEvent.change(screen.getByLabelText('Machine ID'), { target: { value: 'node-new' } });
+    fireEvent.change(screen.getByLabelText('Hostname'), { target: { value: 'node.tail.ts.net' } });
+    fireEvent.change(screen.getByLabelText('Sync URL'), { target: { value: 'ftp://node' } });
+    fireEvent.click(screen.getByTestId('mesh-peer-submit'));
+
+    expect(screen.getByTestId('mesh-peer-form-error').textContent).toContain('valid http(s) URL');
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('invokes the delete mutation after confirmation', async () => {
+    const mutate = vi.fn((_machineId: string, opts: { onSuccess?: () => void }) => {
+      opts.onSuccess?.();
+    });
+    mockUseDeleteSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({ peers: [makePeer({ machineId: 'node-delete' })] }),
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('delete-node-delete')).toBeDefined());
+    fireEvent.click(screen.getByTestId('delete-node-delete'));
+    expect(screen.getByTestId('mesh-peer-delete-confirm')).toBeDefined();
+    fireEvent.click(screen.getByTestId('confirm-delete-mesh-peer'));
+
+    expect(mutate).toHaveBeenCalledWith('node-delete', expect.any(Object));
+    expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('deleted'));
   });
 
   it('shows a success toast when the ping resolves reachable', async () => {

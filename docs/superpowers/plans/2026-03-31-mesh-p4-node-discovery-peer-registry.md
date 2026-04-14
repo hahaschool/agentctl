@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-31-mesh-p4-node-discovery-peer-registry-design.md` (v3)
 
-> Status note (2026-04-14): the backend P4 peer registry, discovery, health check, auth foundation, and REST API shipped earlier in PR #376. PR #425 added the missing standalone `/mesh-peers` web read + ping surface using the existing `GET /api/sync/peers` and `POST /api/sync/peers/:machineId/ping` endpoints; PR #431 added focused Playwright coverage for render, empty, ping-success, and ping-failure states; PR #452 hardened peer registration and ping URL validation against unsafe protocols plus local/metadata SSRF targets. Create/update/delete UI remains intentionally deferred.
+> Status note (2026-04-14): the backend P4 peer registry, discovery, health check, auth foundation, and REST API shipped earlier in PR #376. PR #425 added the missing standalone `/mesh-peers` web read + ping surface using the existing `GET /api/sync/peers` and `POST /api/sync/peers/:machineId/ping` endpoints; PR #431 added focused Playwright coverage for render, empty, ping-success, and ping-failure states; PR #452 hardened peer registration and ping URL validation against unsafe protocols plus local/metadata SSRF targets. The 2026-04-14 follow-up adds the remaining `/mesh-peers` Add/Delete UI over the existing `POST/DELETE /api/sync/peers` registry API, plus backend-independent Playwright coverage for create, delete, and validation/error states.
 
 ---
 

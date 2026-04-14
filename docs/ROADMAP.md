@@ -1947,7 +1947,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] Peer auth foundation: `peer-auth.ts` with Ed25519 signing/verification (reuses dispatch signing)
 - [x] Per-peer health check with adaptive interval (30s default → 5min backoff on failure)
 - [x] REST API: `GET/POST/DELETE /api/sync/peers`, `POST /:machineId/ping`
-- [x] Standalone `/mesh-peers` web page with sidebar entry, peer status table, 30s polling, and per-peer ping action over the existing list/ping APIs *(PR #425; render/empty/ping-success/ping-failure Playwright coverage in PR #431; sync peer URL/SSRF validation hardening in PR #452; upsert/delete UI intentionally deferred)*
+- [x] Standalone `/mesh-peers` web page with sidebar entry, peer status table, 30s polling, per-peer ping action, and Add/Delete peer UI over the existing registry APIs *(PR #425; render/empty/ping-success/ping-failure Playwright coverage in PR #431; sync peer URL/SSRF validation hardening in PR #452; Add/Delete UI plus create/delete/validation Playwright coverage in PR pending from `agent/codex-mesh-peers-ui`)*
 
 ### 33.5 Unified CP + Worker per Machine (P5) — Delivered
 
