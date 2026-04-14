@@ -109,6 +109,7 @@ export type {
 // Domain module re-exports (types + helpers).
 // ---------------------------------------------------------------------------
 
+export * from './api/agent-profiles';
 export * from './api/agents';
 export * from './api/core';
 export * from './api/deployment';
@@ -121,6 +122,7 @@ export * from './api/spaces';
 export * from './api/sync';
 export * from './api/webhooks';
 
+import { agentProfilesApi } from './api/agent-profiles';
 import { agentsApi } from './api/agents';
 import { type Attachment, healthApi } from './api/core';
 import { deploymentApi } from './api/deployment';
@@ -141,6 +143,7 @@ import { webhooksApi } from './api/webhooks';
 export const api = {
   ...healthApi,
   ...agentsApi,
+  ...agentProfilesApi,
   ...sessionsApi,
   ...settingsApi,
   ...securityApi,

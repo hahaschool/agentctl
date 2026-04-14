@@ -842,6 +842,7 @@ Step-by-step deployment documentation (`docs/DEPLOYMENT.md`).
 - [x] Agent Bus: Postgres outbox + NATS JetStream (EventBus interface + MockEventBus for CI) *(PR #95)*
 - [x] AgentMessage protocol: request/response/inform/delegate/escalate/ack with typed payloads *(PR #95)*
 - [x] Agent identity: AgentProfile + AgentInstance with CRUD routes *(PR #95)*
+- [x] Agent Profiles web UI: `/agent-profiles` CRUD page — list, create dialog, delete confirm, sidebar entry *(frontend shipped on top of existing backend)*
 - [x] Approval gates: multi-decision support + timeout policies *(PR #95)*
 - [x] WebSocket event gateway with visibility filtering *(PR #95)*
 - [x] Subscription filters on SpaceMember *(PR #95)*
