@@ -22,6 +22,12 @@ import type {
   ContextRef,
   CreateManagedSessionRequest,
   CrossSpaceSubscription,
+  DecomposedEdge,
+  DecomposedTask,
+  DecompositionConstraints,
+  DecompositionRequest,
+  DecompositionResponse,
+  DecompositionResult,
   DiscoveredMcpServer,
   DiscoveredSkill,
   DispatchConfigSnapshot,
@@ -97,12 +103,12 @@ export type {
   ApprovalTimeoutPolicy,
   ContextRef,
   CrossSpaceSubscription,
-  MobilePushDevice,
-  NotificationChannel,
-  NotificationPreference,
-  NotificationPriority,
-  PermissionRequest,
-  PermissionRequestStatus,
+  DecomposedEdge,
+  DecomposedTask,
+  DecompositionConstraints,
+  DecompositionRequest,
+  DecompositionResponse,
+  DecompositionResult,
   DiscoveredMcpServer,
   DiscoveredSkill,
   EventSenderType,
@@ -113,6 +119,12 @@ export type {
   McpServerTemplate,
   MemoryScopeRecord,
   MemoryScopeType,
+  MobilePushDevice,
+  NotificationChannel,
+  NotificationPreference,
+  NotificationPriority,
+  PermissionRequest,
+  PermissionRequestStatus,
   Space,
   SpaceEvent,
   SpaceEventType,
@@ -253,6 +265,15 @@ export type TaskGraphValidation = {
   valid: boolean;
   errors: string[];
   topologicalOrder?: string[];
+};
+
+/**
+ * Response from `POST /api/decompose/preview` — dry run of a decomposition.
+ * Only the LLM result + validation errors; no graph is persisted.
+ */
+export type DecompositionPreviewResponse = {
+  result: DecompositionResult;
+  validationErrors: readonly string[];
 };
 
 export type SessionsPage = {
@@ -1945,6 +1966,22 @@ export const api = {
 
   createTaskRun: (body: { definitionId: string; spaceId?: string; threadId?: string }) =>
     request<TaskRun>('/api/task-runs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  // ---------------------------------------------------------------------------
+  // Auto-decompose (LLM-powered task breakdown)
+  // ---------------------------------------------------------------------------
+
+  decomposeTaskPreview: (body: { description: string; constraints?: DecompositionConstraints }) =>
+    request<DecompositionPreviewResponse>('/api/decompose/preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  decomposeTask: (body: DecompositionRequest) =>
+    request<DecompositionResponse>('/api/decompose', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

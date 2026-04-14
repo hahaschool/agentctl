@@ -689,6 +689,32 @@ export function useCreateTaskRun() {
   });
 }
 
+/**
+ * Preview LLM-based task decomposition (dry run, no persistence).
+ * Used by the AutoDecomposeDialog to show proposed subtasks before apply.
+ */
+export function useDecomposeTaskPreview() {
+  return useMutation({
+    mutationFn: api.decomposeTaskPreview,
+  });
+}
+
+/**
+ * Apply LLM-based task decomposition — creates a new TaskGraph.
+ * Invalidates task-graphs list so the new graph shows up immediately.
+ */
+export function useDecomposeTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: api.decomposeTask,
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskGraphs });
+      // New graph has its own id — ensure any cached entry is invalidated.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskGraph(data.graphId) });
+    },
+  });
+}
+
 export function useCreateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
