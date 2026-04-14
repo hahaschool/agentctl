@@ -1771,6 +1771,26 @@ export function syncPeersQuery() {
   });
 }
 
+export function useUpsertSyncPeer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.upsertSyncPeer,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.syncPeers });
+    },
+  });
+}
+
+export function useDeleteSyncPeer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (machineId: string) => api.deleteSyncPeer(machineId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.syncPeers });
+    },
+  });
+}
+
 /**
  * Ping a mesh sync peer via its `/health` endpoint. Invalidates the peers
  * list so the UI reflects the updated `syncStatus` and `lastSeen` values.
