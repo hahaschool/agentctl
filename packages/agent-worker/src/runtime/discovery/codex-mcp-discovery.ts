@@ -1,5 +1,5 @@
 import { join, normalize, resolve } from 'node:path';
-import type { McpServerSource } from '@agentctl/shared';
+import type { DiscoveredMcpServer, McpServerSource } from '@agentctl/shared';
 import { parse } from 'smol-toml';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
@@ -7,8 +7,6 @@ import {
   safeReadFileAtomic,
   sanitizePath,
 } from '../../utils/path-security.js';
-
-import type { DiscoveredMcpServerWithProvenance } from './_type-stubs.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -57,13 +55,13 @@ function resolveCodexConfigPath(
  * Discover MCP servers from a Codex `.codex/config.toml` file.
  *
  * Parses the `[mcp_servers]` TOML table and maps each entry to a
- * `DiscoveredMcpServerWithProvenance`. Returns an empty array when the
- * config file is missing, unreadable, or malformed.
+ * `DiscoveredMcpServer`. Returns an empty array when the config file
+ * is missing, unreadable, or malformed.
  */
 export async function discoverCodexMcpServers(
   basePath: string,
   sourceType: McpServerSource = 'global',
-): Promise<DiscoveredMcpServerWithProvenance[]> {
+): Promise<DiscoveredMcpServer[]> {
   const configLocation = resolveCodexConfigPath(basePath);
   if (!configLocation) {
     return [];

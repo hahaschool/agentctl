@@ -1,6 +1,6 @@
 import { join, normalize, resolve } from 'node:path';
 
-import type { ManagedRuntime } from '@agentctl/shared';
+import type { DiscoveredSkill, ManagedRuntime } from '@agentctl/shared';
 import {
   DEFAULT_DENIED_PATH_SEGMENTS,
   findDeniedPathSegment,
@@ -8,8 +8,6 @@ import {
   safeReadFile,
   sanitizePath,
 } from '../../utils/path-security.js';
-
-import type { DiscoveredSkill } from './_type-stubs.js';
 
 // ---------------------------------------------------------------------------
 // Constants

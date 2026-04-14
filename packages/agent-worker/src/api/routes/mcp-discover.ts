@@ -6,7 +6,6 @@ import { isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 import type { Logger } from 'pino';
 
-import type { DiscoveredMcpServerWithProvenance } from '../../runtime/discovery/_type-stubs.js';
 import { discoverCodexMcpServers } from '../../runtime/discovery/codex-mcp-discovery.js';
 import { DiscoveryCache } from '../../runtime/discovery/discovery-cache.js';
 import {
@@ -29,7 +28,7 @@ type DiscoverQuerystring = {
 };
 
 type DiscoverResult = {
-  discovered: (DiscoveredMcpServer | DiscoveredMcpServerWithProvenance)[];
+  discovered: DiscoveredMcpServer[];
   sources: Array<{ path: string; count: number }>;
   cached: boolean;
 };
@@ -40,9 +39,7 @@ type DiscoverResult = {
 
 const CACHE_TTL_MS = 60_000;
 
-export const mcpDiscoverCache = new DiscoveryCache<
-  (DiscoveredMcpServer | DiscoveredMcpServerWithProvenance)[]
->(CACHE_TTL_MS);
+export const mcpDiscoverCache = new DiscoveryCache<DiscoveredMcpServer[]>(CACHE_TTL_MS);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -254,9 +251,7 @@ export async function discoverAllMcpServers(projectPath?: string): Promise<Disco
  * Discover MCP servers for the Codex runtime.
  * Scans global (~/) and project-scoped .codex/config.toml files.
  */
-async function discoverAllCodexMcpServers(
-  projectPath?: string,
-): Promise<DiscoveredMcpServerWithProvenance[]> {
+async function discoverAllCodexMcpServers(projectPath?: string): Promise<DiscoveredMcpServer[]> {
   const home = homedir();
   const parsedProjectPath = projectPath === undefined ? undefined : parseProjectPath(projectPath);
   const safeProjectPath = parsedProjectPath?.ok ? parsedProjectPath.path : undefined;
@@ -267,7 +262,7 @@ async function discoverAllCodexMcpServers(
 
   // Deduplicate: project-level entries win over global
   const seen = new Set<string>();
-  const results: DiscoveredMcpServerWithProvenance[] = [];
+  const results: DiscoveredMcpServer[] = [];
 
   for (const server of projectServers) {
     if (!seen.has(server.name)) {
