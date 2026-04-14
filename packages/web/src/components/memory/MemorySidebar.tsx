@@ -24,6 +24,11 @@ const MEMORY_NAV_ITEMS = [
     label: 'Synthesis',
     description: 'Preview structural lint and clusters',
   },
+  {
+    href: '/memory/maintenance',
+    label: 'Maintenance',
+    description: 'Lint stale facts and coverage gaps',
+  },
   { href: '/memory/reports', label: 'Reports', description: 'Generated summaries and exports' },
   { href: '/memory/import', label: 'Import', description: 'Bring in external memory sources' },
   { href: '/memory/scopes', label: 'Scopes', description: 'Inspect scope boundaries' },

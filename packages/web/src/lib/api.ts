@@ -51,6 +51,7 @@ import type {
   MemoryEdge,
   MemoryFact,
   MemoryObservation,
+  MemoryReport,
   MemoryScope,
   MemoryScopeRecord,
   MemoryScopeType,
@@ -574,6 +575,75 @@ export type MemorySynthesisLint = {
 export type MemorySynthesisResult = {
   lint: MemorySynthesisLint;
   synthesisGroups: readonly MemorySynthesisGroup[];
+};
+
+// Knowledge maintenance — section 7.4
+// Wire shape mirrors packages/control-plane/src/memory/knowledge-maintenance.ts
+
+export type MemoryMaintenanceStaleEntry = {
+  factId: string;
+  content: string;
+  referencedPaths: readonly string[];
+  reason: string;
+};
+
+export type MemoryMaintenanceDeletedFileEntry = {
+  factId: string;
+  content: string;
+  deletedFile: string;
+};
+
+export type MemoryMaintenanceSynthesisCluster = {
+  seedFactId: string;
+  factIds: readonly string[];
+  factContents: readonly string[];
+  proposedPrinciple: string;
+};
+
+export type MemoryMaintenanceCoverageGap = {
+  directory: string;
+  factCount: number;
+};
+
+export type MemoryMaintenanceCoverageEntry = {
+  directory: string;
+  factCount: number;
+};
+
+export type MemoryMaintenanceCoverageReport = {
+  covered: readonly MemoryMaintenanceCoverageEntry[];
+  gaps: readonly MemoryMaintenanceCoverageGap[];
+  totalDirectories: number;
+  coveredCount: number;
+  gapCount: number;
+};
+
+export type MemoryMaintenanceSummary = {
+  staleEntries: number;
+  deletedFileEntries: number;
+  synthesisClusters: number;
+  consolidationItems: number;
+  coverageReport: {
+    totalDirectories: number;
+    covered: number;
+    gaps: number;
+  };
+  reportId: string | null;
+};
+
+export type MemoryMaintenanceResult = {
+  staleEntries: readonly MemoryMaintenanceStaleEntry[];
+  deletedFileEntries: readonly MemoryMaintenanceDeletedFileEntry[];
+  synthesisClusters: readonly MemoryMaintenanceSynthesisCluster[];
+  coverageReport: MemoryMaintenanceCoverageReport;
+  consolidationItems: readonly ConsolidationItem[];
+  report: MemoryReport | null;
+};
+
+export type MemoryMaintenanceResponse = {
+  ok: boolean;
+  summary: MemoryMaintenanceSummary;
+  result: MemoryMaintenanceResult;
 };
 
 export type SpaceWithMembers = Space & { members: SpaceMember[] };
@@ -1625,6 +1695,12 @@ export const api = {
 
   runMemorySynthesis: (body?: { scope?: string }) =>
     request<{ ok: boolean; result: MemorySynthesisResult }>('/api/memory/synthesis', {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
+
+  runMemoryMaintenance: (body?: { scope?: string }) =>
+    request<MemoryMaintenanceResponse>('/api/memory/maintenance', {
       method: 'POST',
       body: JSON.stringify(body ?? {}),
     }),
