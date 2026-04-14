@@ -9,7 +9,17 @@ import type { AgentProfile, AgentRuntimeType } from '@agentctl/shared';
 import { request } from './core';
 
 export type { AgentProfile, AgentRuntimeType } from '@agentctl/shared';
-export { AGENT_RUNTIME_TYPES, isAgentRuntimeType } from '@agentctl/shared';
+
+export const AGENT_RUNTIME_TYPES = [
+  'claude-code',
+  'codex',
+  'openclaw',
+  'nanoclaw',
+] as const satisfies readonly AgentRuntimeType[];
+
+export function isAgentRuntimeType(value: string): value is AgentRuntimeType {
+  return (AGENT_RUNTIME_TYPES as readonly string[]).includes(value);
+}
 
 export type CreateAgentProfileInput = {
   readonly name: string;
