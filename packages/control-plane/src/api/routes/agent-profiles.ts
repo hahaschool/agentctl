@@ -104,6 +104,82 @@ export const agentProfileRoutes: FastifyPluginAsync<AgentProfileRoutesOptions> =
     },
   );
 
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      runtimeType?: string;
+      modelId?: string;
+      providerId?: string;
+      capabilities?: string[];
+      toolScopes?: string[];
+      maxTokensPerTask?: number | null;
+      maxCostPerHour?: number | null;
+    };
+  }>(
+    '/:id',
+    { schema: { tags: ['agent-identity'], summary: 'Update agent profile' } },
+    async (request, reply) => {
+      const body = request.body ?? {};
+
+      // Validate only fields that are actually present. Partial update semantics:
+      // missing fields are unchanged, explicit values must be well-formed.
+      if (body.name !== undefined) {
+        if (typeof body.name !== 'string' || body.name.trim().length === 0) {
+          return reply.code(400).send({
+            error: 'INVALID_NAME',
+            message: 'A non-empty "name" string is required',
+          });
+        }
+      }
+
+      if (body.runtimeType !== undefined && !isAgentRuntimeType(body.runtimeType)) {
+        return reply.code(400).send({
+          error: 'INVALID_RUNTIME_TYPE',
+          message: `runtimeType must be one of: ${AGENT_RUNTIME_TYPES.join(', ')}`,
+        });
+      }
+
+      if (body.modelId !== undefined) {
+        if (typeof body.modelId !== 'string' || body.modelId.length === 0) {
+          return reply.code(400).send({
+            error: 'INVALID_MODEL_ID',
+            message: 'A non-empty "modelId" string is required',
+          });
+        }
+      }
+
+      if (body.providerId !== undefined) {
+        if (typeof body.providerId !== 'string' || body.providerId.length === 0) {
+          return reply.code(400).send({
+            error: 'INVALID_PROVIDER_ID',
+            message: 'A non-empty "providerId" string is required',
+          });
+        }
+      }
+
+      const updated = await agentProfileStore.updateProfile(request.params.id, {
+        name: body.name !== undefined ? body.name.trim() : undefined,
+        runtimeType: body.runtimeType,
+        modelId: body.modelId,
+        providerId: body.providerId,
+        capabilities: body.capabilities,
+        toolScopes: body.toolScopes,
+        maxTokensPerTask: body.maxTokensPerTask,
+        maxCostPerHour: body.maxCostPerHour,
+      });
+
+      if (!updated) {
+        return reply.code(404).send({
+          error: 'PROFILE_NOT_FOUND',
+          message: 'Agent profile not found',
+        });
+      }
+
+      return updated;
+    },
+  );
+
   app.delete<{ Params: { id: string } }>(
     '/:id',
     { schema: { tags: ['agent-identity'], summary: 'Delete agent profile' } },

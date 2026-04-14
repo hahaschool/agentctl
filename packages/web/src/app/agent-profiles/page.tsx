@@ -17,6 +17,7 @@ import {
   agentProfilesApi,
   type CreateAgentProfileInput,
   isAgentRuntimeType,
+  type UpdateAgentProfileInput,
 } from '@/lib/api/agent-profiles';
 import { cn } from '@/lib/utils';
 
@@ -44,10 +45,10 @@ function parseCapabilityList(raw: string): readonly string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Create dialog
+// Form dialog (shared for Create + Edit)
 // ---------------------------------------------------------------------------
 
-type CreateDialogState = {
+type FormDialogState = {
   name: string;
   runtimeType: AgentRuntimeType;
   modelId: string;
@@ -56,7 +57,7 @@ type CreateDialogState = {
   toolScopes: string;
 };
 
-function emptyCreateState(): CreateDialogState {
+function emptyFormState(): FormDialogState {
   return {
     name: '',
     runtimeType: DEFAULT_RUNTIME,
@@ -67,40 +68,73 @@ function emptyCreateState(): CreateDialogState {
   };
 }
 
-type CreateDialogProps = {
+function stateFromProfile(profile: AgentProfile): FormDialogState {
+  return {
+    name: profile.name,
+    runtimeType: profile.runtimeType,
+    modelId: profile.modelId,
+    providerId: profile.providerId,
+    capabilities: profile.capabilities.join(', '),
+    toolScopes: profile.toolScopes.join(', '),
+  };
+}
+
+type FormDialogProps = {
   open: boolean;
+  mode: 'create' | 'edit';
+  initialProfile: AgentProfile | null;
   onClose: () => void;
-  onCreated: (profile: AgentProfile) => void;
+  onSaved: (profile: AgentProfile) => void;
 };
 
-function CreateAgentProfileDialog({
+function AgentProfileFormDialog({
   open,
+  mode,
+  initialProfile,
   onClose,
-  onCreated,
-}: CreateDialogProps): React.JSX.Element | null {
+  onSaved,
+}: FormDialogProps): React.JSX.Element | null {
   const toast = useToast();
-  const [state, setState] = useState<CreateDialogState>(() => emptyCreateState());
+  const [state, setState] = useState<FormDialogState>(() =>
+    initialProfile ? stateFromProfile(initialProfile) : emptyFormState(),
+  );
   const [error, setError] = useState<string | null>(null);
 
-  const openKey = open ? 'open' : 'closed';
+  // Reset state whenever the dialog is opened (or the target profile swaps).
+  const openKey = open ? `${mode}:${initialProfile?.id ?? 'new'}` : 'closed';
   const [lastKey, setLastKey] = useState(openKey);
   if (openKey !== lastKey) {
     setLastKey(openKey);
-    setState(emptyCreateState());
+    setState(initialProfile ? stateFromProfile(initialProfile) : emptyFormState());
     setError(null);
   }
 
-  const mutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: (input: CreateAgentProfileInput) => agentProfilesApi.createAgentProfile(input),
     onSuccess: (profile) => {
       toast.success(`Profile ${profile.name} created`);
-      onCreated(profile);
+      onSaved(profile);
       onClose();
     },
     onError: (err) => {
       setError(errorMessage(err, 'Failed to create agent profile'));
     },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: UpdateAgentProfileInput }) =>
+      agentProfilesApi.updateAgentProfile(id, body),
+    onSuccess: (profile) => {
+      toast.success(`Profile ${profile.name} updated`);
+      onSaved(profile);
+      onClose();
+    },
+    onError: (err) => {
+      setError(errorMessage(err, 'Failed to update agent profile'));
+    },
+  });
+
+  const isPending = createMutation.isPending || updateMutation.isPending;
 
   if (!open) return null;
 
@@ -134,8 +168,22 @@ function CreateAgentProfileDialog({
       return;
     }
     setError(null);
-    mutation.mutate(result.body);
+    if (mode === 'edit' && initialProfile) {
+      updateMutation.mutate({ id: initialProfile.id, body: result.body });
+    } else {
+      createMutation.mutate(result.body);
+    }
   };
+
+  const title = mode === 'edit' ? 'Edit agent profile' : 'New agent profile';
+  const submitLabel =
+    mode === 'edit'
+      ? isPending
+        ? 'Saving…'
+        : 'Save changes'
+      : isPending
+        ? 'Creating…'
+        : 'Create profile';
 
   return (
     <div
@@ -149,7 +197,7 @@ function CreateAgentProfileDialog({
         <form onSubmit={handleSubmit} className="flex flex-col" noValidate>
           <div className="px-5 py-3 border-b border-border">
             <h2 id="agent-profile-form-title" className="text-sm font-semibold text-foreground">
-              New agent profile
+              {title}
             </h2>
           </div>
 
@@ -280,18 +328,18 @@ function CreateAgentProfileDialog({
             <button
               type="button"
               onClick={onClose}
-              disabled={mutation.isPending}
+              disabled={isPending}
               className="px-3 py-1.5 rounded-md border border-border bg-muted text-xs text-foreground hover:bg-accent/10 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={isPending}
               data-testid="agent-profile-submit"
               className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
             >
-              {mutation.isPending ? 'Creating…' : 'Create profile'}
+              {submitLabel}
             </button>
           </div>
         </form>
@@ -306,11 +354,17 @@ function CreateAgentProfileDialog({
 
 type ProfileRowProps = {
   profile: AgentProfile;
+  onEdit: (profile: AgentProfile) => void;
   onDelete: (profile: AgentProfile) => void;
   deletingId: string | null;
 };
 
-function AgentProfileRow({ profile, onDelete, deletingId }: ProfileRowProps): React.JSX.Element {
+function AgentProfileRow({
+  profile,
+  onEdit,
+  onDelete,
+  deletingId,
+}: ProfileRowProps): React.JSX.Element {
   const thisRowIsDeleting = deletingId === profile.id;
   const capabilities = profile.capabilities.length === 0 ? '—' : profile.capabilities.join(', ');
 
@@ -337,20 +391,36 @@ function AgentProfileRow({ profile, onDelete, deletingId }: ProfileRowProps): Re
         <span className="font-mono break-words">{capabilities}</span>
       </td>
       <td className="px-4 py-3 align-top text-right whitespace-nowrap">
-        <button
-          type="button"
-          onClick={() => onDelete(profile)}
-          disabled={thisRowIsDeleting}
-          data-testid={`delete-${profile.id}`}
-          title="Delete profile"
-          className={cn(
-            'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
-            'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20',
-            'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10',
-          )}
-        >
-          {thisRowIsDeleting ? 'Deleting…' : 'Delete'}
-        </button>
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onEdit(profile)}
+            disabled={thisRowIsDeleting}
+            data-testid={`edit-${profile.id}`}
+            title="Edit profile"
+            className={cn(
+              'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+              'border-border bg-muted text-foreground hover:bg-accent/10',
+              'disabled:opacity-40 disabled:cursor-not-allowed',
+            )}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(profile)}
+            disabled={thisRowIsDeleting}
+            data-testid={`delete-${profile.id}`}
+            title="Delete profile"
+            className={cn(
+              'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+              'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20',
+              'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10',
+            )}
+          >
+            {thisRowIsDeleting ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -371,6 +441,7 @@ export function AgentProfilesPage(): React.JSX.Element {
   });
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingProfile, setEditingProfile] = useState<AgentProfile | null>(null);
   const [pendingDelete, setPendingDelete] = useState<AgentProfile | null>(null);
 
   const deleteMutation = useMutation({
@@ -382,9 +453,17 @@ export function AgentProfilesPage(): React.JSX.Element {
 
   const profiles = profilesData.data ?? [];
 
-  const handleCreated = useCallback((): void => {
+  const handleSaved = useCallback((): void => {
     void queryClient.invalidateQueries({ queryKey: AGENT_PROFILES_QUERY_KEY });
   }, [queryClient]);
+
+  const openEditDialog = useCallback((profile: AgentProfile): void => {
+    setEditingProfile(profile);
+  }, []);
+
+  const closeEditDialog = useCallback((): void => {
+    setEditingProfile(null);
+  }, []);
 
   const confirmDelete = useCallback((): void => {
     if (!pendingDelete) return;
@@ -499,6 +578,7 @@ export function AgentProfilesPage(): React.JSX.Element {
                   <AgentProfileRow
                     key={profile.id}
                     profile={profile}
+                    onEdit={openEditDialog}
                     onDelete={setPendingDelete}
                     deletingId={deletingId}
                   />
@@ -509,10 +589,20 @@ export function AgentProfilesPage(): React.JSX.Element {
         </div>
       )}
 
-      <CreateAgentProfileDialog
+      <AgentProfileFormDialog
         open={dialogOpen}
+        mode="create"
+        initialProfile={null}
         onClose={() => setDialogOpen(false)}
-        onCreated={handleCreated}
+        onSaved={handleSaved}
+      />
+
+      <AgentProfileFormDialog
+        open={editingProfile !== null}
+        mode="edit"
+        initialProfile={editingProfile}
+        onClose={closeEditDialog}
+        onSaved={handleSaved}
       />
 
       {pendingDelete && (

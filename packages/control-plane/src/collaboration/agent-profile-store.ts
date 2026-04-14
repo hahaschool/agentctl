@@ -19,6 +19,17 @@ type CreateProfileInput = {
   readonly maxCostPerHour?: number | null;
 };
 
+type UpdateProfileInput = {
+  readonly name?: string;
+  readonly runtimeType?: string;
+  readonly modelId?: string;
+  readonly providerId?: string;
+  readonly capabilities?: readonly string[];
+  readonly toolScopes?: readonly string[];
+  readonly maxTokensPerTask?: number | null;
+  readonly maxCostPerHour?: number | null;
+};
+
 type CreateInstanceInput = {
   readonly profileId: string;
   readonly machineId?: string | null;
@@ -77,6 +88,54 @@ export class AgentProfileStore {
   async listProfiles(): Promise<AgentProfile[]> {
     const rows = await this.db.select().from(agentProfiles);
     return rows.map((row) => this.toProfile(row));
+  }
+
+  async updateProfile(id: string, input: UpdateProfileInput): Promise<AgentProfile | null> {
+    const updateFields: Record<string, unknown> = {};
+
+    if (input.name !== undefined) {
+      updateFields.name = input.name;
+    }
+    if (input.runtimeType !== undefined) {
+      updateFields.runtimeType = input.runtimeType;
+    }
+    if (input.modelId !== undefined) {
+      updateFields.modelId = input.modelId;
+    }
+    if (input.providerId !== undefined) {
+      updateFields.providerId = input.providerId;
+    }
+    if (input.capabilities !== undefined) {
+      updateFields.capabilities = [...input.capabilities];
+    }
+    if (input.toolScopes !== undefined) {
+      updateFields.toolScopes = [...input.toolScopes];
+    }
+    if (input.maxTokensPerTask !== undefined) {
+      updateFields.maxTokensPerTask = input.maxTokensPerTask;
+    }
+    if (input.maxCostPerHour !== undefined) {
+      updateFields.maxCostPerHour = input.maxCostPerHour;
+    }
+
+    // If no fields provided, just return current state (or null if missing).
+    if (Object.keys(updateFields).length === 0) {
+      const existing = await this.getProfile(id);
+      return existing ?? null;
+    }
+
+    const rows = await this.db
+      .update(agentProfiles)
+      .set(updateFields)
+      .where(eq(agentProfiles.id, id))
+      .returning();
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    this.logger.info({ profileId: id }, 'Agent profile updated');
+    return this.toProfile(rows[0]);
   }
 
   async deleteProfile(id: string): Promise<void> {
