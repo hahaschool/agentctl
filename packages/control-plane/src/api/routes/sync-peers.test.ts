@@ -28,6 +28,17 @@ function createMockDb(): Database {
   } as unknown as Database;
 }
 
+function makeValidUpsertPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    machineId: 'machine-9',
+    hostname: 'mesh-worker',
+    syncUrl: 'http://100.64.0.9:8080',
+    tailscaleIp: '100.64.0.9',
+    publicKey: 'pk-9',
+    ...overrides,
+  };
+}
+
 async function buildApp(db: Database): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(syncPeersRoutes, {
@@ -90,13 +101,7 @@ describe('syncPeersRoutes', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/sync/peers',
-      payload: {
-        machineId: 'machine-9',
-        hostname: 'mesh-worker',
-        syncUrl: 'http://100.64.0.9:8080',
-        tailscaleIp: '100.64.0.9',
-        publicKey: 'pk-9',
-      },
+      payload: makeValidUpsertPayload(),
     });
 
     expect(response.statusCode).toBe(201);
@@ -123,6 +128,49 @@ describe('syncPeersRoutes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ error: 'INVALID_MACHINE_ID' });
+  });
+
+  it.each([
+    ['unsupported protocol', 'ftp://100.64.0.9:8080'],
+    ['localhost hostname', 'http://localhost:8080'],
+    ['localhost loopback IPv4', 'http://127.0.0.1:8080'],
+    ['IPv6 loopback', 'http://[::1]:8080'],
+    ['unspecified address', 'http://0.0.0.0:8080'],
+    ['link-local metadata address', 'http://169.254.169.254/latest/meta-data'],
+    ['link-local range', 'http://169.254.10.20:8080'],
+    ['metadata hostname', 'http://metadata.google.internal/computeMetadata/v1'],
+  ])('rejects peer upserts with an unsafe syncUrl: %s', async (_name, syncUrl) => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers',
+      payload: makeValidUpsertPayload({ syncUrl }),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'INVALID_SYNC_URL' });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['invalid role', { role: 'admin' }, 'INVALID_ROLE'],
+    ['invalid sync status', { syncStatus: 'ready' }, 'INVALID_SYNC_STATUS'],
+    ['zero interval', { syncIntervalMs: 0 }, 'INVALID_SYNC_INTERVAL'],
+    ['negative interval', { syncIntervalMs: -1 }, 'INVALID_SYNC_INTERVAL'],
+    ['fractional interval', { syncIntervalMs: 1500.5 }, 'INVALID_SYNC_INTERVAL'],
+    ['excessive interval', { syncIntervalMs: 3_600_000 }, 'INVALID_SYNC_INTERVAL'],
+  ])('rejects peer upserts with %s', async (_name, overrides: Record<
+    string,
+    unknown
+  >, error: string) => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers',
+      payload: makeValidUpsertPayload(overrides),
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error });
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('deletes a sync peer', async () => {
@@ -206,5 +254,27 @@ describe('syncPeersRoutes', () => {
       status: 'unreachable',
       peer: { machineId: 'machine-2', syncStatus: 'unreachable', syncIntervalMs: 60000 },
     });
+  });
+
+  it('does not fetch when pinging a peer with an unsafe stored syncUrl', async () => {
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-2',
+          sync_url: 'http://169.254.169.254/latest/meta-data',
+        }),
+      ],
+    });
+    globalThis.fetch = vi.fn() as typeof globalThis.fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-2/ping',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'INVALID_SYNC_URL' });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledTimes(1);
   });
 });

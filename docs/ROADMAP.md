@@ -1179,6 +1179,7 @@ Make all create/edit/filter flows runtime-aware with three shared components.
 - [x] Run the backend-independent webhooks Playwright slice in CI so web e2e regressions are gated before merge *(PR #445)*
 - [x] Add mobile-push device validation negative tests, including oversized `deviceId` route handling through the route-level schema response *(PR #447)*
 - [x] Tighten batch-2 input validation across `webhooks`, `permission-requests`, `approvals`, `handoffs`, `sync-conflicts`, and `memory-facts`, including enum checks, pagination bounds, and serialized source-size limits *(PR #448)*
+- [x] Harden sync-peer registration and ping validation so manual mesh peer URLs reject unsafe protocols, local/metadata targets, bad role/status enums, and out-of-range intervals before DB writes or outbound fetches *(PR #452)*
 - [x] Close the manual-takeover GET route CodeQL `#579` false positive after confirming route-local `@fastify/rate-limit` executes before authorization *(PRs #410, #413; GitHub alert dismissed after fresh `main` analysis)*
 - [x] Runs with 0 cost/tokens marked `empty` not `success` *(PR #157)*
 - [x] Retry runs show `retryOf` (original run ID) + `retryIndex` (attempt number) *(PR #157)*
