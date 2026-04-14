@@ -2,7 +2,7 @@
 
 > Last updated: 2026-04-14 (post-PR #479 web feature/E2E + agent-worker type-hygiene batch). The 2026-04-13/14 landing set includes PR #395 through PR #479, including the latest memory/web follow-ups: PR #457 (`/memory/import` wizard completion/cancellation coverage), PR #458 (`/settings` notification preferences backend-independent coverage), PR #459 (`/discover` grouped/filter/import/new-session coverage), PR #460 (roadmap checkpoint sync), PR #461 (`/memory` index redirect/sidebar coverage), PR #462 (`/memory/consolidation` queue/action coverage), PR #465 (`/memory/scopes` broader render/create/rename/promote/merge/delete/error/empty coverage), PR #466 (`/memory/graph` table/SVG/detail/empty coverage), PR #467 (webhook delivery history viewer over the existing delivery-list API), PR #468 (`/spaces/[id]` + `/tasks/[id]` detail-route coverage), PR #470 (`/memory/synthesis` structural-lint page over `POST /api/memory/synthesis`), PR #471 (Settings → Notifications **Registered Push Devices** section over `/api/mobile-push-devices`), PR #472 (memory fact thumbs-up / irrelevant / outdated feedback buttons over `PATCH /api/memory/facts/:id/feedback`), PR #473 (`/memory/maintenance` page over `POST /api/memory/maintenance`), PR #474 (tasks auto-decompose action wiring `POST /api/decompose` + `/preview` with two-step preview/apply UX), PR #475 (browser coverage for memory synthesis, webhook deliveries, and push-device registration/revoke flows), PR #476 (shared ConfirmDialog primitive plus memory dashboard first-load/error states), PR #478 (browser coverage for memory maintenance and task auto-decompose, including the stale-preview guard), and PR #479 (removal of stale agent-worker discovery type stubs now that shared `DiscoveredSkill` / `DiscoveredMcpServer.configFile` types are canonical). CodeQL `#579` remains formally dismissed as a false positive after fresh `main` analysis still flagged the real `@fastify/rate-limit` route shape; local source-shape coverage keeps the limiter before `authorizeManualTakeover`.
 >
-> Current checkpoint: PR #470 through PR #479 are merged through `main@9f984523`; GitHub reports no non-docs open PRs at this sync point, plus 0 open code-scanning alerts, 0 open Dependabot alerts, and 0 open secret-scanning alerts.
+> Current checkpoint: PR #470 through PR #479 are represented, and the docs sync itself merged as PR #477 through `main@be1765d3`; GitHub reports no open PRs at this sync point, plus 0 open code-scanning alerts, 0 open Dependabot alerts, and 0 open secret-scanning alerts.
 >
 > Coordination note: PR #461 merged as `e6fd4c2e`, PR #462 as `193e6b02`, PR #465 as `2b950c96`, PR #466 as `9fbc2fe9`, PR #467 as `620de798`, PR #468 as `4291f520`, PR #470 as `5a480a23`, PR #471 as `2d61cb8a`, PR #472 as `7b2f9b8c`, PR #473 as `22fbe6ae`, PR #474 as `a8189309`, PR #475 as `1f4007c1`, PR #476 as `fa632acd`, PR #478 as `082deedb`, and PR #479 as `9f984523`; duplicate PRs #463 and #464 were closed after their stronger sibling branches merged.
 
@@ -490,7 +490,8 @@ Consolidate `/sessions` and `/runtime-sessions` into one canonical view.
 > Impl plan: [plans/2026-03-11-memory-ui-implementation.md](plans/2026-03-11-memory-ui-implementation.md)
 >
 > Full-stack vertical implementation: each page ships API route → component → test.
-> Top-level `/memory` route with left sidebar, 8 sub-pages, plus memory data
+> Top-level `/memory` route with left sidebar, the original 8 memory sub-pages plus the
+> synthesis and maintenance follow-up pages, plus memory data
 > surfaced contextually across existing agent/session/machine pages.
 
 **Pages (priority order):**
@@ -2001,7 +2002,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P0** | ~~Unified Session Browser (Web)~~ | 4.6 | ✅ Delivered |
 | **P0** | ~~CLAUDE.md Management Strategy~~ | 17.3 | ✅ Delivered — `project` / `managed` / `merge` strategies, accurate project preview, and targeted web coverage landed (PRs #215, #218, #220) |
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
-| **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — 8 pages + integration points + MCP tools (PRs #47,#50,#52-#59); backend routes for consolidation, reports, and decay all landed |
+| **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — original 8 pages plus synthesis/maintenance follow-ups, integration points, and MCP tools (PRs #47,#50,#52-#59,#470,#473); backend routes for consolidation, reports, decay, synthesis, and maintenance all landed |
 | **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all original ARIA items complete (PRs #51,#54,#59), StatusBadge descriptions refreshed in PR #417, slash-search/hotkey discoverability improved in PRs #446/#449, and shared Sidebar/Sessions `?` event ownership centralized in PR #450 |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
@@ -2098,7 +2099,7 @@ runtime mgmt:    config sync → managed sessions → native import preflight �
 mcp/skill:       machine config scan → discover MCP servers (JSON/TOML) + skills (SKILL.md) → machine defaults → per-agent opt-out overrides → picker UX
 codex parity:    RuntimeSelector (radio/dropdown) → RuntimeAwareModelSelect → RuntimeAwareMachineSelect → unified create/edit/filter flows for claude-code + codex
 memory:          embed fact → pgvector HNSW → hybrid search (vector+BM25+graph RRF) → 3-tier injection
-memory UI:       /memory (8 pages) → browser/graph/dashboard/consolidation/reports/import/editor/scopes
+memory UI:       /memory → browser/graph/dashboard/consolidation/reports/import/editor/scopes/synthesis/maintenance
 memory integ:    session/agent/machine/dashboard/context-picker/cmd-palette → contextual memory data
 knowledge:       extract → lint (dedup+contradict) → synthesize (LLM propose) → human review → promote
 feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) → adjust strength/ranking
@@ -2110,7 +2111,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 |------|-----------|-------|
 | ~~Unified Session Browser (P0)~~ | None | ✅ Delivered |
 | ~~Unified Memory Layer (P1)~~ | None | ✅ Delivered — all knowledge engineering items complete, decay module landed (PR #76) |
-| ~~Unified Memory System UI (P1)~~ | Unified Memory Layer (§3.6) backend routes | ✅ Delivered — 8 pages + integration + all backend routes (consolidation, reports, decay) |
+| ~~Unified Memory System UI (P1)~~ | Unified Memory Layer (§3.6) backend routes | ✅ Delivered — original 8 pages plus synthesis/maintenance follow-ups + integration + all backend routes (consolidation, reports, decay, synthesis, maintenance) |
 | ~~UI Quality & Accessibility (P1)~~ | None | ✅ Delivered — all original ARIA items complete; StatusBadge descriptions refreshed in PR #417; slash-search/hotkey discoverability improved in PRs #446/#449; shared Sidebar/Sessions `?` ownership centralized in PR #450 |
 | ~~Execution Summary (P1)~~ | None | ✅ Delivered (PRs #32, #39) |
 | ~~Workdir Safety (P1)~~ | None | ✅ Delivered |
@@ -2215,7 +2216,7 @@ feedback:        agent uses fact → memory_feedback(used/irrelevant/outdated) �
 | [mobile-approval-center-design](plans/2026-03-19-mobile-approval-center-design.md) | Delivered — 21.1 shipped; 21.2 now has dedicated push-notification design docs | 17.4, 21.1 |
 | [mobile-approval-center-impl-plan](plans/2026-03-19-mobile-approval-center-impl-plan.md) | Delivered — 21.1 shipped; 21.2 now tracks execution in the dedicated push-notification impl plan | 21.1 |
 | [approval-push-notifications-design](plans/2026-03-19-approval-push-notifications-design.md) | Delivered — PRs #290, #291, and #295 shipped the full 21.2 slice on `main` | 21.2 |
-| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing; PR #447 added validation hardening coverage for the registry route | 21.2 |
+| [approval-push-notifications-impl-plan](plans/2026-03-19-approval-push-notifications-impl-plan.md) | Delivered — PRs #290, #291, and #295 completed mobile registration, device registry, Expo dispatch, and tap routing; PR #447 added validation hardening coverage for the registry route; PR #471 added the operator-facing Registered Push Devices UI; PR #475 added backend-independent registration/list/revoke browser coverage | 21.2 |
 | [post-21-2-e2e-cd-hardening-plan](plans/2026-03-20-post-21-2-e2e-cd-hardening-plan.md) | Delivered — PRs #299, #297, #298, and #301 completed workstreams A-D on `main` | 24.1-24.4 |
 | [web-hardening-follow-through-plan](plans/2026-03-20-web-hardening-follow-through-plan.md) | Delivered — PRs #305, #304, and #306 completed the runtime sessions, settings control-center, and permission-request contract follow-through on `main`; the remaining machines / terminal coverage now lives in the dedicated section 29 follow-up | 25.1-25.3 |
 | [machine-terminal-e2e-follow-up-plan](plans/2026-03-21-machine-terminal-e2e-follow-up-plan.md) | Delivered — PR #346 added the dedicated machine terminal Playwright coverage on `main`; no page-level hardening was required beyond the focused e2e spec | 29 |
