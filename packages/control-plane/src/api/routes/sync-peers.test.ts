@@ -24,6 +24,9 @@ function makePeerRow(overrides: Record<string, unknown> = {}) {
     last_ping_status_code: null,
     last_seen: null,
     created_at: '2026-04-01T00:00:00.000Z',
+    peer_version: null,
+    peer_git_sha: null,
+    peer_schema_version: null,
     ...overrides,
   };
 }
@@ -707,6 +710,142 @@ describe('syncPeersRoutes', () => {
         syncStatus: 'reachable',
         lastPingError: null,
         lastPingStatusCode: null,
+      },
+    });
+  });
+
+  it('persists peer version fields parsed from /health body (33.9)', async () => {
+    execute
+      .mockResolvedValueOnce({
+        rows: [makePeerRow({ id: 'machine-2', sync_status: 'unknown' })],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_status: 'reachable',
+            peer_version: '0.4.0',
+            peer_git_sha: 'abc1234',
+            peer_schema_version: 24,
+          }),
+        ],
+      });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'ok',
+        appVersion: '0.4.0',
+        gitSha: 'abc1234',
+        schemaVersion: 24,
+      }),
+    }) as typeof globalThis.fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-2/ping',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      status: 'reachable',
+      peer: {
+        machineId: 'machine-2',
+        syncStatus: 'reachable',
+        peerVersion: '0.4.0',
+        peerGitSha: 'abc1234',
+        peerSchemaVersion: 24,
+      },
+    });
+
+    // The UPDATE (second execute call) must carry the extracted version fields
+    // as bound params. Drizzle `sql` puts raw params directly in `queryChunks`
+    // alongside SQL string-piece objects — we filter out the latter.
+    const updateCall = execute.mock.calls[1]?.[0] as { queryChunks?: unknown[] };
+    const bindParams = (updateCall?.queryChunks ?? []).filter(
+      (chunk) => !(chunk && typeof chunk === 'object' && 'value' in chunk),
+    );
+    expect(bindParams).toEqual(expect.arrayContaining(['0.4.0', 'abc1234', 24, 'machine-2']));
+  });
+
+  it('leaves peer version columns null when /health omits the new fields (older peer)', async () => {
+    execute
+      .mockResolvedValueOnce({
+        rows: [makePeerRow({ id: 'machine-2', sync_status: 'unknown' })],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_status: 'reachable',
+            peer_version: null,
+            peer_git_sha: null,
+            peer_schema_version: null,
+          }),
+        ],
+      });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'ok' }),
+    }) as typeof globalThis.fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-2/ping',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      status: 'reachable',
+      peer: {
+        machineId: 'machine-2',
+        syncStatus: 'reachable',
+        peerVersion: null,
+        peerGitSha: null,
+        peerSchemaVersion: null,
+      },
+    });
+  });
+
+  it('tolerates malformed JSON in /health body without failing the ping', async () => {
+    execute
+      .mockResolvedValueOnce({
+        rows: [makePeerRow({ id: 'machine-2', sync_status: 'unknown' })],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_status: 'reachable',
+          }),
+        ],
+      });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected token < in JSON at position 0');
+      },
+    }) as typeof globalThis.fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-2/ping',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      status: 'reachable',
+      peer: {
+        machineId: 'machine-2',
+        syncStatus: 'reachable',
+        peerVersion: null,
+        peerGitSha: null,
+        peerSchemaVersion: null,
       },
     });
   });
