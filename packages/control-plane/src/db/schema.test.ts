@@ -121,8 +121,8 @@ describe('Schema module exports', () => {
 describe('machines table columns', () => {
   const meta = getColumnMeta(machines);
 
-  it('has exactly 9 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(9);
+  it('has exactly 10 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(10);
   });
 
   it('has all expected column keys', () => {
@@ -135,6 +135,7 @@ describe('machines table columns', () => {
       'status',
       'lastHeartbeat',
       'capabilities',
+      'originNodeId',
       'createdAt',
     ];
     expect(Object.keys(meta)).toEqual(expectedKeys);
@@ -207,6 +208,17 @@ describe('machines table columns', () => {
     expect(meta.capabilities.hasDefault).toBe(true);
   });
 
+  it('origin_node_id is a nullable text column without default', () => {
+    expect(meta.originNodeId).toEqual({
+      name: 'origin_node_id',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: false,
+      hasDefault: false,
+      primary: false,
+    });
+  });
+
   it('created_at is a nullable timestamp with defaultNow()', () => {
     expect(meta.createdAt).toEqual({
       name: 'created_at',
@@ -229,6 +241,7 @@ describe('machines table columns', () => {
       'status',
       'last_heartbeat',
       'capabilities',
+      'origin_node_id',
       'created_at',
     ]);
   });
@@ -693,13 +706,19 @@ describe('Required (NOT NULL) vs nullable columns', () => {
     expect(notNullKeys).toEqual(['id', 'hostname', 'tailscaleIp', 'os', 'arch']);
   });
 
-  it('machines: status, last_heartbeat, capabilities, created_at are nullable', () => {
+  it('machines: status, last_heartbeat, capabilities, origin_node_id, created_at are nullable', () => {
     const meta = getColumnMeta(machines);
     const nullableKeys = Object.entries(meta)
       .filter(([, m]) => !m.notNull)
       .map(([key]) => key);
 
-    expect(nullableKeys).toEqual(['status', 'lastHeartbeat', 'capabilities', 'createdAt']);
+    expect(nullableKeys).toEqual([
+      'status',
+      'lastHeartbeat',
+      'capabilities',
+      'originNodeId',
+      'createdAt',
+    ]);
   });
 
   it('agents: id, name, type are NOT NULL', () => {

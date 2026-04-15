@@ -68,6 +68,8 @@ export function MachinesPage(): React.JSX.Element {
         (m) =>
           m.hostname.toLowerCase().includes(q) ||
           m.id.toLowerCase().includes(q) ||
+          (m.originNodeId ?? '').toLowerCase().includes(q) ||
+          (m.originNodeHostname ?? '').toLowerCase().includes(q) ||
           (m.tailscaleIp ?? '').includes(q) ||
           m.os.toLowerCase().includes(q),
       );
@@ -352,6 +354,7 @@ function MachineCard({
         >
           {m.hostname}
         </Link>
+        <MachineProvenanceBadge machine={m} compact />
         <span className="text-[11px] text-muted-foreground font-mono truncate">{m.os}</span>
         <div className="flex items-center gap-1.5 ml-auto shrink-0">
           <StatusBadge status={m.status} />
@@ -387,6 +390,9 @@ function MachineCard({
             {m.hostname}
           </Link>
           <CopyableText value={m.id} maxDisplay={12} />
+          <div className="mt-1">
+            <MachineProvenanceBadge machine={m} />
+          </div>
         </div>
         <div className="flex items-center gap-1.5">
           <StatusBadge status={m.status} />
@@ -443,6 +449,34 @@ function MachineCard({
 // ---------------------------------------------------------------------------
 // Subcomponents
 // ---------------------------------------------------------------------------
+
+function MachineProvenanceBadge({
+  machine,
+  compact,
+}: {
+  machine: Machine;
+  compact?: boolean;
+}): React.JSX.Element {
+  const originNodeId = machine.originNodeId ?? null;
+  const label = originNodeId
+    ? `Synced from ${machine.originNodeHostname ?? originNodeId}`
+    : 'Local';
+
+  return (
+    <span
+      title={originNodeId ? `Origin node: ${originNodeId}` : 'Local machine row'}
+      className={cn(
+        'inline-flex items-center max-w-full rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+        originNodeId
+          ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300'
+          : 'border-border bg-muted text-muted-foreground',
+        compact ? 'shrink-0' : 'w-fit',
+      )}
+    >
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
 
 function DetailField({
   label,

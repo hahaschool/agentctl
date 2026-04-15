@@ -232,4 +232,33 @@ describe('applyMutable', () => {
 
     expect(result).toBe('applied');
   });
+
+  it('stamps remote machine rows with the source node id when provenance is absent', async () => {
+    const { db, executedQueries } = createMockDb({
+      latestVclock: null,
+    });
+    const change = makeChange({
+      tableName: 'machines',
+      operation: 'INSERT',
+      rowId: 'remote-machine',
+      payload: {
+        id: 'remote-machine',
+        hostname: 'remote-worker',
+        tailscale_ip: '100.64.0.20',
+        os: 'linux',
+        arch: 'x64',
+      },
+      vclock: { 'node-remote': 1 },
+    });
+
+    const result = await applyChange(change, db as never);
+
+    expect(result).toBe('applied');
+    const machineUpsert = executedQueries.find(
+      (query) =>
+        query.includes('INSERT') && query.includes('machines') && query.includes('origin_node_id'),
+    );
+    expect(machineUpsert).toBeDefined();
+    expect(machineUpsert).toContain('node-remote');
+  });
 });

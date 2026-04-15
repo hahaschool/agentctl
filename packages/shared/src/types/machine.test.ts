@@ -12,6 +12,8 @@ describe('machine types', () => {
       arch: 'arm64',
       status: 'online',
       lastHeartbeat: new Date('2026-03-11T10:00:00.000Z'),
+      originNodeId: null,
+      originNodeHostname: null,
       capabilities: {
         gpu: false,
         docker: true,
@@ -42,6 +44,30 @@ describe('machine types', () => {
     expect(machine.capabilities.executionEnvironments?.[0]?.id).toBe('direct');
     expect(machine.capabilities.defaultExecutionEnvironment).toBe('direct');
     expect(machine.capabilities.executionEnvironments?.[1]?.reasonUnavailable).toContain('Docker');
+    expect(machine.originNodeId).toBeNull();
+  });
+
+  it('supports synced machine provenance fields', () => {
+    const machine: Machine = {
+      id: 'synced-machine',
+      hostname: 'worker-a',
+      tailscaleIp: '100.64.0.20',
+      os: 'linux',
+      arch: 'x64',
+      status: 'online',
+      lastHeartbeat: new Date('2026-04-15T10:00:00.000Z'),
+      originNodeId: 'peer-macmini',
+      originNodeHostname: 'pinnacle-macmini',
+      capabilities: {
+        gpu: false,
+        docker: true,
+        maxConcurrentAgents: 2,
+      },
+      createdAt: new Date('2026-04-15T09:00:00.000Z'),
+    };
+
+    expect(machine.originNodeId).toBe('peer-macmini');
+    expect(machine.originNodeHostname).toBe('pinnacle-macmini');
   });
 });
 

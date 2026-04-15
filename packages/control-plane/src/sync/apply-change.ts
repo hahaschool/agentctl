@@ -14,6 +14,28 @@ type LatestChangeRow = {
   payload: Record<string, unknown> | null;
 };
 
+function payloadWithRemoteMachineProvenance(
+  tableName: string,
+  nodeId: string,
+  payload: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (tableName !== 'machines' || !payload) {
+    return payload;
+  }
+
+  const next = { ...payload };
+  if ('originNodeId' in next && !('origin_node_id' in next)) {
+    next.origin_node_id = next.originNodeId;
+  }
+  delete next.originNodeId;
+
+  if (next.origin_node_id == null || next.origin_node_id === '') {
+    next.origin_node_id = nodeId;
+  }
+
+  return next;
+}
+
 /**
  * Apply a single remote change to the local database.
  * Routes to append-only or mutable logic based on TABLE_SYNC_CONFIG.
@@ -87,6 +109,12 @@ async function applyAppendOnly(
  */
 async function applyMutable(change: ChangeLogEntry, db: Database): Promise<ApplyResult> {
   return withSyncApplyGuard(db, async (tx) => {
+    const payload = payloadWithRemoteMachineProvenance(
+      change.tableName,
+      change.nodeId,
+      change.payload,
+    );
+
     // Advisory lock INSIDE the transaction (xact-scoped, released at tx end)
     const lockKey = `${change.tableName}:${change.rowId}`;
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey})::bigint)`);
@@ -116,10 +144,10 @@ async function applyMutable(change: ChangeLogEntry, db: Database): Promise<Apply
           DELETE FROM ${sql.identifier(change.tableName)}
           WHERE ${sql.identifier(pkCol)} = ${change.rowId}
         `);
-      } else if (change.payload) {
+      } else if (payload) {
         // UPSERT: try insert, on conflict update all payload columns
-        const columns = Object.keys(change.payload);
-        const values = Object.values(change.payload);
+        const columns = Object.keys(payload);
+        const values = Object.values(payload);
 
         if (columns.length > 0) {
           const colList = columns.map((c) => sql.identifier(c));
@@ -152,7 +180,7 @@ async function applyMutable(change: ChangeLogEntry, db: Database): Promise<Apply
       await tx.execute(sql`
         INSERT INTO sync_change_log (node_id, table_name, row_id, operation, payload, vclock)
         VALUES (${change.nodeId}, ${change.tableName}, ${change.rowId}, ${change.operation},
-                ${change.payload ? JSON.stringify(change.payload) : null}::jsonb,
+                ${payload ? JSON.stringify(payload) : null}::jsonb,
                 ${JSON.stringify(merged)}::jsonb)
       `);
 
@@ -170,7 +198,7 @@ async function applyMutable(change: ChangeLogEntry, db: Database): Promise<Apply
           ${JSON.stringify(localVclock)}::jsonb,
           ${localEntry?.payload ? JSON.stringify(localEntry.payload) : null}::jsonb,
           ${JSON.stringify(remoteVclock)}::jsonb,
-          ${change.payload ? JSON.stringify(change.payload) : null}::jsonb,
+          ${payload ? JSON.stringify(payload) : null}::jsonb,
           ${change.nodeId}
         )
       `);

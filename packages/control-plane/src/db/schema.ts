@@ -25,6 +25,7 @@ export const machines = pgTable('machines', {
   status: text('status').default('online'),
   lastHeartbeat: timestamp('last_heartbeat', { withTimezone: true }),
   capabilities: jsonb('capabilities').default({}),
+  originNodeId: text('origin_node_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
 

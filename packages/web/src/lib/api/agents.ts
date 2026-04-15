@@ -22,6 +22,8 @@ export type Machine = {
   arch: string;
   status: MachineStatus;
   lastHeartbeat: string | null;
+  originNodeId?: string | null;
+  originNodeHostname?: string | null;
   capabilities?: MachineCapabilities;
   createdAt: string;
 };

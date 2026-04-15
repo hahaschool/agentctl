@@ -27,6 +27,10 @@ export type Machine = {
   arch: 'x64' | 'arm64';
   status: MachineStatus;
   lastHeartbeat: Date | null;
+  /** Null or absent for machines owned by this control plane; set when learned from a peer. */
+  originNodeId?: string | null;
+  /** Best-effort display name for originNodeId, resolved from sync_nodes when available. */
+  originNodeHostname?: string | null;
   capabilities: MachineCapabilities;
   createdAt: Date;
 };
