@@ -69,6 +69,11 @@ on:
         required: false
         type: number
         default: 3
+      skip_attestation_verification:
+        description: "EMERGENCY USE ONLY: skip GHCR build-provenance verification (e.g. rollback before attestations are backfilled). Logs a loud warning."
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-fleet
@@ -85,6 +90,7 @@ permissions:
   contents: read
   packages: read
   id-token: write  # Required for Tailscale OIDC
+  attestations: read  # Required for `gh attestation verify` (33.11 build provenance gate)
 
 # =============================================================================
 # Job 0: Bootstrap machines (optional — only when bootstrap=true)
@@ -363,6 +369,69 @@ jobs:
           if [ "$FAILED" -ne 0 ]; then
             exit 1
           fi
+
+      # ── Verify GHCR build-provenance attestation ───────────────────
+      # Gate: every image we deploy must carry a signed build-provenance
+      # attestation issued by this repository (see build-images.yml ::
+      # actions/attest-build-provenance). If the attestation is missing
+      # or untrusted, we refuse to deploy.
+      #
+      # Operator escape-hatch: `skip_attestation_verification=true`
+      # bypasses this gate (emergency rollback only). The step logs a
+      # loud warning and the verify job records the override.
+      - name: Verify build provenance attestation
+        id: attest-verify
+        if: ${{ !inputs.skip_attestation_verification }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.image_tag }}
+          TARGET_ROLE: ${{ inputs.target_role }}
+        run: |
+          set -euo pipefail
+
+          declare -a IMAGES=()
+          if [ "$TARGET_ROLE" = "control-plane" ] || [ "$TARGET_ROLE" = "all" ]; then
+            IMAGES+=("${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane")
+          fi
+          if [ "$TARGET_ROLE" = "worker" ] || [ "$TARGET_ROLE" = "all" ]; then
+            IMAGES+=("${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/agent-worker")
+          fi
+
+          FAILED=0
+          for IMAGE in "${IMAGES[@]}"; do
+            echo "Resolving digest for ${IMAGE}:${TAG}..."
+            # Resolve tag -> digest so the attestation lookup is pinned to
+            # an immutable artifact (tags can move; digests cannot).
+            DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${TAG}" \
+              --format '{{json .Manifest}}' | jq -r '.digest')
+            if [ -z "$DIGEST" ] || [ "$DIGEST" = "null" ]; then
+              echo "::error::Could not resolve digest for ${IMAGE}:${TAG}"
+              FAILED=1
+              continue
+            fi
+
+            SUBJECT="oci://${IMAGE}@${DIGEST}"
+            echo "Verifying attestation for ${SUBJECT}..."
+            if gh attestation verify "$SUBJECT" --repo "${{ github.repository }}"; then
+              echo "  attestation verified for ${IMAGE}"
+            else
+              echo "::error::Attestation verification FAILED for ${SUBJECT}."
+              echo "::error::Peers refuse unattested images. Either rebuild via build-images.yml so an attestation is published, or re-run with skip_attestation_verification=true (emergency rollback only)."
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Warn about skipped attestation verification
+        if: ${{ inputs.skip_attestation_verification }}
+        run: |
+          echo "::warning::skip_attestation_verification=true — build-provenance verification was BYPASSED for tag '${{ inputs.image_tag }}'. This is an escape-hatch for emergency rollback; the deployed image has NOT been verified against the repository's attestation store. Backfill attestations via build-images.yml before the next non-emergency deploy."
+          echo "## Attestation Verification: SKIPPED" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> Build-provenance verification was bypassed via \`skip_attestation_verification=true\`. Backfill attestations before the next non-emergency deploy." >> "$GITHUB_STEP_SUMMARY"
 
       # ── Dry run: stop here ─────────────────────────────────────────
       - name: Dry run summary
