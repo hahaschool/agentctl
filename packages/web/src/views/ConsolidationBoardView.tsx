@@ -206,10 +206,6 @@ export function ConsolidationBoardView(): React.JSX.Element {
 
   const handleAction = useCallback(
     (id: string, action: ConsolidationAction) => {
-      if (action === 'edit') {
-        // Edit opens an inline flow — not yet implemented; skip for now
-        return;
-      }
       resolveItem.mutate({ id, action });
     },
     [resolveItem],
