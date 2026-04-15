@@ -12,9 +12,10 @@ laptop and macmini run local checkouts, local builds, and PM2 reloads. A mesh
 operator still has to update each peer manually.
 
 Rollout work depends on 33.9 for drift visibility and 33.10 for safe
-schema/protocol compatibility checks. PR #557 delivered the backend envelope
-stamping and apply-side compat gate for 33.10, but operator UI warnings,
-two-node proof, and the remaining 33.9 ping/UI pieces still gate fleet rollout.
+schema/protocol compatibility checks. PR #561 completes the 33.9 drift signal
+by persisting peer metadata from on-demand and background pings. PR #557
+delivered the backend envelope stamping and apply-side compat gate for 33.10,
+but operator UI warnings and two-node proof still gate fleet rollout.
 
 ## Scope
 

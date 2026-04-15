@@ -1,11 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   computeNextInterval,
   EMPTY_PEER_VERSION_INFO,
   extractPeerVersionInfo,
+  healthCheckAllPeers,
   readPeerVersionInfo,
 } from './peer-health.js';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('computeNextInterval', () => {
   it('keeps default on reachable', () => {
@@ -89,5 +95,49 @@ describe('readPeerVersionInfo', () => {
     } as unknown as Response;
 
     expect(await readPeerVersionInfo(response)).toEqual(EMPTY_PEER_VERSION_INFO);
+  });
+});
+
+describe('healthCheckAllPeers', () => {
+  it('persists peer version fields from successful background /health pings', async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'peer-1',
+            sync_url: 'http://peer.local',
+            sync_interval_ms: 120_000,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          appVersion: '0.4.2',
+          gitSha: 'abc9999',
+          schemaVersion: 25,
+        }),
+      }),
+    );
+
+    await healthCheckAllPeers({
+      db: { execute } as never,
+      logger: { debug: vi.fn() } as never,
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://peer.local/health',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(execute).toHaveBeenCalledTimes(2);
+    const updateCall = execute.mock.calls[1]?.[0] as { queryChunks?: unknown[] };
+    const bindParams = (updateCall?.queryChunks ?? []).filter(
+      (chunk) => !(chunk && typeof chunk === 'object' && 'value' in chunk),
+    );
+    expect(bindParams).toEqual(expect.arrayContaining([30_000, '0.4.2', 'abc9999', 25, 'peer-1']));
   });
 });
