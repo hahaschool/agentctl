@@ -23,6 +23,10 @@ type SyncPeer = {
   publicKey: string | null;
   lastSeen: string | null;
   createdAt: string | null;
+  // 33.9 Mesh Version Observability — optional fields from PR #555.
+  peerVersion?: string | null;
+  peerGitSha?: string | null;
+  peerSchemaVersion?: number | null;
 };
 
 type PingResult = { ok: boolean; status: 'reachable' | 'unreachable'; peer: SyncPeer | null };
@@ -237,6 +241,57 @@ test.describe('Mesh Peers page', () => {
     await expect(betaRow.getByText('replica', { exact: true })).toBeVisible();
     await expect(betaRow.getByText('1m', { exact: true })).toBeVisible();
     await expect(betaRow.getByTestId('ping-machine-beta')).toBeEnabled();
+  });
+
+  test('renders the version column and mesh drift banner when peers span versions', async ({
+    page,
+  }) => {
+    const peers: SyncPeer[] = [
+      makePeer({
+        machineId: 'machine-self',
+        hostname: 'self.tail.ts.net',
+        role: 'self',
+        isSelf: true,
+        syncStatus: 'reachable',
+        peerVersion: 'v0.4.0',
+      }),
+      makePeer({
+        machineId: 'machine-old',
+        hostname: 'old.tail.ts.net',
+        tailscaleIp: '100.64.0.11',
+        syncUrl: 'http://100.64.0.11:8080',
+        role: 'replica',
+        syncStatus: 'reachable',
+        peerVersion: 'v0.3.1',
+      }),
+    ];
+    await mountApiMocks(page, {
+      peers,
+      pingResponses: new Map(),
+      pingCalls: [],
+    });
+
+    await page.goto('/mesh-peers');
+
+    const table = page.getByRole('table', { name: 'Mesh sync peers' });
+    await expect(table.getByRole('columnheader', { name: 'Version' })).toBeVisible();
+
+    // Self row renders its own version with a match dot.
+    const selfRow = table.getByRole('row').filter({ hasText: 'self.tail.ts.net' });
+    await expect(selfRow.getByTestId('peer-version-match')).toBeVisible();
+    await expect(selfRow.getByTestId('peer-version-match')).toContainText('v0.4.0');
+
+    // Older peer renders the behind (yellow) drift indicator.
+    const oldRow = table.getByRole('row').filter({ hasText: 'old.tail.ts.net' });
+    await expect(oldRow.getByTestId('peer-version-behind')).toBeVisible();
+    await expect(oldRow.getByTestId('peer-version-behind')).toContainText('v0.3.1');
+
+    // Mesh-wide drift banner surfaces the version breakdown.
+    const banner = page.getByTestId('mesh-drift-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText('Mesh on mixed versions');
+    await expect(banner).toContainText('v0.4.0');
+    await expect(banner).toContainText('v0.3.1');
   });
 
   test('shows the empty state when no peers are registered', async ({ page }) => {

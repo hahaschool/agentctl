@@ -508,6 +508,114 @@ describe('MeshPeersPage', () => {
     expect(screen.getByTestId('refresh-button')).toBeDefined();
   });
 
+  // ---------------------------------------------------------------------------
+  // 33.9 Mesh Version Observability
+  // ---------------------------------------------------------------------------
+
+  it('renders the peer version with a drift dot when peerVersion is present', async () => {
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [makePeer({ machineId: 'node-match', peerVersion: 'v0.4.0' } as Partial<SyncPeer>)],
+      }),
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('v0.4.0')).toBeDefined();
+      expect(screen.getByTestId('peer-version-match')).toBeDefined();
+    });
+  });
+
+  it('renders a muted dash when peerVersion is absent', async () => {
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [makePeer({ machineId: 'node-no-version' })],
+      }),
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('peer-version-missing')).toBeDefined();
+    });
+  });
+
+  it('classifies a newer peer as ahead (blue dot)', async () => {
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [makePeer({ machineId: 'node-new', peerVersion: 'v0.5.0' } as Partial<SyncPeer>)],
+      }),
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('peer-version-ahead')).toBeDefined());
+  });
+
+  it('classifies an older peer as behind (yellow dot)', async () => {
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [makePeer({ machineId: 'node-old', peerVersion: 'v0.3.1' } as Partial<SyncPeer>)],
+      }),
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('peer-version-behind')).toBeDefined());
+  });
+
+  it('shows the drift banner when peers span multiple versions', async () => {
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [
+          makePeer({ machineId: 'a', peerVersion: 'v0.4.0' } as Partial<SyncPeer>),
+          makePeer({ machineId: 'b', peerVersion: 'v0.3.1' } as Partial<SyncPeer>),
+        ],
+      }),
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('mesh-drift-banner')).toBeDefined();
+    });
+    expect(screen.getByTestId('mesh-drift-banner').textContent).toContain('v0.4.0');
+    expect(screen.getByTestId('mesh-drift-banner').textContent).toContain('v0.3.1');
+  });
+
+  it('hides the drift banner when all peers report the local version', async () => {
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [
+          makePeer({ machineId: 'a', peerVersion: 'v0.4.0' } as Partial<SyncPeer>),
+          makePeer({ machineId: 'b', peerVersion: 'v0.4.0' } as Partial<SyncPeer>),
+        ],
+      }),
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getAllByText('v0.4.0').length).toBeGreaterThan(0));
+    expect(screen.queryByTestId('mesh-drift-banner')).toBeNull();
+  });
+
+  it('expands and dismisses the drift banner', async () => {
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [
+          makePeer({ machineId: 'a', peerVersion: 'v0.4.0' } as Partial<SyncPeer>),
+          makePeer({ machineId: 'b', peerVersion: 'v0.3.1' } as Partial<SyncPeer>),
+        ],
+      }),
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('mesh-drift-banner')).toBeDefined());
+
+    // Expand
+    fireEvent.click(screen.getByTestId('mesh-drift-banner-toggle'));
+    expect(screen.getByTestId('mesh-drift-banner-breakdown')).toBeDefined();
+
+    // Dismiss
+    fireEvent.click(screen.getByTestId('mesh-drift-banner-dismiss'));
+    expect(screen.queryByTestId('mesh-drift-banner')).toBeNull();
+  });
+
   it('shows inline length error and disables submit when sync URL exceeds 2048 chars', async () => {
     const mutate = vi.fn();
     mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook({ mutate }));

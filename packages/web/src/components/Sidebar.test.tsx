@@ -204,9 +204,18 @@ describe('Sidebar', () => {
   // =========================================================================
 
   describe('version display', () => {
-    it('shows the version number text', () => {
+    it('shows the local app version text', () => {
       render(<Sidebar />);
-      expect(screen.getByText('v0.3.1')).toBeDefined();
+      // Matches `LOCAL_APP_VERSION` exported from lib/mesh-version.
+      expect(screen.getByTestId('sidebar-version-link').textContent).toContain('v0.4.0');
+    });
+
+    it('exposes a tooltip that summarises local + peer versions', () => {
+      render(<Sidebar />);
+      const link = screen.getByTestId('sidebar-version-link');
+      // With no peers reported (query disabled in test harness) we still
+      // surface the local version and a "No peer versions" hint.
+      expect(link.getAttribute('title')).toContain('v0.4.0');
     });
   });
 

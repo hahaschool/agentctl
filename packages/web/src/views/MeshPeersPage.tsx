@@ -11,6 +11,15 @@ import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
 import type { SyncPeer, UpsertSyncPeerInput } from '@/lib/api';
 import {
+  classifyDrift,
+  type DriftRelation,
+  formatVersionGroups,
+  groupPeerVersions,
+  hasMeshDrift,
+  LOCAL_APP_VERSION,
+  type SyncPeerWithVersion,
+} from '@/lib/mesh-version';
+import {
   syncPeersQuery,
   useDeleteSyncPeer,
   usePingSyncPeer,
@@ -384,11 +393,68 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
 }
 
 // ---------------------------------------------------------------------------
+// Version cell — renders the peer's reported appVersion with a drift dot.
+// ---------------------------------------------------------------------------
+
+const DRIFT_DOT_CLASS: Record<DriftRelation, string> = {
+  match: 'bg-green-500',
+  ahead: 'bg-blue-500',
+  behind: 'bg-yellow-500',
+  unknown: 'bg-muted-foreground/30',
+};
+
+const DRIFT_LABEL: Record<DriftRelation, string> = {
+  match: 'Peer version matches local',
+  ahead: 'Peer is ahead of local — consider upgrading this node',
+  behind: 'Peer is behind local',
+  unknown: 'Peer version unknown',
+};
+
+type VersionCellProps = {
+  peerVersion?: string | null;
+  localVersion: string;
+  isSelf: boolean;
+};
+
+function VersionCell({ peerVersion, localVersion, isSelf }: VersionCellProps): React.JSX.Element {
+  // The self-row always matches itself; skip drift computation.
+  const displayVersion = isSelf ? (peerVersion ?? localVersion) : (peerVersion ?? null);
+  const relation: DriftRelation = isSelf ? 'match' : classifyDrift(peerVersion, localVersion);
+
+  if (!displayVersion) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground/70"
+        title="Peer has not reported version yet"
+        data-testid="peer-version-missing"
+      >
+        <span className={cn('inline-block size-1.5 rounded-full', DRIFT_DOT_CLASS.unknown)} />—
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 font-mono text-xs text-foreground"
+      title={DRIFT_LABEL[relation]}
+      data-testid={`peer-version-${relation}`}
+    >
+      <span
+        className={cn('inline-block size-1.5 rounded-full', DRIFT_DOT_CLASS[relation])}
+        aria-hidden="true"
+      />
+      {displayVersion}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Row
 // ---------------------------------------------------------------------------
 
 type PeerRowProps = {
-  peer: SyncPeer;
+  peer: SyncPeerWithVersion;
+  localVersion: string;
   onPing: (machineId: string) => void;
   onEdit: (peer: SyncPeer) => void;
   onDelete: (peer: SyncPeer) => void;
@@ -399,6 +465,7 @@ type PeerRowProps = {
 
 export function MeshPeerRow({
   peer,
+  localVersion,
   onPing,
   onEdit,
   onDelete,
@@ -434,6 +501,13 @@ export function MeshPeerRow({
         >
           {peer.syncStatus}
         </span>
+      </td>
+      <td className="px-4 py-3 align-top whitespace-nowrap">
+        <VersionCell
+          peerVersion={peer.peerVersion}
+          localVersion={localVersion}
+          isSelf={peer.isSelf}
+        />
       </td>
       <td className="px-4 py-3 align-top font-mono text-xs text-muted-foreground">
         {peer.tailscaleIp ?? '—'}
@@ -519,9 +593,16 @@ export function MeshPeersPage(): React.JSX.Element {
   const [dialogPeer, setDialogPeer] = useState<SyncPeer | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SyncPeer | null>(null);
 
-  const peers = peersData.data?.peers ?? [];
+  const [driftBannerOpen, setDriftBannerOpen] = useState(false);
+  const [driftBannerDismissed, setDriftBannerDismissed] = useState(false);
+
+  const peers = (peersData.data?.peers ?? []) as SyncPeerWithVersion[];
   const reachableCount = peers.filter((p) => p.syncStatus === 'reachable').length;
   const unreachableCount = peers.filter((p) => p.syncStatus === 'unreachable').length;
+  const versionGroups = groupPeerVersions(peers);
+  const meshHasDrift = hasMeshDrift(peers, LOCAL_APP_VERSION);
+  const showDriftBanner = meshHasDrift && !driftBannerDismissed;
+  const driftSummary = formatVersionGroups(versionGroups);
 
   const openAddDialog = useCallback(() => {
     setDialogPeer(null);
@@ -622,6 +703,54 @@ export function MeshPeersPage(): React.JSX.Element {
         <span className="font-mono">/health</span> endpoint and refresh its status.
       </p>
 
+      {showDriftBanner && (
+        <section
+          data-testid="mesh-drift-banner"
+          aria-label="Mesh version drift"
+          className="mb-4 rounded-md border border-yellow-500/30 bg-yellow-500/5 text-foreground"
+        >
+          <div className="flex items-start gap-3 px-3 py-2">
+            <button
+              type="button"
+              onClick={() => setDriftBannerOpen((prev) => !prev)}
+              aria-expanded={driftBannerOpen}
+              data-testid="mesh-drift-banner-toggle"
+              className="flex-1 text-left text-xs font-mono text-foreground hover:text-yellow-300 focus:outline-none"
+            >
+              <span className="mr-2 inline-block size-1.5 rounded-full bg-yellow-500 align-middle" />
+              Mesh on mixed versions: {driftSummary}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDriftBannerDismissed(true)}
+              data-testid="mesh-drift-banner-dismiss"
+              className="text-[11px] text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss drift banner"
+            >
+              Dismiss
+            </button>
+          </div>
+          {driftBannerOpen && (
+            <ul
+              data-testid="mesh-drift-banner-breakdown"
+              className="border-t border-yellow-500/20 px-3 py-2 space-y-1"
+            >
+              {versionGroups.map((group) => (
+                <li
+                  key={group.version}
+                  className="flex items-center justify-between text-[11px] font-mono text-muted-foreground"
+                >
+                  <span className="text-foreground">{group.version}</span>
+                  <span>
+                    {group.count} {group.count === 1 ? 'peer' : 'peers'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
       {peersData.error && (
         <ErrorBanner
           message={`Failed to load peers: ${peersData.error.message}`}
@@ -664,6 +793,7 @@ export function MeshPeersPage(): React.JSX.Element {
                 <tr>
                   <th className="px-4 py-2 font-medium">Peer</th>
                   <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium">Version</th>
                   <th className="px-4 py-2 font-medium">Tailscale IP</th>
                   <th className="px-4 py-2 font-medium">Sync URL</th>
                   <th className="px-4 py-2 font-medium">Role</th>
@@ -677,6 +807,7 @@ export function MeshPeersPage(): React.JSX.Element {
                   <MeshPeerRow
                     key={peer.machineId}
                     peer={peer}
+                    localVersion={LOCAL_APP_VERSION}
                     onPing={handlePing}
                     onEdit={openEditDialog}
                     onDelete={setPendingDelete}
