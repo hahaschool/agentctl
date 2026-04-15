@@ -1,12 +1,21 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
+
+import rateLimit from '@fastify/rate-limit';
 import { sql } from 'drizzle-orm';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { Database } from '../../db/index.js';
 import { extractRows } from '../../db/index.js';
 import { computeNextInterval } from '../../sync/peer-health.js';
+import { verifyPeerRegistrationSignature } from '../../sync/peer-registration.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 
 const DEFAULT_INTERVAL_MS = 30_000;
 const HEALTH_TIMEOUT_MS = 5_000;
+const REGISTRATION_RATE_LIMIT = {
+  max: 10,
+  windowMs: 60_000,
+} as const;
 const MAX_MACHINE_ID_LENGTH = 128;
 const MAX_HOSTNAME_LENGTH = 255;
 const MAX_TAILSCALE_IP_LENGTH = 64;
@@ -52,6 +61,7 @@ type PingPeerResult =
 
 type SyncPeersRoutesOptions = {
   db: Database;
+  registrationToken?: string;
 };
 
 type SyncPeerRow = {
@@ -82,6 +92,25 @@ type UpsertSyncPeerBody = {
   publicKey?: string;
 };
 
+type RegisterSyncPeerBody = {
+  machineId?: string;
+  hostname?: string;
+  tailscaleIp?: string;
+  syncUrl?: string;
+  publicKey?: string;
+  registrationSignature?: unknown;
+};
+
+type PeerRegistrationRequestContext = {
+  peerRegistration?: {
+    machineId: string;
+    hostname: string;
+    tailscaleIp: string | null;
+    syncUrl: string;
+    publicKey: string;
+  };
+};
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -94,6 +123,44 @@ function validationFailureBody(result: ValidationFailure): { error: string; mess
     error: result.error,
     message: result.message,
   };
+}
+
+function readHeaderValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function tokensEqual(actual: string, expected: string): boolean {
+  const actualHash = createHash('sha256').update(actual).digest();
+  const expectedHash = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(actualHash, expectedHash);
+}
+
+function getRegistrationToken(configuredToken: string | undefined): string | null {
+  const token = configuredToken ?? process.env.SYNC_PEER_REGISTRATION_TOKEN;
+  return typeof token === 'string' && token.trim().length > 0 ? token.trim() : null;
+}
+
+function getRateLimitKey(request: {
+  ip?: string;
+  headers: Record<string, string | string[] | undefined>;
+}): string {
+  return (
+    request.ip ??
+    (typeof request.headers['x-forwarded-for'] === 'string'
+      ? request.headers['x-forwarded-for']
+      : 'unknown')
+  );
+}
+
+function readPeerRegistrationContext(request: FastifyRequest) {
+  const context = request as FastifyRequest & PeerRegistrationRequestContext;
+  if (!context.peerRegistration) {
+    throw new Error('Peer registration context missing after authorization');
+  }
+  return context.peerRegistration;
 }
 
 function validateRequiredString(
@@ -505,6 +572,119 @@ async function updatePingResult(
 
 export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async (app, opts) => {
   const { db } = opts;
+  const registrationRateLimitMax = readRateLimitEnv(
+    'SYNC_PEER_REGISTRATION_RATE_LIMIT_MAX',
+    REGISTRATION_RATE_LIMIT.max,
+  );
+  const registrationRateLimitWindowMs = readRateLimitEnv(
+    'SYNC_PEER_REGISTRATION_RATE_LIMIT_WINDOW_MS',
+    REGISTRATION_RATE_LIMIT.windowMs,
+  );
+  const registrationRateLimitConfig = {
+    max: registrationRateLimitMax,
+    timeWindow: registrationRateLimitWindowMs,
+    keyGenerator: getRateLimitKey,
+    errorResponseBuilder: () => ({
+      statusCode: 429,
+      error: 'RATE_LIMITED',
+      message: 'Too many registration attempts',
+    }),
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: getRateLimitKey,
+    errorResponseBuilder: registrationRateLimitConfig.errorResponseBuilder,
+  });
+
+  const authorizePeerRegistration = async (
+    request: FastifyRequest<{ Body: RegisterSyncPeerBody }>,
+    reply: FastifyReply,
+  ) => {
+    const registrationToken = getRegistrationToken(opts.registrationToken);
+    if (!registrationToken) {
+      return reply.code(503).send({
+        error: 'PEER_REGISTRATION_DISABLED',
+        message: 'Peer registration requires SYNC_PEER_REGISTRATION_TOKEN',
+      });
+    }
+
+    const suppliedToken = readHeaderValue(request.headers['x-sync-registration-token']);
+    if (!suppliedToken) {
+      return reply.code(401).send({
+        error: 'PEER_REGISTRATION_TOKEN_MISSING',
+        message: 'X-Sync-Registration-Token header is required',
+      });
+    }
+
+    if (!tokensEqual(suppliedToken, registrationToken)) {
+      return reply.code(403).send({
+        error: 'PEER_REGISTRATION_TOKEN_INVALID',
+        message: 'Peer registration token is invalid',
+      });
+    }
+
+    const { machineId, hostname, tailscaleIp, syncUrl, publicKey, registrationSignature } =
+      request.body ?? {};
+
+    const machineIdResult = validateRequiredString(machineId, {
+      field: 'machineId',
+      error: 'INVALID_MACHINE_ID',
+      maxLength: MAX_MACHINE_ID_LENGTH,
+    });
+    if (!machineIdResult.ok) {
+      return reply.code(400).send(validationFailureBody(machineIdResult));
+    }
+
+    const hostnameResult = validateRequiredString(hostname, {
+      field: 'hostname',
+      error: 'INVALID_HOSTNAME',
+      maxLength: MAX_HOSTNAME_LENGTH,
+    });
+    if (!hostnameResult.ok) {
+      return reply.code(400).send(validationFailureBody(hostnameResult));
+    }
+
+    const tailscaleIpResult = validateOptionalString(tailscaleIp, {
+      field: 'tailscaleIp',
+      error: 'INVALID_TAILSCALE_IP',
+      maxLength: MAX_TAILSCALE_IP_LENGTH,
+    });
+    if (!tailscaleIpResult.ok) {
+      return reply.code(400).send(validationFailureBody(tailscaleIpResult));
+    }
+
+    const syncUrlResult = validateSyncUrl(syncUrl);
+    if (!syncUrlResult.ok) {
+      return reply.code(400).send(validationFailureBody(syncUrlResult));
+    }
+
+    const publicKeyResult = validateRequiredString(publicKey, {
+      field: 'publicKey',
+      error: 'INVALID_PUBLIC_KEY',
+      maxLength: MAX_PUBLIC_KEY_LENGTH,
+    });
+    if (!publicKeyResult.ok) {
+      return reply.code(400).send(validationFailureBody(publicKeyResult));
+    }
+
+    const registrationFields = {
+      machineId: machineIdResult.value,
+      hostname: hostnameResult.value,
+      syncUrl: syncUrlResult.value,
+      tailscaleIp: tailscaleIpResult.value,
+      publicKey: publicKeyResult.value,
+    };
+    if (!verifyPeerRegistrationSignature(registrationSignature, registrationFields)) {
+      return reply.code(403).send({
+        error: 'PEER_REGISTRATION_INVALID_SIGNATURE',
+        message: 'Peer registration signature verification failed',
+      });
+    }
+
+    (request as FastifyRequest & PeerRegistrationRequestContext).peerRegistration =
+      registrationFields;
+  };
 
   app.get(
     '/',
@@ -625,6 +805,55 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           sync_status = EXCLUDED.sync_status,
           sync_interval_ms = EXCLUDED.sync_interval_ms,
           is_self = EXCLUDED.is_self,
+          public_key = EXCLUDED.public_key
+        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+      `);
+      const [peer] = extractRows<SyncPeerRow>(result);
+
+      return reply.code(201).send({
+        ok: true,
+        peer: peer ? mapSyncPeerRow(peer) : null,
+      });
+    },
+  );
+
+  app.post<{ Body: RegisterSyncPeerBody }>(
+    '/register',
+    {
+      config: { rateLimit: registrationRateLimitConfig },
+      schema: {
+        tags: ['sync'],
+        summary: 'Register a reverse mesh sync peer',
+      },
+      preHandler: [app.rateLimit(registrationRateLimitConfig), authorizePeerRegistration],
+    },
+    // @fastify/rate-limit runs before bootstrap token and register-peer signature verification;
+    // CodeQL only models legacy fastify-rate-limit for this rule.
+    // codeql[js/missing-rate-limiting]
+    async (request, reply) => {
+      const registrationFields = readPeerRegistrationContext(request);
+
+      const result = await db.execute(sql`
+        INSERT INTO sync_nodes (id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key)
+        VALUES (
+          ${registrationFields.machineId},
+          ${registrationFields.hostname},
+          ${registrationFields.tailscaleIp},
+          ${registrationFields.syncUrl},
+          'full',
+          'unknown',
+          ${DEFAULT_INTERVAL_MS},
+          false,
+          ${registrationFields.publicKey}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          hostname = EXCLUDED.hostname,
+          tailscale_ip = EXCLUDED.tailscale_ip,
+          sync_url = EXCLUDED.sync_url,
+          role = EXCLUDED.role,
+          sync_status = EXCLUDED.sync_status,
+          sync_interval_ms = EXCLUDED.sync_interval_ms,
+          is_self = false,
           public_key = EXCLUDED.public_key
         RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
       `);

@@ -1,9 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { generateDispatchSigningKeyPair, signDispatchPayload } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Database } from '../../db/index.js';
 import { syncPeersRoutes } from './sync-peers.js';
+
+const REGISTRATION_TOKEN = 'registration-token';
 
 function makePeerRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -41,11 +45,54 @@ function makeValidUpsertPayload(overrides: Record<string, unknown> = {}) {
   };
 }
 
-async function buildApp(db: Database): Promise<FastifyInstance> {
+function makeRegistrationPayload(
+  overrides: Record<string, unknown> = {},
+  signer = generateDispatchSigningKeyPair(),
+  signatureOverrides: { issuedAt?: string } = {},
+) {
+  const body = {
+    machineId: 'machine-9',
+    hostname: 'mesh-worker',
+    syncUrl: 'http://100.64.0.9:8080',
+    tailscaleIp: '100.64.0.9',
+    publicKey: signer.publicKey,
+    ...overrides,
+  };
+  const registrationSignature = signDispatchPayload(
+    {
+      action: 'register-peer',
+      machineId: body.machineId,
+      hostname: body.hostname,
+      syncUrl: body.syncUrl,
+      tailscaleIp: body.tailscaleIp,
+      publicKey: body.publicKey,
+    },
+    {
+      agentId: 'register-peer',
+      machineId: String(body.machineId),
+      secretKey: signer.secretKey,
+      issuedAt: signatureOverrides.issuedAt,
+    },
+  );
+
+  return {
+    payload: {
+      ...body,
+      registrationSignature,
+    },
+    signer,
+  };
+}
+
+async function buildApp(
+  db: Database,
+  options: { registrationToken?: string } = { registrationToken: REGISTRATION_TOKEN },
+): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(syncPeersRoutes, {
     prefix: '/api/sync/peers',
     db,
+    ...options,
   });
   await app.ready();
   return app;
@@ -65,6 +112,9 @@ describe('syncPeersRoutes', () => {
 
   afterEach(async () => {
     globalThis.fetch = originalFetch;
+    delete process.env.SYNC_PEER_REGISTRATION_RATE_LIMIT_MAX;
+    delete process.env.SYNC_PEER_REGISTRATION_RATE_LIMIT_WINDOW_MS;
+    vi.useRealTimers();
     await app.close();
     vi.restoreAllMocks();
   });
@@ -115,6 +165,190 @@ describe('syncPeersRoutes', () => {
         syncUrl: 'http://100.64.0.9:8080',
       },
     });
+  });
+
+  it('registers a reverse sync peer with a bootstrap token and register-peer signature', async () => {
+    const { payload } = makeRegistrationPayload();
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          hostname: 'mesh-worker',
+          sync_url: 'http://100.64.0.9:8080',
+          tailscale_ip: '100.64.0.9',
+          public_key: payload.publicKey,
+        }),
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      headers: { 'x-sync-registration-token': REGISTRATION_TOKEN },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      peer: {
+        machineId: 'machine-9',
+        hostname: 'mesh-worker',
+        syncUrl: 'http://100.64.0.9:8080',
+        publicKey: payload.publicKey,
+      },
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects reverse peer registration without a bootstrap token', async () => {
+    const { payload } = makeRegistrationPayload();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      payload,
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: 'PEER_REGISTRATION_TOKEN_MISSING' });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('keeps reverse peer registration disabled when no operator token is configured', async () => {
+    await app.close();
+    app = await buildApp(db, { registrationToken: '' });
+    const { payload } = makeRegistrationPayload();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      headers: { 'x-sync-registration-token': REGISTRATION_TOKEN },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ error: 'PEER_REGISTRATION_DISABLED' });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects reverse peer registration with an invalid bootstrap token', async () => {
+    const { payload } = makeRegistrationPayload();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      headers: { 'x-sync-registration-token': 'wrong-token' },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: 'PEER_REGISTRATION_TOKEN_INVALID' });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects reverse peer registration when the signature does not match the advertised public key', async () => {
+    const signer = generateDispatchSigningKeyPair();
+    const advertised = generateDispatchSigningKeyPair();
+    const { payload } = makeRegistrationPayload({ publicKey: advertised.publicKey }, signer);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      headers: { 'x-sync-registration-token': REGISTRATION_TOKEN },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: 'PEER_REGISTRATION_INVALID_SIGNATURE' });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects reverse peer registration with a stale register-peer signature', async () => {
+    const { payload } = makeRegistrationPayload({}, generateDispatchSigningKeyPair(), {
+      issuedAt: '2026-04-01T00:00:00.000Z',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      headers: { 'x-sync-registration-token': REGISTRATION_TOKEN },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: 'PEER_REGISTRATION_INVALID_SIGNATURE' });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('upserts an already registered reverse peer idempotently', async () => {
+    const { payload } = makeRegistrationPayload({ hostname: 'mesh-worker-renamed' });
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          hostname: 'mesh-worker-renamed',
+          sync_url: 'http://100.64.0.9:8080',
+          tailscale_ip: '100.64.0.9',
+          public_key: payload.publicKey,
+        }),
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      headers: { 'x-sync-registration-token': REGISTRATION_TOKEN },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      peer: {
+        machineId: 'machine-9',
+        hostname: 'mesh-worker-renamed',
+      },
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('rate limits reverse peer registration attempts', async () => {
+    await app.close();
+    process.env.SYNC_PEER_REGISTRATION_RATE_LIMIT_MAX = '1';
+    process.env.SYNC_PEER_REGISTRATION_RATE_LIMIT_WINDOW_MS = '60000';
+    app = await buildApp(db);
+    const first = makeRegistrationPayload({ machineId: 'machine-9' });
+    const second = makeRegistrationPayload({ machineId: 'machine-10' });
+    execute.mockResolvedValue({
+      rows: [makePeerRow({ id: 'machine-9', public_key: first.payload.publicKey })],
+    });
+
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      headers: { 'x-sync-registration-token': REGISTRATION_TOKEN },
+      payload: first.payload,
+    });
+    const blockedResponse = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/register',
+      headers: { 'x-sync-registration-token': REGISTRATION_TOKEN },
+      payload: second.payload,
+    });
+
+    expect(firstResponse.statusCode).toBe(201);
+    expect(blockedResponse.statusCode).toBe(429);
+    expect(blockedResponse.json()).toMatchObject({ error: 'RATE_LIMITED' });
+  });
+
+  it('keeps reverse peer registration rate-limited before bootstrap authorization', () => {
+    const source = readFileSync(new URL('./sync-peers.ts', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
+    expect(source).toMatch(
+      /'\/register'[\s\S]*?config:\s*\{\s*rateLimit:\s*registrationRateLimitConfig\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(registrationRateLimitConfig\),\s*authorizePeerRegistration\s*\][\s\S]*?\/\/ @fastify\/rate-limit runs before bootstrap token and register-peer signature verification;[\s\S]*?\/\/ CodeQL only models legacy fastify-rate-limit for this rule\.[\s\S]*?\n\s*\/\/ codeql\[js\/missing-rate-limiting\]\n\s*async \(request, reply\) =>/,
+    );
   });
 
   it('rejects peer upserts without a machineId', async () => {
