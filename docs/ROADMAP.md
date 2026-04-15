@@ -366,6 +366,7 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 
 > Design doc: [plans/2026-03-10-unified-memory-layer-design.md](plans/2026-03-10-unified-memory-layer-design.md)
 > Impl plan: [plans/2026-03-10-unified-memory-layer-impl-plan.md](plans/2026-03-10-unified-memory-layer-impl-plan.md)
+> MemPalace-inspired evolution plan: [plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md](plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md)
 >
 > Status note: Delivered on `main` via PRs #30 (claude-mem migration tooling),
 > #31 (memory cutover: dual-backend `MemoryInjector`, memory API routes, memory
@@ -401,6 +402,13 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 - [x] `memory_feedback` MCP tool: `used` / `irrelevant` / `outdated` signals *(PR #58)*
 - [x] Knowledge synthesis: weekly cron Phase 1 (lint) + Phase 2 (LLM-proposed principles, human review) *(direct commit)*
 - [x] Contradiction detection: `contradicts` edges trigger human review flags *(direct commit)*
+
+**MemPalace-Inspired Follow-up (planned):**
+- [ ] Add a verbatim `memory_drawers` layer so raw session/code chunks remain searchable evidence under extracted facts.
+- [ ] Link facts to supporting source drawers via `memory_fact_sources` and show evidence snippets in Memory Browser.
+- [ ] Extend retrieval with drawer-aware search, source-neighbor hydration, temporal boosts, assistant-reference search, and local recall evals before default enablement.
+- [ ] Add checkpoint capture and agent diaries so long sessions and specialist agents keep continuity without polluting verified facts.
+- [ ] Extend memory edges with temporal validity/source references and expose entity timeline queries.
 
 ---
 
@@ -2189,6 +2197,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
 | **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — original 8 pages plus synthesis/maintenance follow-ups, integration points, and MCP tools (PRs #47,#50,#52-#59,#470,#473); backend routes for consolidation, reports, decay, synthesis, and maintenance all landed |
 | **P1** | ~~Memory Browser Provenance Filters~~ | 4.8 | ✅ Delivered in PR #486 — exposes the already-supported `sessionId` / `agentId` / `machineId` memory fact filters in `/memory/browser`, keeps them shareable via URL state, and adds focused unit/Playwright coverage. See [plans/2026-04-14-memory-browser-provenance-filters-plan.md](plans/2026-04-14-memory-browser-provenance-filters-plan.md) |
+| **P1** | MemPalace-Inspired Memory Evolution | 3.6 / 4.8 / 7.3 | Planned — keep the existing PostgreSQL-native memory core, add verbatim drawers, fact-source provenance, drawer-aware retrieval, checkpoint capture, agent diaries, temporal timeline queries, and a recall eval harness. See [plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md](plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md). |
 | **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all original ARIA items complete (PRs #51,#54,#59), StatusBadge descriptions refreshed in PR #417, slash-search/hotkey discoverability improved in PRs #446/#449, shared Sidebar/Sessions `?` event ownership centralized in PR #450, and sidebar Go To keyboard coverage plus Settings shortcut docs expanded in PR #525 |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
