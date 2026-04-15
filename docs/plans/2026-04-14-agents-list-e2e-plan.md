@@ -1,7 +1,7 @@
 # Agents List E2E Coverage Plan
 
 Date: 2026-04-14
-Status: Delivered in PR #494; CI gating follow-up in PR #518
+Status: Delivered in PR #494; CI-gated in PR #518 with shared-package build preflight
 Owner: Codex
 
 ## Context
@@ -27,5 +27,6 @@ PR #492 added backend-independent coverage for `/agents/[id]`, but the `/agents`
 
 - `WEB_PORT=<unique> pnpm --filter @agentctl/web exec playwright test e2e/agents-list.spec.ts`
 - `WEB_PORT=<unique> pnpm --filter @agentctl/web test:e2e:ci`
+- PR #518 extends `test:e2e:ci` to include `agents-list.spec.ts` and builds `@agentctl/shared` before Playwright so cold CI checkouts can compile `/agents` imports.
 - `git diff --check`
 - `pnpm lint`
