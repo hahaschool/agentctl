@@ -1,7 +1,7 @@
 # Mesh Schema + Protocol Compatibility Policy
 
-Roadmap tracker: [33.10 Mesh Schema + Protocol Compat Policy (P0)](./ROADMAP.md#3310-mesh-schema--protocol-compat-policy-p0--planned).
-Related: [33.9 Mesh Version Observability (P1)](./ROADMAP.md#339-mesh-version-observability-p1--planned).
+Roadmap tracker: [33.10 Mesh Schema + Protocol Compat Policy (P0)](./ROADMAP.md#3310-mesh-schema--protocol-compat-policy-p0--in-progress).
+Related: [33.9 Mesh Version Observability (P1)](./ROADMAP.md#339-mesh-version-observability-p1--in-progress).
 
 ## Scope
 
@@ -10,7 +10,7 @@ Every mesh envelope (one row returned by `GET /api/sync/changes`) carries a
 
 ```ts
 type MeshEnvelopeMeta = {
-  schemaVersion: number;      // producer's highest applied migration seq
+  schemaVersion: number;      // producer's highest shipped migration prefix
   protocolVersion: number;    // mesh wire-format version (starts at 1)
   producerVersion: string;    // producer's appVersion, e.g. "0.4.0"
 };
@@ -43,9 +43,10 @@ The **apply-side compat gate** lives in
 
 ### `schemaVersion` skew: ±1 during rolling updates
 
-- **Definition** — `schemaVersion` is the count of `.sql` files in the
-  producer's `packages/control-plane/drizzle/` directory, matching
-  roadmap 33.9's definition of "highest applied migration sequence number".
+- **Definition** — `schemaVersion` is the highest numeric prefix across `.sql`
+  files shipped in the producer's `packages/control-plane/drizzle/` directory.
+  It is build metadata for the producer, not a read of the database's applied
+  migration ledger.
 - **Tolerance** — an inbound envelope is accepted when
   `envelope.schemaVersion <= localSchemaVersion + 1`. This covers the normal
   rolling-update window: one peer has picked up a new migration, others are

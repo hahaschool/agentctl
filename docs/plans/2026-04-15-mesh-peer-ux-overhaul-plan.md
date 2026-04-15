@@ -1,6 +1,6 @@
 # Mesh Peer UX Overhaul Plan
 
-**Status:** Planned
+**Status:** In Progress — backend ping diagnostics and peer edit landed
 **Roadmap:** 33.7 Mesh Peer UX Overhaul
 **Created:** 2026-04-15
 
@@ -14,37 +14,37 @@ The 2026-04-15 beta mesh setup exposed three operator-facing gaps in `/mesh-peer
 
 `syncIntervalMs` is not discoverable infrastructure data; it should remain an operator policy with a default and an editable review step.
 
+## Delivered
+
+1. Backend ping diagnostics *(PR #550)*.
+   - Ping failures are classified into stable categories.
+   - `sync_nodes` stores `last_ping_error` and `last_ping_status_code`.
+   - Peer rows and ping responses include the persisted diagnostics.
+
+2. Existing peer editing *(PR #551)*.
+   - `/mesh-peers` can edit an existing peer in-place through the existing idempotent upsert API.
+   - The edit path preserves the backend role contract and keeps self-peer rows protected.
+
 ## Scope
 
-1. Persist and return ping failure details.
-   - Add a typed ping error category such as `dns`, `connect_refused`, `tls_handshake`, `timeout`, `http_status`, or `other`.
-   - Include the last HTTP status when the target responds with a non-2xx status.
-   - Store the latest ping error on `sync_nodes` so table state survives refresh.
-
-2. Render actionable failure details.
+1. Render actionable failure details.
    - Show the error category next to the peer status pill.
    - Include the specific reason in ping failure toasts.
    - Keep wording focused on what to fix: scheme mismatch, refused port, timeout, DNS, or HTTP status.
 
-3. Add per-row Edit.
-   - Reuse the existing Add peer dialog in edit mode.
-   - Prepopulate current row values.
-   - Keep self-peer edit disabled.
-   - Submit through the existing idempotent `POST /api/sync/peers` path unless backend validation requires a narrower update endpoint.
-
-4. Add Tailscale discovery.
+2. Add Tailscale discovery.
    - Implement `GET /api/sync/peers/discover` behind the same auth/rate-limit posture as other sync routes.
    - Use `tailscale status --json` without interpolating user-controlled shell fragments.
    - Filter to `tag:mesh-node`, probe `http://<tailscaleIp>:8080/health`, and return discovered identity/address/key data for peers not already registered.
 
-5. Add manual Probe.
+3. Add manual Probe.
    - Implement `GET /api/sync/peers/probe?target=...`.
    - Reuse the existing sync URL SSRF blocklist and IP/hostname validation rules.
    - Probe `/health` for `machineId` and `nodePublicKey`; derive `syncUrl` from the validated target, and fill `hostname`/`tailscaleIp` from the user-entered target or Tailscale status data where available.
    - Default `syncUrl` to `http://<target>:8080`; keep HTTPS available for public endpoints.
 
-6. Cover the browser flows.
-   - Add `/mesh-peers` Playwright coverage for edit, discover, probe, and detailed ping-failure rendering.
+4. Cover the remaining browser flows.
+   - Add `/mesh-peers` Playwright coverage for discover, probe, and detailed ping-failure rendering.
    - Keep tests backend-independent where practical; use a dedicated two-node fixture only if the route behavior cannot be mocked safely.
 
 ## Non-Goals
