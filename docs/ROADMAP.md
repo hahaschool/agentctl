@@ -2038,7 +2038,13 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] ACL tests embedded in `acl-policy.json` (5 test cases per repo convention)
 - [x] Document mesh tagging procedure in `infra/tailscale/README.md`
 
-### 33.7 Mesh Peer UX Overhaul (P1) — Planned
+### 33.7 Mesh Peer UX Overhaul (P1) — Partially Delivered
+
+**Delivered in this cycle:**
+
+- PR #550 persists mesh peer ping diagnostics (`last_ping_error`, `last_ping_status_code`, status-code + reason surfaces on the API + UI).
+- PR #551 adds the per-row in-place Edit dialog + Playwright coverage (Discover, Probe, manual flows still outstanding).
+
 
 **Plan:** [plans/2026-04-15-mesh-peer-ux-overhaul-plan.md](plans/2026-04-15-mesh-peer-ux-overhaul-plan.md)
 
@@ -2060,7 +2066,12 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 **Depends on:** 33.4 (peer registry), 33.6 (ACL tagging). Contributes to 16.1 observability (surfacing mesh ping diagnostics).
 
-### 33.8 Mesh Bidirectional Registration + Cross-Node Visibility (P0) — Planned
+### 33.8 Mesh Bidirectional Registration + Cross-Node Visibility (P0) — Partially Delivered
+
+**Delivered in this cycle:**
+
+- PR #552 added the authenticated `POST /api/sync/peers/register` handshake endpoint so a newly-added peer on node A auto-registers the reverse row on node B. Machines/workers cross-visibility, fleet-view badge, mesh health panel, and Playwright two-node fixture are still outstanding.
+
 
 **Plan:** [plans/2026-04-15-mesh-bidirectional-registration-plan.md](plans/2026-04-15-mesh-bidirectional-registration-plan.md)
 
@@ -2082,7 +2093,16 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 **Depends on:** 33.4 (peer registry + peer-auth). Shares UI affordances with 33.7, but the P0 registration endpoint, fallback warning, and manual retry action should not block on the full 33.7 UX overhaul.
 
-### 33.9 Mesh Version Observability (P1) — Planned
+### 33.9 Mesh Version Observability (P1) — Mostly Delivered
+
+**Delivered in this cycle:**
+
+- PR #555 added `peer_version` / `peer_git_sha` / `peer_schema_version` columns to `sync_nodes` and shared `SyncNode` types.
+- PR #556 exposed `appVersion` + `gitSha` + `schemaVersion` on `/health` via a new `build-info` module (drizzle migration count; `GIT_SHA`/`GITHUB_SHA` env).
+- PR #558 renders the per-peer Version column on `/mesh-peers`, a mesh-wide drift banner, and a sidebar-footer peer-version tooltip.
+
+**Still outstanding:** wiring `sync-peers.ts` `pingPeer()` to parse the remote `/health` response and persist `peer_version` / `peer_git_sha` / `peer_schema_version` on every heartbeat.
+
 
 **Motivation:** Today `/health` exposes only `nodeVersion` (the Node.js runtime). There is no surface that reports which AgentCTL release each node is running, and no way to see if peers have drifted. After the v0.3.1 → v0.4.0 promote on 2026-04-15 a `Youhane-Iori.local` peer could be on v0.4.0 while `pinnacle-macmini` was still on v0.3.1 and we would not know until an API contract change surfaced a bug. Observability must land before any automated rollout, otherwise drift is invisible both before and after.
 
@@ -2097,7 +2117,10 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 **Depends on:** 33.4 (peer registry) + pings already wired in 33.7. **Prereq for:** 33.11 (automated rollout decisions need a drift signal).
 
-### 33.10 Mesh Schema + Protocol Compat Policy (P0) — Planned
+### 33.10 Mesh Schema + Protocol Compat Policy (P0) — Delivered
+
+**Delivered:** PR #557 landed the full envelope compat gate: shared `MeshEnvelopeMeta`/`MESH_PROTOCOL_VERSION*` constants, `mesh-compat.ts` with `assertEnvelopeCompat()` + `buildLocalEnvelopeMeta()`, typed errors (`MeshEnvelopeSchemaAheadError`, `MeshProtocolUnsupportedError`), producer-side envelope stamping in the sync route, apply-side gating in `apply-change.ts`, `docs/MESH_COMPAT.md`, and 6 apply-gate unit tests. The "peer ahead — please update" banner on `/mesh-peers` is still a follow-up, gated on 33.11's update action existing.
+
 
 **Motivation:** The mesh change-log envelope (`packages/control-plane/src/sync/apply-change.ts`) does not carry a schema or protocol version. During a rolling upgrade, a peer on schema 24 could receive an envelope authored against schema 25 (new column, dropped column, renamed key) and silently half-apply — the sync loop has no way to detect the mismatch and gate the apply. Any automated rollout (33.11) would multiply this risk. The envelope needs a versioned compat contract **before** any auto-update lands, regardless of whether the rollout stays manual.
 
@@ -2163,10 +2186,10 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Mesh: Conflict Resolution UI~~ | 33.3 | ✅ Delivered — PR #381 merged the feature slice, PR #389 added focused Playwright coverage for the existing `/conflicts` page state/filter flows, and PR #391 added direct backend route coverage for the `sync-conflicts` handlers. |
 | **P1** | ~~Mesh: Unified CP + Worker~~ | 33.5 | ✅ Delivered — PR #379 merged. Machine-scoped jobs/reaper/scheduler, localhost dispatch, setup script, PM2 mesh config. |
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
-| **P1** | Mesh Peer UX Overhaul | 33.7 | Planned — surface per-ping failure reason, add per-row Edit, Tailscale-backed `/discover` + `/probe` endpoints, and a two-step discovery picker so adding a peer no longer requires typing identity/key/URL fields by hand. Motivated by 2026-04-15 beta incident where an `https://` syncUrl on an HTTP-only peer reported `unreachable` with no detail. See [plans/2026-04-15-mesh-peer-ux-overhaul-plan.md](plans/2026-04-15-mesh-peer-ux-overhaul-plan.md). |
-| **P0** | Mesh Bidirectional Registration + Cross-Node Visibility | 33.8 | Planned — adding a peer on node A today does not register A on node B, so sync is silently one-way and peer Machines never cross-populate. Adds a signed `POST /api/sync/peers/register` handshake with an explicit first-registration trust model, a manual "Register with peer" action, explicit machine-row sync provenance for `/machines` origin badges, and a two-node Playwright fixture that proves machine rows replicate end-to-end. Motivated by 2026-04-15 observation that laptop-side `mac-local` never appeared in macmini's `sync_nodes` or `machines`. See [plans/2026-04-15-mesh-bidirectional-registration-plan.md](plans/2026-04-15-mesh-bidirectional-registration-plan.md). |
-| **P1** | Mesh Version Observability | 33.9 | Planned — `/health` only exposes `nodeVersion` (Node.js runtime) today, leaving release drift invisible across the mesh. Adds `appVersion` + `gitSha` + `schemaVersion` to `/health`, persists them on `sync_nodes` via ping, renders a version column + mesh-wide drift banner on `/mesh-peers`, and lists peer versions from the sidebar footer tooltip. Prereq for 33.11 — auto-update decisions need a drift signal. |
-| **P0** | Mesh Schema + Protocol Compat Policy | 33.10 | Planned — mesh envelopes carry no schema/protocol version today, so rolling upgrades can half-apply changes silently. Tags every envelope with `{ schemaVersion, protocolVersion, producerVersion }`, adds an apply-side compat gate with a typed `MESH_ENVELOPE_SCHEMA_AHEAD` error, shows a "Peer ahead — please update" banner on `/mesh-peers`, and documents the ±1 schema skew policy in `docs/MESH_COMPAT.md`. Must land before any auto-update (33.11) to keep rollouts safe. |
+| **P1** | Mesh Peer UX Overhaul | 33.7 | Partially delivered — PR #550 (ping-diagnostic persistence + UI surface) and PR #551 (per-row in-place Edit) are on `main`. Discover / Probe / two-step add-peer flow and the inline scheme helper remain outstanding. See [plans/2026-04-15-mesh-peer-ux-overhaul-plan.md](plans/2026-04-15-mesh-peer-ux-overhaul-plan.md). |
+| **P0** | Mesh Bidirectional Registration + Cross-Node Visibility | 33.8 | Partially delivered — PR #552 landed the authenticated `POST /api/sync/peers/register` handshake so new peers auto-register the reverse row. Machines/workers cross-visibility, `/machines` origin badges, mesh health panel, and the two-node Playwright fixture remain outstanding. See [plans/2026-04-15-mesh-bidirectional-registration-plan.md](plans/2026-04-15-mesh-bidirectional-registration-plan.md). |
+| **P1** | Mesh Version Observability | 33.9 | Mostly delivered — PR #555 (sync_nodes peer version columns), PR #556 (`/health` `appVersion` + `gitSha` + `schemaVersion` + new `build-info` module), and PR #558 (`/mesh-peers` version column + drift banner + sidebar tooltip) are on `main`. Remaining follow-up: have `pingPeer()` parse the remote `/health` response and persist into the new sync_nodes columns on every heartbeat. |
+| **P0** | ~~Mesh Schema + Protocol Compat Policy~~ | 33.10 | ✅ Delivered — PR #557 shipped `MeshEnvelopeMeta` + `MESH_PROTOCOL_VERSION*` in shared, a new `mesh-compat.ts` with `assertEnvelopeCompat()` + `buildLocalEnvelopeMeta()`, typed `MeshEnvelopeSchemaAheadError` + `MeshProtocolUnsupportedError`, producer-side envelope stamping in the sync route, apply-side gating in `apply-change.ts`, `docs/MESH_COMPAT.md`, and 6 apply-gate unit tests. The "Peer ahead — please update" banner is deferred to 33.11's update-flow slice. |
 | **P1** | Fleet Rollout & Peer Auto-Update (two-topology) | 33.11 | Planned — beta promotion today still requires manual `git pull && pnpm build && pm2 reload` on each mesh node. Activates the existing Docker fleet path (populate `infra/machines.yml`, wire `actions/attest-build-provenance` + `gh attestation verify`, canary dry-run via `deploy-fleet.yml`, reuse `migration-check.yml`). Adds a PM2 mesh path: `scripts/peer-update.sh` + `pnpm agentctl peer update` subcommand, opt-in `launchd`/`systemd` timers (disabled by default), a `/settings` auto-update toggle, a per-row "Update" action on `/mesh-peers` protected by Ed25519 peer-auth, and documented rollback for both topologies. Cross-topology: `/api/version-compat` for iOS/web clients, an "Update available" web banner, and a two-node Playwright fixture. Explicit non-goal: no truly unattended automation — auto-update stays opt-in. Depends on 33.9 + 33.10. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 landed the scripts hardening, PR #380 re-closed the earlier latest-base alert, and PRs #386-#388 closed the reopened 2026-04-01 findings on current `main` |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
