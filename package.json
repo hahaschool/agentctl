@@ -19,6 +19,7 @@
     "test:coverage": "pnpm -r test:coverage",
     "lint": "biome check packages/ scripts/",
     "lint:fix": "biome check --write packages/ scripts/",
+    "audit:deps": "node scripts/npm-bulk-audit.mjs",
     "typecheck": "pnpm -r build",
     "clean": "pnpm -r exec rm -rf dist",
     "agentctl": "tsx scripts/agentctl.ts",
