@@ -150,6 +150,7 @@ export const queryKeys = {
   syncConflict: (id: string) => ['sync-conflicts', id] as const,
   syncConflictCount: ['sync-conflict-count'] as const,
   syncPeers: ['sync-peers'] as const,
+  syncPeerCursors: (machineId: string) => ['sync-peer-cursors', machineId] as const,
   webhooks: ['webhooks'] as const,
   webhookDeliveries: (id: string) => ['webhook-deliveries', id] as const,
   memory: {
@@ -1783,6 +1784,20 @@ export function syncPeersQuery() {
     queryFn: api.listSyncPeers,
     refetchInterval: SYNC_PEER_POLL_INTERVAL,
     refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * §33.8 — Fetch raw `sync_peer_cursors` state for a single peer. Gated by
+ * `enabled` so the mesh health panel only requests cursor data once the row
+ * has been expanded.
+ */
+export function syncPeerCursorsQuery(machineId: string, enabled: boolean) {
+  return queryOptions({
+    queryKey: queryKeys.syncPeerCursors(machineId),
+    queryFn: () => api.getSyncPeerCursors(machineId),
+    enabled,
+    staleTime: 15_000,
   });
 }
 

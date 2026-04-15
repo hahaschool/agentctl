@@ -1222,4 +1222,107 @@ describe('syncPeersRoutes reverse registration (§33.8)', () => {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({ error: 'REVERSE_REGISTRATION_DISABLED' });
   });
+
+  // --------------------------------------------------------------------
+  // §33.8 — mesh health panel: peer cursor drill-down endpoint.
+  // --------------------------------------------------------------------
+
+  describe('GET /api/sync/peers/:machineId/cursors (§33.8)', () => {
+    it('returns the cursor row for a peer', async () => {
+      execute.mockResolvedValueOnce({ rows: [makePeerRow({ id: 'machine-2' })] });
+      execute.mockResolvedValueOnce({
+        rows: [
+          {
+            local_node_id: 'self-machine',
+            remote_node_id: 'machine-2',
+            pulled_cursor: 42,
+            acked_cursor: 40,
+            updated_at: '2026-04-15T12:00:00.000Z',
+          },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/machine-2/cursors',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        machineId: 'machine-2',
+        localNodeId: 'self-machine',
+        remoteNodeId: 'machine-2',
+        pulledCursor: 42,
+        ackedCursor: 40,
+        lastPullAt: '2026-04-15T12:00:00.000Z',
+        lastAckAt: '2026-04-15T12:00:00.000Z',
+        updatedAt: '2026-04-15T12:00:00.000Z',
+      });
+    });
+
+    it('returns 404 when the peer does not exist', async () => {
+      execute.mockResolvedValueOnce({ rows: [] });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/ghost-machine/cursors',
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ error: 'SYNC_PEER_NOT_FOUND' });
+    });
+
+    it('returns 404 when no cursor row has been materialized yet', async () => {
+      execute.mockResolvedValueOnce({ rows: [makePeerRow({ id: 'machine-2' })] });
+      execute.mockResolvedValueOnce({ rows: [] });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/machine-2/cursors',
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ error: 'SYNC_PEER_CURSORS_NOT_FOUND' });
+    });
+
+    it('exposes lastPullAt on GET /api/sync/peers via the cursor JOIN', async () => {
+      execute.mockResolvedValueOnce({
+        rows: [
+          {
+            ...makePeerRow({ id: 'machine-fresh' }),
+            last_pull_at: '2026-04-15T12:00:00.000Z',
+            last_ack_at: '2026-04-15T12:00:00.000Z',
+          },
+          {
+            ...makePeerRow({ id: 'machine-stale' }),
+            last_pull_at: null,
+            last_ack_at: null,
+          },
+        ],
+      });
+
+      const response = await app.inject({ method: 'GET', url: '/api/sync/peers' });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        peers: Array<{
+          machineId: string;
+          lastPullAt?: string | null;
+          lastAckAt?: string | null;
+        }>;
+      };
+      expect(body.peers).toEqual([
+        expect.objectContaining({
+          machineId: 'machine-fresh',
+          lastPullAt: '2026-04-15T12:00:00.000Z',
+          lastAckAt: '2026-04-15T12:00:00.000Z',
+        }),
+        expect.objectContaining({
+          machineId: 'machine-stale',
+          lastPullAt: null,
+          lastAckAt: null,
+        }),
+      ]);
+    });
+  });
 });

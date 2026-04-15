@@ -123,6 +123,18 @@ export type SyncNode = {
   lastSchemaAheadVersion?: number | null;
   lastSchemaAheadAt?: string | null;
   schemaAheadCount?: number | null;
+  /**
+   * Cursor timestamps derived from `sync_peer_cursors` (roadmap §33.8).
+   *
+   * Used by the mesh health panel to classify a peer as "stale" when
+   * `lastPullAt` has not advanced in the last 10 minutes, and by the row
+   * drill-down to surface the exact pull/ack cursor state.
+   *
+   * Both fields are optional for backward compatibility with responses from
+   * older control planes that pre-date the mesh health panel.
+   */
+  lastPullAt?: string | null;
+  lastAckAt?: string | null;
 };
 
 /**

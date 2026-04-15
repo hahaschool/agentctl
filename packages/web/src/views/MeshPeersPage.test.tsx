@@ -10,6 +10,7 @@ import type { SyncPeer } from '@/lib/api';
 
 const {
   mockSyncPeersQuery,
+  mockSyncPeerCursorsQuery,
   mockUsePingSyncPeer,
   mockUseUpsertSyncPeer,
   mockUseDeleteSyncPeer,
@@ -20,6 +21,7 @@ const {
   mockToastError,
 } = vi.hoisted(() => ({
   mockSyncPeersQuery: vi.fn(),
+  mockSyncPeerCursorsQuery: vi.fn(),
   mockUsePingSyncPeer: vi.fn(),
   mockUseUpsertSyncPeer: vi.fn(),
   mockUseDeleteSyncPeer: vi.fn(),
@@ -74,6 +76,8 @@ vi.mock('@/components/Toast', () => ({
 
 vi.mock('@/lib/queries', () => ({
   syncPeersQuery: () => mockSyncPeersQuery(),
+  syncPeerCursorsQuery: (machineId: string, enabled: boolean) =>
+    mockSyncPeerCursorsQuery(machineId, enabled),
   usePingSyncPeer: () => mockUsePingSyncPeer(),
   useUpsertSyncPeer: () => mockUseUpsertSyncPeer(),
   useDeleteSyncPeer: () => mockUseDeleteSyncPeer(),
@@ -149,6 +153,20 @@ describe('MeshPeersPage', () => {
       queryKey: ['sync-peers'],
       queryFn: vi.fn().mockResolvedValue({ peers: [makePeer()] }),
     });
+    mockSyncPeerCursorsQuery.mockImplementation((machineId: string, enabled: boolean) => ({
+      queryKey: ['sync-peer-cursors', machineId],
+      queryFn: vi.fn().mockResolvedValue({
+        machineId,
+        localNodeId: 'self',
+        remoteNodeId: machineId,
+        pulledCursor: 0,
+        ackedCursor: 0,
+        lastPullAt: null,
+        lastAckAt: null,
+        updatedAt: null,
+      }),
+      enabled,
+    }));
     mockUsePingSyncPeer.mockReturnValue(makeMutationHook());
     mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook());
     mockUseDeleteSyncPeer.mockReturnValue(makeMutationHook());
@@ -1186,6 +1204,122 @@ describe('MeshPeersPage', () => {
 
       fireEvent.click(screen.getByTestId('mesh-peer-probe-override'));
       expect((screen.getByTestId('mesh-peer-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.8 — Mesh health summary + peer row drill-down.
+  // ---------------------------------------------------------------------------
+
+  describe('mesh health summary', () => {
+    it('renders the summary line above the peers table with correct counts', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'a',
+              reverseRegistrationStatus: 'ok',
+              lastPullAt: new Date().toISOString(),
+            }),
+            makePeer({
+              machineId: 'b',
+              reverseRegistrationStatus: 'failed',
+              lastPullAt: new Date().toISOString(),
+            }),
+            makePeer({
+              machineId: 'c',
+              reverseRegistrationStatus: null,
+              lastPullAt: null,
+            }),
+          ],
+        }),
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mesh-health-summary')).toBeDefined();
+      });
+      expect(screen.getByTestId('mesh-health-total').textContent).toContain('3');
+      expect(screen.getByTestId('mesh-health-bidirectional').textContent).toContain('1');
+      expect(screen.getByTestId('mesh-health-one-way').textContent).toContain('2');
+      expect(screen.getByTestId('mesh-health-stale').textContent).toContain('1');
+    });
+
+    it('does not render the summary when there are no peers', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('No mesh peers registered.')).toBeDefined();
+      });
+      expect(screen.queryByTestId('mesh-health-summary')).toBeNull();
+    });
+
+    it('expands a peer row on click and renders the cursor detail panel', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [makePeer({ machineId: 'node-abc' })] }),
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-row-node-abc')).toBeDefined();
+      });
+      expect(screen.queryByTestId('peer-row-detail-node-abc')).toBeNull();
+
+      fireEvent.click(screen.getByTestId('peer-row-node-abc'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-row-detail-node-abc')).toBeDefined();
+        expect(screen.getByTestId('peer-cursor-detail-node-abc')).toBeDefined();
+      });
+      // Query hook must be invoked with the expanded peer id and enabled=true.
+      expect(mockSyncPeerCursorsQuery).toHaveBeenCalledWith('node-abc', true);
+    });
+
+    it('collapses a previously-expanded peer row on a second click', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [makePeer({ machineId: 'node-z' })] }),
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-row-node-z')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('peer-row-node-z'));
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-row-detail-node-z')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('peer-row-node-z'));
+      await waitFor(() => {
+        expect(screen.queryByTestId('peer-row-detail-node-z')).toBeNull();
+      });
+    });
+
+    it('does not toggle expansion when an action button inside the row is clicked', async () => {
+      const pingMutate = vi.fn();
+      mockUsePingSyncPeer.mockReturnValue(makeMutationHook({ mutate: pingMutate }));
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [makePeer({ machineId: 'node-btn' })] }),
+      });
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-row-node-btn')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('ping-node-btn'));
+
+      expect(pingMutate).toHaveBeenCalled();
+      expect(screen.queryByTestId('peer-row-detail-node-btn')).toBeNull();
     });
   });
 });
