@@ -1822,6 +1822,27 @@ export function useUpdateSyncPeer() {
 }
 
 /**
+ * §33.7 — Discover candidate Tailscale peers. Fetched on demand when the
+ * operator opens the add-peer dialog (query disabled by default).
+ */
+export function useDiscoverSyncPeers() {
+  return useMutation({
+    mutationFn: () => api.discoverSyncPeers(),
+  });
+}
+
+/**
+ * §33.7 — Probe a sync URL's `/health` endpoint before persisting it. This is
+ * a side-effectful but idempotent request so it uses `useMutation` to stay in
+ * lockstep with the add-peer dialog's user interactions.
+ */
+export function useProbeSyncUrl() {
+  return useMutation({
+    mutationFn: (syncUrl: string) => api.probeSyncUrl(syncUrl),
+  });
+}
+
+/**
  * §33.8 — Retry reverse registration against an existing peer.
  *
  * Always invalidates the peer list so the "one-way" badge reflects the

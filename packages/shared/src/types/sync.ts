@@ -82,6 +82,17 @@ export type SyncNode = {
   peerGitSha?: string | null;
   peerSchemaVersion?: number | null;
   /**
+   * Ping diagnostics (roadmap §33.4 + §33.7).
+   *
+   * Populated by the control plane health-check loop and the manual `/ping`
+   * endpoint. `lastPingError` is a short category string (e.g. `timeout`,
+   * `connect_refused`, `http_status`) and `lastPingStatusCode` is the HTTP
+   * status code when the peer responded with a non-OK status. Both are null
+   * on a successful probe.
+   */
+  lastPingError?: string | null;
+  lastPingStatusCode?: number | null;
+  /**
    * Outbound reverse registration outcome (roadmap §33.8).
    *
    * When an operator adds a peer locally, the control plane calls the peer's

@@ -25,6 +25,7 @@ import {
   syncPeersQuery,
   useDeleteSyncPeer,
   usePingSyncPeer,
+  useProbeSyncUrl,
   useRegisterReverseSyncPeer,
   useUpdateSyncPeer,
   useUpsertSyncPeer,
@@ -90,6 +91,75 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Ping diagnostics — roadmap §33.7
+// ---------------------------------------------------------------------------
+
+const PING_DIAGNOSTIC_MAX_CHARS = 120;
+
+/**
+ * Compose the compact diagnostic reason shown beneath the status badge.
+ * Returns null when there is no useful signal (peer is reachable or no error
+ * has been recorded yet).
+ */
+export function formatPingDiagnostic(
+  peer: Pick<SyncPeer, 'syncStatus' | 'lastPingError' | 'lastPingStatusCode'>,
+): { reason: string; truncated: boolean; full: string } | null {
+  if (peer.syncStatus === 'reachable') return null;
+  const rawError = peer.lastPingError;
+  if (!rawError || rawError.length === 0) return null;
+
+  const status = peer.lastPingStatusCode;
+  const prefix = typeof status === 'number' && status > 0 ? `HTTP ${status} — ` : '';
+  const full = `${prefix}${rawError}`;
+  const truncated = full.length > PING_DIAGNOSTIC_MAX_CHARS;
+  const reason = truncated ? `${full.slice(0, PING_DIAGNOSTIC_MAX_CHARS - 1)}…` : full;
+  return { reason, truncated, full };
+}
+
+type PingDiagnosticLineProps = {
+  peer: SyncPeer;
+};
+
+/**
+ * §33.7 — Render the truncated ping-failure reason below the status badge.
+ * Self-rows and reachable peers render nothing.
+ */
+function PingDiagnosticLine({ peer }: PingDiagnosticLineProps): React.JSX.Element | null {
+  const diagnostic = formatPingDiagnostic(peer);
+  if (!diagnostic) return null;
+
+  const handleCopy = (): void => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+    void navigator.clipboard.writeText(diagnostic.full);
+  };
+
+  return (
+    <div
+      data-testid={`peer-ping-diagnostic-${peer.machineId}`}
+      className="mt-1 flex items-center gap-1.5"
+    >
+      <span
+        title={diagnostic.full}
+        className="text-[11px] font-mono text-muted-foreground truncate max-w-[240px]"
+      >
+        {diagnostic.reason}
+      </span>
+      {diagnostic.truncated && (
+        <button
+          type="button"
+          onClick={handleCopy}
+          data-testid={`peer-ping-diagnostic-copy-${peer.machineId}`}
+          title="Copy full error"
+          className="px-1.5 py-px rounded-sm text-[10px] font-medium border border-border bg-muted text-muted-foreground hover:bg-accent/10"
+        >
+          Copy
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Dialog: add peer
 // ---------------------------------------------------------------------------
 
@@ -130,11 +200,30 @@ type PeerFormDialogProps = {
   onClose: () => void;
 };
 
+type ProbeState =
+  | { kind: 'idle' }
+  | { kind: 'pending' }
+  | {
+      kind: 'success';
+      syncUrl: string;
+      appVersion: string | null;
+      statusCode: number | null;
+    }
+  | {
+      kind: 'failure';
+      syncUrl: string;
+      reason: string;
+      statusCode: number | null;
+    };
+
 function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX.Element | null {
   const toast = useToast();
   const upsertPeer = useUpsertSyncPeer();
+  const probeMutation = useProbeSyncUrl();
   const [state, setState] = useState<PeerFormState>(() => emptyPeerForm());
   const [error, setError] = useState<string | null>(null);
+  const [probeState, setProbeState] = useState<ProbeState>({ kind: 'idle' });
+  const [probeOverridden, setProbeOverridden] = useState(false);
 
   const isUpdate = Boolean(peer);
   const key = open ? `open:${peer?.machineId ?? 'new'}` : 'closed';
@@ -143,6 +232,8 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
     setLastKey(key);
     setState(peer ? peerFormFromPeer(peer) : emptyPeerForm());
     setError(null);
+    setProbeState({ kind: 'idle' });
+    setProbeOverridden(false);
   }
 
   if (!open) return null;
@@ -152,6 +243,53 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
   const syncUrlTooLong = syncUrlLength > MAX_SYNC_URL_LENGTH;
   const showSyncUrlCounter =
     syncUrlLength > 0 && syncUrlLength >= MAX_SYNC_URL_LENGTH - URL_LENGTH_COUNTER_THRESHOLD;
+
+  // §33.7 — When the probe has succeeded for the current URL, Save is
+  // unblocked. Otherwise the operator can either run the probe or override.
+  const syncUrlLooksValid =
+    trimmedSyncUrl.length > 0 && !syncUrlTooLong && isValidHttpUrl(trimmedSyncUrl);
+  const probeMatchesCurrentUrl =
+    (probeState.kind === 'success' || probeState.kind === 'failure') &&
+    probeState.syncUrl === trimmedSyncUrl;
+  const probePassed = probeState.kind === 'success' && probeMatchesCurrentUrl;
+  const canProbe = syncUrlLooksValid && probeState.kind !== 'pending';
+  // Gate Save ONLY when the URL is locally valid — invalid URLs should fall
+  // through to the form validator so the operator sees the proper error.
+  // Updates (existing peers) aren't blocked — preserves the "edit without
+  // reprobing" UX from §33.5.
+  const saveBlockedByProbe = !isUpdate && syncUrlLooksValid && !probePassed && !probeOverridden;
+
+  const handleProbe = (): void => {
+    if (!canProbe) return;
+    setProbeState({ kind: 'pending' });
+    probeMutation.mutate(trimmedSyncUrl, {
+      onSuccess: (result) => {
+        if (result.reachable) {
+          setProbeState({
+            kind: 'success',
+            syncUrl: trimmedSyncUrl,
+            appVersion: result.appVersion ?? null,
+            statusCode: result.statusCode ?? null,
+          });
+        } else {
+          setProbeState({
+            kind: 'failure',
+            syncUrl: trimmedSyncUrl,
+            reason: result.error ?? 'Peer unreachable',
+            statusCode: result.statusCode ?? null,
+          });
+        }
+      },
+      onError: (err) => {
+        setProbeState({
+          kind: 'failure',
+          syncUrl: trimmedSyncUrl,
+          reason: errorMessage(err, 'Probe failed'),
+          statusCode: null,
+        });
+      },
+    });
+  };
 
   const validate = (): { body: UpsertSyncPeerInput } | { error: string } => {
     const machineId = state.machineId.trim();
@@ -277,25 +415,76 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
               >
                 Sync URL
               </label>
-              <input
-                id="mesh-peer-sync-url"
-                type="url"
-                value={state.syncUrl}
-                onChange={(e) => setState((p) => ({ ...p, syncUrl: e.target.value }))}
-                aria-invalid={syncUrlTooLong || undefined}
-                aria-describedby={
-                  syncUrlTooLong
-                    ? 'mesh-peer-sync-url-error'
-                    : showSyncUrlCounter
-                      ? 'mesh-peer-sync-url-counter'
-                      : undefined
-                }
-                className={cn(
-                  'w-full bg-muted border rounded-md text-xs px-2 py-1.5 font-mono text-foreground',
-                  syncUrlTooLong ? 'border-red-500/60' : 'border-border',
-                )}
-                placeholder="http://100.64.0.11:8080"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  id="mesh-peer-sync-url"
+                  type="url"
+                  value={state.syncUrl}
+                  onChange={(e) => {
+                    setState((p) => ({ ...p, syncUrl: e.target.value }));
+                    // Invalidate previous probe when the URL changes.
+                    setProbeState({ kind: 'idle' });
+                    setProbeOverridden(false);
+                  }}
+                  aria-invalid={syncUrlTooLong || undefined}
+                  aria-describedby={
+                    syncUrlTooLong
+                      ? 'mesh-peer-sync-url-error'
+                      : showSyncUrlCounter
+                        ? 'mesh-peer-sync-url-counter'
+                        : undefined
+                  }
+                  className={cn(
+                    'flex-1 bg-muted border rounded-md text-xs px-2 py-1.5 font-mono text-foreground',
+                    syncUrlTooLong ? 'border-red-500/60' : 'border-border',
+                  )}
+                  placeholder="http://100.64.0.11:8080"
+                />
+                <button
+                  type="button"
+                  onClick={handleProbe}
+                  disabled={!canProbe}
+                  data-testid="mesh-peer-probe"
+                  title="Probe the peer's /health endpoint"
+                  className={cn(
+                    'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors whitespace-nowrap',
+                    'border-border bg-muted hover:bg-accent/10 text-foreground',
+                    'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
+                  )}
+                >
+                  {probeState.kind === 'pending' ? 'Probing…' : 'Probe URL'}
+                </button>
+              </div>
+              {probeMatchesCurrentUrl && probeState.kind === 'success' && (
+                <p
+                  data-testid="mesh-peer-probe-success"
+                  className="mt-1 text-[11px] text-green-400"
+                >
+                  Reachable{probeState.statusCode ? ` (HTTP ${probeState.statusCode})` : ''}
+                  {probeState.appVersion ? ` — peer v${probeState.appVersion}` : ''}
+                </p>
+              )}
+              {probeMatchesCurrentUrl && probeState.kind === 'failure' && (
+                <div
+                  data-testid="mesh-peer-probe-failure"
+                  className="mt-1 flex items-center gap-2 text-[11px] text-red-400"
+                >
+                  <span className="font-mono">
+                    {probeState.statusCode ? `HTTP ${probeState.statusCode} — ` : ''}
+                    {probeState.reason}
+                  </span>
+                  {!isUpdate && (
+                    <button
+                      type="button"
+                      onClick={() => setProbeOverridden(true)}
+                      data-testid="mesh-peer-probe-override"
+                      className="px-1.5 py-px rounded-sm text-[10px] font-medium border border-red-500/40 bg-red-500/5 text-red-300 hover:bg-red-500/10"
+                    >
+                      Save anyway
+                    </button>
+                  )}
+                </div>
+              )}
               {syncUrlTooLong ? (
                 <p
                   id="mesh-peer-sync-url-error"
@@ -393,8 +582,11 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
             </button>
             <button
               type="submit"
-              disabled={upsertPeer.isPending || syncUrlTooLong}
+              disabled={upsertPeer.isPending || syncUrlTooLong || saveBlockedByProbe}
               data-testid="mesh-peer-submit"
+              title={
+                saveBlockedByProbe ? 'Probe the sync URL first, or choose Save anyway' : undefined
+              }
               className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
             >
               {upsertPeer.isPending ? 'Saving…' : isUpdate ? 'Update peer' : 'Save peer'}
@@ -681,6 +873,7 @@ export function MeshPeerRow({
             updateAvailable={updatable}
           />
         </div>
+        <PingDiagnosticLine peer={peer} />
       </td>
       <td className="px-4 py-3 align-top whitespace-nowrap">
         <VersionCell

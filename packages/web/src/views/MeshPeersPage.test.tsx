@@ -15,6 +15,7 @@ const {
   mockUseDeleteSyncPeer,
   mockUseUpdateSyncPeer,
   mockUseRegisterReverseSyncPeer,
+  mockUseProbeSyncUrl,
   mockToastSuccess,
   mockToastError,
 } = vi.hoisted(() => ({
@@ -24,6 +25,7 @@ const {
   mockUseDeleteSyncPeer: vi.fn(),
   mockUseUpdateSyncPeer: vi.fn(),
   mockUseRegisterReverseSyncPeer: vi.fn(),
+  mockUseProbeSyncUrl: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
 }));
@@ -77,6 +79,7 @@ vi.mock('@/lib/queries', () => ({
   useDeleteSyncPeer: () => mockUseDeleteSyncPeer(),
   useUpdateSyncPeer: () => mockUseUpdateSyncPeer(),
   useRegisterReverseSyncPeer: () => mockUseRegisterReverseSyncPeer(),
+  useProbeSyncUrl: () => mockUseProbeSyncUrl(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -151,6 +154,7 @@ describe('MeshPeersPage', () => {
     mockUseDeleteSyncPeer.mockReturnValue(makeMutationHook());
     mockUseUpdateSyncPeer.mockReturnValue(makeMutationHook());
     mockUseRegisterReverseSyncPeer.mockReturnValue(makeMutationHook());
+    mockUseProbeSyncUrl.mockReturnValue(makeMutationHook());
   });
 
   afterEach(() => {
@@ -282,7 +286,17 @@ describe('MeshPeersPage', () => {
         opts.onSuccess?.({ ok: true, peer: makePeer({ machineId: 'node-new' }) });
       },
     );
+    // §33.7: add-peer path requires a passing probe before Save is enabled.
+    const probeMutate = vi.fn(
+      (
+        _url: string,
+        opts: { onSuccess?: (r: { reachable: boolean; statusCode?: number }) => void },
+      ) => {
+        opts.onSuccess?.({ reachable: true, statusCode: 200 });
+      },
+    );
     mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+    mockUseProbeSyncUrl.mockReturnValue(makeMutationHook({ mutate: probeMutate }));
     mockSyncPeersQuery.mockReturnValue({
       queryKey: ['sync-peers'],
       queryFn: vi.fn().mockResolvedValue({ peers: [] }),
@@ -300,6 +314,7 @@ describe('MeshPeersPage', () => {
     fireEvent.change(screen.getByLabelText('Tailscale IP'), { target: { value: '100.64.0.12' } });
     fireEvent.change(screen.getByLabelText('Sync interval seconds'), { target: { value: '45' } });
     fireEvent.change(screen.getByLabelText('Public key'), { target: { value: 'pubkey' } });
+    fireEvent.click(screen.getByTestId('mesh-peer-probe'));
     fireEvent.click(screen.getByTestId('mesh-peer-submit'));
 
     expect(mutate).toHaveBeenCalledWith(
@@ -893,6 +908,144 @@ describe('MeshPeersPage', () => {
         expect(screen.getAllByRole('row').length).toBeGreaterThan(0);
       });
       expect(screen.queryByTestId('peer-ahead-badge-peer-self')).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.7 — Ping diagnostics + Probe button
+  // ---------------------------------------------------------------------------
+
+  describe('ping diagnostics', () => {
+    it('renders the truncated ping reason and HTTP status code for unreachable peers', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-flaky',
+              syncStatus: 'unreachable',
+              lastPingError: 'connect_refused',
+              lastPingStatusCode: 503,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-ping-diagnostic-peer-flaky')).toBeDefined();
+      });
+      const diagnostic = screen.getByTestId('peer-ping-diagnostic-peer-flaky');
+      expect(diagnostic.textContent).toContain('HTTP 503');
+      expect(diagnostic.textContent).toContain('connect_refused');
+    });
+
+    it('renders a Copy button when the full diagnostic exceeds the display limit', async () => {
+      const longError = `long-error-${'x'.repeat(200)}`;
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-verbose',
+              syncStatus: 'unreachable',
+              lastPingError: longError,
+              lastPingStatusCode: null,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-ping-diagnostic-copy-peer-verbose')).toBeDefined();
+      });
+    });
+
+    it('does not render a diagnostic for reachable peers', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-ok',
+              syncStatus: 'reachable',
+              lastPingError: null,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByText('peer-ok')).toBeDefined();
+      });
+      expect(screen.queryByTestId('peer-ping-diagnostic-peer-ok')).toBeNull();
+    });
+  });
+
+  describe('add-peer probe button', () => {
+    function openAddDialogWithSyncUrl(url: string) {
+      renderPage();
+      fireEvent.click(screen.getByTestId('add-mesh-peer'));
+      fireEvent.change(screen.getByLabelText('Machine ID'), { target: { value: 'node-new' } });
+      fireEvent.change(screen.getByLabelText('Hostname'), {
+        target: { value: 'node.tail.ts.net' },
+      });
+      fireEvent.change(screen.getByLabelText('Sync URL'), { target: { value: url } });
+    }
+
+    beforeEach(() => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+      });
+    });
+
+    it('gates the Save button until the probe succeeds', async () => {
+      const probeMutate = vi.fn(
+        (_url: string, opts: { onSuccess?: (r: { reachable: boolean }) => void }) => {
+          opts.onSuccess?.({ reachable: true });
+        },
+      );
+      mockUseProbeSyncUrl.mockReturnValue(makeMutationHook({ mutate: probeMutate }));
+
+      openAddDialogWithSyncUrl('https://node.tail.ts.net:8080');
+
+      const submit = screen.getByTestId('mesh-peer-submit') as HTMLButtonElement;
+      expect(submit.disabled).toBe(true);
+
+      fireEvent.click(screen.getByTestId('mesh-peer-probe'));
+      expect(probeMutate).toHaveBeenCalledWith('https://node.tail.ts.net:8080', expect.any(Object));
+
+      await waitFor(() => {
+        expect((screen.getByTestId('mesh-peer-submit') as HTMLButtonElement).disabled).toBe(false);
+      });
+      expect(screen.getByTestId('mesh-peer-probe-success')).toBeDefined();
+    });
+
+    it('allows "Save anyway" override after a failed probe', async () => {
+      const probeMutate = vi.fn(
+        (
+          _url: string,
+          opts: { onSuccess?: (r: { reachable: boolean; error?: string }) => void },
+        ) => {
+          opts.onSuccess?.({ reachable: false, error: 'timeout' });
+        },
+      );
+      mockUseProbeSyncUrl.mockReturnValue(makeMutationHook({ mutate: probeMutate }));
+
+      openAddDialogWithSyncUrl('https://node.tail.ts.net:8080');
+
+      fireEvent.click(screen.getByTestId('mesh-peer-probe'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mesh-peer-probe-failure')).toBeDefined();
+      });
+      expect((screen.getByTestId('mesh-peer-submit') as HTMLButtonElement).disabled).toBe(true);
+
+      fireEvent.click(screen.getByTestId('mesh-peer-probe-override'));
+      expect((screen.getByTestId('mesh-peer-submit') as HTMLButtonElement).disabled).toBe(false);
     });
   });
 });

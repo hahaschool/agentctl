@@ -109,6 +109,7 @@ import { spaceRoutes } from './routes/spaces.js';
 import { streamRoutes } from './routes/stream.js';
 import { syncRoutes } from './routes/sync.js';
 import { syncConflictsRoutes } from './routes/sync-conflicts.js';
+import { syncDiscoverRoutes } from './routes/sync-discover.js';
 import { syncPeerUpdateRoutes } from './routes/sync-peer-update.js';
 import { syncPeersRoutes } from './routes/sync-peers.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
@@ -825,6 +826,12 @@ export async function createServer({
         selfMachineId: machineId,
       });
     }
+
+    // Mesh peer discovery + URL probe routes (§33.7) — both read-only.
+    await app.register(syncDiscoverRoutes, {
+      prefix: '/api/sync',
+      logger: logger.child({ component: 'sync-discover' }),
+    });
 
     // Mesh sync conflict resolution routes
     if (machineId) {
