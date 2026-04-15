@@ -499,7 +499,7 @@ jobs:
       # Non-blocking: audit results appear as annotations, not failures
       - name: Dependency audit
         continue-on-error: true
-        run: pnpm audit --audit-level=high
+        run: pnpm audit:deps --audit-level=high
 
       # Keep this focused on Biome's security domain; the main lint job
       # already runs the full check across formatting and suspicious rules.
