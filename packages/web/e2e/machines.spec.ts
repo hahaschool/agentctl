@@ -89,6 +89,23 @@ type RuntimeDriftItem = {
   drifted: boolean;
 };
 
+type SyncPeerFixture = {
+  machineId: string;
+  hostname: string;
+  tailscaleIp: string | null;
+  syncUrl: string | null;
+  role: string;
+  syncStatus: string;
+  syncIntervalMs: number;
+  isSelf: boolean;
+  publicKey: string | null;
+  lastSeen: string | null;
+  createdAt: string | null;
+  reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
+  reverseRegistrationError?: string | null;
+  reverseRegistrationAt?: string | null;
+};
+
 type MockState = {
   machines: Machine[];
   agents: Agent[];
@@ -96,6 +113,7 @@ type MockState = {
   workerNodes: WorkerNode[];
   runtimeDrift: RuntimeDriftItem[];
   memoryFacts: Array<Record<string, unknown>>;
+  syncPeers: SyncPeerFixture[];
 };
 
 const NOW = new Date().toISOString();
@@ -339,6 +357,8 @@ const memoryFacts = [
   },
 ];
 
+const syncPeers: SyncPeerFixture[] = [];
+
 async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
@@ -402,6 +422,14 @@ async function mountApiMocks(page: Page, state: MockState): Promise<void> {
       await fulfillJson(route, state.workerNodes);
       return;
     }
+    if (method === 'GET' && pathname === '/api/sync/peers') {
+      await fulfillJson(route, { peers: state.syncPeers });
+      return;
+    }
+    if (method === 'POST' && /^\/api\/sync\/peers\/[^/]+\/register-reverse$/.test(pathname)) {
+      await fulfillJson(route, { ok: true, status: 'ok', peer: null });
+      return;
+    }
     if (method === 'GET' && pathname === '/api/runtime-config/drift') {
       const machineId = url.searchParams.get('machineId');
       const items = machineId
@@ -427,6 +455,7 @@ function makeState(overrides: Partial<MockState> = {}): MockState {
     workerNodes,
     runtimeDrift,
     memoryFacts,
+    syncPeers,
     ...overrides,
   };
 }
@@ -473,6 +502,39 @@ test.describe('Machines operator surfaces', () => {
     await page.getByLabel('Filter by status').selectOption('degraded');
     await expect(page.getByRole('link', { name: 'gpu-degraded', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'linux-offline', exact: true })).toHaveCount(0);
+  });
+
+  test('shows the §33.8 One-way warning badge for peers with failed reverse registration', async ({
+    page,
+  }) => {
+    await mountApiMocks(
+      page,
+      makeState({
+        syncPeers: [
+          {
+            machineId: 'machine-dev-1',
+            hostname: 'dev-1',
+            tailscaleIp: '100.64.0.10',
+            syncUrl: 'http://dev-1:8080',
+            role: 'full',
+            syncStatus: 'reachable',
+            syncIntervalMs: 30_000,
+            isSelf: false,
+            publicKey: null,
+            lastSeen: NOW,
+            createdAt: REGISTERED_AT,
+            reverseRegistrationStatus: 'failed',
+            reverseRegistrationError: 'handshake timeout',
+            reverseRegistrationAt: NOW,
+          },
+        ],
+      }),
+    );
+
+    await page.goto('/machines');
+
+    await expect(page.getByTestId('machine-reverse-badge-machine-dev-1')).toBeVisible();
+    await expect(page.getByTestId('machine-reverse-retry-machine-dev-1')).toBeVisible();
   });
 
   test('renders machine detail cards, runtimes, worker-node matching, agents, and sessions', async ({

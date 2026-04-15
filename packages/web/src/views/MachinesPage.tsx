@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Filter, Server } from 'lucide-react';
 import Link from 'next/link';
 import type React from 'react';
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -20,8 +21,9 @@ import { StatCard } from '../components/StatCard';
 import { StatusBadge } from '../components/StatusBadge';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import type { Machine } from '../lib/api';
+import type { SyncPeer } from '../lib/api/sync';
 import { downloadCsv, formatDate, isStaleHeartbeat } from '../lib/format-utils';
-import { machinesQuery } from '../lib/queries';
+import { machinesQuery, syncPeersQuery, useRegisterReverseSyncPeer } from '../lib/queries';
 
 type MachineStatusFilter = 'all' | 'online' | 'offline' | 'degraded';
 
@@ -31,6 +33,46 @@ type MachineStatusFilter = 'all' | 'online' | 'offline' | 'degraded';
 
 export function MachinesPage(): React.JSX.Element {
   const machines = useQuery(machinesQuery());
+  // §33.8 follow-up: pull sync peers in parallel so we can render a "One-way"
+  // reverse-registration warning badge per machine without changing the
+  // `/api/machines` backend response shape.
+  const peers = useQuery(syncPeersQuery());
+  const reverseRetryMutation = useRegisterReverseSyncPeer();
+  const toast = useToast();
+
+  const peersByMachineId = useMemo(() => {
+    const map = new Map<string, SyncPeer>();
+    for (const peer of peers.data?.peers ?? []) {
+      map.set(peer.machineId, peer);
+    }
+    return map;
+  }, [peers.data]);
+
+  const retryingMachineId = reverseRetryMutation.isPending
+    ? ((reverseRetryMutation.variables as string | undefined) ?? null)
+    : null;
+
+  const handleRetryReverse = useCallback(
+    (machineId: string) => {
+      reverseRetryMutation.mutate(machineId, {
+        onSuccess: (res) => {
+          if (res.ok) {
+            toast.success(`Reverse registration for ${machineId} succeeded`);
+          } else {
+            toast.error(
+              res.message
+                ? `Reverse registration still failing: ${res.message}`
+                : `Reverse registration for ${machineId} still failing`,
+            );
+          }
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : 'Failed to retry reverse registration');
+        },
+      });
+    },
+    [reverseRetryMutation, toast],
+  );
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<MachineStatusFilter>('all');
@@ -283,7 +325,14 @@ export function MachinesPage(): React.JSX.Element {
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
           {filteredList.map((m) => (
-            <MachineCard key={m.id} machine={m} compact={compact} />
+            <MachineCard
+              key={m.id}
+              machine={m}
+              compact={compact}
+              peer={peersByMachineId.get(m.id) ?? null}
+              onRetryReverse={handleRetryReverse}
+              isRetryingReverse={retryingMachineId === m.id}
+            />
           ))}
         </div>
       )}
@@ -334,9 +383,15 @@ function InlineMachineStat({
 function MachineCard({
   machine,
   compact,
+  peer,
+  onRetryReverse,
+  isRetryingReverse,
 }: {
   machine: Machine;
   compact?: boolean;
+  peer: SyncPeer | null;
+  onRetryReverse: (machineId: string) => void;
+  isRetryingReverse: boolean;
 }): React.JSX.Element {
   const m = machine;
 
@@ -355,6 +410,12 @@ function MachineCard({
           {m.hostname}
         </Link>
         <MachineProvenanceBadge machine={m} compact />
+        <MachineReverseRegistrationBadge
+          machineId={m.id}
+          peer={peer}
+          onRetry={onRetryReverse}
+          isRetrying={isRetryingReverse}
+        />
         <span className="text-[11px] text-muted-foreground font-mono truncate">{m.os}</span>
         <div className="flex items-center gap-1.5 ml-auto shrink-0">
           <StatusBadge status={m.status} />
@@ -390,8 +451,14 @@ function MachineCard({
             {m.hostname}
           </Link>
           <CopyableText value={m.id} maxDisplay={12} />
-          <div className="mt-1">
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <MachineProvenanceBadge machine={m} />
+            <MachineReverseRegistrationBadge
+              machineId={m.id}
+              peer={peer}
+              onRetry={onRetryReverse}
+              isRetrying={isRetryingReverse}
+            />
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -474,6 +541,59 @@ function MachineProvenanceBadge({
       )}
     >
       <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * §33.8 follow-up — Inline warning badge shown on a machine row whose
+ * corresponding `sync_nodes` peer has `reverse_registration_status === 'failed'`.
+ * Mirrors `ReverseRegistrationBadge` on `/mesh-peers` but is scoped to a
+ * single machine id. Self rows (`peer.isSelf`) never render this badge because
+ * reverse registration is not attempted against ourselves.
+ */
+export function MachineReverseRegistrationBadge({
+  machineId,
+  peer,
+  onRetry,
+  isRetrying,
+}: {
+  machineId: string;
+  peer: SyncPeer | null;
+  onRetry: (machineId: string) => void;
+  isRetrying: boolean;
+}): React.JSX.Element | null {
+  if (!peer || peer.isSelf) return null;
+  if (peer.reverseRegistrationStatus !== 'failed') return null;
+  const baseTooltip =
+    'This peer has registered us, but our reverse handshake failed. Other peers may not discover this machine until you retry.';
+  const tooltip = peer.reverseRegistrationError
+    ? `${baseTooltip}\n\nLast error: ${peer.reverseRegistrationError}`
+    : baseTooltip;
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        data-testid={`machine-reverse-badge-${machineId}`}
+        title={tooltip}
+        className="px-1.5 py-0.5 rounded-md bg-yellow-500/15 text-yellow-400 text-[10px] font-semibold tracking-wide uppercase border border-yellow-500/30"
+      >
+        One-way
+      </span>
+      <button
+        type="button"
+        onClick={() => onRetry(machineId)}
+        disabled={isRetrying}
+        data-testid={`machine-reverse-retry-${machineId}`}
+        title="Retry reverse registration"
+        aria-label={`Retry reverse registration for ${machineId}`}
+        className={cn(
+          'px-1.5 py-0.5 rounded-md text-[10px] font-medium border border-yellow-500/40 bg-yellow-500/5 text-yellow-300 hover:bg-yellow-500/10',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+        )}
+      >
+        {isRetrying ? 'Retrying…' : 'Retry'}
+      </button>
     </span>
   );
 }
