@@ -60,8 +60,8 @@ export const schedulerApi = {
       body: JSON.stringify(body),
     }),
 
-  deleteSchedulerJob: (key: string): Promise<DeleteJobResponse> =>
-    request<DeleteJobResponse>(`/api/scheduler/jobs/${encodeURIComponent(key)}`, {
+  deleteSchedulerJob: (agentId: string): Promise<DeleteJobResponse> =>
+    request<DeleteJobResponse>(`/api/scheduler/jobs/${encodeURIComponent(agentId)}`, {
       method: 'DELETE',
     }),
 };

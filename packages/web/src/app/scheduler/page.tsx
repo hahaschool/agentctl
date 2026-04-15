@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -88,20 +88,16 @@ function CreateJobDialog({
   const [model, setModel] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  // Reset state on open/close
-  const [lastOpen, setLastOpen] = useState(open);
-  if (open !== lastOpen) {
-    setLastOpen(open);
-    if (open) {
-      setTab('heartbeat');
-      setAgentId('');
-      setMachineId('');
-      setIntervalSec('60');
-      setPattern('');
-      setModel('');
-      setError(null);
-    }
-  }
+  useEffect(() => {
+    if (!open) return;
+    setTab('heartbeat');
+    setAgentId('');
+    setMachineId('');
+    setIntervalSec('60');
+    setPattern('');
+    setModel('');
+    setError(null);
+  }, [open]);
 
   const heartbeatMutation = useMutation({
     mutationFn: (body: CreateHeartbeatJobInput) => schedulerApi.createSchedulerHeartbeatJob(body),
