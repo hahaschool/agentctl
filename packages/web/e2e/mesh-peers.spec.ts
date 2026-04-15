@@ -372,6 +372,77 @@ test.describe('Mesh Peers page', () => {
     await expect(deltaRow.getByText('45s', { exact: true })).toBeVisible();
   });
 
+  test('updates an existing mesh peer without deleting it', async ({ page }) => {
+    const state: MockState = {
+      peers: [
+        makePeer({
+          machineId: 'machine-edit',
+          hostname: 'old.tail.ts.net',
+          tailscaleIp: '100.64.0.30',
+          syncUrl: 'http://100.64.0.30:8080',
+          syncStatus: 'unreachable',
+          syncIntervalMs: 60_000,
+          publicKey: 'old-public-key',
+        }),
+      ],
+      pingResponses: new Map(),
+      pingCalls: [],
+      upsertRequests: [],
+      deleteCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+    const table = page.getByRole('table', { name: 'Mesh sync peers' });
+    const editRow = table.getByRole('row').filter({ hasText: 'old.tail.ts.net' });
+    await editRow.getByTestId('edit-machine-edit').click();
+
+    const dialog = page.getByTestId('mesh-peer-form-dialog');
+    await expect(dialog.getByRole('heading', { name: 'Update mesh peer' })).toBeVisible();
+    await expect(dialog.getByLabel('Machine ID')).toHaveValue('machine-edit');
+    await expect(dialog.getByLabel('Machine ID')).toBeDisabled();
+    await expect(dialog.getByLabel('Hostname')).toHaveValue('old.tail.ts.net');
+    await expect(dialog.getByLabel('Sync URL')).toHaveValue('http://100.64.0.30:8080');
+    await expect(dialog.getByLabel('Tailscale IP')).toHaveValue('100.64.0.30');
+    await expect(dialog.getByLabel('Sync interval seconds')).toHaveValue('60');
+    await expect(dialog.getByLabel('Public key')).toHaveValue('old-public-key');
+
+    await dialog.getByLabel('Hostname').fill('new.tail.ts.net');
+    await dialog.getByLabel('Sync URL').fill('https://new.tail.ts.net:9090');
+    await dialog.getByLabel('Tailscale IP').fill('100.64.0.31');
+    await dialog.getByLabel('Sync interval seconds').fill('45');
+    await dialog.getByLabel('Public key').fill('new-public-key');
+
+    const upsertRequest = page.waitForRequest(
+      (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/api/sync/peers',
+    );
+    await dialog.getByTestId('mesh-peer-submit').click();
+    await upsertRequest;
+
+    expect(state.upsertRequests).toEqual([
+      {
+        machineId: 'machine-edit',
+        hostname: 'new.tail.ts.net',
+        syncUrl: 'https://new.tail.ts.net:9090',
+        tailscaleIp: '100.64.0.31',
+        role: 'full',
+        syncStatus: 'unreachable',
+        syncIntervalMs: 45_000,
+        isSelf: false,
+        publicKey: 'new-public-key',
+      },
+    ]);
+    expect(state.deleteCalls).toEqual([]);
+
+    await expect(page.getByTestId('mesh-peer-form-dialog')).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({ hasText: /updated/i })).toBeVisible();
+
+    const updatedRow = table.getByRole('row').filter({ hasText: 'new.tail.ts.net' });
+    await expect(updatedRow.getByText('machine-edit', { exact: true })).toBeVisible();
+    await expect(updatedRow.getByText('https://new.tail.ts.net:9090', { exact: true })).toBeVisible();
+    await expect(updatedRow.getByText('45s', { exact: true })).toBeVisible();
+  });
+
   test('shows add-peer validation and backend errors without closing the dialog', async ({
     page,
   }) => {

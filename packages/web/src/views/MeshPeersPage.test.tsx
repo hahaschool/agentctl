@@ -311,6 +311,91 @@ describe('MeshPeersPage', () => {
     expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('saved'));
   });
 
+  it('opens a prefilled update dialog for a non-self peer and submits through upsert', async () => {
+    const mutate = vi.fn(
+      (_body: unknown, opts: { onSuccess?: (r: { ok: boolean; peer: SyncPeer }) => void }) => {
+        opts.onSuccess?.({ ok: true, peer: makePeer({ machineId: 'node-edit' }) });
+      },
+    );
+    mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [
+          makePeer({
+            machineId: 'node-edit',
+            hostname: 'old.tail.ts.net',
+            tailscaleIp: '100.64.0.31',
+            syncUrl: 'https://old.tail.ts.net:8080',
+            role: 'observer',
+            syncStatus: 'unreachable',
+            syncIntervalMs: 60_000,
+            publicKey: 'old-public-key',
+          }),
+        ],
+      }),
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('edit-node-edit')).toBeDefined());
+    fireEvent.click(screen.getByTestId('edit-node-edit'));
+
+    expect(screen.getByRole('heading', { name: 'Update mesh peer' })).toBeDefined();
+    const machineIdInput = screen.getByLabelText('Machine ID') as HTMLInputElement;
+    expect(machineIdInput.value).toBe('node-edit');
+    expect(machineIdInput.disabled).toBe(true);
+    expect((screen.getByLabelText('Hostname') as HTMLInputElement).value).toBe('old.tail.ts.net');
+    expect((screen.getByLabelText('Sync URL') as HTMLInputElement).value).toBe(
+      'https://old.tail.ts.net:8080',
+    );
+    expect((screen.getByLabelText('Tailscale IP') as HTMLInputElement).value).toBe('100.64.0.31');
+    expect((screen.getByLabelText('Sync interval seconds') as HTMLInputElement).value).toBe('60');
+    expect((screen.getByLabelText('Public key') as HTMLInputElement).value).toBe('old-public-key');
+
+    fireEvent.change(screen.getByLabelText('Hostname'), {
+      target: { value: 'new.tail.ts.net' },
+    });
+    fireEvent.change(screen.getByLabelText('Sync URL'), {
+      target: { value: 'https://new.tail.ts.net:9090' },
+    });
+    fireEvent.change(screen.getByLabelText('Tailscale IP'), { target: { value: '100.64.0.32' } });
+    fireEvent.change(screen.getByLabelText('Sync interval seconds'), { target: { value: '75' } });
+    fireEvent.change(screen.getByLabelText('Public key'), { target: { value: 'new-public-key' } });
+    fireEvent.click(screen.getByTestId('mesh-peer-submit'));
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        machineId: 'node-edit',
+        hostname: 'new.tail.ts.net',
+        syncUrl: 'https://new.tail.ts.net:9090',
+        tailscaleIp: '100.64.0.32',
+        role: 'full',
+        syncStatus: 'unreachable',
+        syncIntervalMs: 75_000,
+        isSelf: false,
+        publicKey: 'new-public-key',
+      },
+      expect.any(Object),
+    );
+    expect(mockToastSuccess).toHaveBeenCalledWith(expect.stringContaining('updated'));
+  });
+
+  it('disables editing for the self peer', async () => {
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [makePeer({ machineId: 'self-node', isSelf: true })],
+      }),
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      const editBtn = screen.getByTestId('edit-self-node') as HTMLButtonElement;
+      expect(editBtn.disabled).toBe(true);
+    });
+  });
+
   it('shows add-peer validation errors before mutation', async () => {
     const mutate = vi.fn();
     mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
