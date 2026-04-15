@@ -115,6 +115,7 @@ export * from './api/core';
 export * from './api/deployment';
 export * from './api/machines';
 export * from './api/memory';
+export * from './api/scheduler';
 export * from './api/security';
 export * from './api/sessions';
 export * from './api/settings';
@@ -128,6 +129,7 @@ import { type Attachment, healthApi } from './api/core';
 import { deploymentApi } from './api/deployment';
 import { machinesApi } from './api/machines';
 import { memoryApi } from './api/memory';
+import { schedulerApi } from './api/scheduler';
 import { securityApi } from './api/security';
 import { sessionsApi } from './api/sessions';
 import { settingsApi } from './api/settings';
@@ -149,6 +151,7 @@ export const api = {
   ...securityApi,
   ...machinesApi,
   ...memoryApi,
+  ...schedulerApi,
   ...spacesApi,
   ...deploymentApi,
   ...syncApi,

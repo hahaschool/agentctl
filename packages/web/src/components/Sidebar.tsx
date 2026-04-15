@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bot,
+  CalendarClock,
   Compass,
   Database,
   ExternalLink,
@@ -73,6 +74,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/memory', label: 'Memory', icon: Database, shortcut: '8' },
   { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9' },
   { href: '/tasks', label: 'Tasks', icon: ListTree },
+  { href: '/scheduler', label: 'Scheduler', icon: CalendarClock },
   { href: '/deployment', label: 'Deployment', icon: Rocket, shortcut: '0' },
   { href: '/conflicts', label: 'Conflicts', icon: GitMerge },
   { href: '/mesh-peers', label: 'Mesh Peers', icon: Wifi },
