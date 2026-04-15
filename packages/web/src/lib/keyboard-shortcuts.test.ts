@@ -56,17 +56,17 @@ describe('ALL_SHORTCUTS', () => {
     expect(ALL_SHORTCUTS.length).toBeGreaterThan(0);
   });
 
-  it('has 15 total entries (8 nav + 7 global)', () => {
-    expect(ALL_SHORTCUTS).toHaveLength(15);
+  it('has 36 total entries (10 nav + 19 go-to + 7 global)', () => {
+    expect(ALL_SHORTCUTS).toHaveLength(36);
   });
 
-  it('starts with navigation shortcuts (keys 1-8)', () => {
-    const navKeys = ALL_SHORTCUTS.slice(0, 8).map((e) => e.keys[0]);
-    expect(navKeys).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+  it('starts with navigation shortcuts (keys 1-9, 0)', () => {
+    const navKeys = ALL_SHORTCUTS.slice(0, 10).map((e) => e.keys[0]);
+    expect(navKeys).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']);
   });
 
   it('has navigation descriptions in correct order', () => {
-    const navDescs = ALL_SHORTCUTS.slice(0, 8).map((e) => e.desc);
+    const navDescs = ALL_SHORTCUTS.slice(0, 10).map((e) => e.desc);
     expect(navDescs).toEqual([
       'Dashboard',
       'Machines',
@@ -76,6 +76,8 @@ describe('ALL_SHORTCUTS', () => {
       'Logs & Metrics',
       'Settings',
       'Memory',
+      'Spaces',
+      'Deployment',
     ]);
   });
 
@@ -134,7 +136,7 @@ describe('SHORTCUT_GROUPS', () => {
     expect(descs).toContain('Command palette');
     expect(descs).toContain('New agent');
     expect(descs).toContain('Save settings (Settings pages)');
-    expect(descs).toContain('Navigate to page (top 9)');
+    expect(descs).toContain('Navigate to page');
     expect(descs).toContain('Show keyboard shortcuts');
   });
 

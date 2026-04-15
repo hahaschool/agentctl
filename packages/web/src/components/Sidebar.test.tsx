@@ -471,6 +471,25 @@ describe('Sidebar', () => {
       expect(mockPush).toHaveBeenCalledWith('/webhooks');
     });
 
+    it('does not treat modified second keys as g-prefix navigation', () => {
+      mockPathname.mockReturnValue('/settings');
+      const onSave = vi.fn();
+      render(
+        <div>
+          <Sidebar />
+          <button type="button" onClick={onSave}>
+            Save
+          </button>
+        </div>,
+      );
+
+      fireEvent.keyDown(document, { key: 'g' });
+      fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalledWith('/sessions');
+    });
+
     it('does not trigger save button on Ctrl+S outside settings pages', () => {
       mockPathname.mockReturnValue('/sessions');
       const onSave = vi.fn();

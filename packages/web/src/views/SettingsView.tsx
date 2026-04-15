@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { NotificationPreferencesPanel } from '@/components/settings/NotificationPreferencesPanel';
 import { PushDevicesSection } from '@/components/settings/PushDevicesSection';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ALL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
+import { SHORTCUT_GROUPS } from '@/lib/keyboard-shortcuts';
 import { cn } from '@/lib/utils';
 import { healthQuery } from '../lib/queries';
 
@@ -467,18 +467,27 @@ function KeyboardShortcutsSection(): React.JSX.Element {
       <div className="pb-3 mb-4 border-b border-border/30">
         <h3 className="text-sm font-semibold">Keyboard Shortcuts</h3>
       </div>
-      <div className="space-y-1">
-        {ALL_SHORTCUTS.map((s) => (
-          <div key={s.desc} className="flex justify-between items-center py-0.5">
-            <span className="text-[13px] text-muted-foreground">{s.desc}</span>
-            <div className="flex gap-0.5">
-              {s.keys.map((k) => (
-                <kbd
-                  key={k}
-                  className="inline-block px-1.5 py-0.5 text-[10px] font-mono bg-muted border border-border rounded min-w-[20px] text-center"
-                >
-                  {k}
-                </kbd>
+      <div className="space-y-4">
+        {SHORTCUT_GROUPS.map((group) => (
+          <div key={group.title}>
+            <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {group.title}
+            </h4>
+            <div className="space-y-1">
+              {group.shortcuts.map((s) => (
+                <div key={s.desc} className="flex justify-between items-center gap-4 py-0.5">
+                  <span className="text-[13px] text-muted-foreground">{s.desc}</span>
+                  <div className="flex gap-0.5">
+                    {s.keys.map((k) => (
+                      <kbd
+                        key={k}
+                        className="inline-block px-1.5 py-0.5 text-[10px] font-mono bg-muted border border-border rounded min-w-[20px] text-center"
+                      >
+                        {k}
+                      </kbd>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

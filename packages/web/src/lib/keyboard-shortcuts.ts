@@ -2,7 +2,7 @@
  * Single source of truth for keyboard shortcut definitions displayed in
  * SettingsView and KeyboardHelpOverlay.
  *
- * Navigation shortcuts (1-8) are derived from NAV_ITEMS in Sidebar.tsx at
+ * Navigation shortcuts are derived from NAV_ITEMS in Sidebar.tsx at
  * runtime, but the "shape" metadata lives here so every display surface stays
  * in sync.
  */
@@ -24,7 +24,7 @@ export type ShortcutGroup = {
 export const KEYBOARD_HELP_OPEN_EVENT = 'agentctl:open-keyboard-help';
 
 /**
- * Navigation page shortcuts (number keys 1-8).
+ * Navigation page shortcuts (number keys 1-9, 0).
  * Order must match the sidebar nav order.
  */
 const NAV_SHORTCUTS: ShortcutEntry[] = [
@@ -36,6 +36,8 @@ const NAV_SHORTCUTS: ShortcutEntry[] = [
   { keys: ['6'], desc: 'Logs & Metrics' },
   { keys: ['7'], desc: 'Settings' },
   { keys: ['8'], desc: 'Memory' },
+  { keys: ['9'], desc: 'Spaces' },
+  { keys: ['0'], desc: 'Deployment' },
 ];
 
 /** Global (non-navigation) shortcuts. */
@@ -48,12 +50,6 @@ const GLOBAL_SHORTCUTS: ShortcutEntry[] = [
   { keys: ['Esc'], desc: 'Close dialogs / Cancel' },
   { keys: ['?'], desc: 'Toggle keyboard help' },
 ];
-
-/**
- * Full shortcut list — nav keys first, then global shortcuts.
- * Used by SettingsView's Keyboard Shortcuts section.
- */
-export const ALL_SHORTCUTS: ShortcutEntry[] = [...NAV_SHORTCUTS, ...GLOBAL_SHORTCUTS];
 
 /**
  * "Go to" chord shortcuts — `g` prefix followed by a single letter routes to a
@@ -83,6 +79,16 @@ const GO_TO_SHORTCUTS: ShortcutEntry[] = [
 ];
 
 /**
+ * Full shortcut list — nav keys first, then go-to chords, then global shortcuts.
+ * Kept for simple consumers that need a flat shortcut list.
+ */
+export const ALL_SHORTCUTS: ShortcutEntry[] = [
+  ...NAV_SHORTCUTS,
+  ...GO_TO_SHORTCUTS,
+  ...GLOBAL_SHORTCUTS,
+];
+
+/**
  * Grouped shortcuts for the help overlay — organized by context/page.
  */
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
@@ -93,7 +99,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['\u2318K / Ctrl+K'], desc: 'Command palette' },
       { keys: ['\u2318N / Ctrl+N'], desc: 'New agent' },
       { keys: ['\u2318S / Ctrl+S'], desc: 'Save settings (Settings pages)' },
-      { keys: ['1\u20139'], desc: 'Navigate to page (top 9)' },
+      { keys: ['1\u20139', '0'], desc: 'Navigate to page' },
+      { keys: ['r'], desc: 'Refresh current page' },
+      { keys: ['/'], desc: 'Focus page search' },
       { keys: ['Esc'], desc: 'Close dialogs / Cancel' },
     ],
   },

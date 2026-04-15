@@ -348,35 +348,41 @@ describe('SettingsView', () => {
 
   it('renders navigation shortcut descriptions', () => {
     renderSettings();
-    expect(screen.getByText('Dashboard')).toBeDefined();
-    expect(screen.getByText('Machines')).toBeDefined();
-    expect(screen.getByText('Agents')).toBeDefined();
-    expect(screen.getByText('Sessions')).toBeDefined();
-    expect(screen.getByText('Memory')).toBeDefined();
-    // "Settings" appears as both h1 and shortcut desc — use getAllByText
-    const settingsEls = screen.getAllByText('Settings');
-    expect(settingsEls.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Navigate to page')).toBeDefined();
+    expect(screen.getByText('Go to Dashboard')).toBeDefined();
+    expect(screen.getByText('Go to Spaces')).toBeDefined();
+    expect(screen.getByText('Go to Deployment')).toBeDefined();
+    expect(screen.getByText('Go to Settings')).toBeDefined();
   });
 
   it('renders global shortcut descriptions', () => {
     renderSettings();
     expect(screen.getByText('Command palette')).toBeDefined();
     expect(screen.getByText('Refresh current page')).toBeDefined();
-    expect(screen.getByText('Toggle keyboard help')).toBeDefined();
+    expect(screen.getByText('Show keyboard shortcuts')).toBeDefined();
   });
 
-  it('renders the correct number of kbd elements for all shortcuts', () => {
+  it('renders grouped go-to shortcut descriptions', () => {
+    renderSettings();
+    expect(screen.getByText('Go To')).toBeDefined();
+    expect(screen.getByText('Go to Scheduler')).toBeDefined();
+    expect(screen.getByText('Go to Webhooks')).toBeDefined();
+  });
+
+  it('renders kbd elements for grouped shortcuts', () => {
     renderSettings();
     const kbdElements = document.querySelectorAll('kbd');
-    // ALL_SHORTCUTS has 15 entries, each with 1 key = 15 kbd elements
-    expect(kbdElements.length).toBe(15);
+    expect(kbdElements.length).toBeGreaterThan(50);
   });
 
   it('renders specific shortcut key labels', () => {
     renderSettings();
     const kbdElements = Array.from(document.querySelectorAll('kbd'));
     const keyTexts = kbdElements.map((el) => el.textContent);
-    expect(keyTexts).toContain('1');
+    expect(keyTexts).toContain('1\u20139');
+    expect(keyTexts).toContain('0');
+    expect(keyTexts).toContain('g');
+    expect(keyTexts).toContain('c');
     expect(keyTexts).toContain('r');
     expect(keyTexts).toContain('?');
     expect(keyTexts).toContain('Esc');

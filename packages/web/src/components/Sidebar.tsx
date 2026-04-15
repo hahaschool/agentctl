@@ -141,7 +141,7 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [pathname]);
 
-  // Two-key sequence support: "g" followed by d/s/a/m
+  // Two-key sequence support: "g" followed by a nav goKey.
   const pendingKeyRef = useRef<string | null>(null);
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -231,6 +231,7 @@ export function Sidebar(): React.JSX.Element {
           clearTimeout(pendingTimerRef.current);
           pendingTimerRef.current = null;
         }
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
         const goHref = SIDEBAR_GO_MAP[e.key];
         if (goHref) {
           e.preventDefault();
@@ -418,7 +419,7 @@ export function Sidebar(): React.JSX.Element {
           {/* Keyboard hints (hidden on medium, shown on large) */}
           <div className="text-[10px] text-muted-foreground/60 leading-relaxed flex-wrap gap-x-3 gap-y-0.5 hidden lg:flex">
             <span>
-              <Kbd>1</Kbd>-<Kbd>9</Kbd> Nav
+              <Kbd>1</Kbd>-<Kbd>9</Kbd>, <Kbd>0</Kbd> Nav
             </span>
             <span>
               <Kbd>g</Kbd> <Kbd>x</Kbd> Go-to
