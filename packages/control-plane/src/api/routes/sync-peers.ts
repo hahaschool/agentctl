@@ -6,7 +6,12 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { Database } from '../../db/index.js';
 import { extractRows } from '../../db/index.js';
-import { computeNextInterval } from '../../sync/peer-health.js';
+import {
+  computeNextInterval,
+  EMPTY_PEER_VERSION_INFO,
+  type PeerVersionInfo,
+  readPeerVersionInfo,
+} from '../../sync/peer-health.js';
 import { verifyPeerRegistrationSignature } from '../../sync/peer-registration.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
@@ -56,8 +61,8 @@ type PingError = {
 };
 
 type PingPeerResult =
-  | { status: 'reachable'; error: null }
-  | { status: 'unreachable'; error: PingError };
+  | { status: 'reachable'; error: null; version: PeerVersionInfo }
+  | { status: 'unreachable'; error: PingError; version: PeerVersionInfo };
 
 type SyncPeersRoutesOptions = {
   db: Database;
@@ -78,6 +83,9 @@ type SyncPeerRow = {
   last_ping_status_code: number | null;
   last_seen: string | Date | null;
   created_at: string | Date | null;
+  peer_version: string | null;
+  peer_git_sha: string | null;
+  peer_schema_version: number | null;
 };
 
 type UpsertSyncPeerBody = {
@@ -414,12 +422,16 @@ function mapSyncPeerRow(row: SyncPeerRow) {
     lastPingStatusCode: row.last_ping_status_code ?? null,
     lastSeen: toIsoString(row.last_seen),
     createdAt: toIsoString(row.created_at),
+    // §33.9: peer version observability captured on successful /health pings.
+    peerVersion: row.peer_version ?? null,
+    peerGitSha: row.peer_git_sha ?? null,
+    peerSchemaVersion: row.peer_schema_version ?? null,
   };
 }
 
 async function fetchPeer(db: Database, machineId: string): Promise<SyncPeerRow | null> {
   const result = await db.execute(sql`
-    SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+    SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
     FROM sync_nodes
     WHERE id = ${machineId}
     LIMIT 1
@@ -507,17 +519,23 @@ async function pingPeer(syncUrl: string): Promise<PingPeerResult> {
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     });
     if (response.ok) {
-      return { status: 'reachable', error: null };
+      // §33.9: capture peer version observability fields from the /health body.
+      // Malformed JSON or missing fields must not fail the ping — the helper
+      // returns EMPTY_PEER_VERSION_INFO in that case.
+      const version = await readPeerVersionInfo(response);
+      return { status: 'reachable', error: null, version };
     }
 
     return {
       status: 'unreachable',
       error: { category: 'http_status', httpStatusCode: response.status },
+      version: EMPTY_PEER_VERSION_INFO,
     };
   } catch (error) {
     return {
       status: 'unreachable',
       error: { category: classifyPingError(error), httpStatusCode: null },
+      version: EMPTY_PEER_VERSION_INFO,
     };
   }
 }
@@ -552,9 +570,12 @@ async function updatePingResult(
               sync_interval_ms = ${nextInterval},
               last_ping_error = NULL,
               last_ping_status_code = NULL,
-              last_seen = now()
+              last_seen = now(),
+              peer_version = ${result.version.appVersion},
+              peer_git_sha = ${result.version.gitSha},
+              peer_schema_version = ${result.version.schemaVersion}
           WHERE id = ${machineId}
-          RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+          RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
         `)
       : await db.execute(sql`
           UPDATE sync_nodes
@@ -563,7 +584,7 @@ async function updatePingResult(
               last_ping_error = ${result.error.category},
               last_ping_status_code = ${result.error.httpStatusCode}
           WHERE id = ${machineId}
-          RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+          RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
         `);
 
   const [updatedPeer] = extractRows<SyncPeerRow>(updateResult);
@@ -696,7 +717,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
     },
     async () => {
       const result = await db.execute(sql`
-        SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+        SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
         FROM sync_nodes
         ORDER BY hostname ASC, id ASC
       `);
@@ -806,7 +827,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           sync_interval_ms = EXCLUDED.sync_interval_ms,
           is_self = EXCLUDED.is_self,
           public_key = EXCLUDED.public_key
-        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
       `);
       const [peer] = extractRows<SyncPeerRow>(result);
 
@@ -855,7 +876,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           sync_interval_ms = EXCLUDED.sync_interval_ms,
           is_self = false,
           public_key = EXCLUDED.public_key
-        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
       `);
       const [peer] = extractRows<SyncPeerRow>(result);
 
@@ -887,7 +908,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
       const result = await db.execute(sql`
         DELETE FROM sync_nodes
         WHERE id = ${machineId.trim()}
-        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
       `);
       const [peer] = extractRows<SyncPeerRow>(result);
 
@@ -943,6 +964,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
         const result: PingPeerResult = {
           status: 'unreachable',
           error: { category: 'bad_url', httpStatusCode: null },
+          version: EMPTY_PEER_VERSION_INFO,
         };
         const updatedPeer = await updatePingResult(db, machineId.trim(), peer, result);
 
