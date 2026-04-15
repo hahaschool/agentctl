@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AgentCTL peer-update LaunchAgent (macOS) — roadmap §33.11.
+
+  This LaunchAgent invokes `pnpm peer-update` on the schedule defined
+  below. It is SHIPPED DISABLED so that installing the agent (copying
+  the plist under ~/Library/LaunchAgents) does not silently begin
+  mutating the operator's checkout. The operator must explicitly
+  `launchctl load -w` to enable it.
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ Enable:                                                           │
+  │   cp infra/launchd/com.agentctl.peer-update.plist \               │
+  │      ~/Library/LaunchAgents/                                      │
+  │   launchctl load -w ~/Library/LaunchAgents/com.agentctl.peer-update.plist │
+  │                                                                   │
+  │ Disable:                                                          │
+  │   launchctl unload -w ~/Library/LaunchAgents/com.agentctl.peer-update.plist │
+  │                                                                   │
+  │ Inspect last run:                                                 │
+  │   launchctl print gui/$(id -u)/com.agentctl.peer-update           │
+  │   tail -f ~/Library/Logs/agentctl/peer-update.out.log             │
+  └──────────────────────────────────────────────────────────────────┘
+
+  Customising the update window:
+    Default: 03:00 local time, daily.
+    Operators can change the `StartCalendarInterval` Hour/Minute
+    keys below, OR set the `AGENTCTL_UPDATE_WINDOW=HH:MM` environment
+    variable in EnvironmentVariables and adjust the calendar keys to
+    match. The CLI reads the env var for informational output; launchd
+    itself honours the StartCalendarInterval keys.
+
+  Working directory:
+    Template assumes $HOME/agentctl. Operators whose checkout lives
+    elsewhere must replace the WorkingDirectory value (and optionally
+    edit the pnpm path in ProgramArguments).
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.agentctl.peer-update</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>pnpm</string>
+        <string>peer-update</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/CHANGE_ME/agentctl</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>AGENTCTL_UPDATE_WINDOW</key>
+        <string>03:00</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>Disabled</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/CHANGE_ME/Library/Logs/agentctl/peer-update.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/CHANGE_ME/Library/Logs/agentctl/peer-update.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>Nice</key>
+    <integer>5</integer>
+</dict>
+</plist>

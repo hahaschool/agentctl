@@ -41,6 +41,31 @@ export const HISTORY_MAX_ENTRIES = 100;
 export const HEALTH_URL = 'http://localhost:8080/health';
 export const HEALTH_POLL_TIMEOUT_MS = 60_000;
 export const HEALTH_POLL_INTERVAL_MS = 2_000;
+export const UPDATE_WINDOW_ENV = 'AGENTCTL_UPDATE_WINDOW';
+
+// ---------------------------------------------------------------------------
+// Update window env var (consumed by launchd/systemd schedulers; surfaced
+// here for informational logging so operators can confirm the env reached
+// the CLI).
+// ---------------------------------------------------------------------------
+
+export type UpdateWindow = {
+  readonly hour: number;
+  readonly minute: number;
+  readonly raw: string;
+};
+
+export function parseUpdateWindow(raw: string | undefined): UpdateWindow | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  const match = /^(\d{1,2}):(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+  return { hour, minute, raw: trimmed };
+}
 
 // ---------------------------------------------------------------------------
 // ANSI helpers
@@ -1004,6 +1029,19 @@ export async function main(argv: readonly string[]): Promise<number> {
   if (flags.help) {
     printHelp();
     return 0;
+  }
+
+  // Surface the configured update window (set by launchd/systemd units)
+  // so operators running the CLI ad-hoc can confirm the env var reached
+  // the process. Purely informational — the actual schedule lives in the
+  // scheduler unit file.
+  const window = parseUpdateWindow(process.env[UPDATE_WINDOW_ENV]);
+  if (window && isTty()) {
+    process.stdout.write(
+      dim(
+        `${UPDATE_WINDOW_ENV}=${window.raw} (scheduler window; adjust in the launchd plist or systemd timer)\n`,
+      ),
+    );
   }
 
   const result = await runPeerUpdate({ flags });
