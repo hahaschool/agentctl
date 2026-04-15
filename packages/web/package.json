@@ -9,7 +9,7 @@
     "start": "next start --port ${WEB_PORT:-5173}",
     "test": "pnpm --filter @agentctl/shared build && vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:ci": "playwright test webhooks.spec.ts agent-profiles.spec.ts audit.spec.ts"
+    "test:e2e:ci": "playwright test webhooks.spec.ts agent-profiles.spec.ts audit.spec.ts machines.spec.ts"
   },
   "dependencies": {
     "@agentctl/shared": "workspace:*",
