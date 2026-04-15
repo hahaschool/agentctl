@@ -39,7 +39,13 @@ import { useNotificationContext } from '../contexts/notification-context';
 import { useHotkeys } from '../hooks/use-hotkeys';
 import { useWebSocket } from '../hooks/use-websocket';
 import { KEYBOARD_HELP_OPEN_EVENT } from '../lib/keyboard-shortcuts';
-import { syncConflictCountQuery } from '../lib/queries';
+import {
+  formatVersionGroups,
+  groupPeerVersions,
+  LOCAL_APP_VERSION,
+  type SyncPeerWithVersion,
+} from '../lib/mesh-version';
+import { syncConflictCountQuery, syncPeersQuery } from '../lib/queries';
 import { CommandPalette } from './CommandPalette';
 import { ConnectionBanner } from './ConnectionBanner';
 import { KeyboardHelpOverlay } from './KeyboardHelpOverlay';
@@ -105,6 +111,24 @@ export function Sidebar(): React.JSX.Element {
   const queryClient = useQueryClient();
   const conflictCount = useQuery(syncConflictCountQuery());
   const pendingConflicts = conflictCount.data?.count ?? 0;
+
+  // Peer versions for the footer tooltip (33.9 Mesh Version Observability).
+  // Lazy: only fetch once the user focuses or hovers the version link so pages
+  // that don't mock /api/sync/peers (e2e specs, embeds) boot cleanly.
+  const [peerSummaryArmed, setPeerSummaryArmed] = useState(false);
+  const armPeerSummary = useCallback(() => setPeerSummaryArmed(true), []);
+  const syncPeers = useQuery({ ...syncPeersQuery(), enabled: peerSummaryArmed });
+  const peerVersionSummary = useMemo(() => {
+    const peers = (syncPeers.data?.peers ?? []) as SyncPeerWithVersion[];
+    const externalPeers = peers.filter((p) => !p.isSelf);
+    const groups = groupPeerVersions(externalPeers);
+    if (groups.length === 0) return '';
+    return formatVersionGroups(groups);
+  }, [syncPeers.data]);
+
+  const versionLinkTitle = peerVersionSummary
+    ? `Local ${LOCAL_APP_VERSION} • Peers: ${peerVersionSummary}`
+    : `Local ${LOCAL_APP_VERSION} • No peer versions reported yet`;
 
   // Track WS connection for reconnect/disconnect toasts (skip initial connect)
   const wasConnectedRef = useRef(false);
@@ -438,9 +462,13 @@ export function Sidebar(): React.JSX.Element {
               href="https://github.com/hahaschool/agentctl/releases"
               target="_blank"
               rel="noopener noreferrer"
+              title={versionLinkTitle}
+              data-testid="sidebar-version-link"
+              onMouseEnter={armPeerSummary}
+              onFocus={armPeerSummary}
               className="text-[11px] font-mono text-muted-foreground hover:text-blue-500 transition-colors flex items-center gap-1 max-md:inline-flex hidden lg:flex"
             >
-              v0.4.0
+              {LOCAL_APP_VERSION}
               <ExternalLink className="size-2.5" aria-hidden="true" />
             </a>
             {mounted ? (
