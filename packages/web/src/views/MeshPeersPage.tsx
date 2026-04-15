@@ -23,6 +23,7 @@ import {
   syncPeersQuery,
   useDeleteSyncPeer,
   usePingSyncPeer,
+  useUpdateSyncPeer,
   useUpsertSyncPeer,
 } from '@/lib/queries';
 import { MAX_SYNC_URL_LENGTH, URL_LENGTH_COUNTER_THRESHOLD } from '@/lib/ui-constants';
@@ -458,10 +459,25 @@ type PeerRowProps = {
   onPing: (machineId: string) => void;
   onEdit: (peer: SyncPeer) => void;
   onDelete: (peer: SyncPeer) => void;
+  onUpdate: (peer: SyncPeerWithVersion) => void;
   isPinging: boolean;
   pingingId: string | null;
   deletingId: string | null;
+  updatingId: string | null;
 };
+
+/**
+ * A peer is "updatable" only when both versions are known and differ. We
+ * intentionally do NOT enable the button when `peerVersion` is missing —
+ * §33.11 slice 1 is opt-in per operator action, not a fleet-wide rollout.
+ */
+function canUpdatePeer(peer: SyncPeerWithVersion, localVersion: string): boolean {
+  if (peer.isSelf) return false;
+  if (!peer.syncUrl) return false;
+  const peerVersion = peer.peerVersion ?? null;
+  if (!peerVersion || !localVersion) return false;
+  return peerVersion !== localVersion;
+}
 
 export function MeshPeerRow({
   peer,
@@ -469,13 +485,17 @@ export function MeshPeerRow({
   onPing,
   onEdit,
   onDelete,
+  onUpdate,
   isPinging,
   pingingId,
   deletingId,
+  updatingId,
 }: PeerRowProps): React.JSX.Element {
   const thisRowIsPinging = isPinging && pingingId === peer.machineId;
   const canPing = Boolean(peer.syncUrl) && !peer.isSelf;
   const thisRowIsDeleting = deletingId === peer.machineId;
+  const thisRowIsUpdating = updatingId === peer.machineId;
+  const updatable = canUpdatePeer(peer, localVersion);
 
   return (
     <tr className="border-t border-border hover:bg-accent/5">
@@ -542,6 +562,30 @@ export function MeshPeerRow({
           </button>
           <button
             type="button"
+            onClick={() => onUpdate(peer)}
+            disabled={!updatable || thisRowIsUpdating}
+            data-testid={`update-${peer.machineId}`}
+            title={
+              peer.isSelf
+                ? 'Cannot update self from this page'
+                : !peer.syncUrl
+                  ? 'Peer has no syncUrl configured'
+                  : !peer.peerVersion
+                    ? 'Peer has not reported a version yet'
+                    : peer.peerVersion === localVersion
+                      ? 'Peer already matches local version'
+                      : `Update peer from ${peer.peerVersion} to ${localVersion}`
+            }
+            className={cn(
+              'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+              'border-border bg-muted hover:bg-accent/10 text-foreground',
+              'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
+            )}
+          >
+            {thisRowIsUpdating ? 'Updating…' : 'Update'}
+          </button>
+          <button
+            type="button"
             onClick={() => onPing(peer.machineId)}
             disabled={!canPing || thisRowIsPinging}
             className={cn(
@@ -589,9 +633,11 @@ export function MeshPeersPage(): React.JSX.Element {
   const peersData = useQuery(syncPeersQuery());
   const pingMutation = usePingSyncPeer();
   const deleteMutation = useDeleteSyncPeer();
+  const updateMutation = useUpdateSyncPeer();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogPeer, setDialogPeer] = useState<SyncPeer | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SyncPeer | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<SyncPeerWithVersion | null>(null);
 
   const [driftBannerOpen, setDriftBannerOpen] = useState(false);
   const [driftBannerDismissed, setDriftBannerDismissed] = useState(false);
@@ -653,11 +699,31 @@ export function MeshPeersPage(): React.JSX.Element {
     });
   }, [deleteMutation, pendingDelete, toast]);
 
+  const confirmUpdate = useCallback(() => {
+    if (!pendingUpdate) return;
+    const target = pendingUpdate;
+    updateMutation.mutate(target.machineId, {
+      onSuccess: (res) => {
+        toast.success(
+          `Peer ${target.machineId} updated: ${res.previousVersion} -> ${res.newVersion}`,
+        );
+        setPendingUpdate(null);
+      },
+      onError: (err) => {
+        toast.error(errorMessage(err, 'Failed to update peer'));
+        setPendingUpdate(null);
+      },
+    });
+  }, [pendingUpdate, toast, updateMutation]);
+
   const pingingId = pingMutation.isPending
     ? ((pingMutation.variables as string | undefined) ?? null)
     : null;
   const deletingId = deleteMutation.isPending
     ? ((deleteMutation.variables as string | undefined) ?? null)
+    : null;
+  const updatingId = updateMutation.isPending
+    ? ((updateMutation.variables as string | undefined) ?? null)
     : null;
 
   return (
@@ -811,9 +877,11 @@ export function MeshPeersPage(): React.JSX.Element {
                     onPing={handlePing}
                     onEdit={openEditDialog}
                     onDelete={setPendingDelete}
+                    onUpdate={setPendingUpdate}
                     isPinging={pingMutation.isPending}
                     pingingId={pingingId}
                     deletingId={deletingId}
+                    updatingId={updatingId}
                   />
                 ))}
               </tbody>
@@ -860,6 +928,53 @@ export function MeshPeersPage(): React.JSX.Element {
                 className="px-3 py-1.5 rounded-md text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
               >
                 {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingUpdate && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mesh-peer-update-title"
+          data-testid="mesh-peer-update-confirm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="w-full max-w-sm rounded-md border border-border bg-card shadow-xl p-5">
+            <h2 id="mesh-peer-update-title" className="text-sm font-semibold text-foreground">
+              Update mesh peer?
+            </h2>
+            <p className="mt-2 text-xs text-muted-foreground">
+              This triggers <span className="font-mono">scripts/peer-update.sh</span> on the peer.
+              The peer will fetch <span className="font-mono">origin/main</span>, rebuild, and
+              reload its PM2 ecosystem. Expect a brief outage on that node.
+            </p>
+            <p className="mt-1.5 text-[11px] font-mono text-foreground break-all">
+              {pendingUpdate.machineId}
+              {' · '}
+              <span className="text-muted-foreground">
+                {pendingUpdate.peerVersion ?? '?'} → {LOCAL_APP_VERSION}
+              </span>
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingUpdate(null)}
+                disabled={updateMutation.isPending}
+                className="px-3 py-1.5 rounded-md border border-border bg-muted text-xs text-foreground hover:bg-accent/10 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmUpdate}
+                disabled={updateMutation.isPending}
+                data-testid="confirm-update-mesh-peer"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+              >
+                {updateMutation.isPending ? 'Updating…' : 'Update'}
               </button>
             </div>
           </div>

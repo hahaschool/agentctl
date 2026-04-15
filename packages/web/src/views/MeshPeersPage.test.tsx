@@ -13,6 +13,7 @@ const {
   mockUsePingSyncPeer,
   mockUseUpsertSyncPeer,
   mockUseDeleteSyncPeer,
+  mockUseUpdateSyncPeer,
   mockToastSuccess,
   mockToastError,
 } = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const {
   mockUsePingSyncPeer: vi.fn(),
   mockUseUpsertSyncPeer: vi.fn(),
   mockUseDeleteSyncPeer: vi.fn(),
+  mockUseUpdateSyncPeer: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
 }));
@@ -71,6 +73,7 @@ vi.mock('@/lib/queries', () => ({
   usePingSyncPeer: () => mockUsePingSyncPeer(),
   useUpsertSyncPeer: () => mockUseUpsertSyncPeer(),
   useDeleteSyncPeer: () => mockUseDeleteSyncPeer(),
+  useUpdateSyncPeer: () => mockUseUpdateSyncPeer(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -143,6 +146,7 @@ describe('MeshPeersPage', () => {
     mockUsePingSyncPeer.mockReturnValue(makeMutationHook());
     mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook());
     mockUseDeleteSyncPeer.mockReturnValue(makeMutationHook());
+    mockUseUpdateSyncPeer.mockReturnValue(makeMutationHook());
   });
 
   afterEach(() => {

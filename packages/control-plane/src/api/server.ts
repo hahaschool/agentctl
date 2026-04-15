@@ -109,6 +109,7 @@ import { spaceRoutes } from './routes/spaces.js';
 import { streamRoutes } from './routes/stream.js';
 import { syncRoutes } from './routes/sync.js';
 import { syncConflictsRoutes } from './routes/sync-conflicts.js';
+import { syncPeerUpdateRoutes } from './routes/sync-peer-update.js';
 import { syncPeersRoutes } from './routes/sync-peers.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
 import { taskRunRoutes } from './routes/task-runs.js';
@@ -779,6 +780,15 @@ export async function createServer({
       db,
       registrationToken: process.env.SYNC_PEER_REGISTRATION_TOKEN,
     });
+
+    // Mesh peer self-update route (§33.11 slice 1)
+    if (machineId) {
+      await app.register(syncPeerUpdateRoutes, {
+        prefix: '/api/sync/peers',
+        db,
+        selfMachineId: machineId,
+      });
+    }
 
     // Mesh sync conflict resolution routes
     if (machineId) {

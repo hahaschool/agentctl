@@ -65,6 +65,21 @@ export type PingSyncPeerResponse = {
   peer: SyncPeer | null;
 };
 
+/**
+ * Response from `POST /api/sync/peers/:peerId/update` (roadmap §33.11 slice 1).
+ * Only returned when `:peerId` matches the receiving node's local machine id —
+ * otherwise the backend responds with a `PEER_UPDATE_NOT_LOCAL` 404 envelope.
+ */
+export type UpdateSyncPeerResponse = {
+  status: 'success' | 'failed';
+  durationMs: number;
+  previousVersion: string;
+  newVersion: string;
+  exitCode: number;
+  stdoutTail: string;
+  stderrTail: string;
+};
+
 export const syncApi = {
   // Sync Conflicts
   listSyncConflicts: (params?: { status?: string; table?: string; remoteNodeId?: string }) => {
@@ -112,5 +127,11 @@ export const syncApi = {
   pingSyncPeer: (machineId: string) =>
     request<PingSyncPeerResponse>(`/api/sync/peers/${encodeURIComponent(machineId)}/ping`, {
       method: 'POST',
+    }),
+
+  updateSyncPeer: (machineId: string) =>
+    request<UpdateSyncPeerResponse>(`/api/sync/peers/${encodeURIComponent(machineId)}/update`, {
+      method: 'POST',
+      body: JSON.stringify({}),
     }),
 };
