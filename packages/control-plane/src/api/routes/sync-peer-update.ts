@@ -15,18 +15,24 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getAppVersion } from '../../build-info.js';
 import type { Database } from '../../db/index.js';
 import { verifyPeerSignature } from '../../sync/peer-auth.js';
 import { loadKnownPeers } from '../../sync/sync-auth.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT_RELATIVE_PATH = '../../../../scripts/peer-update.sh';
 const DEFAULT_SCRIPT_PATH = path.resolve(CURRENT_FILE_DIR, SCRIPT_RELATIVE_PATH);
 const DEFAULT_PM2_ECOSYSTEM = 'agentctl-beta';
 const OUTPUT_TAIL_BYTES = 4_096;
+const PEER_UPDATE_RATE_LIMIT = {
+  max: 10,
+  timeWindow: 60_000,
+} as const;
 
 /**
  * Structured error codes surfaced by the update route. Kept narrow so the
@@ -178,6 +184,34 @@ export const syncPeerUpdateRoutes: FastifyPluginAsync<SyncPeerUpdateRoutesOption
     scriptPath = DEFAULT_SCRIPT_PATH,
     pm2Ecosystem = process.env.AGENTCTL_PM2_ECOSYSTEM ?? DEFAULT_PM2_ECOSYSTEM,
   } = opts;
+  const peerUpdateRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many peer update requests',
+  });
+  const peerUpdateFastifyRateLimit = {
+    max: readRateLimitEnv('PEER_UPDATE_RATE_LIMIT_MAX', PEER_UPDATE_RATE_LIMIT.max),
+    timeWindow: readRateLimitEnv(
+      'PEER_UPDATE_RATE_LIMIT_WINDOW_MS',
+      PEER_UPDATE_RATE_LIMIT.timeWindow,
+    ),
+    errorResponseBuilder: peerUpdateRateLimitError,
+  } as const;
+
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: peerUpdateRateLimitError,
+  });
+
+  const authorizePeerUpdate = async (request: FastifyRequest, reply: FastifyReply) => {
+    const authorized = await authorize(request, reply, db);
+    if (!authorized) return reply;
+  };
 
   app.post<{ Params: { peerId: string } }>(
     '/:peerId/update',
@@ -186,11 +220,10 @@ export const syncPeerUpdateRoutes: FastifyPluginAsync<SyncPeerUpdateRoutesOption
         tags: ['sync'],
         summary: 'Trigger a self-update on the local mesh peer',
       },
+      config: { rateLimit: peerUpdateFastifyRateLimit },
+      preHandler: [app.rateLimit(peerUpdateFastifyRateLimit), authorizePeerUpdate],
     },
     async (request, reply) => {
-      const authorized = await authorize(request, reply, db);
-      if (!authorized) return;
-
       const { peerId } = request.params;
       if (peerId !== selfMachineId) {
         return reply

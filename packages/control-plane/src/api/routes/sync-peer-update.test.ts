@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { generateDispatchSigningKeyPair } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
@@ -67,6 +68,7 @@ describe('syncPeerUpdateRoutes', () => {
       app = null;
     }
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('returns 401 when the X-Sync-Auth header is missing', async () => {
@@ -263,5 +265,58 @@ describe('syncPeerUpdateRoutes', () => {
     releaseFirstRun?.();
     const firstResponse = await first;
     expect(firstResponse.statusCode).toBe(200);
+  });
+
+  it('rate-limits peer update requests before repeated script execution', async () => {
+    vi.stubEnv('PEER_UPDATE_RATE_LIMIT_MAX', '1');
+    vi.stubEnv('PEER_UPDATE_RATE_LIMIT_WINDOW_MS', '60000');
+
+    const keyPair = generateDispatchSigningKeyPair();
+    const db = createMockDb({ [REMOTE_MACHINE_ID]: keyPair.publicKey });
+
+    vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.4.0');
+
+    const runScript = vi.fn<RunScriptFn>().mockResolvedValue({
+      exitCode: 0,
+      stdoutTail: 'ok\n',
+      stderrTail: '',
+    });
+
+    app = await buildApp({ db, runScript });
+
+    const body = {};
+    const request = () =>
+      app?.inject({
+        method: 'POST',
+        url: `/api/sync/peers/${SELF_MACHINE_ID}/update`,
+        payload: body,
+        headers: {
+          'x-sync-auth': signRequest(keyPair, REMOTE_MACHINE_ID, SELF_MACHINE_ID, body),
+          'content-type': 'application/json',
+        },
+      });
+
+    const first = await request();
+    expect(first?.statusCode).toBe(200);
+
+    const second = await request();
+    expect(second?.statusCode).toBe(429);
+    expect(second?.json()).toMatchObject({
+      error: 'RATE_LIMITED',
+      message: 'Too many peer update requests',
+    });
+    expect(runScript).toHaveBeenCalledTimes(1);
+  });
+
+  it('declares direct Fastify rate-limit and auth preHandler markers for CodeQL', () => {
+    const source = readFileSync(new URL('./sync-peer-update.ts', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
+    expect(source).toMatch(
+      /const authorizePeerUpdate = async \(request: FastifyRequest, reply: FastifyReply\) =>/,
+    );
+    expect(source).toMatch(
+      /'\/:peerId\/update'[\s\S]*?config:\s*\{\s*rateLimit:\s*peerUpdateFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(peerUpdateFastifyRateLimit\),\s*authorizePeerUpdate\s*\]/,
+    );
   });
 });
