@@ -329,6 +329,7 @@ export type {
   ReplayFilter,
   SessionTimeline,
 } from './session-replay.js';
+export type { VersionCompatResponse } from './system.js';
 export type { StatusTransition } from './status-machine.js';
 export {
   getStatusDescription,
