@@ -3,6 +3,19 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.5.1] — 2026-04-15
+
+fix: stale LOCAL_APP_VERSION in web client bundle
+
+### Changes
+
+- 30ac9289 fix(web): bump LOCAL_APP_VERSION to v0.5.0 + sync LOCAL_SCHEMA_VERSION; rewrite mesh-version constants in version-bump.sh (#581)
+- acd60285 ci(fleet): require migration-check gate in deploy-fleet (33.11) (#579)
+- f8bba57a docs: sync roadmap §33.8/§33.11 after PRs #575-#577 (#578)
+- 8b5ffb80 feat(mesh): /settings mesh auto-update section (33.11) (#577)
+- a968c58d feat(mesh): health panel on /mesh-peers with cursor drill-down (33.8) (#576)
+
+
 ## [0.5.0] — 2026-04-15
 
 mesh: ping diagnostics, bidirectional registration warnings, peer-update CLI/schedulers, /api/version-compat, peer-ahead rejection UI, health panel, Docker fleet attestations
