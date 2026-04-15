@@ -116,6 +116,35 @@ describe('GET /health (no dependencies)', () => {
     expect(body.dependencies).toBeUndefined();
   });
 
+  it('exposes appVersion, gitSha, schemaVersion on simple response (§33.9)', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health',
+    });
+
+    const body = response.json();
+    expect(typeof body.appVersion).toBe('string');
+    expect(body.appVersion).toMatch(/^\d+\.\d+\.\d+/);
+    expect(typeof body.gitSha).toBe('string');
+    expect(body.gitSha.length).toBeGreaterThan(0);
+    expect(typeof body.schemaVersion).toBe('number');
+    expect(body.schemaVersion).toBeGreaterThan(0);
+  });
+
+  it('exposes appVersion, gitSha, schemaVersion on detail response (§33.9)', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health?detail=true',
+    });
+
+    const body = response.json();
+    expect(typeof body.appVersion).toBe('string');
+    expect(body.appVersion).toMatch(/^\d+\.\d+\.\d+/);
+    expect(typeof body.gitSha).toBe('string');
+    expect(typeof body.schemaVersion).toBe('number');
+    expect(body.schemaVersion).toBeGreaterThan(0);
+  });
+
   it('returns dependencies when detail=true is provided', async () => {
     const response = await app.inject({
       method: 'GET',
