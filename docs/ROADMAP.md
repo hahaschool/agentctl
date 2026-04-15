@@ -2082,6 +2082,70 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 **Depends on:** 33.4 (peer registry + peer-auth). Shares UI affordances with 33.7, but the P0 registration endpoint, fallback warning, and manual retry action should not block on the full 33.7 UX overhaul.
 
+### 33.9 Mesh Version Observability (P1) — Planned
+
+**Motivation:** Today `/health` exposes only `nodeVersion` (the Node.js runtime). There is no surface that reports which AgentCTL release each node is running, and no way to see if peers have drifted. After the v0.3.1 → v0.4.0 promote on 2026-04-15 a `Youhane-Iori.local` peer could be on v0.4.0 while `pinnacle-macmini` was still on v0.3.1 and we would not know until an API contract change surfaced a bug. Observability must land before any automated rollout, otherwise drift is invisible both before and after.
+
+**Scope:**
+
+- [ ] **Expose `appVersion` + `gitSha` + `schemaVersion` on `/health`.** `appVersion` from the control-plane's `package.json`, `gitSha` stamped into the build by `scripts/version-bump.sh` (write to `packages/control-plane/dist/build-info.json`), `schemaVersion` = the highest migration sequence number already applied (`SELECT max(migration_number)` equivalent, or a static import of the migrations directory count).
+- [ ] **Persist peer version on ping.** Add `peer_version`, `peer_git_sha`, `peer_schema_version` columns to `sync_nodes`; have `pingPeer()` capture them from `/health` and store alongside `sync_status`/`last_seen`.
+- [ ] **Render version per row on `/mesh-peers`.** New column after STATUS. Peers whose version lags the local node get a subtle yellow dot; peers ahead get a blue dot.
+- [ ] **Mesh-wide drift banner.** If peers span more than one `appVersion`, show a header banner "Mesh on mixed versions: v0.4.0 (2), v0.3.1 (1)". Clicking it opens a drift breakdown.
+- [ ] **Sidebar footer tooltip.** Local-node footer already shows `v0.4.0`; add a tooltip that lists peer versions so the operator sees drift at a glance from any page.
+- [ ] **Tests.** Unit test for `/health` shape, integration test asserting `ping` persists version fields, Playwright test for the `/mesh-peers` version column and drift banner.
+
+**Depends on:** 33.4 (peer registry) + pings already wired in 33.7. **Prereq for:** 33.11 (automated rollout decisions need a drift signal).
+
+### 33.10 Mesh Schema + Protocol Compat Policy (P0) — Planned
+
+**Motivation:** The mesh change-log envelope (`packages/control-plane/src/sync/apply-change.ts`) does not carry a schema or protocol version. During a rolling upgrade, a peer on schema 24 could receive an envelope authored against schema 25 (new column, dropped column, renamed key) and silently half-apply — the sync loop has no way to detect the mismatch and gate the apply. Any automated rollout (33.11) would multiply this risk. The envelope needs a versioned compat contract **before** any auto-update lands, regardless of whether the rollout stays manual.
+
+**Scope:**
+
+- [ ] **Tag every envelope.** `change_log.envelope` already exists; extend the envelope shape with `{ schemaVersion, protocolVersion, producerVersion }` written by `sync_capture_change` (or at serialize time in the sync loop — whichever is less invasive to the existing trigger).
+- [ ] **Apply-side compat gate.** In `apply-change.ts`, reject envelopes whose `schemaVersion` is more than +1 newer than the local schema with a typed `MESH_ENVELOPE_SCHEMA_AHEAD` error; similarly reject when the protocolVersion is outside the declared compat window. Older-than-local envelopes continue to apply (backward compat) until an explicit sunset decision is made.
+- [ ] **"Peer ahead — please update" banner.** When apply-side rejects for schema-ahead, surface it in `/mesh-peers` on the offending peer row with a short action link to 33.11's update flow (or manual upgrade instructions during the gap).
+- [ ] **Documented compat window.** Add `docs/MESH_COMPAT.md`: policy is "mesh tolerates exactly one schema version skew during rollout; operators must complete a fleet update within one heartbeat cycle (default 30 s × peer count)." Document the sunset policy for protocolVersion bumps (one minor-version deprecation window).
+- [ ] **Tests.** Unit tests for the apply gate (same / +1 / +2 / -1 schema versions), integration test simulating a rolling upgrade across two peers.
+
+**Depends on:** 33.9 (uses same `appVersion`/`schemaVersion` surface). **Prereq for:** 33.11 (auto-update without this gate is unsafe).
+
+### 33.11 Fleet Rollout & Peer Auto-Update (P1, two-topology) — Planned
+
+**Motivation:** Shipping a new beta today requires the operator to manually `git pull && pnpm build && pm2 reload` on every mesh node. Section 8 (`agentctl deploy`) and §12.6 (promote-beta-CD gate) cover single-host automation; they do not cover fleet propagation. The repo supports two deploy topologies and the plan must be explicit about both:
+
+- **Docker topology** (`deploy-fleet.yml`, `docker-compose.prod.yml`, GHCR images) — 874-line workflow already exists with canary/rolling/all-at-once strategies, but `infra/machines.yml` still carries placeholder IPs (`100.64.0.1`, `100.64.0.2`, `100.64.0.3`) and has never been exercised against the real fleet. Secrets (`DEPLOY_SSH_KEY`, `TS_OAUTH_*`, `POSTGRES_PASSWORD`) are not wired.
+- **PM2 mesh topology** (`ecosystem.mesh.config.cjs`, `setup-mesh-node.sh`) — what the user actually runs today on laptop + macmini. Uses local `pnpm build` + `pm2 reload`; no Docker. No self-update path exists; §12.6's self-hosted-runner gate does not apply to this topology because the mesh nodes are not CI runners.
+
+**Scope — Docker topology (activate existing):**
+
+- [ ] **Populate `infra/machines.yml`** with the real Tailscale IPs + hostnames of production-grade fleet members (leave mesh laptop/macmini off this list — they are PM2-based). Validate with `pnpm tsx scripts/fleet-bootstrap.ts --dry-run`.
+- [ ] **Wire build provenance + verification.** Add `actions/attest-build-provenance` step to `build-images.yml` so every GHCR image publishes a signed attestation. Add `gh attestation verify` (or `cosign verify-attestation`) step to `deploy-fleet.yml` before the `docker pull` so peers refuse unattested images.
+- [ ] **End-to-end canary dry-run.** Run `deploy-fleet.yml --dry-run` against the populated inventory, then once for real with `strategy: canary`, `canary_percentage: 20`, against a non-critical target.
+- [ ] **Migration gate reuse.** Run `migration-check.yml` output as a required status check on `deploy-fleet.yml` to block destructive schema changes from rolling out ahead of 33.10's envelope compat gate.
+
+**Scope — PM2 mesh topology (new):**
+
+- [ ] **New `scripts/peer-update.sh` + `pnpm agentctl peer update` subcommand** (sibling to existing `agentctl deploy` in `scripts/deploy.ts`). Algorithm: (1) call `gh api /repos/…/releases/latest` to find the latest tag; (2) verify release asset signature via `gh attestation verify` (falls back to "require tag on a signed commit" if attestations aren't enabled yet); (3) `git fetch --tags && git checkout <tag>`; (4) run `./scripts/env-migrate.sh mesh`; (5) `pnpm build`; (6) `pm2 reload infra/pm2/ecosystem.mesh.config.cjs`; (7) poll `/health` until `appVersion` matches the target or time out; (8) on failure, restore the previous tag + rebuild + reload; emit a structured result.
+- [ ] **Opt-in schedulers.** Add `infra/launchd/com.agentctl.peer-update.plist` (macOS) and `infra/systemd/agentctl-peer-update.service + .timer` (Linux), both **disabled by default**. Operators enable one explicitly. Default cadence: daily at 03:00 local, with a documented "update-window" env var.
+- [ ] **Settings UI toggle.** Add a "Mesh auto-update" section to `/settings` for the current node: toggle on/off, show next scheduled run, show last run result (version, duration, success/failure), expose a "Run dry-run now" button that calls `agentctl peer update --dry-run` and streams output to the UI.
+- [ ] **Manual "Update peer" action.** On `/mesh-peers`, add a per-row "Update" action (only visible for peers with a reachable sync URL) that signals the peer's CP to run `agentctl peer update` out-of-band. Protected by the same Ed25519 peer-auth used for sync envelopes. No-op if the peer's auto-update is already running.
+- [ ] **Rollback story.** Document + implement rollback for both topologies: Docker = re-invoke `rollback.yml` with the prior tag; PM2 = `agentctl peer update --tag vX.Y.Z-1 --rollback` which skips the attestation requirement iff the target tag was previously verified-applied on this node (stored in `~/.agentctl/update-history.json`).
+
+**Scope — cross-topology:**
+
+- [ ] **iOS + web client compat surface.** Expose `/api/version-compat` returning `{ appVersion, minSupportedMobileBuild, minSupportedWebBuild }`. Mobile and web read it on bootstrap; mismatch shows a "Please update your client" banner rather than silently failing on the new API.
+- [ ] **"Update available" banner in web.** If `/mesh-peers` shows a peer on a newer `appVersion` than the viewer's CP, badge the local-node header with "Update available (vX → vY)" + a link to `./scripts/peer-update.sh --dry-run` instructions.
+- [ ] **Playwright two-node fixture** asserting: (a) pushing a new tag on the primary flips peer-version on the mesh-peers UI after one heartbeat; (b) a forced `schemaVersion + 2` envelope is rejected with the 33.10 banner; (c) `agentctl peer update --dry-run` reports the would-be steps without mutating state.
+
+**Non-goals:**
+
+- Truly unattended rolling-update automation against the user's personal fleet. Auto-update stays opt-in forever; the default posture is "operator-triggered via the UI or CLI after reviewing the drift banner."
+- A bespoke signing pipeline if GitHub build provenance attestations cover the need. Cosign becomes a follow-up only if we run into gaps with the GitHub-native path.
+
+**Depends on:** 33.9 (drift signal), 33.10 (compat gate), §8 (existing `agentctl deploy` CLI plumbing), §12.6 (existing beta CD gate — this section extends it rather than replaces it).
+
 ---
 
 ## Active Priorities
@@ -2101,6 +2165,9 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
 | **P1** | Mesh Peer UX Overhaul | 33.7 | Planned — surface per-ping failure reason, add per-row Edit, Tailscale-backed `/discover` + `/probe` endpoints, and a two-step discovery picker so adding a peer no longer requires typing identity/key/URL fields by hand. Motivated by 2026-04-15 beta incident where an `https://` syncUrl on an HTTP-only peer reported `unreachable` with no detail. See [plans/2026-04-15-mesh-peer-ux-overhaul-plan.md](plans/2026-04-15-mesh-peer-ux-overhaul-plan.md). |
 | **P0** | Mesh Bidirectional Registration + Cross-Node Visibility | 33.8 | Planned — adding a peer on node A today does not register A on node B, so sync is silently one-way and peer Machines never cross-populate. Adds a signed `POST /api/sync/peers/register` handshake with an explicit first-registration trust model, a manual "Register with peer" action, explicit machine-row sync provenance for `/machines` origin badges, and a two-node Playwright fixture that proves machine rows replicate end-to-end. Motivated by 2026-04-15 observation that laptop-side `mac-local` never appeared in macmini's `sync_nodes` or `machines`. See [plans/2026-04-15-mesh-bidirectional-registration-plan.md](plans/2026-04-15-mesh-bidirectional-registration-plan.md). |
+| **P1** | Mesh Version Observability | 33.9 | Planned — `/health` only exposes `nodeVersion` (Node.js runtime) today, leaving release drift invisible across the mesh. Adds `appVersion` + `gitSha` + `schemaVersion` to `/health`, persists them on `sync_nodes` via ping, renders a version column + mesh-wide drift banner on `/mesh-peers`, and lists peer versions from the sidebar footer tooltip. Prereq for 33.11 — auto-update decisions need a drift signal. |
+| **P0** | Mesh Schema + Protocol Compat Policy | 33.10 | Planned — mesh envelopes carry no schema/protocol version today, so rolling upgrades can half-apply changes silently. Tags every envelope with `{ schemaVersion, protocolVersion, producerVersion }`, adds an apply-side compat gate with a typed `MESH_ENVELOPE_SCHEMA_AHEAD` error, shows a "Peer ahead — please update" banner on `/mesh-peers`, and documents the ±1 schema skew policy in `docs/MESH_COMPAT.md`. Must land before any auto-update (33.11) to keep rollouts safe. |
+| **P1** | Fleet Rollout & Peer Auto-Update (two-topology) | 33.11 | Planned — beta promotion today still requires manual `git pull && pnpm build && pm2 reload` on each mesh node. Activates the existing Docker fleet path (populate `infra/machines.yml`, wire `actions/attest-build-provenance` + `gh attestation verify`, canary dry-run via `deploy-fleet.yml`, reuse `migration-check.yml`). Adds a PM2 mesh path: `scripts/peer-update.sh` + `pnpm agentctl peer update` subcommand, opt-in `launchd`/`systemd` timers (disabled by default), a `/settings` auto-update toggle, a per-row "Update" action on `/mesh-peers` protected by Ed25519 peer-auth, and documented rollback for both topologies. Cross-topology: `/api/version-compat` for iOS/web clients, an "Update available" web banner, and a two-node Playwright fixture. Explicit non-goal: no truly unattended automation — auto-update stays opt-in. Depends on 33.9 + 33.10. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 landed the scripts hardening, PR #380 re-closed the earlier latest-base alert, and PRs #386-#388 closed the reopened 2026-04-01 findings on current `main` |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 fixed the original `brace-expansion` regression, PR #380 closed the remaining latest-main dependency/security follow-up, and PR #385 cleared the last `pnpm/action-setup` Node20 deprecation warnings |
