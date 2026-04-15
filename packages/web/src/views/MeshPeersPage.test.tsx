@@ -11,6 +11,7 @@ import type { SyncPeer } from '@/lib/api';
 const {
   mockSyncPeersQuery,
   mockSyncPeerCursorsQuery,
+  mockVersionCompatQuery,
   mockUsePingSyncPeer,
   mockUseUpsertSyncPeer,
   mockUseDeleteSyncPeer,
@@ -22,6 +23,7 @@ const {
 } = vi.hoisted(() => ({
   mockSyncPeersQuery: vi.fn(),
   mockSyncPeerCursorsQuery: vi.fn(),
+  mockVersionCompatQuery: vi.fn(),
   mockUsePingSyncPeer: vi.fn(),
   mockUseUpsertSyncPeer: vi.fn(),
   mockUseDeleteSyncPeer: vi.fn(),
@@ -78,6 +80,7 @@ vi.mock('@/lib/queries', () => ({
   syncPeersQuery: () => mockSyncPeersQuery(),
   syncPeerCursorsQuery: (machineId: string, enabled: boolean) =>
     mockSyncPeerCursorsQuery(machineId, enabled),
+  versionCompatQuery: () => mockVersionCompatQuery(),
   usePingSyncPeer: () => mockUsePingSyncPeer(),
   useUpsertSyncPeer: () => mockUseUpsertSyncPeer(),
   useDeleteSyncPeer: () => mockUseDeleteSyncPeer(),
@@ -167,6 +170,18 @@ describe('MeshPeersPage', () => {
       }),
       enabled,
     }));
+    mockVersionCompatQuery.mockReturnValue({
+      queryKey: ['version-compat'],
+      // Default: local matches the banner's local probe so the "update available"
+      // banner is hidden unless a test explicitly asks for an out-of-date local.
+      queryFn: vi.fn().mockResolvedValue({
+        appVersion: 'v9.9.9',
+        gitSha: 'sha',
+        schemaVersion: 26,
+        minSupportedMobileBuild: 1,
+        minSupportedWebBuild: 1,
+      }),
+    });
     mockUsePingSyncPeer.mockReturnValue(makeMutationHook());
     mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook());
     mockUseDeleteSyncPeer.mockReturnValue(makeMutationHook());
@@ -1320,6 +1335,199 @@ describe('MeshPeersPage', () => {
 
       expect(pingMutate).toHaveBeenCalled();
       expect(screen.queryByTestId('peer-row-detail-node-btn')).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.7 — Ping failure category badge (next to STATUS pill)
+  // ---------------------------------------------------------------------------
+
+  describe('ping failure category badge', () => {
+    it('renders a category badge next to the STATUS pill for unreachable peers', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-cat',
+              syncStatus: 'unreachable',
+              lastPingError: 'connect_refused',
+              lastPingStatusCode: null,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-ping-category-peer-cat')).toBeDefined();
+      });
+      expect(screen.getByTestId('peer-ping-category-peer-cat').textContent).toBe('connect_refused');
+    });
+
+    it('hides the category badge when the peer is reachable', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-ok',
+              syncStatus: 'reachable',
+              lastPingError: null,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => expect(screen.getByText('peer-ok')).toBeDefined());
+      expect(screen.queryByTestId('peer-ping-category-peer-ok')).toBeNull();
+    });
+
+    it('sets a `title` tooltip carrying the HTTP status prefix + full error', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-tooltip',
+              syncStatus: 'unreachable',
+              lastPingError: 'http_status',
+              lastPingStatusCode: 503,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      const badge = await screen.findByTestId('peer-ping-category-peer-tooltip');
+      expect(badge.getAttribute('title')).toBe('HTTP 503 — http_status');
+    });
+
+    it('truncates very long category labels to ~40 chars', async () => {
+      const longCategory = 'x'.repeat(80);
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-long',
+              syncStatus: 'unreachable',
+              lastPingError: longCategory,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      const badge = await screen.findByTestId('peer-ping-category-peer-long');
+      expect(badge.textContent?.length ?? 0).toBeLessThanOrEqual(40);
+      expect(badge.textContent?.endsWith('…')).toBe(true);
+    });
+
+    it('includes the failure reason in the ping toast when unreachable', async () => {
+      const mutate = vi.fn(
+        (
+          _machineId: string,
+          opts: {
+            onSuccess?: (r: {
+              ok: boolean;
+              status: string;
+              peer: Partial<SyncPeer> | null;
+            }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({
+            ok: true,
+            status: 'unreachable',
+            peer: {
+              machineId: 'node-ouch',
+              syncStatus: 'unreachable',
+              lastPingError: 'timeout',
+              lastPingStatusCode: null,
+            },
+          });
+        },
+      );
+      mockUsePingSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [makePeer({ machineId: 'node-ouch' })] }),
+      });
+
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('ping-node-ouch')).toBeDefined());
+      fireEvent.click(screen.getByTestId('ping-node-ouch'));
+
+      expect(mockToastError).toHaveBeenCalledWith(expect.stringContaining('timeout'));
+      expect(mockToastError).toHaveBeenCalledWith(expect.stringContaining('unreachable'));
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.11 — Update-available banner
+  // ---------------------------------------------------------------------------
+
+  describe('update-available banner', () => {
+    it('renders the banner when any peer is ahead of the local CP version', async () => {
+      mockVersionCompatQuery.mockReturnValue({
+        queryKey: ['version-compat'],
+        queryFn: vi.fn().mockResolvedValue({
+          appVersion: 'v0.4.0',
+          gitSha: 'sha',
+          schemaVersion: 26,
+          minSupportedMobileBuild: 1,
+          minSupportedWebBuild: 1,
+        }),
+      });
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-new',
+              peerVersion: 'v0.5.0',
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      const banner = await screen.findByTestId('mesh-version-update-banner');
+      expect(banner.textContent).toContain('Update available');
+      expect(banner.textContent).toContain('v0.4.0');
+      expect(banner.textContent).toContain('v0.5.0');
+      expect(banner.textContent).toContain('./scripts/peer-update.sh --dry-run');
+    });
+
+    it('hides the banner when every peer is at or behind the local version', async () => {
+      mockVersionCompatQuery.mockReturnValue({
+        queryKey: ['version-compat'],
+        queryFn: vi.fn().mockResolvedValue({
+          appVersion: 'v0.5.0',
+          gitSha: 'sha',
+          schemaVersion: 26,
+          minSupportedMobileBuild: 1,
+          minSupportedWebBuild: 1,
+        }),
+      });
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-old',
+              peerVersion: 'v0.4.0',
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByText('peer-old')).toBeDefined();
+      });
+      expect(screen.queryByTestId('mesh-version-update-banner')).toBeNull();
     });
   });
 });
