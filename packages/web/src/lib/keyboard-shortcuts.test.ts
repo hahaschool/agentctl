@@ -115,9 +115,16 @@ describe('SHORTCUT_GROUPS', () => {
     expect(SHORTCUT_GROUPS.length).toBeGreaterThan(0);
   });
 
-  it('has 5 groups: Global, Sessions, Session Detail, Agents, Agent Detail', () => {
+  it('has 6 groups: Global, Go To, Sessions, Session Detail, Agents, Agent Detail', () => {
     const titles = SHORTCUT_GROUPS.map((g) => g.title);
-    expect(titles).toEqual(['Global', 'Sessions', 'Session Detail', 'Agents', 'Agent Detail']);
+    expect(titles).toEqual([
+      'Global',
+      'Go To',
+      'Sessions',
+      'Session Detail',
+      'Agents',
+      'Agent Detail',
+    ]);
   });
 
   it('Global group contains navigation and command palette shortcuts', () => {
@@ -127,8 +134,23 @@ describe('SHORTCUT_GROUPS', () => {
     expect(descs).toContain('Command palette');
     expect(descs).toContain('New agent');
     expect(descs).toContain('Save settings (Settings pages)');
-    expect(descs).toContain('Navigate to page');
+    expect(descs).toContain('Navigate to page (top 9)');
     expect(descs).toContain('Show keyboard shortcuts');
+  });
+
+  it('Go To group covers every navigable page via g-prefix chord', () => {
+    const goTo = SHORTCUT_GROUPS.find((g) => g.title === 'Go To');
+    expect(goTo).toBeDefined();
+    const descs = goTo?.shortcuts.map((s) => s.desc) ?? [];
+    // Every entry is a two-key chord starting with 'g'
+    for (const s of goTo?.shortcuts ?? []) {
+      expect(s.keys[0]).toBe('g');
+      expect(s.keys).toHaveLength(2);
+    }
+    expect(descs).toContain('Go to Dashboard');
+    expect(descs).toContain('Go to Scheduler');
+    expect(descs).toContain('Go to Webhooks');
+    expect(descs).toContain('Go to Audit');
   });
 
   it('Sessions group contains relevant shortcuts', () => {
@@ -188,8 +210,8 @@ describe('SHORTCUT_GROUPS', () => {
   });
 
   it('two-key shortcuts use separate array entries', () => {
-    const global = SHORTCUT_GROUPS.find((g) => g.title === 'Global');
-    const goToDashboard = global?.shortcuts.find((s) => s.desc === 'Go to Dashboard');
+    const goTo = SHORTCUT_GROUPS.find((g) => g.title === 'Go To');
+    const goToDashboard = goTo?.shortcuts.find((s) => s.desc === 'Go to Dashboard');
     expect(goToDashboard).toBeDefined();
     expect(goToDashboard?.keys).toEqual(['g', 'd']);
   });

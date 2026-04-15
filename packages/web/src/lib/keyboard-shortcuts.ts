@@ -56,6 +56,33 @@ const GLOBAL_SHORTCUTS: ShortcutEntry[] = [
 export const ALL_SHORTCUTS: ShortcutEntry[] = [...NAV_SHORTCUTS, ...GLOBAL_SHORTCUTS];
 
 /**
+ * "Go to" chord shortcuts — `g` prefix followed by a single letter routes to a
+ * nav entry. Pairs with digit shortcuts (1-9, 0) for the most common pages.
+ * Keep in sync with NAV_ITEMS.goKey in Sidebar.tsx.
+ */
+const GO_TO_SHORTCUTS: ShortcutEntry[] = [
+  { keys: ['g', 'd'], desc: 'Go to Dashboard' },
+  { keys: ['g', 'm'], desc: 'Go to Machines' },
+  { keys: ['g', 'a'], desc: 'Go to Agents' },
+  { keys: ['g', 'p'], desc: 'Go to Agent Profiles' },
+  { keys: ['g', 's'], desc: 'Go to Sessions' },
+  { keys: ['g', 'i'], desc: 'Go to Discover' },
+  { keys: ['g', 'l'], desc: 'Go to Logs' },
+  { keys: ['g', 'e'], desc: 'Go to Settings' },
+  { keys: ['g', 'v'], desc: 'Go to Approvals' },
+  { keys: ['g', 'y'], desc: 'Go to Memory' },
+  { keys: ['g', 'x'], desc: 'Go to Spaces' },
+  { keys: ['g', 't'], desc: 'Go to Tasks' },
+  { keys: ['g', 'c'], desc: 'Go to Scheduler' },
+  { keys: ['g', 'u'], desc: 'Go to Deployment' },
+  { keys: ['g', 'f'], desc: 'Go to Conflicts' },
+  { keys: ['g', 'n'], desc: 'Go to Mesh Peers' },
+  { keys: ['g', 'r'], desc: 'Go to Security' },
+  { keys: ['g', 'q'], desc: 'Go to Audit' },
+  { keys: ['g', 'w'], desc: 'Go to Webhooks' },
+];
+
+/**
  * Grouped shortcuts for the help overlay — organized by context/page.
  */
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
@@ -66,13 +93,13 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: ['\u2318K / Ctrl+K'], desc: 'Command palette' },
       { keys: ['\u2318N / Ctrl+N'], desc: 'New agent' },
       { keys: ['\u2318S / Ctrl+S'], desc: 'Save settings (Settings pages)' },
-      { keys: ['1\u20139'], desc: 'Navigate to page' },
+      { keys: ['1\u20139'], desc: 'Navigate to page (top 9)' },
       { keys: ['Esc'], desc: 'Close dialogs / Cancel' },
-      { keys: ['g', 'd'], desc: 'Go to Dashboard' },
-      { keys: ['g', 's'], desc: 'Go to Sessions' },
-      { keys: ['g', 'a'], desc: 'Go to Agents' },
-      { keys: ['g', 'm'], desc: 'Go to Machines' },
     ],
+  },
+  {
+    title: 'Go To',
+    shortcuts: GO_TO_SHORTCUTS,
   },
   {
     title: 'Sessions',
