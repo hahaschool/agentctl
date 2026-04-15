@@ -912,6 +912,146 @@ describe('MeshPeersPage', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // §33.10 — Persistent "Peer ahead (schema vX)" rejection badge
+  //
+  // Unlike the advisory `PeerAheadBadge` (ping-derived schema drift), this one
+  // only renders when the apply-side compat gate has actually rejected one or
+  // more envelopes from the peer. The backend stamps lastSchemaAheadVersion /
+  // schemaAheadCount on the peer row when the rejection fires.
+  // ---------------------------------------------------------------------------
+
+  describe('peer-schema-ahead badge (rejection-persisted)', () => {
+    it('renders the badge when schemaAheadCount > 0 with the peer schema version', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-reject',
+              lastSchemaAheadVersion: 42,
+              schemaAheadCount: 3,
+              lastSchemaAheadAt: '2026-04-15T12:00:00.000Z',
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-schema-ahead-badge-peer-reject')).toBeDefined();
+      });
+      const badge = screen.getByTestId('peer-schema-ahead-badge-peer-reject');
+      // Destructive tone and explicit schema version in the label text.
+      expect(badge.textContent).toContain('Peer ahead');
+      expect(badge.textContent).toContain('schema v42');
+      // Tooltip explains the count + local version and directs operator action.
+      const title = badge.getAttribute('title') ?? '';
+      expect(title).toContain('3 envelopes');
+      expect(title).toContain('schema v42');
+      expect(title).toContain('your local v26');
+      expect(title).toContain('Update this control plane');
+      // A11y: <output> has implicit role="status" — explicit attribute is
+      // redundant per WAI-ARIA. We assert the tag + aria-label carry intent.
+      expect(badge.tagName).toBe('OUTPUT');
+      expect(badge.getAttribute('aria-label')).toContain('peer-reject');
+      expect(badge.getAttribute('aria-label')).toContain('3 schema-ahead envelopes');
+    });
+
+    it('uses singular "envelope" wording when schemaAheadCount === 1', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-single',
+              lastSchemaAheadVersion: 27,
+              schemaAheadCount: 1,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-schema-ahead-badge-peer-single')).toBeDefined();
+      });
+      const badge = screen.getByTestId('peer-schema-ahead-badge-peer-single');
+      const title = badge.getAttribute('title') ?? '';
+      expect(title).toContain('1 envelope');
+      expect(title).not.toContain('1 envelopes');
+    });
+
+    it('does not render the badge when schemaAheadCount is 0 or null', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-clean-zero',
+              schemaAheadCount: 0,
+            } as Partial<SyncPeer>),
+            makePeer({
+              machineId: 'peer-clean-null',
+              schemaAheadCount: null,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getAllByRole('row').length).toBeGreaterThan(1);
+      });
+      expect(screen.queryByTestId('peer-schema-ahead-badge-peer-clean-zero')).toBeNull();
+      expect(screen.queryByTestId('peer-schema-ahead-badge-peer-clean-null')).toBeNull();
+    });
+
+    it('does not render the badge on self rows even when count > 0', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-self-row',
+              isSelf: true,
+              lastSchemaAheadVersion: 42,
+              schemaAheadCount: 5,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getAllByRole('row').length).toBeGreaterThan(0);
+      });
+      expect(screen.queryByTestId('peer-schema-ahead-badge-peer-self-row')).toBeNull();
+    });
+
+    it('falls back to "?" when lastSchemaAheadVersion is missing but count > 0', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-no-version',
+              lastSchemaAheadVersion: null,
+              schemaAheadCount: 2,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-schema-ahead-badge-peer-no-version')).toBeDefined();
+      });
+      const badge = screen.getByTestId('peer-schema-ahead-badge-peer-no-version');
+      expect(badge.textContent).toContain('schema ?');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // §33.7 — Ping diagnostics + Probe button
   // ---------------------------------------------------------------------------
 

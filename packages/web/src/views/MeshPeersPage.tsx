@@ -816,6 +816,61 @@ export function PeerAheadBadge({
   );
 }
 
+type PeerSchemaAheadBadgeProps = {
+  peer: SyncPeerWithVersion & {
+    lastSchemaAheadVersion?: number | null;
+    schemaAheadCount?: number | null;
+  };
+  localSchemaVersion: number;
+};
+
+/**
+ * §33.10 — Per-row "Peer ahead (schema vX)" rejection badge.
+ *
+ * Renders when the control plane has *actually rejected* one or more mesh
+ * envelopes from this peer because their `schemaVersion` exceeded the local
+ * CP by more than +1 (`MESH_ENVELOPE_SCHEMA_AHEAD`). This is the load-bearing,
+ * action-required signal: ping-based schema drift (PR #567's `PeerAheadBadge`)
+ * is advisory, but this badge means *real data is being dropped* until the
+ * operator updates this control plane.
+ *
+ * Tone is destructive/red to differentiate from the amber advisory badge. The
+ * badge is informational (rendered as `<output role="status">`) — the action
+ * is "update this control plane", which is not a per-peer click-target.
+ *
+ * Self-rows never render the badge (we do not reject envelopes from ourselves).
+ * When `schemaAheadCount` is null / 0 the badge renders nothing.
+ */
+export function PeerSchemaAheadBadge({
+  peer,
+  localSchemaVersion,
+}: PeerSchemaAheadBadgeProps): React.JSX.Element | null {
+  if (peer.isSelf) return null;
+  const count = peer.schemaAheadCount ?? 0;
+  if (!Number.isFinite(count) || count <= 0) return null;
+
+  const rawSchema = peer.lastSchemaAheadVersion;
+  const peerSchema = typeof rawSchema === 'number' && Number.isFinite(rawSchema) ? rawSchema : null;
+  const peerSchemaLabel = peerSchema === null ? '?' : `v${peerSchema}`;
+  const envelopePlural = count === 1 ? 'envelope' : 'envelopes';
+  const tooltip = `This peer has sent ${count} ${envelopePlural} at schema ${peerSchemaLabel}, newer than your local v${localSchemaVersion}. Update this control plane to accept them. See docs/MESH_COMPAT.md.`;
+  const ariaLabel = `Peer ${peer.machineId} sent ${count} schema-ahead ${envelopePlural}; update this control plane`;
+
+  return (
+    <output
+      data-testid={`peer-schema-ahead-badge-${peer.machineId}`}
+      title={tooltip}
+      aria-label={ariaLabel}
+      className={cn(
+        'inline-flex items-center gap-1 px-1.5 py-px rounded-sm text-[10px] font-semibold tracking-wide uppercase',
+        'bg-red-500/15 text-red-400',
+      )}
+    >
+      Peer ahead (schema {peerSchemaLabel})
+    </output>
+  );
+}
+
 export function MeshPeerRow({
   peer,
   localVersion,
@@ -876,11 +931,14 @@ export function MeshPeerRow({
         <PingDiagnosticLine peer={peer} />
       </td>
       <td className="px-4 py-3 align-top whitespace-nowrap">
-        <VersionCell
-          peerVersion={peer.peerVersion}
-          localVersion={localVersion}
-          isSelf={peer.isSelf}
-        />
+        <div className="flex flex-col items-start gap-1">
+          <VersionCell
+            peerVersion={peer.peerVersion}
+            localVersion={localVersion}
+            isSelf={peer.isSelf}
+          />
+          <PeerSchemaAheadBadge peer={peer} localSchemaVersion={LOCAL_SCHEMA_VERSION} />
+        </div>
       </td>
       <td className="px-4 py-3 align-top font-mono text-xs text-muted-foreground">
         {peer.tailscaleIp ?? '—'}

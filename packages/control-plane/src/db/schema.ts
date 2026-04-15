@@ -404,6 +404,13 @@ export const syncNodes = pgTable('sync_nodes', {
   peerVersion: text('peer_version'),
   peerGitSha: text('peer_git_sha'),
   peerSchemaVersion: integer('peer_schema_version'),
+  // 33.10: envelope schema-ahead rejection tracking. When the apply-side
+  // MESH_ENVELOPE_SCHEMA_AHEAD gate fires, we stamp the rejected envelope's
+  // schemaVersion + timestamp here and bump the count so /mesh-peers can surface
+  // a red "Peer ahead" badge on the offending peer row.
+  lastSchemaAheadVersion: integer('last_schema_ahead_version'),
+  lastSchemaAheadAt: timestamp('last_schema_ahead_at', { withTimezone: true }),
+  schemaAheadCount: integer('schema_ahead_count').notNull().default(0),
 });
 
 export const syncChangeLog = pgTable(

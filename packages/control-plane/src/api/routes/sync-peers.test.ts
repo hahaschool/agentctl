@@ -41,6 +41,9 @@ function makePeerRow(overrides: Record<string, unknown> = {}) {
     reverse_registration_status: null,
     reverse_registration_error: null,
     reverse_registration_at: null,
+    last_schema_ahead_version: null,
+    last_schema_ahead_at: null,
+    schema_ahead_count: 0,
     ...overrides,
   };
 }
@@ -152,6 +155,49 @@ describe('syncPeersRoutes', () => {
         { machineId: 'machine-2', hostname: 'peer-host' },
         { machineId: 'machine-3', hostname: 'another-peer' },
       ],
+    });
+  });
+
+  it('exposes schema-ahead rejection fields on the /api/sync/peers response (§33.10)', async () => {
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-ahead',
+          hostname: 'peer-ahead',
+          last_schema_ahead_version: 42,
+          last_schema_ahead_at: '2026-04-15T12:00:00.000Z',
+          schema_ahead_count: 3,
+        }),
+        makePeerRow({
+          id: 'machine-clean',
+          hostname: 'peer-clean',
+        }),
+      ],
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/api/sync/peers' });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      peers: Array<{
+        machineId: string;
+        lastSchemaAheadVersion?: number | null;
+        lastSchemaAheadAt?: string | null;
+        schemaAheadCount?: number | null;
+      }>;
+    };
+    expect(body.peers).toHaveLength(2);
+    expect(body.peers[0]).toMatchObject({
+      machineId: 'machine-ahead',
+      lastSchemaAheadVersion: 42,
+      lastSchemaAheadAt: '2026-04-15T12:00:00.000Z',
+      schemaAheadCount: 3,
+    });
+    expect(body.peers[1]).toMatchObject({
+      machineId: 'machine-clean',
+      lastSchemaAheadVersion: null,
+      lastSchemaAheadAt: null,
+      schemaAheadCount: 0,
     });
   });
 

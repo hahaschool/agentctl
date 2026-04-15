@@ -103,6 +103,26 @@ export type SyncNode = {
   reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
   reverseRegistrationError?: string | null;
   reverseRegistrationAt?: string | null;
+  /**
+   * Mesh envelope schema-ahead rejection tracking (roadmap §33.10).
+   *
+   * When the apply-side compat gate (`MESH_ENVELOPE_SCHEMA_AHEAD`) rejects a
+   * change-log envelope from this peer because its `schemaVersion` exceeds the
+   * local control plane's schema by more than 1, we persist the event here so
+   * `/mesh-peers` can surface a red "Peer ahead — update this CP" badge on the
+   * offending peer row.
+   *
+   * - `lastSchemaAheadVersion` — `schemaVersion` from the most recently
+   *   rejected envelope, or `null` when no rejection has been recorded.
+   * - `lastSchemaAheadAt` — ISO-8601 timestamp of the most recent rejection,
+   *   or `null` when no rejection has been recorded.
+   * - `schemaAheadCount` — rolling count of rejected envelopes. `0` (or
+   *   nullish) indicates no rejections recorded. UIs should render the badge
+   *   whenever this is > 0.
+   */
+  lastSchemaAheadVersion?: number | null;
+  lastSchemaAheadAt?: string | null;
+  schemaAheadCount?: number | null;
 };
 
 /**

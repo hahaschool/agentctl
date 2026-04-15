@@ -5,7 +5,8 @@ import type { Logger } from 'pino';
 import type { Database } from '../db/index.js';
 import { extractRows } from '../db/index.js';
 
-import { applyChange } from './apply-change.js';
+import { applyChange, recordSchemaAheadRejection } from './apply-change.js';
+import { MeshEnvelopeSchemaAheadError } from './mesh-compat.js';
 import { createPeerSignedHeader } from './peer-auth.js';
 import { markSyncedEntries } from './synced-marker.js';
 
@@ -154,6 +155,17 @@ export async function syncFromPeer(opts: {
           },
           'Failed to apply sync change - stopping batch',
         );
+        // 33.10: when the compat gate rejects a schema-ahead envelope, stamp
+        // the offending peer row so /mesh-peers can render a "Peer ahead" badge
+        // pointing the operator at the CP that needs updating.
+        if (err instanceof MeshEnvelopeSchemaAheadError) {
+          await recordSchemaAheadRejection(
+            db,
+            err.context.producerMachineId ?? peer.id,
+            err.context.envelopeSchemaVersion,
+            logger,
+          );
+        }
         errors++;
         batchFailed = true;
         break;
