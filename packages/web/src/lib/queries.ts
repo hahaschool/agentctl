@@ -49,6 +49,7 @@ function getRefetchInterval(): number | false {
 
 export const queryKeys = {
   health: ['health'] as const,
+  versionCompat: ['version-compat'] as const,
   machines: ['machines'] as const,
   workerNodes: ['worker-nodes'] as const,
   agents: ['agents'] as const,
@@ -184,6 +185,20 @@ export function healthQuery() {
     queryFn: api.health,
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Roadmap §33.11 — low-churn compatibility surface. Kept deliberately quiet
+ * (60s staleTime, no refocus refetch) so it doesn't flood the control plane
+ * while the banner only needs a pre-login bootstrap value.
+ */
+export function versionCompatQuery() {
+  return queryOptions({
+    queryKey: queryKeys.versionCompat,
+    queryFn: api.versionCompat,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 }
 

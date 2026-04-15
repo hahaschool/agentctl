@@ -354,6 +354,7 @@ export {
   TABLE_PK_COLUMN,
   TABLE_SYNC_CONFIG,
 } from './sync.js';
+export type { VersionCompatResponse } from './system.js';
 export type { TaskExecutor } from './task-executor.js';
 export type {
   FleetOverview,

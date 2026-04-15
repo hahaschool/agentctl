@@ -115,6 +115,7 @@ import { syncPeersRoutes } from './routes/sync-peers.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
 import { taskRunRoutes } from './routes/task-runs.js';
 import { terminalProxyRoutes } from './routes/terminal.js';
+import { versionCompatRoutes } from './routes/version-compat.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { workerNodeRoutes } from './routes/worker-nodes.js';
 import { wsRoutes } from './routes/ws.js';
@@ -348,6 +349,8 @@ export async function createServer({
     machineId,
     syncPublicKey,
   });
+  // Public pre-auth compatibility surface for mobile + web bootstrap (§33.11).
+  await app.register(versionCompatRoutes, { prefix: '/api' });
   await app.register(metricsRoutes, {
     registry,
     dbRegistry,

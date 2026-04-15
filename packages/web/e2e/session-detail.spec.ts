@@ -172,6 +172,17 @@ async function mockSessionDetailApis(page: Page): Promise<{
       return;
     }
 
+    if (method === 'GET' && pathname === '/api/version-compat') {
+      await fulfillJson(route, {
+        appVersion: '0.4.0',
+        gitSha: 'test',
+        schemaVersion: 26,
+        minSupportedMobileBuild: 0,
+        minSupportedWebBuild: 0,
+      });
+      return;
+    }
+
     throw new Error(`Unhandled API request in session-detail e2e mock: ${method} ${pathname}`);
   });
 

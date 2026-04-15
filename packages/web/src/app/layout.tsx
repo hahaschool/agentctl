@@ -3,6 +3,7 @@ import localFont from 'next/font/local';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Sidebar } from '@/components/Sidebar';
+import { VersionCompatBanner } from '@/components/VersionCompatBanner';
 import './globals.css';
 import { Providers } from './providers';
 
@@ -60,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="h-full flex">
               <Sidebar />
               <main id="main-content" className="flex-1 overflow-auto bg-background pt-12 md:pt-0">
+                <VersionCompatBanner />
                 {children}
               </main>
             </div>

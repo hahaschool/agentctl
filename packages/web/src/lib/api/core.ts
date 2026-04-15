@@ -50,8 +50,22 @@ export type HealthResponse = {
   dependencies?: Record<string, { status: 'ok' | 'error'; latencyMs: number; error?: string }>;
 };
 
+/**
+ * Payload returned by `GET /api/version-compat` (roadmap §33.11). Intentionally
+ * duplicated from `@agentctl/shared` so this module stays import-light; the
+ * shapes MUST stay in sync.
+ */
+export type VersionCompatResponse = {
+  appVersion: string;
+  gitSha: string;
+  schemaVersion: number;
+  minSupportedMobileBuild: number;
+  minSupportedWebBuild: number;
+};
+
 export const healthApi = {
   health: () => request<HealthResponse>('/health?detail=true'),
+  versionCompat: () => request<VersionCompatResponse>('/api/version-compat'),
 
   // Dashboard / Metrics (Prometheus text format → parsed object)
   metrics: async (): Promise<Record<string, string | number>> => {
