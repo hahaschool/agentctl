@@ -1,6 +1,6 @@
 # Mesh Bidirectional Registration Plan
 
-**Status:** In Progress — reverse-registration endpoint and machine provenance landed
+**Status:** In Progress — reverse-registration endpoint, machine provenance, auto reverse-registration, and one-way retry UI landed; two-node replication proof remains
 **Roadmap:** 33.8 Mesh Bidirectional Registration + Cross-Node Visibility
 **Created:** 2026-04-15
 
@@ -24,21 +24,26 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
    - Machine list/detail responses resolve the origin node hostname.
    - `/machines` renders local vs synced-from-peer badges.
 
+3. Auto reverse-registration on peer add and retry UI *(PR #564)*.
+   - `POST /api/sync/peers` now attempts a signed outbound registration against
+     the target peer after the local peer row is created or updated.
+   - The outcome is persisted as `reverse_registration_status`,
+     `reverse_registration_error`, and `reverse_registration_at` on
+     `sync_nodes`; errors are redacted and truncated before storage.
+   - `/mesh-peers` shows a one-way badge for failed rows and exposes a Retry
+     action backed by `POST /api/sync/peers/:peerId/register-reverse`.
+
 ## Scope
 
-1. Auto-register on peer add.
-   - After node A creates or updates a peer row, call the target's `/api/sync/peers/register`.
-   - Upsert the reverse row on the target with `sync_status = 'unknown'` until the target's own ping succeeds.
-   - Return the target's identity to node A so missing public-key fields can be filled safely.
-
-2. Make one-way registration visible.
-   - If reverse registration fails, log a warning and surface a UI banner that reverse registration may be incomplete.
-   - Add a per-row "Register this CP with peer" action on `/mesh-peers` for manual retry after a peer comes online or after key rotation.
-   - This action can reuse 33.7 edit/probe affordances if they have landed, but the P0 registration endpoint and warning state do not depend on the full 33.7 UX overhaul.
-
-3. Prove end-to-end cross-node visibility.
+1. Prove end-to-end cross-node visibility.
    - Add an integration or Playwright-backed two-node fixture that registers A with B, upserts a machine on A, runs at least one sync tick, and asserts the machine appears on B with provenance.
-   - Add a failure-path case where the handshake is unavailable and the UI shows the one-way warning.
+   - Add a failure-path case where the handshake is unavailable and the UI shows the one-way warning/retry state.
+
+2. Add mesh health summary.
+   - Summarize bidirectional, one-way, and stale peer counts in the
+     `/mesh-peers` header.
+   - Row detail can reuse `sync_peer_cursors` once 33.7's remaining
+     diagnostics surface is wired.
 
 ## Non-Goals
 
@@ -48,7 +53,7 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 
 ## Verification
 
-- Control-plane route tests for valid/invalid `register-peer` signatures, reverse-row upsert behavior, old-peer fallback, and rate limits.
-- Store/migration tests for any machine provenance column.
+- Control-plane route tests for valid/invalid `register-peer` signatures, reverse-row upsert behavior, old-peer fallback, retry outcomes, and rate limits landed across PRs #552/#564.
+- Store/migration tests for machine provenance and reverse-registration columns landed across PRs #554/#564.
 - Sync-loop integration coverage proving node B pulls machine rows from node A after bidirectional registration.
-- Focused `/mesh-peers` and `/machines` browser coverage for warning banners, manual register action, and origin badges.
+- Focused `/mesh-peers` and `/machines` browser coverage for one-way retry, origin badges, and the remaining two-node failure path.
