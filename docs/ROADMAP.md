@@ -2056,6 +2056,26 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 **Depends on:** 33.4 (peer registry), 33.6 (ACL tagging). Contributes to 16.1 observability (surfacing mesh ping diagnostics).
 
+### 33.8 Mesh Bidirectional Registration + Cross-Node Visibility (P0) — Planned
+
+**Motivation:** 2026-04-15 beta follow-up revealed that peering is silently one-way. Adding `pinnacle-macmini` to the laptop's CP leaves the laptop (`mac-local`) completely absent from the macmini CP's `sync_nodes` table — `GET http://100.87.88.36:8080/api/sync/peers` returns only the self row. Consequences:
+
+- The macmini's `sync-loop.ts` has no laptop peer to pull from, so change-log entries authored on the laptop (new agents, runs, machines) never arrive at the macmini.
+- The macmini CP's `/machines` page therefore never discovers the laptop's worker, and vice-versa — even though `machines` already has a `sync_capture_change` trigger (see `drizzle/0021_mesh_change_log.sql`).
+- In the UI, the symptom looks like "sync is broken," but the sync protocol is fine — it's never invited to run because the peer set isn't bidirectional.
+
+**Scope:**
+
+- [ ] **Authenticated bidirectional handshake.** When `POST /api/sync/peers` creates a new peer on node A, A signs a `register-peer` envelope with its Ed25519 key (already used by `peer-auth.ts`) and calls `POST /api/sync/peers/register` on the target. Target validates the signature, derives A's `{ machineId, hostname, tailscaleIp, publicKey, syncUrl }` from its own `/health` + `tailscale status` lookup of A's source IP, and upserts the reverse row with `sync_status = 'unknown'` until its own ping confirms reachability. The target responds with its own identity so A can fill in `publicKey` if missing.
+- [ ] **Auto-register self on peer-add.** If the handshake above fails (remote unreachable, no `/register` endpoint on older peers), fall back to logging a `warn` + surfacing a "Peer did not acknowledge handshake — reverse registration may be incomplete" banner in the UI, so the operator knows to run the handshake manually from the other side.
+- [ ] **"Register this CP with peer" action.** Add a per-row action on `/mesh-peers` to manually (re)trigger the handshake — useful when a peer is added before it's online, or when rotating `node_public_key`.
+- [ ] **Machines / workers cross-visibility.** Once bidirectional peering works, confirm that the `machines` sync_capture trigger + sync_loop actually propagates rows end-to-end: add an integration test that upserts a machine on node A and asserts it appears on node B within one sync tick. Today the trigger fires but the pull side is never invoked.
+- [ ] **Fleet view cross-node badge.** On `/machines`, badge each row with its **origin machine** (`Synced from <peer hostname>` vs `Local`) using the existing `machines.origin_node_id` / sync provenance metadata so the operator can see which worker lives where.
+- [ ] **Mesh health panel.** Single-pane summary on `/mesh-peers` header: `N peers · bidirectional · M one-way · K stale (no sync in >10 min)`. Clicking a row reveals last pull/ack cursors from `sync_peer_cursors`.
+- [ ] **Playwright coverage.** Two-node fixture (docker compose) exercising: add peer on A ⇒ sees self row on B, upsert machine on A ⇒ appears on B, break handshake ⇒ UI shows one-way warning.
+
+**Depends on:** 33.7 (Edit/Probe plumbing), 33.4 (peer registry + peer-auth).
+
 ---
 
 ## Active Priorities
@@ -2074,6 +2094,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Mesh: Unified CP + Worker~~ | 33.5 | ✅ Delivered — PR #379 merged. Machine-scoped jobs/reaper/scheduler, localhost dispatch, setup script, PM2 mesh config. |
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
 | **P1** | Mesh Peer UX Overhaul | 33.7 | Planned — surface per-ping failure reason, add per-row Edit, Tailscale-backed `/discover` + `/probe` endpoints, and a two-step discovery picker so adding a peer no longer requires typing 6 fields. Motivated by 2026-04-15 beta incident where an `https://` syncUrl on an HTTP-only peer reported `unreachable` with no detail. |
+| **P0** | Mesh Bidirectional Registration + Cross-Node Visibility | 33.8 | Planned — adding a peer on node A today does not register A on node B, so sync is silently one-way and peer Machines never cross-populate. Adds a signed `POST /api/sync/peers/register` handshake, a manual "Register with peer" action, origin-node badges on `/machines`, and a two-node Playwright fixture that proves machine rows replicate end-to-end. Motivated by 2026-04-15 observation that laptop-side `mac-local` never appeared in macmini's `sync_nodes` or `machines`. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 landed the scripts hardening, PR #380 re-closed the earlier latest-base alert, and PRs #386-#388 closed the reopened 2026-04-01 findings on current `main` |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 fixed the original `brace-expansion` regression, PR #380 closed the remaining latest-main dependency/security follow-up, and PR #385 cleared the last `pnpm/action-setup` Node20 deprecation warnings |
