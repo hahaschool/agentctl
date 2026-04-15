@@ -1,6 +1,6 @@
 # Mesh Version Observability Plan
 
-**Status:** Partial — schema groundwork landed in PR #555, `/health` build metadata landed in PR #556, and version/drift UI landed in PR #558
+**Status:** Delivered — PR #555 landed schema groundwork, PR #556 added `/health` build metadata, PR #558 added version/drift UI, PR #560 renumbered the peer-version migration to `0025`, and PR #561 persists peer metadata from on-demand/background pings
 **Roadmap:** 33.9 Mesh Version Observability
 **Created:** 2026-04-15
 
@@ -16,7 +16,9 @@ persist version telemetry without breaking older peers. PR #556 then exposed
 local `appVersion`, `gitSha`, and `schemaVersion` on `/health` so peers have a
 stable metadata source to read. PR #558 added the operator-facing `/mesh-peers`
 version column, mixed-version drift banner, and lazy-loaded sidebar peer-version
-tooltip.
+tooltip. PR #560 renumbered the peer-version migration from duplicate `0024` to
+`0025`, and PR #561 persists version telemetry from both on-demand ping and the
+background peer-health loop.
 
 ## Delivered
 
@@ -33,13 +35,16 @@ tooltip.
    behind/ahead/unknown indicators and a mixed-version drift banner.
 7. Add the sidebar footer peer-version tooltip without issuing a global
    background sync-peers request on every route.
+8. Capture peer version metadata on on-demand and background pings.
+   - Parse nullable `appVersion`, `gitSha`, and `schemaVersion` from peer
+     `/health`.
+   - Persist values in the existing nullable `sync_nodes` columns.
+   - Keep pings successful when old peers omit the fields.
 
 ## Remaining Scope
 
-1. Capture peer version metadata on ping.
-   - Parse `appVersion`, `gitSha`, and `schemaVersion` from peer `/health`.
-   - Persist values in the existing nullable `sync_nodes` columns.
-   - Keep pings successful when old peers omit the fields.
+None for 33.9. Follow-on rollout decisions move through 33.10 compat surfacing
+and 33.11 peer auto-update.
 
 ## Non-Goals
 
@@ -52,6 +57,7 @@ tooltip.
 ## Verification
 
 - Control-plane tests for `/health` version fields and old-peer omission.
-- Control-plane route tests proving ping persists version fields.
+- Control-plane route and peer-health tests proving on-demand and background
+  pings persist version fields.
 - Shared contract tests for nullable version fields.
 - Focused `/mesh-peers` unit or Playwright coverage for version column and drift banner landed in PR #558.
