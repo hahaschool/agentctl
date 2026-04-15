@@ -106,7 +106,7 @@ function FactSkeleton(): React.JSX.Element {
 // Action buttons row
 // ---------------------------------------------------------------------------
 
-type ConsolidationAction = 'accept' | 'edit' | 'skip' | 'delete';
+type ConsolidationAction = 'accept' | 'skip' | 'delete';
 
 function ActionButtons({
   itemId,
@@ -127,15 +127,6 @@ function ActionButtons({
         aria-label="Accept suggestion"
       >
         Accept
-      </Button>
-      <Button
-        size="xs"
-        variant="outline"
-        disabled={isPending}
-        onClick={() => onAction(itemId, 'edit')}
-        aria-label="Edit suggestion"
-      >
-        Edit
       </Button>
       <Button
         size="xs"

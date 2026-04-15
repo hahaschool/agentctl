@@ -100,14 +100,20 @@ describe('ConsolidationCard', () => {
     expect(screen.queryByText('BullMQ is preferred for MVP')).toBeNull();
   });
 
-  it('renders all four action buttons', () => {
+  it('renders all three action buttons', () => {
     const onAction = vi.fn();
     render(<ConsolidationCard item={makeItem()} facts={[]} onAction={onAction} />);
 
     expect(screen.getByRole('button', { name: 'Accept suggestion' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Edit suggestion' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Skip' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDefined();
+  });
+
+  it('does not render an Edit button (backend does not yet support edit)', () => {
+    const onAction = vi.fn();
+    render(<ConsolidationCard item={makeItem()} facts={[]} onAction={onAction} />);
+
+    expect(screen.queryByRole('button', { name: 'Edit suggestion' })).toBeNull();
   });
 
   it('calls onAction with "accept" when Accept is clicked', () => {
@@ -135,15 +141,6 @@ describe('ConsolidationCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     expect(onAction).toHaveBeenCalledWith('item-42', 'delete');
-  });
-
-  it('calls onAction with "edit" when Edit is clicked', () => {
-    const onAction = vi.fn();
-    render(<ConsolidationCard item={makeItem({ id: 'item-42' })} facts={[]} onAction={onAction} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Edit suggestion' }));
-
-    expect(onAction).toHaveBeenCalledWith('item-42', 'edit');
   });
 
   it('disables action buttons when isPending is true', () => {
