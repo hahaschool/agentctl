@@ -1,3 +1,6 @@
+import { createRequire } from 'node:module';
+
+import type { MeshEnvelopeMeta } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
@@ -5,8 +8,25 @@ import type { Logger } from 'pino';
 
 import type { Database } from '../../db/index.js';
 import { extractRows } from '../../db/index.js';
+import { buildLocalEnvelopeMeta } from '../../sync/mesh-compat.js';
 import { createSyncAuthHook } from '../../sync/sync-auth.js';
 import { readRateLimitEnv } from '../rate-limit.js';
+
+/**
+ * Resolve the control-plane `appVersion` for outbound envelope stamping.
+ * Best-effort: falls back to '0.0.0' if package.json is unreadable.
+ */
+function resolveProducerVersion(): string {
+  try {
+    const require = createRequire(import.meta.url);
+    const pkg = require('@agentctl/control-plane/package.json') as { version?: string };
+    return typeof pkg.version === 'string' ? pkg.version : '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+const PRODUCER_VERSION = resolveProducerVersion();
 
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 5_000;
@@ -44,7 +64,7 @@ type AckBody = {
   cursor?: number;
 };
 
-function mapChangeLogRow(row: ChangeLogRow) {
+function mapChangeLogRow(row: ChangeLogRow, meta: MeshEnvelopeMeta) {
   return {
     id: row.id,
     nodeId: row.node_id,
@@ -55,6 +75,7 @@ function mapChangeLogRow(row: ChangeLogRow) {
     vclock: row.vclock,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     synced: row.synced,
+    meta,
   };
 }
 
@@ -143,8 +164,12 @@ export const syncRoutes: FastifyPluginAsync<SyncRoutesOptions> = async (app, opt
       const lastEntry = changes[changes.length - 1];
       const cursor = lastEntry?.id ?? since;
 
+      // Stamp every outbound envelope with this node's schema/protocol/version
+      // metadata at serialize time. See docs/MESH_COMPAT.md (roadmap 33.10).
+      const meta = buildLocalEnvelopeMeta(PRODUCER_VERSION);
+
       return {
-        changes: changes.map(mapChangeLogRow),
+        changes: changes.map((row) => mapChangeLogRow(row, meta)),
         cursor,
         hasMore,
       };

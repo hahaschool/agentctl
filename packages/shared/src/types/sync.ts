@@ -3,6 +3,31 @@ import type { VectorClock } from '../vector-clock.js';
 /** Which sync strategy applies to a table. */
 export type TableSyncType = 'append-only' | 'mutable' | 'local-only';
 
+/**
+ * Mesh envelope metadata stamped on every outbound change by the producer.
+ *
+ * - `schemaVersion` — highest applied migration sequence number on the producer
+ *   (see roadmap 33.9 definition).
+ * - `protocolVersion` — mesh wire-format version. Starts at 1; widening policy
+ *   is documented in `docs/MESH_COMPAT.md`.
+ * - `producerVersion` — producer's `appVersion` from `package.json` (e.g. `0.4.0`).
+ *
+ * REQUIRED on new envelopes; the apply-side compat gate treats the whole `meta`
+ * field as optional for backward compatibility with legacy producers.
+ */
+export type MeshEnvelopeMeta = {
+  schemaVersion: number;
+  protocolVersion: number;
+  producerVersion: string;
+};
+
+/** Current mesh protocol version. Bump when the wire format changes. */
+export const MESH_PROTOCOL_VERSION = 1;
+/** Minimum accepted mesh protocol version (inclusive). */
+export const MESH_PROTOCOL_MIN = 1;
+/** Maximum accepted mesh protocol version (inclusive). */
+export const MESH_PROTOCOL_MAX = 1;
+
 /** A single change log entry as stored in sync_change_log. */
 export type ChangeLogEntry = {
   id: number;
@@ -14,6 +39,12 @@ export type ChangeLogEntry = {
   vclock: VectorClock;
   createdAt: Date;
   synced: boolean;
+  /**
+   * Mesh envelope metadata stamped by the producer at serialize time.
+   * Optional to keep backward compatibility with legacy producers that
+   * pre-date roadmap 33.10. New producers MUST set this field.
+   */
+  meta?: MeshEnvelopeMeta;
 };
 
 /** A detected conflict between local and remote changes. */

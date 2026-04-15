@@ -1,11 +1,13 @@
 import type { ChangeLogEntry, VectorClock } from '@agentctl/shared';
 import { getTablePkColumn, TABLE_SYNC_CONFIG, vcCompare, vcMerge } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
+import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
 import { extractRows } from '../db/index.js';
 
 import { withSyncApplyGuard } from './apply-guard.js';
+import { assertEnvelopeCompat, getLocalSchemaVersion } from './mesh-compat.js';
 
 export type ApplyResult = 'applied' | 'skipped' | 'conflict';
 
@@ -39,8 +41,21 @@ function payloadWithRemoteMachineProvenance(
 /**
  * Apply a single remote change to the local database.
  * Routes to append-only or mutable logic based on TABLE_SYNC_CONFIG.
+ *
+ * Before routing, validates the envelope's mesh compat metadata (schemaVersion,
+ * protocolVersion). Rejects envelopes that are too far ahead of the local
+ * schema or outside the supported protocol window; legacy envelopes missing
+ * `meta` are accepted for backward compat (with a WARN log). See
+ * `./mesh-compat.ts` and `docs/MESH_COMPAT.md`.
  */
-export async function applyChange(change: ChangeLogEntry, db: Database): Promise<ApplyResult> {
+export async function applyChange(
+  change: ChangeLogEntry,
+  db: Database,
+  logger?: Logger,
+): Promise<ApplyResult> {
+  // Compat gate first: reject unsupported envelopes before any DB side effects.
+  assertEnvelopeCompat(change, getLocalSchemaVersion(), logger);
+
   const tableType = TABLE_SYNC_CONFIG[change.tableName];
 
   if (!tableType || tableType === 'local-only') {

@@ -340,12 +340,16 @@ export {
 } from './status-machine.js';
 export type {
   ChangeLogEntry,
+  MeshEnvelopeMeta,
   SyncConflict,
   SyncNode,
   TableSyncType,
 } from './sync.js';
 export {
   getTablePkColumn,
+  MESH_PROTOCOL_MAX,
+  MESH_PROTOCOL_MIN,
+  MESH_PROTOCOL_VERSION,
   SYNCED_TABLES,
   TABLE_PK_COLUMN,
   TABLE_SYNC_CONFIG,
