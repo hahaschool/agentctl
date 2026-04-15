@@ -294,6 +294,38 @@ test.describe('Mesh Peers page', () => {
     await expect(banner).toContainText('v0.3.1');
   });
 
+  test('renders the per-row peer-ahead badge when peer schema is ahead of local', async ({
+    page,
+  }) => {
+    // Local schema is 26 (see packages/web/src/lib/mesh-version.ts). A peer
+    // reporting 99 is unambiguously ahead and should surface the 33.10 badge.
+    const peers: SyncPeer[] = [
+      makePeer({
+        machineId: 'machine-ahead',
+        hostname: 'ahead.tail.ts.net',
+        tailscaleIp: '100.64.0.12',
+        syncUrl: 'http://100.64.0.12:8080',
+        role: 'replica',
+        syncStatus: 'reachable',
+        peerVersion: 'v0.5.0',
+        peerSchemaVersion: 99,
+      }),
+    ];
+    await mountApiMocks(page, {
+      peers,
+      pingResponses: new Map(),
+      pingCalls: [],
+    });
+
+    await page.goto('/mesh-peers');
+
+    const table = page.getByRole('table', { name: 'Mesh sync peers' });
+    const aheadRow = table.getByRole('row').filter({ hasText: 'ahead.tail.ts.net' });
+    const badge = aheadRow.getByTestId('peer-ahead-badge-machine-ahead');
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText('update this node');
+  });
+
   test('shows the empty state when no peers are registered', async ({ page }) => {
     await mountApiMocks(page, {
       peers: [],

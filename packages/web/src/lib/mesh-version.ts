@@ -21,6 +21,15 @@ import type { SyncPeer } from './api';
  */
 export const LOCAL_APP_VERSION = 'v0.4.0';
 
+/**
+ * The local control-plane's schema version — the highest migration number
+ * shipped with this build (see `packages/control-plane/src/build-info.ts`).
+ * Kept in lockstep with `packages/control-plane/drizzle/<NNNN>_*.sql` by
+ * convention. When a runtime `/api/version` endpoint lands we can switch
+ * this to a fetched value; helpers below already accept it as a parameter.
+ */
+export const LOCAL_SCHEMA_VERSION = 26;
+
 /** Extension of `SyncPeer` with the upcoming version fields (PR #555). */
 export type SyncPeerWithVersion = SyncPeer & {
   peerVersion?: string | null;
@@ -84,6 +93,32 @@ export function classifyDrift(
   if (cmp === null) return 'unknown';
   if (cmp === 0) return 'match';
   return cmp > 0 ? 'ahead' : 'behind';
+}
+
+/**
+ * Classify a peer's `peerSchemaVersion` relative to the local schema version.
+ *
+ * Schema drift is the signal that matters for mesh envelope compatibility —
+ * `apply-change.ts` rejects envelopes from peers with `schemaVersion > local + 1`
+ * with `MESH_ENVELOPE_SCHEMA_AHEAD`. When a peer is even one version ahead
+ * the operator should update this node to close the window.
+ *
+ * - `match`  — equal numeric schema versions
+ * - `ahead`  — peer schema > local schema (update this node)
+ * - `behind` — peer schema < local schema
+ * - `unknown` — peer has not reported `peerSchemaVersion` yet, or it is not
+ *              a finite number
+ */
+export function classifySchemaDrift(
+  peerSchemaVersion: number | null | undefined,
+  localSchemaVersion: number,
+): DriftRelation {
+  if (peerSchemaVersion === null || peerSchemaVersion === undefined) return 'unknown';
+  if (!Number.isFinite(peerSchemaVersion) || !Number.isFinite(localSchemaVersion)) {
+    return 'unknown';
+  }
+  if (peerSchemaVersion === localSchemaVersion) return 'match';
+  return peerSchemaVersion > localSchemaVersion ? 'ahead' : 'behind';
 }
 
 export type VersionGroup = {

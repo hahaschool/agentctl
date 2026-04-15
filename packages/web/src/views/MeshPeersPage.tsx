@@ -12,11 +12,13 @@ import { useToast } from '@/components/Toast';
 import type { SyncPeer, UpsertSyncPeerInput } from '@/lib/api';
 import {
   classifyDrift,
+  classifySchemaDrift,
   type DriftRelation,
   formatVersionGroups,
   groupPeerVersions,
   hasMeshDrift,
   LOCAL_APP_VERSION,
+  LOCAL_SCHEMA_VERSION,
   type SyncPeerWithVersion,
 } from '@/lib/mesh-version';
 import {
@@ -540,6 +542,88 @@ export function ReverseRegistrationBadge({
   );
 }
 
+type PeerAheadBadgeProps = {
+  peer: SyncPeerWithVersion;
+  localSchemaVersion: number;
+  updateAvailable: boolean;
+};
+
+/**
+ * §33.10 — Per-row "Peer ahead" badge surfaced when a specific peer's
+ * `peerSchemaVersion` is greater than the local node's schema version.
+ *
+ * Complements the aggregate drift banner (which shows app-version mix across
+ * the mesh) by flagging the compatibility-relevant drift axis: schema. The
+ * mesh envelope compat gate (`MESH_ENVELOPE_SCHEMA_AHEAD`) kicks in when a
+ * peer is more than one schema ahead, so an inline nudge toward the existing
+ * per-row Update button (33.11 slice 1) lets the operator close the window.
+ *
+ * Self-rows never render this badge. Behind/match/unknown also return null —
+ * those cases are handled by the global drift banner or are non-actionable.
+ *
+ * When `updateAvailable` is false (e.g. the peer has no syncUrl), the badge
+ * downgrades to a tooltip-only affordance with manual-update instructions.
+ */
+export function PeerAheadBadge({
+  peer,
+  localSchemaVersion,
+  updateAvailable,
+}: PeerAheadBadgeProps): React.JSX.Element | null {
+  if (peer.isSelf) return null;
+  const relation = classifySchemaDrift(peer.peerSchemaVersion, localSchemaVersion);
+  if (relation !== 'ahead') return null;
+
+  const peerSchema = peer.peerSchemaVersion ?? '?';
+  const ariaLabel = `Peer ${peer.machineId} is ahead on schema version ${peerSchema}; update this node`;
+  const tooltip = updateAvailable
+    ? `Peer schema ${peerSchema} > local ${localSchemaVersion}. Click to jump to the Update button for this peer.`
+    : `Peer schema ${peerSchema} > local ${localSchemaVersion}. This peer is not directly updatable from this node — pull the latest release on this control plane, or update the peer manually.`;
+
+  const handleClick = (): void => {
+    if (!updateAvailable) return;
+    if (typeof document === 'undefined') return;
+    const target = document.querySelector<HTMLButtonElement>(
+      `[data-testid="update-${CSS.escape(peer.machineId)}"]`,
+    );
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.focus();
+  };
+
+  const className = cn(
+    'inline-flex items-center gap-1 px-1.5 py-px rounded-sm text-[10px] font-semibold tracking-wide uppercase',
+    'bg-yellow-500/15 text-yellow-400',
+    updateAvailable &&
+      'hover:bg-yellow-500/25 focus:outline-none focus:ring-1 focus:ring-yellow-500/60',
+  );
+
+  if (!updateAvailable) {
+    return (
+      <output
+        data-testid={`peer-ahead-badge-${peer.machineId}`}
+        title={tooltip}
+        aria-label={ariaLabel}
+        className={className}
+      >
+        Peer ahead — update this node
+      </output>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      data-testid={`peer-ahead-badge-${peer.machineId}`}
+      title={tooltip}
+      aria-label={ariaLabel}
+      className={className}
+    >
+      Peer ahead — update this node
+    </button>
+  );
+}
+
 export function MeshPeerRow({
   peer,
   localVersion,
@@ -590,6 +674,11 @@ export function MeshPeerRow({
             peer={peer}
             onRetry={onRetryReverse}
             isRetrying={thisRowIsRetryingReverse}
+          />
+          <PeerAheadBadge
+            peer={peer}
+            localSchemaVersion={LOCAL_SCHEMA_VERSION}
+            updateAvailable={updatable}
           />
         </div>
       </td>
