@@ -103,7 +103,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Audit dependencies (fail on high/critical)
-        run: pnpm audit --audit-level=high
+        run: pnpm audit:deps --audit-level=high
 
       - name: Check licenses for GPL/AGPL
         run: |

@@ -26,6 +26,8 @@
 
 > Follow-up sync (2026-04-14): PR #513 added backend-independent `/audit` Playwright coverage and included it in the focused web e2e CI allowlist. Post-merge `main@5eb844ff` checks passed: CI `24407474324`, Security Audit `24407474322`, and Build & Publish Docker Images `24407474278`. Security Audit still emits GitHub's Node.js 20 deprecation annotation for Docker/cache/artifact actions running under the forced Node 24 runtime; the annotation is informational and the workflow passed.
 
+> Follow-up sync (2026-04-15): PR #514 exposed a global Security Audit dependency-audit failure after npm retired the legacy audit endpoints used by `pnpm audit` (`/-/npm/v1/security/audits` and `/audits/quick`). PR #515 replaces those workflow calls with `pnpm audit:deps --audit-level=high`, a repository script that reads `pnpm-lock.yaml`, calls npm's supported bulk advisory endpoint, and keeps high/critical advisories blocking while avoiding lockfile or package-manager churn.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
