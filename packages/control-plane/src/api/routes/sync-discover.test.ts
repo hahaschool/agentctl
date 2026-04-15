@@ -244,6 +244,27 @@ describe('POST /api/sync/probe', () => {
     expect(response.json().error).toBe('INVALID_SYNC_URL');
   });
 
+  it.each([
+    'http://127.0.0.1:8080',
+    'http://127.1.2.3:8080',
+    'http://0.0.0.0:8080',
+    'http://169.254.169.254/latest/meta-data/',
+    'http://[::1]:8080',
+    'http://[::]:8080',
+  ])('rejects loopback/metadata IP literal %s with 400', async (syncUrl) => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    app = await buildApp({ fetchImpl });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/probe',
+      payload: { syncUrl },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('INVALID_SYNC_URL');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('enforces the probe rate limit', async () => {
     vi.stubEnv('SYNC_PROBE_RATE_LIMIT_MAX', '2');
     vi.stubEnv('SYNC_PROBE_RATE_LIMIT_WINDOW_MS', '60000');

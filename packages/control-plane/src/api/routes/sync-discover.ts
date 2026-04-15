@@ -41,6 +41,23 @@ const BLOCKED_PROBE_HOSTNAMES = new Set([
 ]);
 
 /**
+ * Reject IP literals that either loop back to the control-plane host or point
+ * at well-known cloud metadata services. Tailscale peers live in 100.64.0.0/10
+ * (CGNAT) so we deliberately do NOT block the full RFC1918 space — doing so
+ * would break the primary use case of probing a peer's LAN-routed sync URL.
+ */
+function isBlockedIpLiteral(host: string): boolean {
+  if (/^127(?:\.\d{1,3}){3}$/.test(host)) return true;
+  if (host === '0.0.0.0') return true;
+  if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+  const v6 = host.replace(/^\[/, '').replace(/\]$/, '').toLowerCase();
+  if (v6 === '::1' || v6 === '::' || v6 === '0:0:0:0:0:0:0:1' || v6 === '0:0:0:0:0:0:0:0') {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Shape of a candidate Tailscale peer surfaced to the operator. The
  * `candidateSyncUrl` is a *guess* at the peer's control-plane URL assembled
  * from its Tailscale IP + the AgentCTL default port (8080); the operator can
@@ -224,6 +241,10 @@ function validateProbeUrl(
     return { ok: false, error: 'syncUrl points to a blocked local or metadata address' };
   }
 
+  if (isBlockedIpLiteral(host)) {
+    return { ok: false, error: 'syncUrl points to a blocked local or metadata address' };
+  }
+
   return { ok: true, url: trimmed };
 }
 
@@ -334,6 +355,13 @@ export const syncDiscoverRoutes: FastifyPluginAsync<SyncDiscoverRoutesOptions> =
 
       const target = `${validation.url.replace(/\/$/, '')}/health`;
       try {
+        // The probe endpoint intentionally fetches a URL supplied by the
+        // (authenticated) operator — that's the whole purpose of this route.
+        // `validateProbeUrl` above restricts the scheme, strips credentials,
+        // bounds the length, and blocks loopback/link-local/metadata literals.
+        // The request is also IP-rate-limited (20/min) and the response is
+        // reduced to a small JSON summary, so this is not a usable SSRF gadget.
+        // codeql[js/request-forgery]
         const response = await fetchImpl(target, {
           signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
         });
