@@ -777,6 +777,7 @@ export async function createServer({
     await app.register(syncPeersRoutes, {
       prefix: '/api/sync/peers',
       db,
+      registrationToken: process.env.SYNC_PEER_REGISTRATION_TOKEN,
     });
 
     // Mesh sync conflict resolution routes
