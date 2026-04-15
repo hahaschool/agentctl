@@ -140,6 +140,17 @@ async function mockDiscoverApis(page: Page, state: DiscoverMockState): Promise<v
       return;
     }
 
+    if (method === 'GET' && pathname === '/api/version-compat') {
+      await fulfillJson(route, {
+        appVersion: '0.4.0',
+        gitSha: 'test',
+        schemaVersion: 26,
+        minSupportedMobileBuild: 0,
+        minSupportedWebBuild: 0,
+      });
+      return;
+    }
+
     throw new Error(`Unhandled API request in discover e2e mock: ${method} ${pathname}`);
   });
 }
