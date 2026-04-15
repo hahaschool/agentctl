@@ -2036,6 +2036,26 @@ Agent run lifecycle has hidden intermediate states users can't see:
 - [x] ACL tests embedded in `acl-policy.json` (5 test cases per repo convention)
 - [x] Document mesh tagging procedure in `infra/tailscale/README.md`
 
+### 33.7 Mesh Peer UX Overhaul (P1) — Planned
+
+**Motivation:** Operating the mesh today is painful. Two concrete failures surfaced on beta 2026-04-15:
+
+1. A newly added peer sat in `UNREACHABLE` because its `syncUrl` was typed as `https://…:8080`, but the remote CP only speaks plain HTTP behind Tailscale (WireGuard already encrypts). The ping just reported `unreachable` with no reason, so the operator could not tell scheme from firewall from down. Root cause: `pingPeer()` in `api/routes/sync-peers.ts` swallows the `fetch` error and the UI's toast is a generic "peer unreachable".
+2. Once a peer row exists, the UI offers only Ping and Delete — there is no Edit. Fixing the scheme above required a direct `POST /api/sync/peers` upsert from the CLI, because deleting and re-adding would have lost `lastSeen`, `syncIntervalMs`, and any cursors.
+3. Adding a peer is a 6-field form (`machineId`, `hostname`, `tailscaleIp`, `syncUrl`, `syncInterval`, `publicKey`). Every one of these can be derived from Tailscale + a single `/health` probe — the operator should only need to pick a peer.
+
+**Scope:**
+
+- [ ] **Surface ping failure reason in the API and UI.** Thread the fetch error (category: `dns`, `connect_refused`, `tls_handshake`, `timeout`, `http_status`, `other`) + last-seen status code through `POST /api/sync/peers/:machineId/ping` response, persist as `last_ping_error` on `sync_nodes`, render next to the STATUS pill on `/mesh-peers`, and include in the toast.
+- [ ] **Edit existing peer.** Add a per-row Edit action that opens the Add dialog pre-populated. Backend is already idempotent on `POST /api/sync/peers`; UI just needs the dialog mode + row handler + Playwright coverage. Disable Edit on `isSelf` rows.
+- [ ] **Tailscale discovery endpoint.** New `GET /api/sync/peers/discover` on the CP shells out to `tailscale status --json` (already used in P4 node discovery), filters to peers tagged `tag:mesh-node`, probes each `http://<tailscaleIp>:8080/health`, and returns `{ machineId, hostname, tailscaleIp, syncUrl, nodePublicKey, reachable }[]` for any peer not already in `sync_nodes`. Rate-limit and auth-gate like other sync routes.
+- [ ] **"Discover peers" UI flow.** Replace/augment the `+ Add peer` button with a two-step picker: step 1 lists discovered peers with a checkbox + reachability badge; step 2 previews the derived form and lets the user tweak `syncIntervalMs` before bulk-upserting. Keep the manual form behind an "Add manually" link for air-gapped cases.
+- [ ] **Auto-fill by hostname or IP.** In the manual form, add a "Probe" button next to Hostname/Tailscale IP that calls a new `GET /api/sync/peers/probe?target=…` endpoint (hostname OR IP, SSRF-validated against the same blocklist as `validateSyncUrl`), pulls `{ machineId, nodePublicKey }` from `/health`, and fills the remaining fields. Default `syncUrl` to `http://<target>:8080`.
+- [ ] **Default scheme + inline hint.** Make the Sync URL placeholder pre-fill with `http://` on focus if empty, and show a small "Tailscale already encrypts — HTTPS is only needed for public endpoints" helper below the field.
+- [ ] **Playwright coverage.** Add `/mesh-peers` edit-flow, discover-flow, probe-flow, and ping-failure-detail scenarios to `packages/web/e2e/mesh-peers.spec.ts`.
+
+**Depends on:** 33.4 (peer registry), 33.6 (ACL tagging). Contributes to 16.1 observability (surfacing mesh ping diagnostics).
+
 ---
 
 ## Active Priorities
@@ -2053,6 +2073,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Mesh: Conflict Resolution UI~~ | 33.3 | ✅ Delivered — PR #381 merged the feature slice, PR #389 added focused Playwright coverage for the existing `/conflicts` page state/filter flows, and PR #391 added direct backend route coverage for the `sync-conflicts` handlers. |
 | **P1** | ~~Mesh: Unified CP + Worker~~ | 33.5 | ✅ Delivered — PR #379 merged. Machine-scoped jobs/reaper/scheduler, localhost dispatch, setup script, PM2 mesh config. |
 | **P1** | ~~Mesh: Tailscale ACL Update~~ | 33.6 | ✅ Delivered — PR #378 merged. tag:mesh-node ACL + 5 embedded tests. |
+| **P1** | Mesh Peer UX Overhaul | 33.7 | Planned — surface per-ping failure reason, add per-row Edit, Tailscale-backed `/discover` + `/probe` endpoints, and a two-step discovery picker so adding a peer no longer requires typing 6 fields. Motivated by 2026-04-15 beta incident where an `https://` syncUrl on an HTTP-only peer reported `unreachable` with no detail. |
 | **P0** | ~~CodeQL Scripts Alerts~~ | 32.1 | ✅ Delivered — PR #371 landed the scripts hardening, PR #380 re-closed the earlier latest-base alert, and PRs #386-#388 closed the reopened 2026-04-01 findings on current `main` |
 | **P1** | ~~Machine ID → Hostname~~ | 32.2 | ✅ Delivered — PR #370 resolves machine UUIDs to hostnames with tooltip |
 | **P0** | ~~CI Stability~~ | 32.3 | ✅ Delivered — PR #369 fixed the original `brace-expansion` regression, PR #380 closed the remaining latest-main dependency/security follow-up, and PR #385 cleared the last `pnpm/action-setup` Node20 deprecation warnings |
