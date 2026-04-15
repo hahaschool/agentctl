@@ -18,6 +18,7 @@ import {
   runHandoffDecisions,
   runtimeConfigRevisions,
   sessionHandoffs,
+  syncNodes,
 } from './schema.js';
 
 // ---------------------------------------------------------------------------
@@ -1659,5 +1660,46 @@ describe('Runtime management indexes', () => {
         'idx_run_handoff_decisions_created_at',
       ]),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 33.9 (partial): peer version columns on sync_nodes
+// ---------------------------------------------------------------------------
+
+describe('syncNodes peer version columns', () => {
+  const meta = getColumnMeta(syncNodes);
+
+  it('exposes peer_version as a nullable text column', () => {
+    expect(meta.peerVersion).toEqual({
+      name: 'peer_version',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: false,
+      hasDefault: false,
+      primary: false,
+    });
+  });
+
+  it('exposes peer_git_sha as a nullable text column', () => {
+    expect(meta.peerGitSha).toEqual({
+      name: 'peer_git_sha',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: false,
+      hasDefault: false,
+      primary: false,
+    });
+  });
+
+  it('exposes peer_schema_version as a nullable integer column', () => {
+    expect(meta.peerSchemaVersion).toEqual({
+      name: 'peer_schema_version',
+      columnType: 'PgInteger',
+      dataType: 'number',
+      notNull: false,
+      hasDefault: false,
+      primary: false,
+    });
   });
 });

@@ -40,6 +40,16 @@ export type SyncNode = {
   role: 'full' | 'worker-only';
   lastSeen: Date | null;
   createdAt: Date;
+  /**
+   * Peer version observability (roadmap §33.9).
+   *
+   * All three fields are optional/nullable until every peer in the mesh has
+   * shipped the /health change that advertises them. Older peers will simply
+   * leave these as `null`, which downstream UIs should render as "unknown".
+   */
+  peerVersion?: string | null;
+  peerGitSha?: string | null;
+  peerSchemaVersion?: number | null;
 };
 
 /**

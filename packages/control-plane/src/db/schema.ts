@@ -398,6 +398,12 @@ export const syncNodes = pgTable('sync_nodes', {
   publicKey: text('public_key'),
   lastPingError: text('last_ping_error'),
   lastPingStatusCode: integer('last_ping_status_code'),
+  // 33.9 (partial): version observability captured on each ping. All nullable —
+  // older peers that have not yet shipped the /health fields will continue to
+  // ping successfully and simply leave these columns NULL.
+  peerVersion: text('peer_version'),
+  peerGitSha: text('peer_git_sha'),
+  peerSchemaVersion: integer('peer_schema_version'),
 });
 
 export const syncChangeLog = pgTable(
