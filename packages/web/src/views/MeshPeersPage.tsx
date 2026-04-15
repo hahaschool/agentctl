@@ -35,6 +35,7 @@ import { MAX_SYNC_URL_LENGTH, URL_LENGTH_COUNTER_THRESHOLD } from '@/lib/ui-cons
 import { cn } from '@/lib/utils';
 
 import { MeshHealthSummary } from './mesh/MeshHealthSummary';
+import { MeshVersionBanner } from './mesh/MeshVersionBanner';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,6 +123,41 @@ export function formatPingDiagnostic(
 type PingDiagnosticLineProps = {
   peer: SyncPeer;
 };
+
+/**
+ * §33.7 — Small category pill rendered next to the STATUS pill when a ping
+ * failure has been persisted. Shows just the short category ("timeout",
+ * "connect_refused", "http_status", ...) so the row can be scanned at a glance
+ * without waiting for the longer diagnostic line below to be read.
+ *
+ * The full reason is surfaced via the `title` attribute so hover reveals the
+ * complete string, and `<PingDiagnosticLine />` renders it verbatim below.
+ */
+export function PingCategoryBadge({
+  peer,
+}: {
+  peer: Pick<SyncPeer, 'machineId' | 'syncStatus' | 'lastPingError' | 'lastPingStatusCode'>;
+}): React.JSX.Element | null {
+  if (peer.syncStatus !== 'unreachable') return null;
+  const category = peer.lastPingError;
+  if (!category) return null;
+
+  const diagnostic = formatPingDiagnostic(peer);
+  const title = diagnostic?.full ?? category;
+  // Keep the label short — ~40 chars is the stated cap in the design.
+  const MAX = 40;
+  const label = category.length > MAX ? `${category.slice(0, MAX - 1)}…` : category;
+
+  return (
+    <span
+      data-testid={`peer-ping-category-${peer.machineId}`}
+      title={title}
+      className="px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-medium uppercase tracking-wide border border-red-500/30 bg-red-500/10 text-red-300"
+    >
+      {label}
+    </span>
+  );
+}
 
 /**
  * §33.7 — Render the truncated ping-failure reason below the status badge.
@@ -954,6 +990,7 @@ export function MeshPeerRow({
             >
               {peer.syncStatus}
             </span>
+            <PingCategoryBadge peer={peer} />
             <ReverseRegistrationBadge
               peer={peer}
               onRetry={onRetryReverse}
@@ -1209,7 +1246,13 @@ export function MeshPeersPage(): React.JSX.Element {
           if (result.status === 'reachable') {
             toast.success(`Peer ${machineId} is reachable`);
           } else {
-            toast.error(`Peer ${machineId} is unreachable`);
+            // §33.7 — Surface the persisted failure reason verbatim in the toast.
+            // The backend stamps `lastPingError` (category) + `lastPingStatusCode`
+            // on the returned peer row; when missing (legacy peer) fall back to
+            // the plain "unreachable" message.
+            const diagnostic = result.peer ? formatPingDiagnostic(result.peer) : null;
+            const suffix = diagnostic ? `: ${diagnostic.full}` : '';
+            toast.error(`Peer ${machineId} is unreachable${suffix}`);
           }
         },
         onError: (err) => {
@@ -1411,6 +1454,8 @@ export function MeshPeersPage(): React.JSX.Element {
           </button>
         </div>
       )}
+
+      {peers.length > 0 && <MeshVersionBanner peers={peers} />}
 
       {peers.length > 0 && <MeshHealthSummary peers={peers} />}
 
