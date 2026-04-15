@@ -31,11 +31,44 @@ export type SyncPeer = {
   publicKey: string | null;
   lastSeen: string | null;
   createdAt: string | null;
+  // §33.7: ping diagnostics — category string (e.g. `timeout`, `http_status`)
+  // and optional HTTP status. Both null on a successful probe.
+  lastPingError?: string | null;
+  lastPingStatusCode?: number | null;
   // §33.8: outbound reverse-registration outcome. Optional for backward
   // compatibility with older backends that pre-date the 0026 migration.
   reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
   reverseRegistrationError?: string | null;
   reverseRegistrationAt?: string | null;
+};
+
+/**
+ * §33.7 — Tailscale peer discovery candidate. Returned by `GET /api/sync/discover`.
+ * When the Tailscale CLI is not available (typical in CI / dev) the backend
+ * returns an empty list with `source: "none"`.
+ */
+export type DiscoverCandidate = {
+  hostname: string;
+  tailscaleIp: string;
+  candidateSyncUrl: string;
+};
+
+export type DiscoverSyncPeersResponse = {
+  peers: DiscoverCandidate[];
+  source: 'tailscale' | 'none';
+  message?: string;
+};
+
+/**
+ * §33.7 — Response from `POST /api/sync/probe`. A lightweight pre-flight
+ * probe used by the add-peer dialog to validate a sync URL before persisting.
+ */
+export type ProbeSyncUrlResponse = {
+  reachable: boolean;
+  statusCode?: number;
+  appVersion?: string;
+  schemaVersion?: number;
+  error?: string;
 };
 
 export type SyncPeersResponse = {
@@ -158,4 +191,21 @@ export const syncApi = {
       `/api/sync/peers/${encodeURIComponent(machineId)}/register-reverse`,
       { method: 'POST' },
     ),
+
+  /**
+   * §33.7 — Return a list of candidate Tailscale peers the operator could add.
+   * Read-only; no DB writes. Empty when the Tailscale CLI is not available.
+   */
+  discoverSyncPeers: () => request<DiscoverSyncPeersResponse>('/api/sync/discover'),
+
+  /**
+   * §33.7 — Probe a candidate sync URL's `/health` endpoint before persisting
+   * it via `upsertSyncPeer`. Returns a boolean + lightweight diagnostics so the
+   * add-peer dialog can gate its Save button.
+   */
+  probeSyncUrl: (syncUrl: string) =>
+    request<ProbeSyncUrlResponse>('/api/sync/probe', {
+      method: 'POST',
+      body: JSON.stringify({ syncUrl }),
+    }),
 };
