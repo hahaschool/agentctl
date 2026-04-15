@@ -366,6 +366,7 @@ Shared output contract between runtime adapters. Foundation for multi-runtime.
 
 > Design doc: [plans/2026-03-10-unified-memory-layer-design.md](plans/2026-03-10-unified-memory-layer-design.md)
 > Impl plan: [plans/2026-03-10-unified-memory-layer-impl-plan.md](plans/2026-03-10-unified-memory-layer-impl-plan.md)
+> MemPalace-inspired evolution plan v1.3: [plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md](plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md) plus supplements [plans/2026-04-15-mempalace-additional-findings.md](plans/2026-04-15-mempalace-additional-findings.md) and [plans/2026-04-16-mempalace-additional-findings-round-3.md](plans/2026-04-16-mempalace-additional-findings-round-3.md)
 >
 > Status note: Delivered on `main` via PRs #30 (claude-mem migration tooling),
 > #31 (memory cutover: dual-backend `MemoryInjector`, memory API routes, memory
@@ -401,6 +402,15 @@ PostgreSQL-native hybrid memory replacing external Mem0 service. 4-scope isolati
 - [x] `memory_feedback` MCP tool: `used` / `irrelevant` / `outdated` signals *(PR #58)*
 - [x] Knowledge synthesis: weekly cron Phase 1 (lint) + Phase 2 (LLM-proposed principles, human review) *(direct commit)*
 - [x] Contradiction detection: `contradicts` edges trigger human review flags *(direct commit)*
+
+**MemPalace-Inspired Follow-up (planned):**
+- [ ] Start with eval + drawer schema/chunker/sanitizer/backfill only: `0028_add_memory_drawers.sql`, no `wing`/`room` hierarchy, non-unique content hashes, raw-secret redaction before hash/embed/store, and resumable JSONL/claude-mem drawer backfill.
+- [ ] Keep eval honest with seed-42 dev/held-out split discipline, per-category reporting, known failure-mode fixtures, planted `NEEDLE_` recall regression bench, and no held-out tuning outside release/weekly eval jobs.
+- [ ] Lock first-run behavior with an empty-DB/cold-start contract for memory search, recall, stats/report, dedup-check, and traverse, plus null-arguments MCP tests so bad calls fail fast instead of hanging.
+- [ ] Link facts to supporting source drawers via `memory_fact_sources` offsets, add embedding version stamping, keep legacy facts usable, and bridge Surface A (`MEMORY.md`) through a bounded dry-run generator instead of another source of truth.
+- [ ] Extend retrieval only after eval/backfill with the three-stage query sanitizer, rank-bucket boosts, drawer-aware search, drawer-grep enrichment, source-neighbor hydration, capped additive boosts, MCP drawer get/search parity, `memory_dedup_check`, and per-tier injector token budgets.
+- [ ] Add nonblocking checkpoint capture with explicit PreCompact timeout/deferred-job contract plus diary-as-fact continuity so long sessions and specialist agents keep context without polluting verified fact search.
+- [ ] Extend memory edges with temporal validity/source references and `memory_traverse` only after reviewing mesh `sync_capture_change()` payload compatibility, schema-version gates, and entity canonicalization/backfill requirements.
 
 ---
 
@@ -2189,6 +2199,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 | **P1** | ~~Unified Memory Layer~~ | 3.6 | ✅ Delivered — all knowledge engineering items complete (PRs #50-#59) |
 | **P1** | ~~Unified Memory System UI~~ | 4.8 | ✅ Delivered — original 8 pages plus synthesis/maintenance follow-ups, integration points, and MCP tools (PRs #47,#50,#52-#59,#470,#473); backend routes for consolidation, reports, decay, synthesis, and maintenance all landed |
 | **P1** | ~~Memory Browser Provenance Filters~~ | 4.8 | ✅ Delivered in PR #486 — exposes the already-supported `sessionId` / `agentId` / `machineId` memory fact filters in `/memory/browser`, keeps them shareable via URL state, and adds focused unit/Playwright coverage. See [plans/2026-04-14-memory-browser-provenance-filters-plan.md](plans/2026-04-14-memory-browser-provenance-filters-plan.md) |
+| **P1** | MemPalace-Inspired Memory Evolution | 3.6 / 4.8 / 7.3 | Planned — v1.3 keeps the existing PostgreSQL-native memory core and starts with eval + sanitized verbatim drawers + resumable backfill before search changes. It explicitly covers migration numbering from `0028`, mesh sync compatibility, raw-secret redaction, non-unique drawer hashes, embedding version stamping/rotation, Surface A bridge, audit logging/shared redaction keys, retention, injector token budgets, PreCompact timeout contracts, three-stage query sanitizer, rank-bucket boosts, held-out eval discipline, planted-needle regression, cold-start/null-arguments MCP contracts, `memory_dedup_check`, `memory_traverse`, entity canonicalization, and timeline gates. See [plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md](plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md). |
 | **P1** | ~~UI Quality & Accessibility~~ | 4.7 | ✅ Delivered — all original ARIA items complete (PRs #51,#54,#59), StatusBadge descriptions refreshed in PR #417, slash-search/hotkey discoverability improved in PRs #446/#449, shared Sidebar/Sessions `?` event ownership centralized in PR #450, and sidebar Go To keyboard coverage plus Settings shortcut docs expanded in PR #525 |
 | **P1** | ~~Structured Execution Summary~~ | 2.5 | ✅ Delivered |
 | **P1** | ~~Workdir Safety Tiers~~ | 2.6 | ✅ Delivered |
