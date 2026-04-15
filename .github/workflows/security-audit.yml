@@ -23,9 +23,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   # ── CodeQL static analysis ──────────────────────────────────────
   codeql:
@@ -234,10 +231,12 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.0.0
+        with:
+          cache-binary: false
 
       - name: Build container image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7.1.0
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -257,6 +256,7 @@ jobs:
           exit-code: '0'
           ignore-unfixed: true
           vuln-type: os,library
+          cache: "false"
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: always()
@@ -273,9 +273,10 @@ jobs:
           image-ref: ${{ matrix.image }}:audit
           format: cyclonedx
           output: sbom-${{ matrix.image }}.cdx.json
+          cache: "false"
 
       - name: Upload SBOM as artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: sbom-${{ matrix.image }}
           path: sbom-${{ matrix.image }}.cdx.json
