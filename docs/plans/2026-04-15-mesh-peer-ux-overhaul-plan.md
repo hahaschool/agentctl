@@ -40,7 +40,7 @@ The 2026-04-15 beta mesh setup exposed three operator-facing gaps in `/mesh-peer
 5. Add manual Probe.
    - Implement `GET /api/sync/peers/probe?target=...`.
    - Reuse the existing sync URL SSRF blocklist and IP/hostname validation rules.
-   - Probe `/health` and fill `machineId`, `hostname`, `tailscaleIp`, `syncUrl`, and `publicKey` where available.
+   - Probe `/health` for `machineId` and `nodePublicKey`; derive `syncUrl` from the validated target, and fill `hostname`/`tailscaleIp` from the user-entered target or Tailscale status data where available.
    - Default `syncUrl` to `http://<target>:8080`; keep HTTPS available for public endpoints.
 
 6. Cover the browser flows.
@@ -59,4 +59,3 @@ The 2026-04-15 beta mesh setup exposed three operator-facing gaps in `/mesh-peer
 - Focused web unit or component tests for edit/probe state where Playwright setup cost is unnecessary.
 - `pnpm --filter @agentctl/web test:e2e -- e2e/mesh-peers.spec.ts --project=chromium` or the repo-equivalent focused command after the UI flows land.
 - `pnpm build`, lint, and relevant control-plane tests for backend changes.
-

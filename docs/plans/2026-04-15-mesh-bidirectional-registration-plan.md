@@ -14,8 +14,9 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 
 1. Add a signed reverse-registration endpoint.
    - Implement `POST /api/sync/peers/register`.
-   - Require the same sync-route auth and rate-limit posture as other peer write routes.
-   - Validate a `register-peer` envelope signed by the caller's Ed25519 key.
+   - Keep the same rate-limit posture as other peer write routes, but do not use the existing sync-route auth hook as the sole gate: it verifies against already-known `sync_nodes` peer keys, while this endpoint exists for the first registration of an unknown peer.
+   - Pick and document one bootstrap trust model before implementation, such as Tailscale ACL/tag-gated TOFU with fingerprint confirmation, an enrollment token, or target-initiated key confirmation.
+   - Validate a `register-peer` envelope signed by the caller's Ed25519 key after the bootstrap trust check accepts the key.
    - Have node A include its own `/health` identity and proposed peer fields in the signed envelope; the target may corroborate A's Tailscale IP from request metadata or `tailscale status --json`, but must not infer A's identity from the target's own `/health` response.
 
 2. Auto-register on peer add.
@@ -26,6 +27,7 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 3. Make one-way registration visible.
    - If reverse registration fails, log a warning and surface a UI banner that reverse registration may be incomplete.
    - Add a per-row "Register this CP with peer" action on `/mesh-peers` for manual retry after a peer comes online or after key rotation.
+   - This action can reuse 33.7 edit/probe affordances if they have landed, but the P0 registration endpoint and warning state do not depend on the full 33.7 UX overhaul.
 
 4. Add explicit machine sync provenance.
    - Inspect the current `machines` schema before implementation; do not assume `origin_node_id` exists.
@@ -39,7 +41,7 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 ## Non-Goals
 
 - Do not ship machine-row provenance UI without the backing schema/data path.
-- Do not bypass peer-auth signature validation for convenience during discovery or registration.
+- Do not bypass peer-auth signature validation for convenience during discovery or registration; solve first-registration with an explicit bootstrap trust model instead.
 - Do not touch beta promotion, production deployment, dev-1, or dev-2 workflows.
 
 ## Verification
@@ -48,4 +50,3 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 - Store/migration tests for any machine provenance column.
 - Sync-loop integration coverage proving node B pulls machine rows from node A after bidirectional registration.
 - Focused `/mesh-peers` and `/machines` browser coverage for warning banners, manual register action, and origin badges.
-
