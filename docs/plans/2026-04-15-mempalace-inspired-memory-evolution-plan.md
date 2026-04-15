@@ -43,6 +43,7 @@ This v1.1 plan supersedes the original PR #584 draft. It incorporates the review
 - Write-ahead audit for memory writes is tied to the existing `packages/agent-worker/src/hooks/audit-logger.ts` hash-chain logger instead of a new JSONL format.
 - Backfill from Claude Code JSONL and `claude-mem` is explicit, so evals have real drawer data.
 - Phase order is changed to build data before drawer-aware search: eval -> schema/chunker -> backfill -> checkpoint capture -> provenance/injection bridge -> search.
+- Round-2 findings in [2026-04-15-mempalace-additional-findings.md](2026-04-15-mempalace-additional-findings.md) are folded into this plan: PreCompact timeout contract, query-hygiene gate, dev/held-out eval discipline, rank-bucket boosts, per-category reporting, entity canonicalization, shared redaction keys, and embedding rotation playbooks.
 
 ## Research Summary
 
@@ -81,6 +82,7 @@ AgentCTL sources reviewed:
 - `packages/agent-worker/src/hooks/experience-extractor.ts`
 - `packages/agent-worker/src/api/routes/memory-*.ts`
 - `packages/shared/src/types/memory.ts`
+- `docs/plans/2026-04-15-mempalace-additional-findings.md`
 
 ## Glossary
 
@@ -107,7 +109,7 @@ AgentCTL sources reviewed:
 | Auto-save hooks | Periodic save and PreCompact emergency save. | Post-session experience extraction exists, but no periodic raw checkpoint. | Adopt as nonblocking checkpoint capture. |
 | Benchmarks | Benchmark methodology and per-question results. | No recall benchmark for AgentCTL memory quality. | Adopt before ranking changes, with internal plus external fixtures. |
 | Backend abstraction | ChromaDB behind a narrow collection interface. | AgentCTL is intentionally PostgreSQL-native. | Keep Postgres; add test seams around retrieval services only. |
-| AAAK compression | Experimental lossy token compression. | No equivalent. | Do not adopt now. Revisit only after raw recall and token budgets are measured. |
+| AAAK compression | Experimental lossy token compression; round-2 research found upstream removal after eval regressions. | No equivalent. | Do not adopt. Revisit only if a future eval shows raw-storage token budget is the binding constraint. |
 
 ## Current AgentCTL Baseline
 
@@ -180,7 +182,9 @@ flowchart LR
 7. Drawer storage needs stricter privacy controls than extracted facts: sanitizer, quarantine, retention, scoped visibility, audit, and explicit export/delete paths.
 8. Injection and retrieval are separate. Drawer-aware search must not make prompt injection unbounded.
 9. Mesh compatibility is part of schema design. New synced payload columns require schema-version review.
-10. Do not add ChromaDB unless PostgreSQL cannot meet measured recall or latency goals.
+10. Search input hygiene is part of the retrieval contract. Embedding the full prompt, system prefix, or rendered conversation is a correctness bug.
+11. Eval numbers are only meaningful with dev/held-out split discipline. Tune on dev; treat held-out as release evidence.
+12. Do not add ChromaDB unless PostgreSQL cannot meet measured recall or latency goals. MemPalace's vector-store point-release breakage is an argument for staying PostgreSQL-native until data says otherwise.
 
 ## Data Model Contract
 
@@ -390,6 +394,35 @@ Required chunker tests:
 
 Phase 1 must create a drawer-specific sanitizer rather than reusing fact-level sanitization blindly.
 
+Create a shared redaction module:
+
+- Create: `packages/shared/src/memory/redaction.ts`
+- Export: `MEMORY_REDACT_KEYS`
+- Export: `redactKeys<T extends object>(obj: T, keys = MEMORY_REDACT_KEYS): T`
+
+Default key list:
+
+```typescript
+export const MEMORY_REDACT_KEYS: ReadonlySet<string> = new Set([
+  'api_key',
+  'apikey',
+  'password',
+  'token',
+  'authorization',
+  'secret',
+  'openai_api_key',
+  'anthropic_api_key',
+  'aws_secret_access_key',
+  'bearer',
+  'cookie',
+  'x-api-key',
+  'stripe_api_key',
+  'slack_webhook_url',
+]);
+```
+
+The raw-transcript sanitizer, `AuditLogger` memory write path, checkpoint metadata logs, and future memory audit surfaces must call `redactKeys()` before writing structured context. Add a Vitest suite that covers the helper and greps memory audit call sites to ensure the helper is on the write path.
+
 Minimum patterns:
 
 - OpenAI/Anthropic style keys: `sk-*`, `sk-ant-*`
@@ -488,6 +521,12 @@ Rules:
 - Search filters stale vectors out of vector paths but can still use keyword/graph paths.
 - `pnpm memory:reembed --from-version <n> --to-version <m>` handles batch rebuild.
 - Bumping embedding versions requires a migration default change plus a background re-embed plan.
+- Embedding rotation playbook:
+  1. Write new rows under the new `embedding_model` / `embedding_version`.
+  2. Build a second HNSW index filtered to the new model/version if mixed versions must coexist.
+  3. Dual-query during transition and union/dedup by fact or drawer ID.
+  4. Remove old embeddings only after held-out eval matches or beats the prior baseline.
+  5. Never mix incompatible embedding models in one ranking pool without model/version filtering.
 
 ### Baseline Search Paths
 
@@ -514,6 +553,15 @@ Implementation notes:
 
 Every signal is additive and capped. No signal may hide raw drawer hits or demote legacy fact-only hits below a fixed penalty gate.
 
+Boost application is rank-bucket based, not distance-multiplied. For each additive signal:
+
+1. Run the fused base ranker.
+2. Take the top-K candidates satisfying the signal.
+3. Add fixed rank-position boosts from `MEMORY_RANK_BOOSTS`, default `[0.40, 0.25, 0.15, 0.08, 0.04]`.
+4. Re-sort.
+
+Do not multiply boosts into `1 - cosine_distance`, and do not scale boosts by raw vector score. Rank-bucket boosts are more stable across embedding-model rotation.
+
 Feature flags:
 
 - `MEMORY_DRAWER_SEARCH_ENABLED`
@@ -532,6 +580,24 @@ Signals:
 6. Basic temporal boost only for relative dates supported by `chrono-node` or deterministic parsing: "yesterday", "last week", "four weeks ago".
 7. Event-anchored temporal queries such as "before PR #563" and "after the mesh migration" are Phase 4b and depend on a stable event log or GitHub metadata source.
 8. Optional LLM rerank only after top-20 retrieval, behind `MEMORY_RERANK_ENABLED`.
+
+### Query Hygiene
+
+Query hygiene is part of the search contract, not a downstream caller concern.
+
+Rules:
+
+- Embedding input must be bare query text only.
+- Strip leading whitespace, role tags such as `User:` / `Assistant:`, code fences, and any content before the last user-turn marker when the caller passes a rendered conversation.
+- Reject queries over `MEMORY_QUERY_MAX_TOKENS` with `400 query_too_long`; default max is `256`.
+- Log `query.token_count` and `query.has_prefix_smell` for every search. Prefix smells include multi-turn role markers, system-prompt markers, or long prompt/conversation separators.
+- Validate in both `packages/agent-worker/src/api/routes/memory-search.ts` and `packages/control-plane/src/memory/memory-search.ts`; neither surface trusts the other.
+
+Required contamination test:
+
+- Prepend every eval fixture query with a 2,000-token harmless prefix.
+- Assert held-out NDCG@10 drops by less than 5 points.
+- If it drops more, retrieval is input-contaminated and Phase 4 cannot ship.
 
 ### Result Shape
 
@@ -644,9 +710,33 @@ Mobile constraint:
 1. Define eval fixture schema with query, expected facts, expected drawer sources, redacted answer hints, tags, and public/private marker.
 2. Commit only a sanitized sample fixture. Store the real 30-50 internal fixture in a gitignored path such as `tmp/memory-eval/agentctl-private.json`.
 3. Add at least one external anchor set from LongMemEval-style single-session preference or project-memory cases, converted into sanitized local fixture format.
-4. Metrics: R@5, R@10, MRR, NDCG@10, drawer-only hit rate, source-grounding coverage, and p95 search duration.
-5. CI uses deterministic mock embeddings to verify retrieval logic. Nightly or local eval uses real embeddings against dev-1/dev-2 configuration.
-6. Baseline numbers must be written into this plan or a follow-up eval report before Phase 4 defaults can change.
+4. Add deterministic split discipline:
+   - `EVAL_SPLIT_SEED = 42`
+   - 10% dev / 90% held-out
+   - tuning PRs use dev only
+   - held-out runs only on release tags and weekly cron
+   - held-out rows are immutable after the first tag; bad rows use `excluded: true` plus `fixtures/CHANGELOG.md`, not deletion or silent expected-answer edits.
+5. Add API helpers:
+   - `getDevSet(): Fixture[]`
+   - `getHeldOutSet(): Fixture[]`
+   - `getFullSet(): Fixture[]`, callable only by release-eval jobs.
+6. Metrics: R@5, R@10, MRR, NDCG@10, drawer-only hit rate, source-grounding coverage, p95 search duration, and per-category R@5/R@10/NDCG@10.
+7. Categories:
+   - LongMemEval-compatible categories where applicable.
+   - `AgentCTL-internal` for project-specific memory shapes.
+   - Failure-mode tags for vocabulary gap, temporal ambiguity, assistant-reference, person-name underweighting, and noisy distractor rejection.
+8. Required fixture coverage:
+   - At least 5 rows for each failure-mode tag.
+   - At least 5 assistant-turn queries.
+   - At least 5 relative-time queries.
+9. Baseline progression targets:
+   - raw vector only: R@10 >= 90%
+   - hybrid vector + BM25 + boosts: R@10 >= 95%
+   - hybrid + LLM rerank: R@10 >= 98%
+   - misses are plan-level findings requiring issues, not silent retuning.
+10. Held-out regression budget: >2 point NDCG@10 drop between release evals is a release blocker.
+11. CI uses deterministic mock embeddings to verify retrieval logic. Nightly or local eval uses real embeddings against dev-1/dev-2 configuration.
+12. Baseline numbers must be written into this plan or a follow-up eval report before Phase 4 defaults can change.
 
 **Tests:**
 
@@ -654,6 +744,10 @@ Mobile constraint:
 - Mock embedding path is deterministic.
 - R@5/MRR/NDCG calculations are correct.
 - Private fixture path is ignored by git.
+- Split generation is deterministic for seed 42.
+- A test asserts fixture failure-mode coverage.
+- Per-category report output is stable markdown.
+- Contaminated-query eval fixture path exists for Phase 4.
 
 **Rollback:** No product behavior change.
 
@@ -754,18 +848,24 @@ Mobile constraint:
 **Work:**
 
 1. Add nonblocking checkpoint hook triggered by every N human turns, stop/session end, and pre-compaction when runtime exposes it.
-2. Store drawer chunks first; enqueue extraction separately.
-3. Use a BullMQ or existing queue-backed worker for `memory-drawer-extraction`. If no queue is available in the target environment, explicitly implement inline best-effort mode and document the tradeoff.
-4. Make extraction idempotent per drawer: check `memory_fact_sources` for existing links or use deterministic source keys before creating facts.
-5. Add orphan drawer recovery: scheduled job scans drawers with no extraction attempt and re-enqueues them.
-6. Chaos behavior: if PG or embedding API fails, the agent run continues.
+2. Default cadence is every 15 user messages via `MEMORY_CHECKPOINT_MESSAGE_INTERVAL=15`.
+3. All `SessionStart`, `Stop`, and `PreCompact` memory hooks must return within `MEMORY_HOOK_TIMEOUT_MS`, default `2000`.
+4. Never await a DB write inside a hook. Drawer captures enqueue onto the same queue-backed path used by backfill; the hook returns with a job ID or a structured deferred result.
+5. Use an `AbortSignal` wired to the hook timeout. On abort, increment `memory_checkpoint_hook_timeout_total` and return without blocking the session.
+6. Losing a checkpoint is a warning; blocking PreCompact is a paging-severity defect. Prefer dropping/deferring memory work over blocking compaction or user execution.
+7. Store drawer chunks first; enqueue extraction separately.
+8. Use a BullMQ or existing queue-backed worker for `memory-drawer-extraction`. If no queue is available in the target environment, explicitly implement inline best-effort mode and document the tradeoff.
+9. Make extraction idempotent per drawer: check `memory_fact_sources` for existing links or use deterministic source keys before creating facts.
+10. Add orphan drawer recovery: scheduled job scans drawers with no extraction attempt and re-enqueues them.
+11. Chaos behavior: if PG, queue, or embedding API fails, the agent run continues.
 
 **Config:**
 
 - `MEMORY_CHECKPOINT_ENABLED`
-- `MEMORY_CHECKPOINT_TURN_INTERVAL`
+- `MEMORY_CHECKPOINT_MESSAGE_INTERVAL`
 - `MEMORY_CHECKPOINT_MAX_CHARS`
 - `MEMORY_DRAWER_EXTRACTION_QUEUE_ENABLED`
+- `MEMORY_HOOK_TIMEOUT_MS`
 
 **Tests:**
 
@@ -775,6 +875,9 @@ Mobile constraint:
 - Extraction failure does not lose raw drawer.
 - Hook errors do not block session teardown.
 - Simulated PG/embedding 500 keeps runtime successful.
+- Fixture stalls the drawer queue worker for 30 seconds; PreCompact hook returns within 2.5 seconds.
+- Stalled queue test eventually lands one drawer after the queue unblocks.
+- Hook timeout metric increments exactly once in the stalled queue test.
 
 **Rollback:** Disable checkpoint flag; existing drawers remain searchable only if drawer search is enabled.
 
@@ -846,9 +949,10 @@ Mobile constraint:
 4. Fuse fact and drawer paths with RRF.
 5. Return discriminated union results with token estimates.
 6. Implement MCP parity for `memory_drawer_search` and `memory_drawer_get`.
-7. Basic temporal parser supports relative dates only.
-8. Event-anchored temporal search is Phase 4b and must not block Phase 4.
-9. Report eval before/after. Default enablement requires drawer-aware R@5 >= facts-only R@5 and no p95 regression beyond the accepted threshold.
+7. Implement query hygiene in both worker route and control-plane search before embedding.
+8. Basic temporal parser supports relative dates only.
+9. Event-anchored temporal search is Phase 4b and must not block Phase 4.
+10. Report eval before/after using dev during tuning. Default enablement requires drawer-aware dev R@5 >= facts-only dev R@5 and no p95 regression beyond the accepted threshold. Held-out comparison happens only in release/weekly eval jobs.
 
 **Tests:**
 
@@ -861,6 +965,10 @@ Mobile constraint:
 - Strict BM25 zero-result path falls back cleanly.
 - Basic temporal boost changes ranking only when temporal signal exists.
 - Search result token budget cannot exceed requested cap.
+- Queries longer than `MEMORY_QUERY_MAX_TOKENS` return `query_too_long`.
+- Query hygiene strips role-prefix/system-prefix contamination before embedding.
+- Contamination eval prepends a 2,000-token prefix and asserts held-out NDCG@10 drop stays under 5 points.
+- Rank-bucket boost test proves boosts are fixed by result position and do not scale with raw cosine distance.
 
 **Rollback:** `MEMORY_DRAWER_SEARCH_ENABLED=false`; schema and backfilled data remain.
 
@@ -915,15 +1023,24 @@ Mobile constraint:
 2. Benchmark entity extraction options on 1,000 sampled facts/drawers:
    - regex + dictionaries for PRs/issues/files/machines/agents.
    - optional NER or LLM path for people/concepts only if the benchmark justifies it.
-3. Add timeline API:
+3. Ship entity canonicalization with Phase 6. It is not polish because timeline joins depend on stable identity:
+   - Add nullable canonical IDs to facts and temporal edge subjects/objects.
+   - Add `memory_entity_aliases(canonical_id uuid, alias text, confidence numeric)`.
+   - Canonicalization pass lowercases and strips whitespace.
+   - For people, match first+last and last-only against aliases. If exactly one match exists, reuse that canonical ID.
+   - If ambiguous, log `memory_canonicalization_ambiguous`, leave canonical ID null, and surface as needs-review in UI.
+   - For non-person entities, exact-match canonicalized strings first; fall back to null + review.
+4. Backfill canonicalization only through dry-run CSV proposals followed by human-approved apply. Never auto-merge historical people/entities.
+5. Add timeline API:
    - `GET /api/memory/timeline?entity=...&asOf=...&limit=...&cursor=...`
    - `POST /api/memory/edges/:id/invalidate`
-4. Define MCP `memory_timeline` parameters:
+6. Define MCP `memory_timeline` parameters:
    - `entity`: exact ID or query string.
    - `asOf`: ISO-8601 UTC string; omitted means now.
    - `limit`: default 20, max 100.
    - `cursor`: opaque pagination cursor.
-5. Auth: mutation routes require the same account/admin scope as existing memory mutation routes; read routes follow existing memory read visibility.
+7. Auth: mutation routes require the same account/admin scope as existing memory mutation routes; read routes follow existing memory read visibility.
+8. If canonicalization is too large for the Phase 6 timebox, Phase 6 may ship only with a visible timeline UI warning that same-name entities can appear as distinct nodes and a follow-up PR already filed.
 
 **Tests:**
 
@@ -932,6 +1049,9 @@ Mobile constraint:
 - Timeline orders events deterministically.
 - Old peer/schema-ahead behavior is covered if sync payload changes.
 - Auth tests cover read vs invalidate.
+- `"John"`, `"John Smith"`, and `"john smith"` can resolve to one canonical ID after reviewed backfill.
+- `"John Doe"` remains separate.
+- Ambiguous alias logs and UI review marker appear without auto-merging.
 
 **Rollback:** Disable timeline routes and keep new columns unused; if sync schema was bumped, follow mesh rollback docs before downgrading.
 
@@ -998,12 +1118,16 @@ Add env vars through the existing centralized config path used by control-plane/
 | `MEMORY_TEMPORAL_BOOST_ENABLED` | boolean | `false` | control-plane |
 | `MEMORY_ASSISTANT_REFERENCE_SEARCH_ENABLED` | boolean | `false` | control-plane |
 | `MEMORY_RERANK_ENABLED` | boolean | `false` | control-plane |
+| `MEMORY_RANK_BOOSTS` | comma-separated numbers | `0.40,0.25,0.15,0.08,0.04` | control-plane |
+| `MEMORY_QUERY_MAX_TOKENS` | number | `256` | worker/control-plane |
 | `MEMORY_CHECKPOINT_ENABLED` | boolean | `false` | worker |
-| `MEMORY_CHECKPOINT_TURN_INTERVAL` | number | `15` | worker |
+| `MEMORY_CHECKPOINT_MESSAGE_INTERVAL` | number | `15` | worker |
 | `MEMORY_CHECKPOINT_MAX_CHARS` | number | `40000` | worker |
+| `MEMORY_HOOK_TIMEOUT_MS` | number | `2000` | worker |
 | `MEMORY_DRAWER_EXTRACTION_QUEUE_ENABLED` | boolean | `true` where queue is available | worker/control-plane |
 | `MEMORY_INJECTION_RESULT_MODE` | enum | `fact-only` | control-plane |
 | `MEMORY_EVIDENCE_TOKEN_CAP` | number | `800` | control-plane |
+| `EVAL_SPLIT_SEED` | number | `42` | control-plane/scripts |
 
 ## Suggested PR Slices
 
@@ -1048,6 +1172,10 @@ Add env vars through the existing centralized config path used by control-plane/
 | Mesh schema drift. | No drawer sync trigger until policy is explicit; edge changes require schema version gate. |
 | Ranking regressions. | Eval harness first; every search PR reports before/after R@5/R@10/MRR/p95. |
 | Prompt budget blowup. | Injector result modes and per-tier token caps; full drawer only on demand. |
+| Query-prefix contamination collapses retrieval. | Query hygiene strips role/system prefixes, rejects oversized queries, logs prefix smells, and runs contamination eval. |
+| Held-out overfitting. | Seeded dev/held-out split; tuning uses dev only; held-out runs on release/weekly jobs. |
+| Silent quality regression during embedding-model rotation. | Model/version columns, dual-query migration, second HNSW index when needed, and held-out eval gate before deleting old embeddings. |
+| Vector-store point-release breakage. | Stay PostgreSQL-native until eval/latency data proves a separate vector DB is necessary. |
 | LLM extraction/rerank cost. | Raw storage and local retrieval are baseline; extraction/rerank are async or feature-flagged. |
 | Duplicate memory surfaces. | Diary folds into facts; Surface A bridge is generator/dry-run, not a new source of truth. |
 | Backfill rate limits. | Batch embeddings, queue with backoff, resumable state. |
@@ -1058,7 +1186,7 @@ Add env vars through the existing centralized config path used by control-plane/
 | Item | Reason |
 | --- | --- |
 | Replacing PostgreSQL with ChromaDB | Current PG-native stack is sufficient until eval/latency proves otherwise. |
-| Adopting AAAK or custom compression dialect | Lossy and not required for evidence storage. |
+| Adopting AAAK or custom compression dialect | Lossy; round-2 research found upstream MemPalace removed the AAAK path after eval regressions. Revisit only if future evals prove raw-storage token budget is the binding constraint. |
 | Perfect LongMemEval parity | Use external anchors for calibration, not full benchmark parity. |
 | Cloud memory providers | Local-first and mesh concerns come first. |
 | Auto-writing durable facts without provenance or review path | Provenance and review are required. |
@@ -1075,13 +1203,18 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Extracted facts link to supporting drawer offsets without copying quoted content.
 - [ ] Legacy facts without drawer provenance still search, render, inject, and sync.
 - [ ] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, and p95 search time.
+- [ ] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42; ranker tuning runs on dev only.
+- [ ] Eval report prints per-category metrics and includes at least five examples for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
 - [ ] Phase 0 records a facts-only baseline number before drawer-aware search changes ranking.
 - [ ] Drawer-aware search is not default-enabled unless R@5 is at least the facts-only baseline and p95 stays within the accepted threshold.
+- [ ] Query hygiene rejects oversized/prefix-contaminated search inputs and contamination eval NDCG@10 drop stays under 5 points.
 - [ ] Memory Browser can show why a result matched and where it came from.
 - [ ] Injector supports fact-only, fact-plus-snippet, and full-drawer modes with per-tier caps.
 - [ ] Checkpoint capture cannot block an agent run, proven by simulated PG/embedding failure tests.
+- [ ] PreCompact checkpoint hook returns within 2.5 seconds under a stalled queue fixture.
 - [ ] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts.
 - [ ] Mesh sync behavior for drawers and temporal edge fields is explicit before any sync payload changes.
+- [ ] Phase 6 includes entity canonicalization or ships with an explicit UI warning and follow-up PR.
 - [ ] Mobile evidence display truncates to one 120-char snippet without layout overflow.
 
 ## First Implementation Choice
