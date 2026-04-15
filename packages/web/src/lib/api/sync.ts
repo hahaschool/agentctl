@@ -48,6 +48,27 @@ export type SyncPeer = {
   lastSchemaAheadVersion?: number | null;
   lastSchemaAheadAt?: string | null;
   schemaAheadCount?: number | null;
+  // §33.8: mesh health panel. `lastPullAt`/`lastAckAt` come from the LEFT
+  // JOIN on `sync_peer_cursors` — both fields track the shared `updated_at`
+  // timestamp. Null when this control plane has never pulled or acked with
+  // the peer yet, which the panel renders as "stale".
+  lastPullAt?: string | null;
+  lastAckAt?: string | null;
+};
+
+/**
+ * §33.8 — Response from `GET /api/sync/peers/:peerId/cursors`. Used by the
+ * mesh health panel to drill into raw pull / ack cursor state on row expansion.
+ */
+export type SyncPeerCursors = {
+  machineId: string;
+  localNodeId: string;
+  remoteNodeId: string;
+  pulledCursor: number;
+  ackedCursor: number;
+  lastPullAt: string | null;
+  lastAckAt: string | null;
+  updatedAt: string | null;
 };
 
 /**
@@ -199,6 +220,13 @@ export const syncApi = {
       `/api/sync/peers/${encodeURIComponent(machineId)}/register-reverse`,
       { method: 'POST' },
     ),
+
+  /**
+   * §33.8 — Fetch the `sync_peer_cursors` row for a peer. The mesh health
+   * panel calls this on row expansion to reveal last-pull / last-ack state.
+   */
+  getSyncPeerCursors: (machineId: string) =>
+    request<SyncPeerCursors>(`/api/sync/peers/${encodeURIComponent(machineId)}/cursors`),
 
   /**
    * §33.7 — Return a list of candidate Tailscale peers the operator could add.

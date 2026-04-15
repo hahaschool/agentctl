@@ -9,7 +9,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
-import type { SyncPeer, UpsertSyncPeerInput } from '@/lib/api';
+import type { SyncPeer, SyncPeerCursors, UpsertSyncPeerInput } from '@/lib/api';
 import {
   classifyDrift,
   classifySchemaDrift,
@@ -22,6 +22,7 @@ import {
   type SyncPeerWithVersion,
 } from '@/lib/mesh-version';
 import {
+  syncPeerCursorsQuery,
   syncPeersQuery,
   useDeleteSyncPeer,
   usePingSyncPeer,
@@ -32,6 +33,8 @@ import {
 } from '@/lib/queries';
 import { MAX_SYNC_URL_LENGTH, URL_LENGTH_COUNTER_THRESHOLD } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
+
+import { MeshHealthSummary } from './mesh/MeshHealthSummary';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -666,11 +669,16 @@ type PeerRowProps = {
   onDelete: (peer: SyncPeer) => void;
   onUpdate: (peer: SyncPeerWithVersion) => void;
   onRetryReverse: (peer: SyncPeer) => void;
+  onToggleExpand: (machineId: string) => void;
   isPinging: boolean;
   pingingId: string | null;
   deletingId: string | null;
   updatingId: string | null;
   reverseRetryingId: string | null;
+  /** §33.8: whether this row is currently expanded for cursor drill-down. */
+  isExpanded: boolean;
+  /** Total column count — used to size the expanded detail row's colspan. */
+  columnCount: number;
 };
 
 /**
@@ -879,11 +887,14 @@ export function MeshPeerRow({
   onDelete,
   onUpdate,
   onRetryReverse,
+  onToggleExpand,
   isPinging,
   pingingId,
   deletingId,
   updatingId,
   reverseRetryingId,
+  isExpanded,
+  columnCount,
 }: PeerRowProps): React.JSX.Element {
   const thisRowIsPinging = isPinging && pingingId === peer.machineId;
   const canPing = Boolean(peer.syncUrl) && !peer.isSelf;
@@ -892,148 +903,256 @@ export function MeshPeerRow({
   const updatable = canUpdatePeer(peer, localVersion);
   const thisRowIsRetryingReverse = reverseRetryingId === peer.machineId;
 
+  const handleRowClick = (event: React.MouseEvent<HTMLTableRowElement>): void => {
+    // Don't toggle when the click originated inside an action button or link;
+    // the action buttons already stopPropagation via their own handlers below.
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea')) return;
+    onToggleExpand(peer.machineId);
+  };
+
+  const handleRowKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>): void => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    onToggleExpand(peer.machineId);
+  };
+
   return (
-    <tr className="border-t border-border hover:bg-accent/5">
-      <td className="px-4 py-3 align-top">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-foreground">{peer.hostname}</span>
-          {peer.isSelf && (
-            <span className="px-1.5 py-px rounded-sm bg-primary/15 text-primary text-[10px] font-semibold">
-              SELF
+    <>
+      <tr
+        className={cn(
+          'border-t border-border hover:bg-accent/5 cursor-pointer',
+          isExpanded && 'bg-accent/5',
+        )}
+        data-testid={`peer-row-${peer.machineId}`}
+        aria-expanded={isExpanded}
+        onClick={handleRowClick}
+        onKeyDown={handleRowKeyDown}
+        tabIndex={0}
+      >
+        <td className="px-4 py-3 align-top">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-foreground">{peer.hostname}</span>
+            {peer.isSelf && (
+              <span className="px-1.5 py-px rounded-sm bg-primary/15 text-primary text-[10px] font-semibold">
+                SELF
+              </span>
+            )}
+          </div>
+          <div className="font-mono text-[10px] text-muted-foreground mt-0.5 truncate max-w-[240px]">
+            {peer.machineId}
+          </div>
+        </td>
+        <td className="px-4 py-3 align-top">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={cn(
+                'px-2 py-0.5 rounded-sm text-[10px] font-semibold tracking-wide uppercase',
+                statusClasses(peer.syncStatus),
+              )}
+            >
+              {peer.syncStatus}
             </span>
-          )}
-        </div>
-        <div className="font-mono text-[10px] text-muted-foreground mt-0.5 truncate max-w-[240px]">
-          {peer.machineId}
-        </div>
-      </td>
-      <td className="px-4 py-3 align-top">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className={cn(
-              'px-2 py-0.5 rounded-sm text-[10px] font-semibold tracking-wide uppercase',
-              statusClasses(peer.syncStatus),
-            )}
-          >
-            {peer.syncStatus}
-          </span>
-          <ReverseRegistrationBadge
-            peer={peer}
-            onRetry={onRetryReverse}
-            isRetrying={thisRowIsRetryingReverse}
-          />
-          <PeerAheadBadge
-            peer={peer}
-            localSchemaVersion={LOCAL_SCHEMA_VERSION}
-            updateAvailable={updatable}
-          />
-        </div>
-        <PingDiagnosticLine peer={peer} />
-      </td>
-      <td className="px-4 py-3 align-top whitespace-nowrap">
-        <div className="flex flex-col items-start gap-1">
-          <VersionCell
-            peerVersion={peer.peerVersion}
-            localVersion={localVersion}
-            isSelf={peer.isSelf}
-          />
-          <PeerSchemaAheadBadge peer={peer} localSchemaVersion={LOCAL_SCHEMA_VERSION} />
-        </div>
-      </td>
-      <td className="px-4 py-3 align-top font-mono text-xs text-muted-foreground">
-        {peer.tailscaleIp ?? '—'}
-      </td>
-      <td className="px-4 py-3 align-top font-mono text-[11px] text-muted-foreground break-all max-w-[280px]">
-        {peer.syncUrl ?? <span className="italic text-muted-foreground/60">not set</span>}
-      </td>
-      <td className="px-4 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
-        {peer.role}
-      </td>
-      <td className="px-4 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
-        {formatInterval(peer.syncIntervalMs)}
-      </td>
-      <td className="px-4 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
-        {formatRelative(peer.lastSeen)}
-      </td>
-      <td className="px-4 py-3 align-top text-right whitespace-nowrap">
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => onEdit(peer)}
-            disabled={peer.isSelf}
-            data-testid={`edit-${peer.machineId}`}
-            title={peer.isSelf ? 'Cannot edit self' : 'Edit peer'}
-            className={cn(
-              'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
-              'border-border bg-muted hover:bg-accent/10 text-foreground',
-              'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
-            )}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => onUpdate(peer)}
-            disabled={!updatable || thisRowIsUpdating}
-            data-testid={`update-${peer.machineId}`}
-            title={
-              peer.isSelf
-                ? 'Cannot update self from this page'
-                : !peer.syncUrl
-                  ? 'Peer has no syncUrl configured'
-                  : !peer.peerVersion
-                    ? 'Peer has not reported a version yet'
-                    : peer.peerVersion === localVersion
-                      ? 'Peer already matches local version'
-                      : `Update peer from ${peer.peerVersion} to ${localVersion}`
-            }
-            className={cn(
-              'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
-              'border-border bg-muted hover:bg-accent/10 text-foreground',
-              'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
-            )}
-          >
-            {thisRowIsUpdating ? 'Updating…' : 'Update'}
-          </button>
-          <button
-            type="button"
-            onClick={() => onPing(peer.machineId)}
-            disabled={!canPing || thisRowIsPinging}
-            className={cn(
-              'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
-              'border-border bg-muted hover:bg-accent/10 text-foreground',
-              'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
-            )}
-            title={
-              peer.isSelf
-                ? 'Cannot ping self'
-                : !peer.syncUrl
-                  ? 'Peer has no syncUrl configured'
-                  : 'Ping via /health'
-            }
-            data-testid={`ping-${peer.machineId}`}
-          >
-            {thisRowIsPinging ? 'Pinging…' : 'Ping'}
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(peer)}
-            disabled={peer.isSelf || thisRowIsDeleting}
-            data-testid={`delete-${peer.machineId}`}
-            title={peer.isSelf ? 'Cannot delete self' : 'Delete peer'}
-            className={cn(
-              'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
-              'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20',
-              'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10',
-            )}
-          >
-            {thisRowIsDeleting ? 'Deleting…' : 'Delete'}
-          </button>
-        </div>
-      </td>
-    </tr>
+            <ReverseRegistrationBadge
+              peer={peer}
+              onRetry={onRetryReverse}
+              isRetrying={thisRowIsRetryingReverse}
+            />
+            <PeerAheadBadge
+              peer={peer}
+              localSchemaVersion={LOCAL_SCHEMA_VERSION}
+              updateAvailable={updatable}
+            />
+          </div>
+          <PingDiagnosticLine peer={peer} />
+        </td>
+        <td className="px-4 py-3 align-top whitespace-nowrap">
+          <div className="flex flex-col items-start gap-1">
+            <VersionCell
+              peerVersion={peer.peerVersion}
+              localVersion={localVersion}
+              isSelf={peer.isSelf}
+            />
+            <PeerSchemaAheadBadge peer={peer} localSchemaVersion={LOCAL_SCHEMA_VERSION} />
+          </div>
+        </td>
+        <td className="px-4 py-3 align-top font-mono text-xs text-muted-foreground">
+          {peer.tailscaleIp ?? '—'}
+        </td>
+        <td className="px-4 py-3 align-top font-mono text-[11px] text-muted-foreground break-all max-w-[280px]">
+          {peer.syncUrl ?? <span className="italic text-muted-foreground/60">not set</span>}
+        </td>
+        <td className="px-4 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
+          {peer.role}
+        </td>
+        <td className="px-4 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
+          {formatInterval(peer.syncIntervalMs)}
+        </td>
+        <td className="px-4 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
+          {formatRelative(peer.lastSeen)}
+        </td>
+        <td className="px-4 py-3 align-top text-right whitespace-nowrap">
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => onEdit(peer)}
+              disabled={peer.isSelf}
+              data-testid={`edit-${peer.machineId}`}
+              title={peer.isSelf ? 'Cannot edit self' : 'Edit peer'}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+                'border-border bg-muted hover:bg-accent/10 text-foreground',
+                'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
+              )}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdate(peer)}
+              disabled={!updatable || thisRowIsUpdating}
+              data-testid={`update-${peer.machineId}`}
+              title={
+                peer.isSelf
+                  ? 'Cannot update self from this page'
+                  : !peer.syncUrl
+                    ? 'Peer has no syncUrl configured'
+                    : !peer.peerVersion
+                      ? 'Peer has not reported a version yet'
+                      : peer.peerVersion === localVersion
+                        ? 'Peer already matches local version'
+                        : `Update peer from ${peer.peerVersion} to ${localVersion}`
+              }
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+                'border-border bg-muted hover:bg-accent/10 text-foreground',
+                'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
+              )}
+            >
+              {thisRowIsUpdating ? 'Updating…' : 'Update'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onPing(peer.machineId)}
+              disabled={!canPing || thisRowIsPinging}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+                'border-border bg-muted hover:bg-accent/10 text-foreground',
+                'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
+              )}
+              title={
+                peer.isSelf
+                  ? 'Cannot ping self'
+                  : !peer.syncUrl
+                    ? 'Peer has no syncUrl configured'
+                    : 'Ping via /health'
+              }
+              data-testid={`ping-${peer.machineId}`}
+            >
+              {thisRowIsPinging ? 'Pinging…' : 'Ping'}
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(peer)}
+              disabled={peer.isSelf || thisRowIsDeleting}
+              data-testid={`delete-${peer.machineId}`}
+              title={peer.isSelf ? 'Cannot delete self' : 'Delete peer'}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+                'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20',
+                'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10',
+              )}
+            >
+              {thisRowIsDeleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </div>
+        </td>
+      </tr>
+      {isExpanded && (
+        <tr
+          className="border-t border-dashed border-border/60 bg-muted/10"
+          data-testid={`peer-row-detail-${peer.machineId}`}
+        >
+          <td colSpan={columnCount} className="px-4 py-3">
+            <PeerCursorDetail peer={peer} enabled={isExpanded} />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
+
+// ---------------------------------------------------------------------------
+// §33.8 — Cursor drill-down panel rendered when a peer row is expanded.
+// ---------------------------------------------------------------------------
+
+type PeerCursorDetailProps = {
+  peer: SyncPeer;
+  enabled: boolean;
+};
+
+/**
+ * Fetches the full `sync_peer_cursors` row for a peer and surfaces the
+ * last pull / ack timestamps alongside the raw cursor counters. The query is
+ * gated on the `enabled` flag so we only issue the request once the row has
+ * been expanded.
+ */
+function PeerCursorDetail({ peer, enabled }: PeerCursorDetailProps): React.JSX.Element {
+  const q = useQuery(syncPeerCursorsQuery(peer.machineId, enabled));
+
+  const lastPullAt = q.data?.lastPullAt ?? peer.lastPullAt ?? null;
+  const lastAckAt = q.data?.lastAckAt ?? peer.lastAckAt ?? null;
+
+  return (
+    <div
+      data-testid={`peer-cursor-detail-${peer.machineId}`}
+      className="flex flex-wrap items-start gap-x-6 gap-y-2 font-mono text-[11px] text-muted-foreground"
+    >
+      <CursorCell label="last pull" value={formatRelative(lastPullAt)} iso={lastPullAt} />
+      <CursorCell label="last ack" value={formatRelative(lastAckAt)} iso={lastAckAt} />
+      <CursorCell
+        label="pulled cursor"
+        value={q.data ? String(q.data.pulledCursor) : q.isLoading ? '…' : '—'}
+      />
+      <CursorCell
+        label="acked cursor"
+        value={q.data ? String(q.data.ackedCursor) : q.isLoading ? '…' : '—'}
+      />
+      {q.error && (
+        <span
+          data-testid={`peer-cursor-error-${peer.machineId}`}
+          className="text-red-400"
+          title={q.error.message}
+        >
+          Failed to load cursors
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CursorCell({
+  label,
+  value,
+  iso,
+}: {
+  label: string;
+  value: string;
+  iso?: string | null;
+}): React.JSX.Element {
+  return (
+    <span className="inline-flex flex-col">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground/60">{label}</span>
+      <span className="text-foreground" title={iso ?? undefined}>
+        {value}
+      </span>
+    </span>
+  );
+}
+
+// Re-export the cursor type so test helpers in nearby files can consume it.
+export type { SyncPeerCursors };
 
 // ---------------------------------------------------------------------------
 // Page
@@ -1053,6 +1172,11 @@ export function MeshPeersPage(): React.JSX.Element {
 
   const [driftBannerOpen, setDriftBannerOpen] = useState(false);
   const [driftBannerDismissed, setDriftBannerDismissed] = useState(false);
+  // §33.8: a single peer row can be expanded at a time to reveal cursor drill-down.
+  const [expandedPeerId, setExpandedPeerId] = useState<string | null>(null);
+  const toggleExpand = useCallback((machineId: string) => {
+    setExpandedPeerId((prev) => (prev === machineId ? null : machineId));
+  }, []);
 
   const peers = (peersData.data?.peers ?? []) as SyncPeerWithVersion[];
   const reachableCount = peers.filter((p) => p.syncStatus === 'reachable').length;
@@ -1288,6 +1412,8 @@ export function MeshPeersPage(): React.JSX.Element {
         </div>
       )}
 
+      {peers.length > 0 && <MeshHealthSummary peers={peers} />}
+
       {peers.length > 0 && (
         <div className="border border-border rounded-md overflow-hidden bg-card">
           <div className="overflow-x-auto">
@@ -1316,11 +1442,14 @@ export function MeshPeersPage(): React.JSX.Element {
                     onDelete={setPendingDelete}
                     onUpdate={setPendingUpdate}
                     onRetryReverse={handleRetryReverse}
+                    onToggleExpand={toggleExpand}
                     isPinging={pingMutation.isPending}
                     pingingId={pingingId}
                     deletingId={deletingId}
                     updatingId={updatingId}
                     reverseRetryingId={reverseRetryingId}
+                    isExpanded={expandedPeerId === peer.machineId}
+                    columnCount={9}
                   />
                 ))}
               </tbody>

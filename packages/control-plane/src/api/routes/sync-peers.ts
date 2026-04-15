@@ -119,9 +119,24 @@ type SyncPeerRow = {
   last_schema_ahead_version: number | null;
   last_schema_ahead_at: string | Date | null;
   schema_ahead_count: number | null;
+  /**
+   * Cursor timestamps derived from `sync_peer_cursors` (§33.8 mesh health).
+   * Populated by the listing endpoint via a LEFT JOIN; individual fetch
+   * helpers that do not join leave these `undefined`.
+   */
+  last_pull_at?: string | Date | null;
+  last_ack_at?: string | Date | null;
 };
 
 const SYNC_NODE_COLUMNS = sql`id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version, reverse_registration_status, reverse_registration_error, reverse_registration_at, last_schema_ahead_version, last_schema_ahead_at, schema_ahead_count`;
+
+/**
+ * Prefixed version of `SYNC_NODE_COLUMNS` used when the row is joined with
+ * `sync_peer_cursors`. Keeps column names stable (`id`, `hostname`, etc.) so
+ * `mapSyncPeerRow` can operate on either shape. The JOIN contributes
+ * `last_pull_at` and `last_ack_at` columns derived from `updated_at`.
+ */
+const SYNC_NODE_JOIN_COLUMNS = sql`sn.id, sn.hostname, sn.tailscale_ip, sn.sync_url, sn.role, sn.sync_status, sn.sync_interval_ms, sn.is_self, sn.public_key, sn.last_ping_error, sn.last_ping_status_code, sn.last_seen, sn.created_at, sn.peer_version, sn.peer_git_sha, sn.peer_schema_version, sn.reverse_registration_status, sn.reverse_registration_error, sn.reverse_registration_at, sn.last_schema_ahead_version, sn.last_schema_ahead_at, sn.schema_ahead_count, spc.updated_at AS last_pull_at, spc.updated_at AS last_ack_at`;
 
 type UpsertSyncPeerBody = {
   machineId?: string;
@@ -480,6 +495,11 @@ function mapSyncPeerRow(row: SyncPeerRow) {
     lastSchemaAheadVersion: row.last_schema_ahead_version ?? null,
     lastSchemaAheadAt: toIsoString(row.last_schema_ahead_at),
     schemaAheadCount: row.schema_ahead_count ?? 0,
+    // §33.8: cursor timestamps derived from sync_peer_cursors. Both fields
+    // share the single `updated_at` column — the /cursors endpoint returns
+    // the raw pulledCursor / ackedCursor values for deeper inspection.
+    lastPullAt: toIsoString(row.last_pull_at ?? null),
+    lastAckAt: toIsoString(row.last_ack_at ?? null),
   };
 }
 
@@ -814,15 +834,99 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
       },
     },
     async () => {
+      // §33.8: LEFT JOIN sync_peer_cursors so each peer row carries its
+      // `lastPullAt`/`lastAckAt` timestamps. The cursor row is keyed by the
+      // local node's own sync_nodes.id (`is_self = true`); peers without any
+      // pull/ack activity leave the joined columns NULL, which the UI renders
+      // as "stale (no sync in >10 min)".
       const result = await db.execute(sql`
-        SELECT ${SYNC_NODE_COLUMNS}
-        FROM sync_nodes
-        ORDER BY hostname ASC, id ASC
+        SELECT ${SYNC_NODE_JOIN_COLUMNS}
+        FROM sync_nodes sn
+        LEFT JOIN sync_peer_cursors spc
+          ON spc.remote_node_id = sn.id
+         AND spc.local_node_id = (
+           SELECT id FROM sync_nodes WHERE is_self = true LIMIT 1
+         )
+        ORDER BY sn.hostname ASC, sn.id ASC
       `);
 
       return {
         peers: extractRows<SyncPeerRow>(result).map(mapSyncPeerRow),
       };
+    },
+  );
+
+  /**
+   * §33.8 — Return the raw `sync_peer_cursors` row for a peer so the mesh
+   * health panel can reveal last-pull / last-ack state on row expansion.
+   *
+   * 404 when no peer exists with that id, 404 when no cursor row has been
+   * materialized yet (no sync has taken place), and 200 with the full row
+   * otherwise.
+   */
+  app.get<{ Params: { machineId: string } }>(
+    '/:machineId/cursors',
+    {
+      schema: {
+        tags: ['sync'],
+        summary: 'Return sync cursor state for a peer (§33.8)',
+      },
+    },
+    async (request, reply) => {
+      const { machineId } = request.params;
+      if (!isNonEmptyString(machineId)) {
+        return reply.code(400).send({
+          error: 'INVALID_MACHINE_ID',
+          message: 'A non-empty "machineId" path parameter is required',
+        });
+      }
+
+      const trimmed = machineId.trim();
+      const peer = await fetchPeer(db, trimmed);
+      if (!peer) {
+        return reply.code(404).send({
+          error: 'SYNC_PEER_NOT_FOUND',
+          message: `Sync peer '${trimmed}' not found`,
+        });
+      }
+
+      const cursorResult = await db.execute(sql`
+        SELECT local_node_id, remote_node_id, pulled_cursor, acked_cursor, updated_at
+        FROM sync_peer_cursors
+        WHERE remote_node_id = ${trimmed}
+          AND local_node_id = (
+            SELECT id FROM sync_nodes WHERE is_self = true LIMIT 1
+          )
+        LIMIT 1
+      `);
+      const [row] = extractRows<{
+        local_node_id: string;
+        remote_node_id: string;
+        pulled_cursor: number | string | null;
+        acked_cursor: number | string | null;
+        updated_at: string | Date | null;
+      }>(cursorResult);
+
+      if (!row) {
+        return reply.code(404).send({
+          error: 'SYNC_PEER_CURSORS_NOT_FOUND',
+          message: `No cursor state recorded for peer '${trimmed}' yet`,
+        });
+      }
+
+      const updatedAt = toIsoString(row.updated_at ?? null);
+      return reply.send({
+        machineId: trimmed,
+        localNodeId: row.local_node_id,
+        remoteNodeId: row.remote_node_id,
+        pulledCursor: Number(row.pulled_cursor ?? 0),
+        ackedCursor: Number(row.acked_cursor ?? 0),
+        // Both share the same `updated_at` column; the aliasing keeps the
+        // response compatible with the summary panel's peer payload.
+        lastPullAt: updatedAt,
+        lastAckAt: updatedAt,
+        updatedAt,
+      });
     },
   );
 
