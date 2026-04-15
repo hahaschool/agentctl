@@ -87,7 +87,7 @@ fi
 # Get commits since last tag (if any)
 LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 if [[ -n "$LAST_TAG" ]]; then
-  COMMITS=$(git log "${LAST_TAG}..HEAD" --oneline --no-merges 2>/dev/null | head -20)
+  COMMITS=$(git log "${LAST_TAG}..HEAD" --oneline --no-merges -20 2>/dev/null)
 else
   COMMITS=$(git log --oneline --no-merges -20 2>/dev/null)
 fi
