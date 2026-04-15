@@ -82,9 +82,34 @@ the step summary.
 Every use of the override is surfaced as a warning in the workflow's
 step summary so it shows up in post-incident review.
 
+## Migration gate
+
+Since §33.11, `deploy-fleet.yml` also runs a **migration gate** before
+`validate`. It reuses `.github/workflows/migration-check.yml` via
+`workflow_call` so the exact same destructive-operation detector that
+guards pull requests also guards rollouts.
+
+The gate blocks any deploy whose pending migrations contain destructive
+statements (`DROP TABLE`, `DROP COLUMN`, `TRUNCATE TABLE`, `DROP CONSTRAINT`,
+`ALTER COLUMN ... TYPE`). To unblock a *legitimate* destructive migration,
+the operator re-runs the workflow with
+`allow_destructive_migrations=true` in the workflow_dispatch dialog. The
+gate still logs every destructive statement to the workflow step summary
+for the audit trail even when bypassed.
+
+This complements §33.10's envelope schema-ahead rejection:
+
+- **Envelope compat gate (33.10)** handles *runtime drift between peers*
+  (a schema-ahead producer refuses to talk to a lagging consumer).
+- **Migration gate (33.11)** handles *deploy-time drift between the
+  source tree and the target fleet database* (a schema-ahead deploy
+  refuses to roll out until an operator confirms the destructive change
+  is intended).
+
 ## Related
 
 - Build workflow: `.github/workflows/build-images.yml`
 - Deploy workflow: `.github/workflows/deploy-fleet.yml`
+- Migration gate reusable workflow: `.github/workflows/migration-check.yml`
 - Roadmap section: [33.11](./ROADMAP.md#3311-fleet-rollout--peer-auto-update-p1-two-topology--in-progress)
 - Mesh schema/protocol compat (separate but adjacent trust gate): [MESH_COMPAT.md](./MESH_COMPAT.md)

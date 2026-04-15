@@ -74,6 +74,11 @@ on:
         required: false
         type: boolean
         default: false
+      allow_destructive_migrations:
+        description: "Allow deploy even when migration-check detects destructive schema operations (DROP/TRUNCATE/ALTER COLUMN TYPE). Gate still runs and logs the statements for the audit trail."
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-fleet
@@ -199,12 +204,81 @@ jobs:
         run: rm -rf ~/.ssh/deploy_key
 
   # =============================================================================
+  # Job 0.5: Migration gate (§33.11)
+  #
+  # Reuses `.github/workflows/migration-check.yml` to detect destructive
+  # schema operations in the migrations that are about to be rolled out.
+  # If destructive operations are detected, the deploy fails unless the
+  # operator explicitly sets `allow_destructive_migrations=true` in the
+  # workflow_dispatch dialog. See docs/FLEET_ATTESTATIONS.md#migration-gate.
+  # =============================================================================
+  migration-check:
+    name: Run migration-check (reusable)
+    needs: [bootstrap]
+    if: always() && (needs.bootstrap.result == 'success' || needs.bootstrap.result == 'skipped')
+    uses: ./.github/workflows/migration-check.yml
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      base_ref: main
+
+  migration-gate:
+    name: Migration gate
+    needs: [migration-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Enforce migration gate
+        env:
+          HAS_DESTRUCTIVE: ${{ needs.migration-check.outputs.has_destructive_migrations }}
+          OPERATIONS: ${{ needs.migration-check.outputs.destructive_operations }}
+          ALLOW_DESTRUCTIVE: ${{ inputs.allow_destructive_migrations }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## Migration gate (§33.11)"
+            echo ""
+            echo "- destructive_migrations_detected: \`${HAS_DESTRUCTIVE:-false}\`"
+            echo "- allow_destructive_migrations (operator input): \`${ALLOW_DESTRUCTIVE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${HAS_DESTRUCTIVE:-false}" != "true" ]; then
+            echo "No destructive migrations detected — gate is a no-op."
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "_No destructive schema operations detected in pending migrations._" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Always surface the destructive statements for the audit trail,
+          # regardless of whether the deploy proceeds.
+          {
+            echo ""
+            echo "### Destructive operations detected"
+            echo ""
+            # OPERATIONS is a multiline string pre-formatted as markdown bullets.
+            printf '%s\n' "${OPERATIONS}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${ALLOW_DESTRUCTIVE}" != "true" ]; then
+            echo "::error::Destructive migration(s) detected. Re-run deploy-fleet with allow_destructive_migrations=true to proceed, after confirming data-loss impact and backups."
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Gate failed** — re-run with \`allow_destructive_migrations=true\` to proceed." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "::warning::Destructive migration(s) detected but allow_destructive_migrations=true — proceeding. Ensure backups are verified."
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Gate bypassed** — \`allow_destructive_migrations=true\`. Ensure backups are verified before rollout completes." >> "$GITHUB_STEP_SUMMARY"
+
+  # =============================================================================
   # Job 1: Validate inventory and image availability
   # =============================================================================
   validate:
     name: Validate inventory & image
-    needs: [bootstrap]
-    if: always() && (needs.bootstrap.result == 'success' || needs.bootstrap.result == 'skipped')
+    needs: [bootstrap, migration-gate]
+    if: always() && (needs.bootstrap.result == 'success' || needs.bootstrap.result == 'skipped') && needs.migration-gate.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
