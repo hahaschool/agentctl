@@ -116,6 +116,7 @@ describe('DbAgentRegistry', () => {
       expect(insertedValues.status).toBe('online');
       expect(insertedValues.lastHeartbeat).toBeInstanceOf(Date);
       expect(insertedValues.capabilities).toEqual(machineData.capabilities);
+      expect(insertedValues.originNodeId).toBeNull();
     });
 
     it('uses onConflictDoUpdate to upsert on machine id', async () => {
@@ -126,6 +127,7 @@ describe('DbAgentRegistry', () => {
       const conflictArg = mockDb.onConflictDoUpdate.mock.calls[0][0];
       expect(conflictArg.set.hostname).toBe('ip-10-0-0-42');
       expect(conflictArg.set.status).toBe('online');
+      expect(conflictArg.set.originNodeId).toBeNull();
     });
 
     it('logs the registration', async () => {
@@ -340,6 +342,7 @@ describe('DbAgentRegistry', () => {
       status: 'online',
       lastHeartbeat: new Date('2025-06-01T12:00:00Z'),
       capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
+      originNodeId: null,
       createdAt: new Date('2025-01-01'),
     };
 
@@ -362,9 +365,26 @@ describe('DbAgentRegistry', () => {
         docker: true,
         maxConcurrentAgents: 4,
       });
+      expect(machine?.originNodeId).toBeNull();
+      expect(machine?.originNodeHostname).toBeNull();
       expect(db.select).toHaveBeenCalledOnce();
       expect(db.from).toHaveBeenCalledOnce();
       expect(db.where).toHaveBeenCalledOnce();
+    });
+
+    it('maps joined origin peer hostname when present', async () => {
+      const db = createMockDb([
+        {
+          machine: { ...machineRow, originNodeId: 'peer-macmini' },
+          originNodeHostname: 'pinnacle-macmini',
+        },
+      ]);
+      const reg = new DbAgentRegistry(db as unknown as Database, logger);
+
+      const machine = await reg.getMachine('machine-1');
+
+      expect(machine?.originNodeId).toBe('peer-macmini');
+      expect(machine?.originNodeHostname).toBe('pinnacle-macmini');
     });
 
     it('returns undefined when machine does not exist', async () => {
@@ -1001,6 +1021,7 @@ describe('DbAgentRegistry', () => {
           },
         ],
       },
+      originNodeId: null,
       createdAt: new Date('2025-01-01'),
     };
 
@@ -1017,8 +1038,29 @@ describe('DbAgentRegistry', () => {
         'direct',
       ]);
       expect(machines[0].capabilities.defaultExecutionEnvironment).toBe('direct');
+      expect(machines[0].originNodeId).toBeNull();
+      expect(machines[0].originNodeHostname).toBeNull();
       expect(db.select).toHaveBeenCalledOnce();
       expect(db.from).toHaveBeenCalledOnce();
+    });
+
+    it('returns synced machine provenance from the joined peer registry', async () => {
+      const db = createMockDb([
+        {
+          machine: { ...machineRow, id: 'remote-machine', originNodeId: 'peer-laptop' },
+          originNodeHostname: 'laptop-cp',
+        },
+      ]);
+      const reg = new DbAgentRegistry(db as unknown as Database, logger);
+
+      const machines = await reg.listMachines();
+
+      expect(machines).toHaveLength(1);
+      expect(machines[0]).toMatchObject({
+        id: 'remote-machine',
+        originNodeId: 'peer-laptop',
+        originNodeHostname: 'laptop-cp',
+      });
     });
 
     it('returns empty array when no machines exist', async () => {

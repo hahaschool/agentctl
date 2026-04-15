@@ -213,6 +213,42 @@ describe('Agent routes — /api/agents', () => {
     });
   });
 
+  it('returns machine provenance fields from the database-backed registry', async () => {
+    const dbRegistry = createFullMockDbRegistry({
+      listMachines: vi.fn().mockResolvedValue([
+        makeMachine({
+          id: 'remote-machine',
+          originNodeId: 'peer-macmini',
+          originNodeHostname: 'pinnacle-macmini',
+        }),
+      ]),
+    });
+    const dbBackedApp = await createServer({
+      logger,
+      registry: new AgentRegistry(),
+      dbRegistry,
+    });
+    await dbBackedApp.ready();
+
+    try {
+      const response = await dbBackedApp.inject({
+        method: 'GET',
+        url: '/api/agents',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual([
+        expect.objectContaining({
+          id: 'remote-machine',
+          originNodeId: 'peer-macmini',
+          originNodeHostname: 'pinnacle-macmini',
+        }),
+      ]);
+    } finally {
+      await dbBackedApp.close();
+    }
+  });
+
   // -------------------------------------------------------------------------
   // POST /api/agents/:id/heartbeat — machine heartbeat
   // -------------------------------------------------------------------------

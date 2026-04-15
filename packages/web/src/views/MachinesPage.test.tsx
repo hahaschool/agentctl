@@ -132,6 +132,8 @@ function createMachine(overrides?: Partial<Machine>): Machine {
     arch: 'x64',
     status: 'online',
     lastHeartbeat: new Date().toISOString(),
+    originNodeId: null,
+    originNodeHostname: null,
     capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
     createdAt: new Date().toISOString(),
     ...overrides,
@@ -318,6 +320,57 @@ describe('MachinesPage', () => {
     renderMachines();
     await waitFor(() => {
       expect(screen.getByTestId('copyable-text')).toBeDefined();
+    });
+  });
+
+  it('renders Local provenance badge for local machine rows', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([createMachine({ hostname: 'local-cp' })]),
+    });
+
+    renderMachines();
+
+    await waitFor(() => {
+      expect(screen.getByText('Local')).toBeDefined();
+    });
+  });
+
+  it('renders synced provenance badge with peer hostname when available', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([
+        createMachine({
+          hostname: 'remote-worker',
+          originNodeId: 'peer-macmini',
+          originNodeHostname: 'pinnacle-macmini',
+        }),
+      ]),
+    });
+
+    renderMachines();
+
+    await waitFor(() => {
+      expect(screen.getByText('Synced from pinnacle-macmini')).toBeDefined();
+    });
+  });
+
+  it('falls back to origin node id when peer hostname is unavailable', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi.fn().mockResolvedValue([
+        createMachine({
+          hostname: 'remote-worker',
+          originNodeId: 'peer-laptop',
+          originNodeHostname: null,
+        }),
+      ]),
+    });
+
+    renderMachines();
+
+    await waitFor(() => {
+      expect(screen.getByText('Synced from peer-laptop')).toBeDefined();
     });
   });
 

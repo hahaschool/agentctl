@@ -12,7 +12,18 @@ import { and, count, desc, eq, gte, lte, notInArray, sql } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
-import { agentActions, agentRuns, agents, machines, rcSessions } from '../db/index.js';
+import { agentActions, agentRuns, agents, machines, rcSessions, syncNodes } from '../db/index.js';
+
+type MachineQueryRow = typeof machines.$inferSelect | JoinedMachineQueryRow;
+
+type JoinedMachineQueryRow = {
+  machine: typeof machines.$inferSelect;
+  originNodeHostname: string | null;
+};
+
+function isJoinedMachineQueryRow(row: MachineQueryRow): row is JoinedMachineQueryRow {
+  return 'machine' in row && row.machine != null;
+}
 
 type CreateAgentData = {
   machineId: string;
@@ -157,6 +168,7 @@ export class DbAgentRegistry {
         status: 'online',
         lastHeartbeat: new Date(),
         capabilities,
+        originNodeId: null,
       })
       .onConflictDoUpdate({
         target: machines.id,
@@ -168,6 +180,7 @@ export class DbAgentRegistry {
           status: 'online',
           lastHeartbeat: new Date(),
           capabilities,
+          originNodeId: null,
         },
       });
 
@@ -198,9 +211,15 @@ export class DbAgentRegistry {
   }
 
   async listMachines(): Promise<Machine[]> {
-    const rows = await this.db.select().from(machines);
+    const rows = await this.db
+      .select({
+        machine: machines,
+        originNodeHostname: syncNodes.hostname,
+      })
+      .from(machines)
+      .leftJoin(syncNodes, eq(machines.originNodeId, syncNodes.id));
 
-    return rows.map((row) => this.toMachine(row));
+    return rows.map((row) => this.toMachineQueryRow(row));
   }
 
   async findOnlineMachine(): Promise<Machine | null> {
@@ -210,17 +229,24 @@ export class DbAgentRegistry {
       .where(eq(machines.status, 'online'))
       .limit(1);
 
-    return machine ? this.toMachine(machine) : null;
+    return machine ? this.toMachine(machine, null) : null;
   }
 
   async getMachine(machineId: string): Promise<Machine | undefined> {
-    const rows = await this.db.select().from(machines).where(eq(machines.id, machineId));
+    const rows = await this.db
+      .select({
+        machine: machines,
+        originNodeHostname: syncNodes.hostname,
+      })
+      .from(machines)
+      .leftJoin(syncNodes, eq(machines.originNodeId, syncNodes.id))
+      .where(eq(machines.id, machineId));
 
     if (rows.length === 0) {
       return undefined;
     }
 
-    return this.toMachine(rows[0]);
+    return this.toMachineQueryRow(rows[0]);
   }
 
   // ---------------------------------------------------------------------------
@@ -971,7 +997,15 @@ export class DbAgentRegistry {
   // Row-to-domain mappers
   // ---------------------------------------------------------------------------
 
-  private toMachine(row: typeof machines.$inferSelect): Machine {
+  private toMachineQueryRow(row: MachineQueryRow): Machine {
+    if (isJoinedMachineQueryRow(row)) {
+      return this.toMachine(row.machine, row.originNodeHostname);
+    }
+
+    return this.toMachine(row, null);
+  }
+
+  private toMachine(row: typeof machines.$inferSelect, originNodeHostname: string | null): Machine {
     return {
       id: row.id,
       hostname: row.hostname,
@@ -980,6 +1014,8 @@ export class DbAgentRegistry {
       arch: row.arch as Machine['arch'],
       status: (row.status ?? 'online') as Machine['status'],
       lastHeartbeat: row.lastHeartbeat,
+      originNodeId: row.originNodeId ?? null,
+      originNodeHostname: originNodeHostname ?? null,
       capabilities: (row.capabilities ?? {
         gpu: false,
         docker: false,
