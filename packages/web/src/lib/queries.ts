@@ -100,6 +100,7 @@ export const queryKeys = {
   metrics: ['metrics'] as const,
   accounts: ['accounts'] as const,
   accountDefaults: ['account-defaults'] as const,
+  meshAutoUpdate: ['mesh-auto-update'] as const,
   runtimeConfigDefaults: ['runtime-config', 'defaults'] as const,
   runtimeConfigDrift: (machineId?: string) =>
     machineId
@@ -483,6 +484,25 @@ export function runtimeConfigDriftQuery(machineId?: string) {
     queryFn: () => api.getRuntimeConfigDrift(machineId),
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
+  });
+}
+
+export function meshAutoUpdateQuery() {
+  return queryOptions({
+    queryKey: queryKeys.meshAutoUpdate,
+    queryFn: api.getAutoUpdateStatus,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useToggleMeshAutoUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.toggleAutoUpdate,
+    onSuccess: (status) => {
+      qc.setQueryData(queryKeys.meshAutoUpdate, status);
+    },
   });
 }
 

@@ -264,6 +264,12 @@ export type {
 } from './memory.js';
 export { DEFAULT_INJECTION_BUDGET } from './memory.js';
 export type {
+  AutoUpdateDryRunEvent,
+  AutoUpdateLastRun,
+  AutoUpdateStatus,
+  AutoUpdateToggleRequest,
+} from './mesh-auto-update.js';
+export type {
   DeactivateMobilePushDeviceResponse,
   ListMobilePushDevicesResponse,
   MobilePushDevice,

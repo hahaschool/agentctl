@@ -93,6 +93,12 @@ vi.mock('./settings/WorkersSyncSection', () => ({
   WorkersSyncSection: () => <div data-testid="workers-sync-section">WorkersSyncSection</div>,
 }));
 
+vi.mock('./settings/MeshAutoUpdateSection', () => ({
+  MeshAutoUpdateSection: () => (
+    <div data-testid="mesh-auto-update-section">MeshAutoUpdateSection</div>
+  ),
+}));
+
 import { SettingsView } from './SettingsView';
 
 function renderSettings() {

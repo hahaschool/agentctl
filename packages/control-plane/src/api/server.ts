@@ -87,6 +87,7 @@ import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
+import { meshAutoUpdateRoutes } from './routes/mesh-auto-update.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { mobilePushDeviceRoutes } from './routes/mobile-push-devices.js';
 import { notificationPreferenceRoutes } from './routes/notification-preferences.js';
@@ -834,6 +835,12 @@ export async function createServer({
     await app.register(syncDiscoverRoutes, {
       prefix: '/api/sync',
       logger: logger.child({ component: 'sync-discover' }),
+    });
+
+    // Mesh auto-update scheduler + dry-run stream (§33.11 settings panel).
+    await app.register(meshAutoUpdateRoutes, {
+      prefix: '/api/mesh',
+      logger: logger.child({ component: 'mesh-auto-update' }),
     });
 
     // Mesh sync conflict resolution routes
