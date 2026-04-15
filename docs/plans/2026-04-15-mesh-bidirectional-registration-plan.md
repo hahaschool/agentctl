@@ -1,6 +1,6 @@
 # Mesh Bidirectional Registration Plan
 
-**Status:** Planned
+**Status:** In Progress — reverse-registration endpoint and machine provenance landed
 **Roadmap:** 33.8 Mesh Bidirectional Registration + Cross-Node Visibility
 **Created:** 2026-04-15
 
@@ -10,31 +10,33 @@ The 2026-04-15 beta mesh follow-up showed that adding `pinnacle-macmini` on the 
 
 The sync protocol can pull changes once peers exist on both sides; the missing piece is bidirectional registration and clear UI feedback when the reverse registration is absent.
 
+## Delivered
+
+1. Signed reverse-registration endpoint *(PR #552)*.
+   - `POST /api/sync/peers/register` is route-limited before bootstrap auth.
+   - The endpoint requires an explicit registration token and a signed
+     `register-peer` envelope.
+   - Accepted registrations upsert the reverse peer row as `sync_status = 'unknown'`.
+
+2. Machine-row provenance and badges *(PR #554)*.
+   - `machines.origin_node_id` records remote row origin.
+   - Sync apply stamps missing remote provenance from the source node.
+   - Machine list/detail responses resolve the origin node hostname.
+   - `/machines` renders local vs synced-from-peer badges.
+
 ## Scope
 
-1. Add a signed reverse-registration endpoint.
-   - Implement `POST /api/sync/peers/register`.
-   - Keep the same rate-limit posture as other peer write routes, but do not use the existing sync-route auth hook as the sole gate: it verifies against already-known `sync_nodes` peer keys, while this endpoint exists for the first registration of an unknown peer.
-   - Pick and document one bootstrap trust model before implementation, such as Tailscale ACL/tag-gated TOFU with fingerprint confirmation, an enrollment token, or target-initiated key confirmation.
-   - Validate a `register-peer` envelope signed by the caller's Ed25519 key after the bootstrap trust check accepts the key.
-   - Have node A include its own `/health` identity and proposed peer fields in the signed envelope; the target may corroborate A's Tailscale IP from request metadata or `tailscale status --json`, but must not infer A's identity from the target's own `/health` response.
-
-2. Auto-register on peer add.
+1. Auto-register on peer add.
    - After node A creates or updates a peer row, call the target's `/api/sync/peers/register`.
    - Upsert the reverse row on the target with `sync_status = 'unknown'` until the target's own ping succeeds.
    - Return the target's identity to node A so missing public-key fields can be filled safely.
 
-3. Make one-way registration visible.
+2. Make one-way registration visible.
    - If reverse registration fails, log a warning and surface a UI banner that reverse registration may be incomplete.
    - Add a per-row "Register this CP with peer" action on `/mesh-peers` for manual retry after a peer comes online or after key rotation.
    - This action can reuse 33.7 edit/probe affordances if they have landed, but the P0 registration endpoint and warning state do not depend on the full 33.7 UX overhaul.
 
-4. Add explicit machine sync provenance.
-   - Inspect the current `machines` schema before implementation; do not assume `origin_node_id` exists.
-   - Add a provenance field such as `origin_node_id` or `synced_from_machine_id` if needed.
-   - Preserve local machine rows as `Local` and render synced rows as `Synced from <peer hostname>` on `/machines`.
-
-5. Prove end-to-end cross-node visibility.
+3. Prove end-to-end cross-node visibility.
    - Add an integration or Playwright-backed two-node fixture that registers A with B, upserts a machine on A, runs at least one sync tick, and asserts the machine appears on B with provenance.
    - Add a failure-path case where the handshake is unavailable and the UI shows the one-way warning.
 

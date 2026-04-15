@@ -1,15 +1,11 @@
-import { readdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import type { ChangeLogEntry, MeshEnvelopeMeta } from '@agentctl/shared';
 import { MESH_PROTOCOL_MAX, MESH_PROTOCOL_MIN, MESH_PROTOCOL_VERSION } from '@agentctl/shared';
 import type { Logger } from 'pino';
+import { getSchemaVersion } from '../build-info.js';
 
 /**
  * Typed error raised when an inbound mesh envelope carries a `schemaVersion`
- * that is more than one ahead of the local node's applied migration count.
+ * that is more than one ahead of the local node's shipped migration version.
  *
  * The apply path rejects rather than attempting to half-apply a change whose
  * shape we cannot guarantee we understand. See docs/MESH_COMPAT.md.
@@ -51,62 +47,19 @@ export class MeshProtocolUnsupportedError extends Error {
   }
 }
 
-/**
- * Resolve the control-plane package root so we can count migrations in
- * `drizzle/` regardless of whether we are running from `src/` (tsx dev) or
- * `dist/` (production).
- */
-function resolvePackageRoot(): string {
-  // Walk up from this file until we find a directory that contains a
-  // `drizzle` folder. Works for both src/sync/mesh-compat.ts and
-  // dist/sync/mesh-compat.js.
-  const here = dirname(fileURLToPath(import.meta.url));
-  let current = here;
-  for (let i = 0; i < 5; i++) {
-    try {
-      readdirSync(resolve(current, 'drizzle'));
-      return current;
-    } catch {
-      // fall through to parent
-    }
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
-
-  // Fallback: use createRequire on the control-plane package.json.
-  try {
-    const require = createRequire(import.meta.url);
-    const pkgPath = require.resolve('@agentctl/control-plane/package.json');
-    return dirname(pkgPath);
-  } catch {
-    return here;
-  }
-}
-
 let cachedSchemaVersion: number | null = null;
 
 /**
- * Return the local `schemaVersion`, defined as the count of `.sql` files in
- * the control-plane `drizzle/` directory. This matches the roadmap 33.9
- * definition ("highest applied migration sequence number") while avoiding a
- * database round-trip and any touch of `drizzle/` itself.
- *
- * The value is cached for the life of the process; migration files never
- * change at runtime.
+ * Return the local `schemaVersion`, defined as the highest numeric migration
+ * prefix shipped with this build. This matches `/health` and avoids treating
+ * duplicate or sparse migration numbers as valid schema progress.
  */
 export function getLocalSchemaVersion(): number {
   if (cachedSchemaVersion !== null) {
     return cachedSchemaVersion;
   }
 
-  const root = resolvePackageRoot();
-  try {
-    const entries = readdirSync(resolve(root, 'drizzle'));
-    cachedSchemaVersion = entries.filter((name) => name.endsWith('.sql')).length;
-  } catch {
-    cachedSchemaVersion = 0;
-  }
+  cachedSchemaVersion = getSchemaVersion();
   return cachedSchemaVersion;
 }
 
