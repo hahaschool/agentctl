@@ -16,6 +16,8 @@ function makePeerRow(overrides: Record<string, unknown> = {}) {
     sync_interval_ms: 30000,
     is_self: false,
     public_key: 'peer-public-key',
+    last_ping_error: null,
+    last_ping_status_code: null,
     last_seen: null,
     created_at: '2026-04-01T00:00:00.000Z',
     ...overrides,
@@ -236,12 +238,20 @@ describe('syncPeersRoutes', () => {
       })
       .mockResolvedValueOnce({
         rows: [
-          makePeerRow({ id: 'machine-2', sync_status: 'unreachable', sync_interval_ms: 60000 }),
+          makePeerRow({
+            id: 'machine-2',
+            sync_status: 'unreachable',
+            sync_interval_ms: 60000,
+            last_ping_error: 'connect_refused',
+          }),
         ],
       });
-    globalThis.fetch = vi
-      .fn()
-      .mockRejectedValue(new Error('connection refused')) as typeof globalThis.fetch;
+    const refused = Object.assign(new Error('fetch failed'), {
+      cause: Object.assign(new Error('connect ECONNREFUSED 100.64.0.2:8080'), {
+        code: 'ECONNREFUSED',
+      }),
+    });
+    globalThis.fetch = vi.fn().mockRejectedValue(refused) as typeof globalThis.fetch;
 
     const response = await app.inject({
       method: 'POST',
@@ -252,19 +262,153 @@ describe('syncPeersRoutes', () => {
     expect(response.json()).toMatchObject({
       ok: true,
       status: 'unreachable',
-      peer: { machineId: 'machine-2', syncStatus: 'unreachable', syncIntervalMs: 60000 },
+      pingError: { category: 'connect_refused', httpStatusCode: null },
+      peer: {
+        machineId: 'machine-2',
+        syncStatus: 'unreachable',
+        syncIntervalMs: 60000,
+        lastPingError: 'connect_refused',
+        lastPingStatusCode: null,
+      },
     });
   });
 
-  it('does not fetch when pinging a peer with an unsafe stored syncUrl', async () => {
-    execute.mockResolvedValueOnce({
-      rows: [
-        makePeerRow({
-          id: 'machine-2',
-          sync_url: 'http://169.254.169.254/latest/meta-data',
-        }),
-      ],
+  it('classifies TLS handshake failures from scheme mismatch as tls_handshake', async () => {
+    execute
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_url: 'https://100.64.0.2:8080',
+            sync_status: 'reachable',
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_url: 'https://100.64.0.2:8080',
+            sync_status: 'unreachable',
+            sync_interval_ms: 60000,
+            last_ping_error: 'tls_handshake',
+          }),
+        ],
+      });
+    const tlsError = Object.assign(new Error('fetch failed'), {
+      cause: Object.assign(new Error('ssl3_get_record:wrong version number'), { code: 'EPROTO' }),
     });
+    globalThis.fetch = vi.fn().mockRejectedValue(tlsError) as typeof globalThis.fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-2/ping',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      status: 'unreachable',
+      pingError: { category: 'tls_handshake', httpStatusCode: null },
+      peer: { machineId: 'machine-2', lastPingError: 'tls_handshake' },
+    });
+  });
+
+  it('classifies ping timeouts as timeout', async () => {
+    execute
+      .mockResolvedValueOnce({
+        rows: [makePeerRow({ id: 'machine-2', sync_status: 'reachable' })],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_status: 'unreachable',
+            sync_interval_ms: 60000,
+            last_ping_error: 'timeout',
+          }),
+        ],
+      });
+    const timeout = Object.assign(new Error('The operation was aborted due to timeout'), {
+      name: 'TimeoutError',
+    });
+    globalThis.fetch = vi.fn().mockRejectedValue(timeout) as typeof globalThis.fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-2/ping',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      status: 'unreachable',
+      pingError: { category: 'timeout', httpStatusCode: null },
+      peer: { machineId: 'machine-2', lastPingError: 'timeout' },
+    });
+  });
+
+  it('persists non-2xx health responses as http_status with status code', async () => {
+    execute
+      .mockResolvedValueOnce({
+        rows: [makePeerRow({ id: 'machine-2', sync_status: 'reachable' })],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_status: 'unreachable',
+            sync_interval_ms: 60000,
+            last_ping_error: 'http_status',
+            last_ping_status_code: 503,
+          }),
+        ],
+      });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: async () => ({ status: 'degraded' }),
+    }) as typeof globalThis.fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-2/ping',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      status: 'unreachable',
+      pingError: { category: 'http_status', httpStatusCode: 503 },
+      peer: {
+        machineId: 'machine-2',
+        lastPingError: 'http_status',
+        lastPingStatusCode: 503,
+      },
+    });
+  });
+
+  it('does not fetch and persists bad_url when pinging a peer with an unsafe stored syncUrl', async () => {
+    execute
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_url: 'http://169.254.169.254/latest/meta-data',
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_url: 'http://169.254.169.254/latest/meta-data',
+            sync_status: 'unreachable',
+            sync_interval_ms: 60000,
+            last_ping_error: 'bad_url',
+          }),
+        ],
+      });
     globalThis.fetch = vi.fn() as typeof globalThis.fetch;
 
     const response = await app.inject({
@@ -273,8 +417,63 @@ describe('syncPeersRoutes', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: 'INVALID_SYNC_URL' });
+    expect(response.json()).toMatchObject({
+      error: 'INVALID_SYNC_URL',
+      peer: {
+        machineId: 'machine-2',
+        syncStatus: 'unreachable',
+        lastPingError: 'bad_url',
+      },
+    });
     expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears persisted ping errors after a successful health check', async () => {
+    execute
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_status: 'unreachable',
+            sync_interval_ms: 60000,
+            last_ping_error: 'timeout',
+          }),
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          makePeerRow({
+            id: 'machine-2',
+            sync_status: 'reachable',
+            sync_interval_ms: 30000,
+            last_ping_error: null,
+            last_ping_status_code: null,
+          }),
+        ],
+      });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'ok' }),
+    }) as typeof globalThis.fetch;
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-2/ping',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      status: 'reachable',
+      pingError: null,
+      peer: {
+        machineId: 'machine-2',
+        syncStatus: 'reachable',
+        lastPingError: null,
+        lastPingStatusCode: null,
+      },
+    });
   });
 });
