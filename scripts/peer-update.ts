@@ -7,9 +7,12 @@
 //   npx tsx scripts/peer-update.ts ...
 //
 // Algorithm (roadmap §33.11 — PM2 mesh topology):
-//   1. Resolve target tag (gh api latest release, or --tag flag)
+//   1. Resolve target tag (gh api latest release, or --tag flag,
+//      or previously-applied tag from update-history.json on --rollback)
 //   2. Verify release asset signature via `gh attestation verify`
-//      (skipped with warning if attestations are not enabled on the repo)
+//      (skipped with warning if attestations are not enabled on the repo;
+//       skipped entirely on --rollback because the target was previously
+//       verified-applied on this node)
 //   3. git fetch --tags && git checkout <tag>   (skipped if already on tag)
 //   4. ./scripts/env-migrate.sh mesh
 //   5. pnpm build
@@ -140,6 +143,8 @@ export type CliFlags = {
   readonly help: boolean;
 };
 
+export type UpdateMode = 'forward' | 'rollback';
+
 export type HistoryEntry = {
   readonly startedAt: string;
   readonly finishedAt: string;
@@ -148,6 +153,8 @@ export type HistoryEntry = {
   readonly success: boolean;
   readonly errorMessage?: string;
   readonly dryRun: boolean;
+  readonly mode?: UpdateMode;
+  readonly rolledBackFrom?: string;
 };
 
 export type UpdateOptions = {
@@ -170,6 +177,8 @@ export type UpdateResult = {
   readonly attestationVerified: boolean;
   readonly attestationSkipped: boolean;
   readonly rolledBack: boolean;
+  readonly mode: UpdateMode;
+  readonly rolledBackFrom?: string;
   readonly errorCode?: string;
   readonly errorMessage?: string;
   readonly steps: readonly StepRecord[];
@@ -307,14 +316,17 @@ export function readHistory(filePath: string = HISTORY_FILE): HistoryEntry[] {
 function isHistoryEntry(value: unknown): value is HistoryEntry {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  return (
+  const coreOk =
     typeof v.startedAt === 'string' &&
     typeof v.finishedAt === 'string' &&
     (v.fromTag === null || typeof v.fromTag === 'string') &&
     typeof v.toTag === 'string' &&
     typeof v.success === 'boolean' &&
-    typeof v.dryRun === 'boolean'
-  );
+    typeof v.dryRun === 'boolean';
+  if (!coreOk) return false;
+  if (v.mode !== undefined && v.mode !== 'forward' && v.mode !== 'rollback') return false;
+  if (v.rolledBackFrom !== undefined && typeof v.rolledBackFrom !== 'string') return false;
+  return true;
 }
 
 export function appendHistory(
@@ -348,6 +360,16 @@ export function findLastSuccessfulTag(
     }
   }
   return null;
+}
+
+/**
+ * Returns true iff `tag` appears in `history` as a previously-successful,
+ * non-dry-run entry — i.e. the node applied that tag at least once with
+ * a passing attestation verification. Rollback may skip re-verifying
+ * attestations only when this returns true for the target tag.
+ */
+export function hasSuccessfulEntryForTag(history: readonly HistoryEntry[], tag: string): boolean {
+  return history.some((entry) => entry.success && !entry.dryRun && entry.toTag === tag);
 }
 
 // ---------------------------------------------------------------------------
@@ -821,13 +843,26 @@ export async function runPeerUpdate(options: UpdateOptions): Promise<UpdateResul
   const ctx: StepContext = { rootDir, dryRun: flags.dryRun, logger, steps };
 
   const fromTag = await currentTag(rootDir).catch(() => null);
+  const mode: UpdateMode = flags.rollback ? 'rollback' : 'forward';
+  const rolledBackFrom = flags.rollback ? (fromTag ?? undefined) : undefined;
 
   // --rollback picks the previous successful tag from history, unless --tag overrides.
   let targetTag: string;
   try {
     if (flags.rollback) {
+      const history = readHistory(historyFile);
       const explicit = flags.tag;
       if (explicit) {
+        // Explicit --tag under --rollback: the target MUST have been
+        // successfully applied on this node before so we can legitimately
+        // skip the fresh attestation verification.
+        if (!hasSuccessfulEntryForTag(history, explicit)) {
+          throw new PeerUpdateError(
+            'ROLLBACK_TARGET_NOT_IN_HISTORY',
+            `Rollback target ${explicit} has no prior successful entry in update history`,
+            { tag: explicit, historyFile },
+          );
+        }
         targetTag = explicit;
         recordStep(ctx, {
           name: 'Resolve rollback tag',
@@ -836,7 +871,6 @@ export async function runPeerUpdate(options: UpdateOptions): Promise<UpdateResul
           message: `--tag override: ${explicit}`,
         });
       } else {
-        const history = readHistory(historyFile);
         const previous = findLastSuccessfulTag(history, fromTag ?? undefined);
         if (!previous) {
           throw new PeerUpdateError(
@@ -866,6 +900,8 @@ export async function runPeerUpdate(options: UpdateOptions): Promise<UpdateResul
       attestationVerified: false,
       attestationSkipped: false,
       rolledBack: false,
+      mode,
+      rolledBackFrom,
       steps,
     });
     appendHistory(toHistoryEntry(result), historyFile);
@@ -883,6 +919,9 @@ export async function runPeerUpdate(options: UpdateOptions): Promise<UpdateResul
       attestationVerified = attestation.verified;
       attestationSkipped = attestation.skipped;
     } else {
+      logger.warn(
+        `Skipping attestation verification: ${targetTag} was previously verified-applied on this node (rollback path)`,
+      );
       recordStep(ctx, {
         name: 'Verify attestation',
         ok: true,
@@ -920,6 +959,8 @@ export async function runPeerUpdate(options: UpdateOptions): Promise<UpdateResul
       attestationVerified,
       attestationSkipped,
       rolledBack,
+      mode,
+      rolledBackFrom,
       steps,
     });
     appendHistory(toHistoryEntry(result), historyFile);
@@ -937,6 +978,8 @@ export async function runPeerUpdate(options: UpdateOptions): Promise<UpdateResul
     attestationVerified,
     attestationSkipped,
     rolledBack,
+    mode,
+    rolledBackFrom,
     steps,
   };
   appendHistory(toHistoryEntry(result), historyFile);
@@ -944,7 +987,8 @@ export async function runPeerUpdate(options: UpdateOptions): Promise<UpdateResul
 }
 
 function toHistoryEntry(result: UpdateResult): HistoryEntry {
-  return {
+  // Build the entry immutably — never mutate the input result.
+  const base: HistoryEntry = {
     startedAt: result.startedAt,
     finishedAt: result.finishedAt,
     fromTag: result.fromTag,
@@ -952,7 +996,9 @@ function toHistoryEntry(result: UpdateResult): HistoryEntry {
     success: result.success,
     errorMessage: result.errorMessage,
     dryRun: result.dryRun,
+    mode: result.mode,
   };
+  return result.rolledBackFrom ? { ...base, rolledBackFrom: result.rolledBackFrom } : base;
 }
 
 function errorResult(
@@ -966,6 +1012,8 @@ function errorResult(
     attestationVerified: boolean;
     attestationSkipped: boolean;
     rolledBack: boolean;
+    mode: UpdateMode;
+    rolledBackFrom: string | undefined;
     steps: readonly StepRecord[];
   },
 ): UpdateResult {
@@ -992,9 +1040,15 @@ ${bold('USAGE')}
   npx tsx scripts/peer-update.ts [options]
 
 ${bold('OPTIONS')}
-  ${cyan('--tag <tag>')}        Use an explicit release tag (skips gh api lookup)
+  ${cyan('--tag <tag>')}        Use an explicit release tag (skips gh api lookup).
+                     Forward-roll keeps attestation verification.
+                     Combined with ${cyan('--rollback')}, the tag MUST already appear
+                     in update-history.json as a previously-successful entry.
   ${cyan('--dry-run')}          Print each step without executing mutations
-  ${cyan('--rollback')}         Restore the last successful tag from update-history.json
+  ${cyan('--rollback')}         Restore a previously-applied tag. With no ${cyan('--tag')},
+                     resolves to the last successful non-dry-run entry.
+                     Skips fresh attestation verification because the target
+                     was already verified during its forward-roll.
   ${cyan('--no-attestation')}   Skip ${cyan('gh attestation verify')} (opt-out only)
   ${cyan('--help, -h')}         Show this help message
 
@@ -1010,6 +1064,9 @@ ${bold('EXAMPLES')}
 
   ${dim('# Roll back to the previously-successful tag')}
   pnpm peer-update --rollback
+
+  ${dim('# Roll back to a specific previously-applied tag (attestation skipped)')}
+  pnpm peer-update --tag v0.3.3 --rollback
 `;
   process.stdout.write(out);
 }

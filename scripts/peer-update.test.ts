@@ -9,6 +9,7 @@ import {
   type FetchFn,
   findLastSuccessfulTag,
   type HistoryEntry,
+  hasSuccessfulEntryForTag,
   PeerUpdateError,
   parseArgs,
   readHistory,
@@ -156,6 +157,39 @@ describe('history file', () => {
     ];
     expect(findLastSuccessfulTag(entries)).toBe('v1.0.0');
     expect(findLastSuccessfulTag(entries, 'v1.0.0')).toBeNull();
+  });
+
+  it('hasSuccessfulEntryForTag ignores dry-run + failed entries', () => {
+    const entries: HistoryEntry[] = [
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: null,
+        toTag: 'v0.3.2',
+        success: true,
+        dryRun: true, // dry-run must be ignored
+      },
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: null,
+        toTag: 'v0.3.3',
+        success: false,
+        dryRun: false,
+      },
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: null,
+        toTag: 'v0.3.4',
+        success: true,
+        dryRun: false,
+      },
+    ];
+    expect(hasSuccessfulEntryForTag(entries, 'v0.3.2')).toBe(false);
+    expect(hasSuccessfulEntryForTag(entries, 'v0.3.3')).toBe(false);
+    expect(hasSuccessfulEntryForTag(entries, 'v0.3.4')).toBe(true);
+    expect(hasSuccessfulEntryForTag(entries, 'v9.9.9')).toBe(false);
   });
 });
 
@@ -378,6 +412,230 @@ describe('runPeerUpdate full flow', () => {
 
     expect(result.success).toBe(false);
     expect(result.errorCode).toBe('NO_ROLLBACK_TARGET');
+  });
+
+  it('--rollback --tag targets the explicit tag iff it is in history', async () => {
+    const history = makeTmpHistory();
+    appendHistory(
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: null,
+        toTag: 'v0.2.9',
+        success: true,
+        dryRun: false,
+      },
+      history,
+    );
+    appendHistory(
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: 'v0.2.9',
+        toTag: 'v0.3.0',
+        success: true,
+        dryRun: false,
+      },
+      history,
+    );
+    appendHistory(
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: 'v0.3.0',
+        toTag: 'v0.3.1',
+        success: true,
+        dryRun: false,
+      },
+      history,
+    );
+
+    const mock = makeMockExec();
+    mock.impl = async (cmd, args) => {
+      if (cmd === 'git' && args[0] === 'describe') {
+        return { stdout: 'v0.3.1\n', stderr: '', exitCode: 0 };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    };
+    // Target is the older (but previously-applied) v0.2.9, not the last entry.
+    setFetchOverride(makeFetch('v0.2.9'));
+
+    const result = await runPeerUpdate({
+      flags: {
+        tag: 'v0.2.9',
+        dryRun: false,
+        rollback: true,
+        noAttestation: false,
+        help: false,
+      },
+      historyFile: history,
+      healthTimeoutMs: 2_000,
+      healthIntervalMs: 10,
+      logger: silentLogger(),
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.toTag).toBe('v0.2.9');
+    expect(result.mode).toBe('rollback');
+    expect(result.rolledBackFrom).toBe('v0.3.1');
+    expect(result.attestationSkipped).toBe(true);
+    // Attestation must not be invoked on the rollback path.
+    const attestationCall = mock.calls.find((c) => c.cmd === 'gh' && c.args[0] === 'attestation');
+    expect(attestationCall).toBeUndefined();
+
+    const persisted = readHistory(history);
+    const last = persisted[persisted.length - 1];
+    expect(last?.mode).toBe('rollback');
+    expect(last?.rolledBackFrom).toBe('v0.3.1');
+    expect(last?.toTag).toBe('v0.2.9');
+    expect(last?.success).toBe(true);
+  });
+
+  it('--rollback --tag refuses a tag that was never successfully applied', async () => {
+    const history = makeTmpHistory();
+    appendHistory(
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: null,
+        toTag: 'v0.3.0',
+        success: true,
+        dryRun: false,
+      },
+      history,
+    );
+    makeMockExec();
+
+    const result = await runPeerUpdate({
+      flags: {
+        tag: 'v0.9.9', // never applied on this node
+        dryRun: false,
+        rollback: true,
+        noAttestation: false,
+        help: false,
+      },
+      historyFile: history,
+      healthTimeoutMs: 100,
+      healthIntervalMs: 10,
+      logger: silentLogger(),
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('ROLLBACK_TARGET_NOT_IN_HISTORY');
+  });
+
+  it('--tag without --rollback still verifies attestation (forward-roll)', async () => {
+    const mock = makeMockExec();
+    mock.impl = async (cmd, args) => {
+      if (cmd === 'git' && args[0] === 'describe') {
+        return { stdout: 'v0.3.3\n', stderr: '', exitCode: 0 };
+      }
+      if (cmd === 'gh' && args[0] === 'attestation') {
+        return { stdout: 'verified', stderr: '', exitCode: 0 };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    };
+    setFetchOverride(makeFetch('v0.3.4'));
+    const history = makeTmpHistory();
+
+    const result = await runPeerUpdate({
+      flags: {
+        tag: 'v0.3.4',
+        dryRun: false,
+        rollback: false,
+        // noAttestation false — we want the real gh attestation call.
+        noAttestation: false,
+        help: false,
+      },
+      historyFile: history,
+      healthTimeoutMs: 2_000,
+      healthIntervalMs: 10,
+      logger: silentLogger(),
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.mode).toBe('forward');
+    expect(result.attestationVerified).toBe(true);
+    expect(result.attestationSkipped).toBe(false);
+    const attestationCall = mock.calls.find((c) => c.cmd === 'gh' && c.args[0] === 'attestation');
+    expect(attestationCall).toBeDefined();
+    // And never consults gh api (--tag skips the "find latest release" step).
+    const ghApiCall = mock.calls.find((c) => c.cmd === 'gh' && c.args[0] === 'api');
+    expect(ghApiCall).toBeUndefined();
+
+    // Persisted entry should record mode=forward (no rolledBackFrom).
+    const persisted = readHistory(history);
+    const last = persisted[persisted.length - 1];
+    expect(last?.mode).toBe('forward');
+    expect(last?.rolledBackFrom).toBeUndefined();
+  });
+
+  it('persists rollback history with mode=rollback + rolledBackFrom on success', async () => {
+    const history = makeTmpHistory();
+    appendHistory(
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: null,
+        toTag: 'v0.3.0',
+        success: true,
+        dryRun: false,
+      },
+      history,
+    );
+    appendHistory(
+      {
+        startedAt: 't',
+        finishedAt: 't',
+        fromTag: 'v0.3.0',
+        toTag: 'v0.3.1',
+        success: true,
+        dryRun: false,
+      },
+      history,
+    );
+
+    const mock = makeMockExec();
+    mock.impl = async (cmd, args) => {
+      if (cmd === 'git' && args[0] === 'describe') {
+        return { stdout: 'v0.3.1\n', stderr: '', exitCode: 0 };
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    };
+    setFetchOverride(makeFetch('v0.3.0'));
+
+    const result = await runPeerUpdate({
+      flags: {
+        tag: undefined,
+        dryRun: false,
+        rollback: true,
+        noAttestation: false,
+        help: false,
+      },
+      historyFile: history,
+      healthTimeoutMs: 2_000,
+      healthIntervalMs: 10,
+      logger: silentLogger(),
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.mode).toBe('rollback');
+    expect(result.rolledBackFrom).toBe('v0.3.1');
+
+    const persisted = readHistory(history);
+    expect(persisted).toHaveLength(3);
+    const last = persisted[persisted.length - 1];
+    expect(last?.mode).toBe('rollback');
+    expect(last?.rolledBackFrom).toBe('v0.3.1');
+    expect(last?.toTag).toBe('v0.3.0');
+    // Prior (forward) entries should NOT have been mutated.
+    expect(persisted[0]?.mode).toBeUndefined();
+    expect(persisted[1]?.mode).toBeUndefined();
+    // And the mutation commands must still have been issued.
+    const checkoutCall = mock.calls.find(
+      (c) => c.cmd === 'git' && c.args[0] === 'checkout' && c.args[1] === 'v0.3.0',
+    );
+    expect(checkoutCall).toBeDefined();
   });
 
   it('resolves latest tag via gh api when --tag is omitted', async () => {
