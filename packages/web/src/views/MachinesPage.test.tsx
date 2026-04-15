@@ -4,13 +4,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useHotkeys } from '@/hooks/use-hotkeys';
 import type { Machine } from '@/lib/api';
+import type { SyncPeer } from '@/lib/api/sync';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockMachinesQuery } = vi.hoisted(() => ({
+const {
+  mockMachinesQuery,
+  mockSyncPeersQuery,
+  mockUseRegisterReverseSyncPeer,
+  mockToastSuccess,
+  mockToastError,
+} = vi.hoisted(() => ({
   mockMachinesQuery: vi.fn(),
+  mockSyncPeersQuery: vi.fn(),
+  mockUseRegisterReverseSyncPeer: vi.fn(),
+  mockToastSuccess: vi.fn(),
+  mockToastError: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -111,6 +122,15 @@ vi.mock('@/components/SimpleTooltip', () => ({
 
 vi.mock('@/lib/queries', () => ({
   machinesQuery: () => mockMachinesQuery(),
+  syncPeersQuery: () => mockSyncPeersQuery(),
+  useRegisterReverseSyncPeer: () => mockUseRegisterReverseSyncPeer(),
+}));
+
+vi.mock('@/components/Toast', () => ({
+  useToast: () => ({
+    success: mockToastSuccess,
+    error: mockToastError,
+  }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -136,6 +156,40 @@ function createMachine(overrides?: Partial<Machine>): Machine {
     originNodeHostname: null,
     capabilities: { gpu: false, docker: true, maxConcurrentAgents: 4 },
     createdAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function createPeer(overrides?: Partial<SyncPeer>): SyncPeer {
+  return {
+    machineId: 'machine-1',
+    hostname: 'test-machine',
+    tailscaleIp: '100.0.0.1',
+    syncUrl: 'http://test-machine:8080',
+    role: 'full',
+    syncStatus: 'reachable',
+    syncIntervalMs: 30_000,
+    isSelf: false,
+    publicKey: null,
+    lastSeen: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    reverseRegistrationStatus: 'ok',
+    reverseRegistrationError: null,
+    reverseRegistrationAt: null,
+    ...overrides,
+  };
+}
+
+function makeMutationHook(
+  overrides?: Partial<{ mutate: ReturnType<typeof vi.fn>; isPending: boolean; variables: unknown }>,
+) {
+  return {
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+    isError: false,
+    isSuccess: false,
+    variables: undefined as unknown,
     ...overrides,
   };
 }
@@ -171,6 +225,12 @@ describe('MachinesPage', () => {
       queryKey: ['machines'],
       queryFn: vi.fn().mockResolvedValue([createMachine()]),
     });
+    // Default: empty sync peers so reverse badge does not render
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+    });
+    mockUseRegisterReverseSyncPeer.mockReturnValue(makeMutationHook());
   });
 
   afterEach(() => {
@@ -955,6 +1015,92 @@ describe('MachinesPage', () => {
   // =========================================================================
   // Capability Tooltips
   // =========================================================================
+
+  // =========================================================================
+  // Reverse-Registration "One-way" Badge (§33.8 follow-up)
+  // =========================================================================
+
+  it('renders the One-way badge + Retry button when peer reverse registration failed', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([createMachine({ id: 'machine-broken', hostname: 'broken-host' })]),
+    });
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [
+          createPeer({
+            machineId: 'machine-broken',
+            reverseRegistrationStatus: 'failed',
+            reverseRegistrationError: 'handshake timeout',
+          }),
+        ],
+      }),
+    });
+
+    renderMachines();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('machine-reverse-badge-machine-broken')).toBeDefined();
+      expect(screen.getByTestId('machine-reverse-retry-machine-broken')).toBeDefined();
+    });
+    // Tooltip communicates the condition
+    const badge = screen.getByTestId('machine-reverse-badge-machine-broken');
+    expect(badge.getAttribute('title')).toMatch(/reverse handshake failed/i);
+    expect(badge.getAttribute('title')).toContain('handshake timeout');
+  });
+
+  it('does not render the One-way badge when reverse registration status is ok', async () => {
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([createMachine({ id: 'machine-ok', hostname: 'healthy-host' })]),
+    });
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [createPeer({ machineId: 'machine-ok', reverseRegistrationStatus: 'ok' })],
+      }),
+    });
+
+    renderMachines();
+
+    await waitFor(() => {
+      expect(screen.getByText('healthy-host')).toBeDefined();
+    });
+    expect(screen.queryByTestId('machine-reverse-badge-machine-ok')).toBeNull();
+    expect(screen.queryByTestId('machine-reverse-retry-machine-ok')).toBeNull();
+  });
+
+  it('invokes the reverse-register mutation with the machine id when Retry is clicked', async () => {
+    const mutate = vi.fn();
+    mockUseRegisterReverseSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+    mockMachinesQuery.mockReturnValue({
+      queryKey: ['machines'],
+      queryFn: vi
+        .fn()
+        .mockResolvedValue([createMachine({ id: 'machine-broken', hostname: 'broken-host' })]),
+    });
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({
+        peers: [createPeer({ machineId: 'machine-broken', reverseRegistrationStatus: 'failed' })],
+      }),
+    });
+
+    renderMachines();
+
+    const retryBtn = await waitFor(() =>
+      screen.getByTestId('machine-reverse-retry-machine-broken'),
+    );
+    fireEvent.click(retryBtn);
+
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate).toHaveBeenCalledWith('machine-broken', expect.any(Object));
+  });
 
   it('wraps capability badges with SimpleTooltip', async () => {
     mockMachinesQuery.mockReturnValue({
