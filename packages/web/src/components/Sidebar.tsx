@@ -113,8 +113,11 @@ export function Sidebar(): React.JSX.Element {
   const pendingConflicts = conflictCount.data?.count ?? 0;
 
   // Peer versions for the footer tooltip (33.9 Mesh Version Observability).
-  // Exposed peers (minus self) grouped by their reported `appVersion`.
-  const syncPeers = useQuery(syncPeersQuery());
+  // Lazy: only fetch once the user focuses or hovers the version link so pages
+  // that don't mock /api/sync/peers (e2e specs, embeds) boot cleanly.
+  const [peerSummaryArmed, setPeerSummaryArmed] = useState(false);
+  const armPeerSummary = useCallback(() => setPeerSummaryArmed(true), []);
+  const syncPeers = useQuery({ ...syncPeersQuery(), enabled: peerSummaryArmed });
   const peerVersionSummary = useMemo(() => {
     const peers = (syncPeers.data?.peers ?? []) as SyncPeerWithVersion[];
     const externalPeers = peers.filter((p) => !p.isSelf);
@@ -461,6 +464,8 @@ export function Sidebar(): React.JSX.Element {
               rel="noopener noreferrer"
               title={versionLinkTitle}
               data-testid="sidebar-version-link"
+              onMouseEnter={armPeerSummary}
+              onFocus={armPeerSummary}
               className="text-[11px] font-mono text-muted-foreground hover:text-blue-500 transition-colors flex items-center gap-1 max-md:inline-flex hidden lg:flex"
             >
               {LOCAL_APP_VERSION}
