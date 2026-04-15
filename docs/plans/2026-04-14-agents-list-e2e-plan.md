@@ -1,7 +1,7 @@
 # Agents List E2E Coverage Plan
 
 Date: 2026-04-14
-Status: Delivered in PR #494
+Status: Delivered in PR #494; CI gating follow-up in PR #518
 Owner: Codex
 
 ## Context
@@ -26,5 +26,6 @@ PR #492 added backend-independent coverage for `/agents/[id]`, but the `/agents`
 ## Validation
 
 - `WEB_PORT=<unique> pnpm --filter @agentctl/web exec playwright test e2e/agents-list.spec.ts`
+- `WEB_PORT=<unique> pnpm --filter @agentctl/web test:e2e:ci`
 - `git diff --check`
 - `pnpm lint`
