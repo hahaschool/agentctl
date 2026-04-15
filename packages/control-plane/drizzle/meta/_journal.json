@@ -197,6 +197,13 @@
       "when": 1711670400000,
       "tag": "0025_sync_nodes_peer_version",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1711756800000,
+      "tag": "0026_sync_nodes_reverse_registration",
+      "breakpoints": true
     }
   ]
 }
