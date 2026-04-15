@@ -1773,6 +1773,13 @@ git commit -m "feat(web): add spaces views"
 
 ### Task 11: Add Spaces to the sidebar and update sidebar tests
 
+> Follow-up sync (2026-04-15): the original Spaces sidebar slice is delivered, and
+> PR #525 later expanded this same sidebar surface with `1-9,0` digit navigation
+> plus `g`-prefix Go To chords for every sidebar destination. The review fix
+> `f2cb1515` also synced `SettingsView` to render grouped shortcut docs, including
+> the `Go To` section, and added regression coverage so modified second keys do
+> not trigger accidental navigation.
+
 **Files:**
 - Modify: `packages/web/src/components/Sidebar.tsx`
 - Modify: `packages/web/src/components/Sidebar.test.tsx`
@@ -1992,3 +1999,4 @@ The only legacy-session work in Phase 1 is durable session-to-space linking. Ful
 - Updated the frontend plan to include view components and sidebar test changes so the new `/spaces` route fits the current Next.js 16 app structure.
 - Removed the hard-coded `git push origin main` step and tightened commit guidance to conventional commits only.
 - Added explicit verification steps for shared, control-plane, and web packages so completion claims can be backed by fresh evidence.
+- Synced the later PR #525 sidebar follow-up: the navigation surface now keeps digit shortcuts coherent through `1-9,0`, adds `g`-prefix Go To chords for all sidebar destinations, and documents those grouped shortcuts in Settings.
