@@ -680,7 +680,8 @@ export function decodeProjectPath(encoded: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Discover Codex sessions from ~/.codex/archived_sessions/*.jsonl
+ * Discover Codex sessions from ~/.codex/archived_sessions/*.jsonl and
+ * ~/.codex/sessions/YYYY/MM/DD/*.jsonl.
  *
  * Each Codex session file starts with a `session_meta` line containing:
  * - id (session UUID)
@@ -695,17 +696,19 @@ function discoverCodexSessions(
   discovered: DiscoveredSession[],
   logger?: DiscoveryLogger,
 ): void {
-  const codexSessionsDir = join(homedir(), '.codex', 'archived_sessions');
-  if (!existsSync(codexSessionsDir)) {
-    return;
-  }
+  const codexRoots = [
+    { path: join(homedir(), '.codex', 'archived_sessions'), maxDepth: 0 },
+    { path: join(homedir(), '.codex', 'sessions'), maxDepth: 4 },
+  ];
 
-  try {
-    const files = readdirSync(codexSessionsDir).filter((f) => f.endsWith('.jsonl'));
+  for (const { path: codexSessionsDir, maxDepth } of codexRoots) {
+    if (!existsSync(codexSessionsDir)) {
+      continue;
+    }
 
-    for (const file of files) {
+    const files = collectCodexSessionFiles(codexSessionsDir, maxDepth, logger);
+    for (const filePath of files) {
       try {
-        const filePath = join(codexSessionsDir, file);
         const content = readFileSync(filePath, 'utf-8');
         const lines = content.split('\n').filter((l) => l.trim());
 
@@ -790,15 +793,62 @@ function discoverCodexSessions(
         });
       } catch (err) {
         logger?.debug(
-          { error: err instanceof Error ? err.message : String(err), file },
+          { error: err instanceof Error ? err.message : String(err), file: filePath },
           'Skipped unreadable Codex session file',
         );
       }
     }
-  } catch (err) {
-    logger?.debug(
-      { error: err instanceof Error ? err.message : String(err), path: codexSessionsDir },
-      'Failed to read Codex sessions directory',
-    );
   }
+}
+
+function collectCodexSessionFiles(
+  rootDir: string,
+  maxDepth: number,
+  logger?: DiscoveryLogger,
+): string[] {
+  const files: string[] = [];
+  const pending = [{ dir: rootDir, depth: 0 }];
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) continue;
+    const { dir, depth } = current;
+
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true }) as unknown[];
+      for (const entry of entries) {
+        if (typeof entry === 'string') {
+          if (entry.endsWith('.jsonl')) {
+            files.push(join(dir, entry));
+          }
+          continue;
+        }
+
+        if (!isNonNullObject(entry) || typeof entry.name !== 'string') {
+          continue;
+        }
+
+        const childPath = join(dir, entry.name);
+        const isDirectory = typeof entry.isDirectory === 'function' && Boolean(entry.isDirectory());
+        if (isDirectory) {
+          if (depth < maxDepth) {
+            pending.push({ dir: childPath, depth: depth + 1 });
+          }
+          continue;
+        }
+
+        const isFile = typeof entry.isFile === 'function' ? Boolean(entry.isFile()) : true;
+        if (isFile && entry.name.endsWith('.jsonl')) {
+          files.push(childPath);
+        }
+      }
+    } catch (err) {
+      logger?.debug(
+        { error: err instanceof Error ? err.message : String(err), path: dir },
+        'Failed to read Codex sessions directory',
+      );
+    }
+  }
+
+  return files;
 }

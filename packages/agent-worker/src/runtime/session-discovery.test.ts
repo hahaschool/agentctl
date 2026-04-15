@@ -636,6 +636,83 @@ describe('discoverLocalSessions', () => {
     );
   });
 
+  it('discovers codex sessions from the current dated sessions directory', () => {
+    const archivedDir = '/Users/testuser/.codex/archived_sessions';
+    const sessionsDir = '/Users/testuser/.codex/sessions';
+    const yearDir = join(sessionsDir, '2026');
+    const monthDir = join(yearDir, '04');
+    const dayDir = join(monthDir, '15');
+    const sessionFile = join(dayDir, 'rollout-2026-04-15T05-30-00-codex-current.jsonl');
+
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (p === archivedDir) return false;
+      if (p === sessionsDir) return true;
+      return false;
+    });
+
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) return [];
+      if (p === sessionsDir) {
+        return [{ name: '2026', isDirectory: () => true, isFile: () => false }];
+      }
+      if (p === yearDir) {
+        return [{ name: '04', isDirectory: () => true, isFile: () => false }];
+      }
+      if (p === monthDir) {
+        return [{ name: '15', isDirectory: () => true, isFile: () => false }];
+      }
+      if (p === dayDir) {
+        return [
+          {
+            name: 'rollout-2026-04-15T05-30-00-codex-current.jsonl',
+            isDirectory: () => false,
+            isFile: () => true,
+          },
+        ];
+      }
+      return [];
+    }) as typeof readdirSync);
+
+    mockReadFileSync.mockImplementation(((p: string) => {
+      if (p === sessionFile) {
+        return [
+          JSON.stringify({
+            type: 'session_meta',
+            timestamp: '2026-04-15T05:30:00Z',
+            payload: {
+              id: 'codex-current-001',
+              cwd: '/Users/testuser/agentctl',
+              timestamp: '2026-04-15T05:30:00Z',
+              git: { branch: 'codex/discover-current-sessions' },
+            },
+          }),
+          JSON.stringify({
+            type: 'response_item',
+            timestamp: '2026-04-15T05:31:00Z',
+            payload: {
+              role: 'user',
+              content: [{ type: 'input_text', text: 'Fix current Codex session discovery.' }],
+            },
+          }),
+        ].join('\n');
+      }
+      return '';
+    }) as typeof readFileSync);
+
+    const sessions = discoverLocalSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'codex-current-001',
+        projectPath: '/Users/testuser/agentctl',
+        summary: 'Fix current Codex session discovery.',
+        branch: 'codex/discover-current-sessions',
+        runtime: 'codex',
+      }),
+    );
+  });
+
   it('prefers the goal task over AGENTS and system-prompt preamble in Codex user content', () => {
     const codexDir = '/Users/testuser/.codex/archived_sessions';
 
