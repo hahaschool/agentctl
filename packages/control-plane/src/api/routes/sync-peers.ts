@@ -116,9 +116,12 @@ type SyncPeerRow = {
   reverse_registration_status: string | null;
   reverse_registration_error: string | null;
   reverse_registration_at: string | Date | null;
+  last_schema_ahead_version: number | null;
+  last_schema_ahead_at: string | Date | null;
+  schema_ahead_count: number | null;
 };
 
-const SYNC_NODE_COLUMNS = sql`id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version, reverse_registration_status, reverse_registration_error, reverse_registration_at`;
+const SYNC_NODE_COLUMNS = sql`id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version, reverse_registration_status, reverse_registration_error, reverse_registration_at, last_schema_ahead_version, last_schema_ahead_at, schema_ahead_count`;
 
 type UpsertSyncPeerBody = {
   machineId?: string;
@@ -471,6 +474,12 @@ function mapSyncPeerRow(row: SyncPeerRow) {
     reverseRegistrationStatus: normalizeReverseRegistrationStatus(row.reverse_registration_status),
     reverseRegistrationError: row.reverse_registration_error ?? null,
     reverseRegistrationAt: toIsoString(row.reverse_registration_at),
+    // §33.10: schema-ahead envelope rejection tracking. When non-zero, the
+    // apply-side compat gate has rejected one or more envelopes from this peer
+    // because their `schemaVersion` exceeds the local CP by more than 1.
+    lastSchemaAheadVersion: row.last_schema_ahead_version ?? null,
+    lastSchemaAheadAt: toIsoString(row.last_schema_ahead_at),
+    schemaAheadCount: row.schema_ahead_count ?? 0,
   };
 }
 

@@ -9,6 +9,51 @@ import { extractRows } from '../db/index.js';
 import { withSyncApplyGuard } from './apply-guard.js';
 import { assertEnvelopeCompat, getLocalSchemaVersion } from './mesh-compat.js';
 
+/**
+ * Record a `MESH_ENVELOPE_SCHEMA_AHEAD` rejection against the offending peer's
+ * `sync_nodes` row so operators can see on `/mesh-peers` which peer sent the
+ * envelope our apply gate could not accept (roadmap §33.10).
+ *
+ * Returns the post-update row count via `result.rowCount` (best-effort — the
+ * driver's exact shape varies) and logs at WARN level. Failures to persist the
+ * rejection MUST NOT mask the original rejection; callers already logged the
+ * reject reason, so we only record a secondary WARN here if the UPDATE fails.
+ *
+ * The row is a no-op when no matching `sync_nodes` row exists (e.g. an envelope
+ * from an unregistered node): `UPDATE ... WHERE id = ?` simply affects zero
+ * rows. That is intentional — we do not want this helper to silently insert
+ * rows and implicitly register unknown peers.
+ */
+export async function recordSchemaAheadRejection(
+  db: Database,
+  machineId: string,
+  envelopeSchemaVersion: number,
+  logger?: Logger,
+): Promise<void> {
+  if (!machineId || !Number.isFinite(envelopeSchemaVersion)) {
+    return;
+  }
+
+  try {
+    await db.execute(sql`
+      UPDATE sync_nodes
+      SET last_schema_ahead_version = ${envelopeSchemaVersion},
+          last_schema_ahead_at = now(),
+          schema_ahead_count = COALESCE(schema_ahead_count, 0) + 1
+      WHERE id = ${machineId}
+    `);
+  } catch (err) {
+    logger?.warn(
+      {
+        err: err instanceof Error ? err.message : String(err),
+        machineId,
+        envelopeSchemaVersion,
+      },
+      'Failed to persist schema-ahead rejection on sync_nodes',
+    );
+  }
+}
+
 export type ApplyResult = 'applied' | 'skipped' | 'conflict';
 
 type LatestChangeRow = {

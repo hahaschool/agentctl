@@ -40,6 +40,14 @@ export type SyncPeer = {
   reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
   reverseRegistrationError?: string | null;
   reverseRegistrationAt?: string | null;
+  // §33.10: schema-ahead envelope rejection tracking. When `schemaAheadCount`
+  // is > 0, the apply-side compat gate has rejected one or more envelopes from
+  // this peer because their `schemaVersion` exceeded the local CP by more than
+  // one. `/mesh-peers` surfaces this as a red "Peer ahead — update this CP"
+  // badge on the offending peer row.
+  lastSchemaAheadVersion?: number | null;
+  lastSchemaAheadAt?: string | null;
+  schemaAheadCount?: number | null;
 };
 
 /**
