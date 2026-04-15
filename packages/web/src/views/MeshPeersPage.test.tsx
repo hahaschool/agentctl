@@ -771,4 +771,128 @@ describe('MeshPeersPage', () => {
       expect(retry.textContent).toContain('Retrying');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // §33.10 — Per-row "Peer ahead — update this node" badge
+  // ---------------------------------------------------------------------------
+
+  describe('peer-ahead badge', () => {
+    // LOCAL_SCHEMA_VERSION is pinned at 26 in mesh-version.ts. Tests stay
+    // resilient by constructing peers relative to a clearly-ahead value.
+    const AHEAD_SCHEMA = 99;
+    const BEHIND_SCHEMA = 1;
+
+    it('renders the badge with "update this node" text when peer schema is ahead', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-ahead',
+              peerVersion: 'v0.5.0',
+              peerSchemaVersion: AHEAD_SCHEMA,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-ahead-badge-peer-ahead')).toBeDefined();
+      });
+      const badge = screen.getByTestId('peer-ahead-badge-peer-ahead');
+      expect(badge.textContent).toContain('update this node');
+      expect(badge.getAttribute('aria-label')).toContain('ahead on schema version');
+    });
+
+    it('does not render the badge when peer schema matches local', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-match',
+              peerVersion: 'v0.4.0',
+              peerSchemaVersion: 26,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getAllByRole('row').length).toBeGreaterThan(0);
+      });
+      expect(screen.queryByTestId('peer-ahead-badge-peer-match')).toBeNull();
+    });
+
+    it('does not render the ahead badge when peer schema is behind', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-behind',
+              peerVersion: 'v0.3.1',
+              peerSchemaVersion: BEHIND_SCHEMA,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getAllByRole('row').length).toBeGreaterThan(0);
+      });
+      expect(screen.queryByTestId('peer-ahead-badge-peer-behind')).toBeNull();
+    });
+
+    it('renders a tooltip-only badge (non-button) when Update is unavailable', async () => {
+      // Peer has no syncUrl => canUpdatePeer() returns false => updateAvailable=false.
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-ahead-nosync',
+              syncUrl: null,
+              peerVersion: 'v0.5.0',
+              peerSchemaVersion: AHEAD_SCHEMA,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('peer-ahead-badge-peer-ahead-nosync')).toBeDefined();
+      });
+      const badge = screen.getByTestId('peer-ahead-badge-peer-ahead-nosync');
+      // Not a button — the badge is informational only (rendered as <output>).
+      expect(badge.tagName).toBe('OUTPUT');
+      expect(badge.getAttribute('title')).toContain('not directly updatable');
+    });
+
+    it('does not render the badge on self rows', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-self',
+              isSelf: true,
+              peerVersion: 'v0.4.0',
+              peerSchemaVersion: AHEAD_SCHEMA,
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getAllByRole('row').length).toBeGreaterThan(0);
+      });
+      expect(screen.queryByTestId('peer-ahead-badge-peer-self')).toBeNull();
+    });
+  });
 });
