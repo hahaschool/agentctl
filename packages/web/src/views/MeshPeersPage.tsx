@@ -16,6 +16,7 @@ import {
   usePingSyncPeer,
   useUpsertSyncPeer,
 } from '@/lib/queries';
+import { MAX_SYNC_URL_LENGTH, URL_LENGTH_COUNTER_THRESHOLD } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -120,15 +121,24 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
 
   if (!open) return null;
 
+  const trimmedSyncUrl = state.syncUrl.trim();
+  const syncUrlLength = trimmedSyncUrl.length;
+  const syncUrlTooLong = syncUrlLength > MAX_SYNC_URL_LENGTH;
+  const showSyncUrlCounter =
+    syncUrlLength > 0 && syncUrlLength >= MAX_SYNC_URL_LENGTH - URL_LENGTH_COUNTER_THRESHOLD;
+
   const validate = (): { body: UpsertSyncPeerInput } | { error: string } => {
     const machineId = state.machineId.trim();
     const hostname = state.hostname.trim();
-    const syncUrl = state.syncUrl.trim();
+    const syncUrl = trimmedSyncUrl;
     const intervalSeconds = Number(state.syncIntervalSeconds);
 
     if (!machineId) return { error: 'Machine ID is required' };
     if (!hostname) return { error: 'Hostname is required' };
     if (!syncUrl) return { error: 'Sync URL is required' };
+    if (syncUrlTooLong) {
+      return { error: `Sync URL too long (${syncUrlLength}/${MAX_SYNC_URL_LENGTH})` };
+    }
     if (!isValidHttpUrl(syncUrl)) {
       return { error: 'Sync URL must be a valid http(s) URL without credentials' };
     }
@@ -234,9 +244,38 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
                 type="url"
                 value={state.syncUrl}
                 onChange={(e) => setState((p) => ({ ...p, syncUrl: e.target.value }))}
-                className="w-full bg-muted border border-border rounded-md text-xs px-2 py-1.5 font-mono text-foreground"
+                aria-invalid={syncUrlTooLong || undefined}
+                aria-describedby={
+                  syncUrlTooLong
+                    ? 'mesh-peer-sync-url-error'
+                    : showSyncUrlCounter
+                      ? 'mesh-peer-sync-url-counter'
+                      : undefined
+                }
+                className={cn(
+                  'w-full bg-muted border rounded-md text-xs px-2 py-1.5 font-mono text-foreground',
+                  syncUrlTooLong ? 'border-red-500/60' : 'border-border',
+                )}
                 placeholder="http://100.64.0.11:8080"
               />
+              {syncUrlTooLong ? (
+                <p
+                  id="mesh-peer-sync-url-error"
+                  role="alert"
+                  data-testid="mesh-peer-sync-url-length-error"
+                  className="mt-1 text-[11px] text-red-400"
+                >
+                  URL too long ({syncUrlLength}/{MAX_SYNC_URL_LENGTH})
+                </p>
+              ) : showSyncUrlCounter ? (
+                <p
+                  id="mesh-peer-sync-url-counter"
+                  data-testid="mesh-peer-sync-url-length-counter"
+                  className="mt-1 text-[11px] text-muted-foreground"
+                >
+                  {syncUrlLength}/{MAX_SYNC_URL_LENGTH}
+                </p>
+              ) : null}
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
@@ -312,7 +351,7 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
             </button>
             <button
               type="submit"
-              disabled={upsertPeer.isPending}
+              disabled={upsertPeer.isPending || syncUrlTooLong}
               data-testid="mesh-peer-submit"
               className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
             >

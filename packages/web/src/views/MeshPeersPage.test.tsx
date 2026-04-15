@@ -422,4 +422,30 @@ describe('MeshPeersPage', () => {
     // React Query's refetch is called internally — we just verify the button is wired
     expect(screen.getByTestId('refresh-button')).toBeDefined();
   });
+
+  it('shows inline length error and disables submit when sync URL exceeds 2048 chars', async () => {
+    const mutate = vi.fn();
+    mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+    mockSyncPeersQuery.mockReturnValue({
+      queryKey: ['sync-peers'],
+      queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+    fireEvent.click(screen.getByTestId('add-mesh-peer'));
+
+    const tooLong = `https://node.tail.ts.net/${'x'.repeat(2048)}`;
+    fireEvent.change(screen.getByLabelText('Sync URL'), { target: { value: tooLong } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mesh-peer-sync-url-length-error').textContent).toContain(
+        'URL too long',
+      );
+    });
+    const submit = screen.getByTestId('mesh-peer-submit') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(submit);
+    expect(mutate).not.toHaveBeenCalled();
+  });
 });

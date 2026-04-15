@@ -409,4 +409,27 @@ describe('WebhooksPage', () => {
       expect(screen.getByTestId('form-error').textContent).toContain('valid http');
     });
   });
+
+  it('shows inline length error and disables submit when the URL exceeds 2048 chars', async () => {
+    const mutate = vi.fn();
+    mockUseCreateWebhook.mockReturnValue(makeMutationHook({ mutate }));
+    mockWebhooksQuery.mockReturnValue({
+      queryKey: ['webhooks'],
+      queryFn: vi.fn().mockResolvedValue({ subscriptions: [], limit: 50, offset: 0 }),
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('add-webhook')).toBeDefined());
+    fireEvent.click(screen.getByTestId('add-webhook'));
+
+    const tooLong = `https://example.com/${'a'.repeat(2048)}`;
+    fireEvent.change(screen.getByLabelText(/URL/i), { target: { value: tooLong } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('webhook-url-length-error').textContent).toContain('URL too long');
+    });
+    const submit = screen.getByTestId('webhook-submit') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.click(submit);
+    expect(mutate).not.toHaveBeenCalled();
+  });
 });

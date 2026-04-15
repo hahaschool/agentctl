@@ -61,3 +61,28 @@ export const TERMINAL_SPAWN_COLS = 120;
 
 /** Default row count when spawning an interactive terminal. */
 export const TERMINAL_SPAWN_ROWS = 30;
+
+// ---------------------------------------------------------------------------
+// URL length limits (mirrors backend Zod validation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Max webhook URL length accepted by the control plane.
+ * Mirrors `MAX_WEBHOOK_URL_LENGTH` in
+ * `packages/control-plane/src/api/routes/webhooks.ts`.
+ */
+export const MAX_WEBHOOK_URL_LENGTH = 2048;
+
+/**
+ * Max sync peer URL length accepted by the control plane.
+ * Mirrors `MAX_SYNC_URL_LENGTH` in
+ * `packages/control-plane/src/api/routes/sync-peers.ts`.
+ */
+export const MAX_SYNC_URL_LENGTH = 2048;
+
+/**
+ * Show the remaining-character counter when the URL is within this many
+ * characters of the limit. Gives users a visible runway before they paste
+ * something that will be rejected server-side.
+ */
+export const URL_LENGTH_COUNTER_THRESHOLD = 200;
