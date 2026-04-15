@@ -6,6 +6,23 @@ on:
     paths:
       - 'packages/control-plane/drizzle/**'
       - 'packages/control-plane/src/db/**'
+  # Reusable entry point for deploy-fleet.yml's migration gate (§33.11).
+  # Consumers read the `has_destructive_migrations` output and fail the
+  # rollout unless the caller explicitly allows destructive schema changes.
+  workflow_call:
+    inputs:
+      base_ref:
+        description: "Git ref to diff against when detecting changed migration files"
+        required: false
+        type: string
+        default: "main"
+    outputs:
+      has_destructive_migrations:
+        description: "true when one or more destructive operations were detected in changed migration files"
+        value: ${{ jobs.destructive-check.outputs.found }}
+      destructive_operations:
+        description: "Multi-line markdown list of the destructive operations that were detected (empty when none)"
+        value: ${{ jobs.destructive-check.outputs.operations }}
 
 permissions:
   contents: read
@@ -319,6 +336,9 @@ jobs:
     name: Destructive operation check
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      found: ${{ steps.destructive.outputs.found }}
+      operations: ${{ steps.destructive.outputs.operations }}
 
     steps:
       - uses: actions/checkout@v5
@@ -327,12 +347,22 @@ jobs:
 
       - name: Detect destructive operations in changed migrations
         id: destructive
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || inputs.base_ref || 'main' }}
         run: |
           MIGRATION_DIR="packages/control-plane/drizzle"
           destructive_ops=""
 
-          # Get migration files changed in this PR
-          changed_files=$(git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD -- "$MIGRATION_DIR/*.sql" 2>/dev/null || \
+          # Resolve the diff base. On pull_request we compare against the PR
+          # target branch. When called from deploy-fleet.yml we compare
+          # against the `base_ref` input (default `main`) so that the gate
+          # inspects every migration landed since the last deploy base.
+          git fetch --no-tags --depth=1 origin "$BASE_REF" >/dev/null 2>&1 || true
+
+          # Get migration files changed since the base ref. Fall back to
+          # scanning every migration file when no diff base is available
+          # (e.g. initial deploy of a brand-new fork).
+          changed_files=$(git diff --name-only --diff-filter=ACMR "origin/${BASE_REF}"...HEAD -- "$MIGRATION_DIR/*.sql" 2>/dev/null || \
                           find "$MIGRATION_DIR" -maxdepth 1 -name '*.sql' -type f)
 
           if [ -z "$changed_files" ]; then
@@ -397,7 +427,7 @@ jobs:
           fi
 
       - name: Comment on PR with destructive migration warning
-        if: steps.destructive.outputs.found == 'true'
+        if: steps.destructive.outputs.found == 'true' && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
