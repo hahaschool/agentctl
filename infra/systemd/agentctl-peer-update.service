@@ -1,0 +1,63 @@
+; AgentCTL peer-update systemd unit (Linux) — roadmap §33.11.
+;
+; Opt-in auto-update for the PM2 mesh topology. This unit is invoked
+; by agentctl-peer-update.timer; it is not scheduled on its own.
+;
+; Install as a user unit (not system-wide — the checkout lives under
+; the operator's home directory):
+;
+;   mkdir -p ~/.config/systemd/user
+;   cp infra/systemd/agentctl-peer-update.service \
+;      ~/.config/systemd/user/agentctl-peer-update.service
+;   cp infra/systemd/agentctl-peer-update.timer \
+;      ~/.config/systemd/user/agentctl-peer-update.timer
+;   systemctl --user daemon-reload
+;
+; Shipped DISABLED. Operator opts in explicitly:
+;
+;   systemctl --user enable --now agentctl-peer-update.timer
+;
+; The service itself runs once (Type=oneshot) when the timer fires.
+; It does not restart on failure — the CLI handles rollback and
+; appends a structured entry to ~/.agentctl/update-history.json.
+
+[Unit]
+Description=AgentCTL PM2 mesh peer self-update
+Documentation=https://github.com/hahaschool/agentctl/blob/main/infra/systemd/README.md
+# Gate on the network being reachable: peer-update hits GitHub +
+# Tailscale before mutating the local checkout.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+
+# %h expands to the invoking user's home directory. Operators whose
+# checkout lives elsewhere must override with a drop-in:
+#   systemctl --user edit agentctl-peer-update.service
+WorkingDirectory=%h/agentctl
+
+# pnpm must be on PATH. Set explicitly because systemd user services
+# inherit a minimal environment.
+Environment=PATH=%h/.local/share/pnpm:%h/.nvm/versions/node/current/bin:/usr/local/bin:/usr/bin:/bin
+Environment=AGENTCTL_UPDATE_WINDOW=03:00
+
+ExecStart=/usr/bin/env pnpm peer-update
+
+# Do NOT restart — oneshot failure is intentional; let the timer
+# try again on the next scheduled tick. The CLI already attempts
+; a rollback internally.
+Restart=no
+
+# Reasonable hardening for an update job that needs git + network.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=false
+ProtectHome=false
+
+# Surface CLI output to the user journal.
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+# Intentionally no WantedBy — the timer pulls in the service.

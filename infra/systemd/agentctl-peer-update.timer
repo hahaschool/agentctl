@@ -1,0 +1,43 @@
+; AgentCTL peer-update systemd timer (Linux) — roadmap §33.11.
+;
+; Schedules agentctl-peer-update.service daily at 03:00 local time.
+;
+; This timer is NOT enabled by default. Installing the unit file
+; (copying it to ~/.config/systemd/user/) does not start anything —
+; the operator must explicitly run:
+;
+;   systemctl --user enable --now agentctl-peer-update.timer
+;
+; To disable:
+;
+;   systemctl --user disable --now agentctl-peer-update.timer
+;
+; To inspect the next scheduled run:
+;
+;   systemctl --user list-timers agentctl-peer-update.timer
+;
+; To customise the update window, either:
+;   (a) edit OnCalendar= below, or
+;   (b) create a drop-in: `systemctl --user edit agentctl-peer-update.timer`
+;       with an [Timer] OnCalendar= override.
+; Keep AGENTCTL_UPDATE_WINDOW in the .service in sync for CLI output.
+
+[Unit]
+Description=AgentCTL PM2 mesh peer self-update timer (daily 03:00)
+Documentation=https://github.com/hahaschool/agentctl/blob/main/infra/systemd/README.md
+
+[Timer]
+; Daily at 03:00 local time.
+OnCalendar=*-*-* 03:00:00
+
+; If the machine is asleep / off at 03:00, run once it wakes up.
+Persistent=true
+
+; Jitter up to 5 minutes to spread load across a mesh of peers.
+RandomizedDelaySec=300
+
+; The service is oneshot and short-lived; don't accumulate triggers.
+Unit=agentctl-peer-update.service
+
+[Install]
+WantedBy=timers.target
