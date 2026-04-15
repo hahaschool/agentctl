@@ -34,6 +34,8 @@
 
 > Follow-up sync (2026-04-15): PR #526 landed the post-#525 roadmap/plan consistency sync on `main@56ae0b24`. Post-#526 main checks passed: CI `24437448007`, Security Audit `24437448002`, and Build & Publish Docker Images `24437448013`; Docker publish still only reports the known nonblocking Grype high-severity annotations.
 
+> Follow-up sync (2026-04-15): PR #527 completed the post-#526 checkpoint sync, PR #529 added backend-independent `/sessions/[id]` route smoke coverage for the ended-session detail shell and Memory tab session-scoped fact lookup, PR #528 added backend-independent `/memory/dashboard` route smoke coverage for sidebar/dashboard/KPI/recent-activity/decay-card composition, and PR #530 synced the row-level roadmap ledger after those E2E landings. At the post-#530 checkpoint, `main@536480ae` had green CI `24438180676`, Security Audit `24438180686`, and Build & Publish Docker Images `24438180685`; dev-1/dev-2, production deploy, and beta promotion workflows were untouched.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
@@ -210,6 +212,8 @@ Current final state after PR #227 merged and DAST rerun `23131047045` succeeded:
 - PRs #461/#462/#465/#466 extended backend-independent memory browser coverage across the `/memory` index, consolidation board, scopes manager, and knowledge graph.
 - PR #467 added the webhook delivery-history viewer over the existing delivery-list route with focused WebhookDeliveriesPanel unit coverage.
 - PR #468 added backend-independent browser coverage for dynamic `/spaces/[id]` and `/tasks/[id]` detail routes.
+- PR #529 added backend-independent browser route-smoke coverage for `/sessions/[id]`, covering the ended-session detail shell, message render, and Memory tab session-scoped fact query.
+- PR #528 added backend-independent browser route-smoke coverage for `/memory/dashboard`, covering the MemorySidebar active state, dashboard KPI cards, recent activity, and MemoryDecayCard composition.
 - PR #391 added direct control-plane route coverage for the session `dispatch-config` endpoint and `sync-conflicts` list/detail/resolve/count handlers on current `main`.
 - The direct `72c618c6` follow-up added `docs/QUICKSTART-MESH.md` for the already-delivered mesh bootstrap flow.
 - PRs #398/#400/#401/#402 cleared the 2026-04-13 dependency-audit and DAST WebSocket fuzz follow-ups, and PR #404 synced this status back into roadmap/plans.
