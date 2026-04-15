@@ -52,43 +52,45 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   shortcut?: string;
-};
-
-const SIDEBAR_GO_MAP: Record<string, string> = {
-  d: '/',
-  s: '/sessions',
-  a: '/agents',
-  m: '/machines',
+  /** Second key of the `g`-prefix chord (e.g. 'd' for "g d" → Dashboard). */
+  goKey?: string;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1' },
-  { href: '/machines', label: 'Machines', icon: Server, shortcut: '2' },
-  { href: '/agents', label: 'Agents', icon: Bot, shortcut: '3' },
-  { href: '/agent-profiles', label: 'Agent Profiles', icon: UserCog },
-  { href: '/sessions', label: 'Sessions', icon: MessageSquare, shortcut: '4' },
-  { href: '/discover', label: 'Discover', icon: Compass, shortcut: '5' },
-  { href: '/logs', label: 'Logs', icon: ScrollText, shortcut: '6' },
-  { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7' },
-  { href: '/approvals', label: 'Approvals', icon: ShieldCheck },
-  { href: '/memory', label: 'Memory', icon: Database, shortcut: '8' },
-  { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9' },
-  { href: '/tasks', label: 'Tasks', icon: ListTree },
-  { href: '/scheduler', label: 'Scheduler', icon: CalendarClock },
-  { href: '/deployment', label: 'Deployment', icon: Rocket, shortcut: '0' },
-  { href: '/conflicts', label: 'Conflicts', icon: GitMerge },
-  { href: '/mesh-peers', label: 'Mesh Peers', icon: Wifi },
-  { href: '/security-findings', label: 'Security', icon: ShieldAlert },
-  { href: '/audit', label: 'Audit', icon: FileClock },
-  { href: '/webhooks', label: 'Webhooks', icon: Webhook },
+  { href: '/', label: 'Dashboard', icon: Gauge, shortcut: '1', goKey: 'd' },
+  { href: '/machines', label: 'Machines', icon: Server, shortcut: '2', goKey: 'm' },
+  { href: '/agents', label: 'Agents', icon: Bot, shortcut: '3', goKey: 'a' },
+  { href: '/agent-profiles', label: 'Agent Profiles', icon: UserCog, goKey: 'p' },
+  { href: '/sessions', label: 'Sessions', icon: MessageSquare, shortcut: '4', goKey: 's' },
+  { href: '/discover', label: 'Discover', icon: Compass, shortcut: '5', goKey: 'i' },
+  { href: '/logs', label: 'Logs', icon: ScrollText, shortcut: '6', goKey: 'l' },
+  { href: '/settings', label: 'Settings', icon: Settings, shortcut: '7', goKey: 'e' },
+  { href: '/approvals', label: 'Approvals', icon: ShieldCheck, goKey: 'v' },
+  { href: '/memory', label: 'Memory', icon: Database, shortcut: '8', goKey: 'y' },
+  { href: '/spaces', label: 'Spaces', icon: Network, shortcut: '9', goKey: 'x' },
+  { href: '/tasks', label: 'Tasks', icon: ListTree, goKey: 't' },
+  { href: '/scheduler', label: 'Scheduler', icon: CalendarClock, goKey: 'c' },
+  { href: '/deployment', label: 'Deployment', icon: Rocket, shortcut: '0', goKey: 'u' },
+  { href: '/conflicts', label: 'Conflicts', icon: GitMerge, goKey: 'f' },
+  { href: '/mesh-peers', label: 'Mesh Peers', icon: Wifi, goKey: 'n' },
+  { href: '/security-findings', label: 'Security', icon: ShieldAlert, goKey: 'r' },
+  { href: '/audit', label: 'Audit', icon: FileClock, goKey: 'q' },
+  { href: '/webhooks', label: 'Webhooks', icon: Webhook, goKey: 'w' },
 ];
 
 const SHORTCUT_MAP: Record<string, string> = {};
+const SIDEBAR_GO_MAP: Record<string, string> = {};
 for (const item of NAV_ITEMS) {
   if (item.shortcut) {
     SHORTCUT_MAP[item.shortcut] = item.href;
   }
+  if (item.goKey) {
+    SIDEBAR_GO_MAP[item.goKey] = item.href;
+  }
 }
+
+export const SIDEBAR_NAV_ITEMS = NAV_ITEMS;
+export const SIDEBAR_GO_KEY_MAP = SIDEBAR_GO_MAP;
 
 export function Sidebar(): React.JSX.Element {
   const pathname = usePathname();
@@ -139,7 +141,7 @@ export function Sidebar(): React.JSX.Element {
     }
   }, [pathname]);
 
-  // Two-key sequence support: "g" followed by d/s/a/m
+  // Two-key sequence support: "g" followed by a nav goKey.
   const pendingKeyRef = useRef<string | null>(null);
   const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -229,6 +231,7 @@ export function Sidebar(): React.JSX.Element {
           clearTimeout(pendingTimerRef.current);
           pendingTimerRef.current = null;
         }
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
         const goHref = SIDEBAR_GO_MAP[e.key];
         if (goHref) {
           e.preventDefault();
@@ -244,7 +247,7 @@ export function Sidebar(): React.JSX.Element {
         pendingTimerRef.current = setTimeout(() => {
           pendingKeyRef.current = null;
           pendingTimerRef.current = null;
-        }, 500);
+        }, 1500);
         return;
       }
 
@@ -416,7 +419,10 @@ export function Sidebar(): React.JSX.Element {
           {/* Keyboard hints (hidden on medium, shown on large) */}
           <div className="text-[10px] text-muted-foreground/60 leading-relaxed flex-wrap gap-x-3 gap-y-0.5 hidden lg:flex">
             <span>
-              <Kbd>1</Kbd>-<Kbd>8</Kbd> Nav
+              <Kbd>1</Kbd>-<Kbd>9</Kbd>, <Kbd>0</Kbd> Nav
+            </span>
+            <span>
+              <Kbd>g</Kbd> <Kbd>x</Kbd> Go-to
             </span>
             <span>
               <Kbd>{'\u2318'}K</Kbd> Search

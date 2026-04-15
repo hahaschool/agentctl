@@ -273,9 +273,14 @@ describe('Sidebar', () => {
       }
     });
 
-    it('displays keyboard hint text for 1-8 Nav', () => {
+    it('displays keyboard hint text for 1-9 Nav', () => {
       render(<Sidebar />);
       expect(screen.getByText(/Nav/)).toBeDefined();
+    });
+
+    it('displays keyboard hint text for g-prefix go-to chord', () => {
+      render(<Sidebar />);
+      expect(screen.getByText(/Go-to/)).toBeDefined();
     });
 
     it('displays keyboard hint text for search shortcut', () => {
@@ -450,6 +455,39 @@ describe('Sidebar', () => {
 
       fireEvent.keyDown(document, { key: 's', ctrlKey: true });
       expect(onSave).toHaveBeenCalledTimes(1);
+    });
+
+    it('navigates via g-prefix chord ("g" then "c") to Scheduler', () => {
+      render(<Sidebar />);
+      fireEvent.keyDown(document, { key: 'g' });
+      fireEvent.keyDown(document, { key: 'c' });
+      expect(mockPush).toHaveBeenCalledWith('/scheduler');
+    });
+
+    it('navigates via g-prefix chord to pages without a digit shortcut', () => {
+      render(<Sidebar />);
+      fireEvent.keyDown(document, { key: 'g' });
+      fireEvent.keyDown(document, { key: 'w' });
+      expect(mockPush).toHaveBeenCalledWith('/webhooks');
+    });
+
+    it('does not treat modified second keys as g-prefix navigation', () => {
+      mockPathname.mockReturnValue('/settings');
+      const onSave = vi.fn();
+      render(
+        <div>
+          <Sidebar />
+          <button type="button" onClick={onSave}>
+            Save
+          </button>
+        </div>,
+      );
+
+      fireEvent.keyDown(document, { key: 'g' });
+      fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(mockPush).not.toHaveBeenCalledWith('/sessions');
     });
 
     it('does not trigger save button on Ctrl+S outside settings pages', () => {

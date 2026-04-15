@@ -56,17 +56,17 @@ describe('ALL_SHORTCUTS', () => {
     expect(ALL_SHORTCUTS.length).toBeGreaterThan(0);
   });
 
-  it('has 15 total entries (8 nav + 7 global)', () => {
-    expect(ALL_SHORTCUTS).toHaveLength(15);
+  it('has 36 total entries (10 nav + 19 go-to + 7 global)', () => {
+    expect(ALL_SHORTCUTS).toHaveLength(36);
   });
 
-  it('starts with navigation shortcuts (keys 1-8)', () => {
-    const navKeys = ALL_SHORTCUTS.slice(0, 8).map((e) => e.keys[0]);
-    expect(navKeys).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+  it('starts with navigation shortcuts (keys 1-9, 0)', () => {
+    const navKeys = ALL_SHORTCUTS.slice(0, 10).map((e) => e.keys[0]);
+    expect(navKeys).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']);
   });
 
   it('has navigation descriptions in correct order', () => {
-    const navDescs = ALL_SHORTCUTS.slice(0, 8).map((e) => e.desc);
+    const navDescs = ALL_SHORTCUTS.slice(0, 10).map((e) => e.desc);
     expect(navDescs).toEqual([
       'Dashboard',
       'Machines',
@@ -76,6 +76,8 @@ describe('ALL_SHORTCUTS', () => {
       'Logs & Metrics',
       'Settings',
       'Memory',
+      'Spaces',
+      'Deployment',
     ]);
   });
 
@@ -115,9 +117,16 @@ describe('SHORTCUT_GROUPS', () => {
     expect(SHORTCUT_GROUPS.length).toBeGreaterThan(0);
   });
 
-  it('has 5 groups: Global, Sessions, Session Detail, Agents, Agent Detail', () => {
+  it('has 6 groups: Global, Go To, Sessions, Session Detail, Agents, Agent Detail', () => {
     const titles = SHORTCUT_GROUPS.map((g) => g.title);
-    expect(titles).toEqual(['Global', 'Sessions', 'Session Detail', 'Agents', 'Agent Detail']);
+    expect(titles).toEqual([
+      'Global',
+      'Go To',
+      'Sessions',
+      'Session Detail',
+      'Agents',
+      'Agent Detail',
+    ]);
   });
 
   it('Global group contains navigation and command palette shortcuts', () => {
@@ -129,6 +138,21 @@ describe('SHORTCUT_GROUPS', () => {
     expect(descs).toContain('Save settings (Settings pages)');
     expect(descs).toContain('Navigate to page');
     expect(descs).toContain('Show keyboard shortcuts');
+  });
+
+  it('Go To group covers every navigable page via g-prefix chord', () => {
+    const goTo = SHORTCUT_GROUPS.find((g) => g.title === 'Go To');
+    expect(goTo).toBeDefined();
+    const descs = goTo?.shortcuts.map((s) => s.desc) ?? [];
+    // Every entry is a two-key chord starting with 'g'
+    for (const s of goTo?.shortcuts ?? []) {
+      expect(s.keys[0]).toBe('g');
+      expect(s.keys).toHaveLength(2);
+    }
+    expect(descs).toContain('Go to Dashboard');
+    expect(descs).toContain('Go to Scheduler');
+    expect(descs).toContain('Go to Webhooks');
+    expect(descs).toContain('Go to Audit');
   });
 
   it('Sessions group contains relevant shortcuts', () => {
@@ -188,8 +212,8 @@ describe('SHORTCUT_GROUPS', () => {
   });
 
   it('two-key shortcuts use separate array entries', () => {
-    const global = SHORTCUT_GROUPS.find((g) => g.title === 'Global');
-    const goToDashboard = global?.shortcuts.find((s) => s.desc === 'Go to Dashboard');
+    const goTo = SHORTCUT_GROUPS.find((g) => g.title === 'Go To');
+    const goToDashboard = goTo?.shortcuts.find((s) => s.desc === 'Go to Dashboard');
     expect(goToDashboard).toBeDefined();
     expect(goToDashboard?.keys).toEqual(['g', 'd']);
   });
