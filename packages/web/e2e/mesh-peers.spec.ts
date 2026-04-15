@@ -425,7 +425,7 @@ test.describe('Mesh Peers page', () => {
         hostname: 'new.tail.ts.net',
         syncUrl: 'https://new.tail.ts.net:9090',
         tailscaleIp: '100.64.0.31',
-        role: 'primary',
+        role: 'full',
         syncStatus: 'unreachable',
         syncIntervalMs: 45_000,
         isSelf: false,

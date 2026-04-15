@@ -165,7 +165,7 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
         hostname,
         syncUrl,
         tailscaleIp: state.tailscaleIp.trim() || null,
-        role: peer?.role ?? 'full',
+        role: 'full',
         syncStatus: peer?.syncStatus ?? 'unknown',
         syncIntervalMs: intervalSeconds * 1000,
         isSelf: false,

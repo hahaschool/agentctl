@@ -369,7 +369,7 @@ describe('MeshPeersPage', () => {
         hostname: 'new.tail.ts.net',
         syncUrl: 'https://new.tail.ts.net:9090',
         tailscaleIp: '100.64.0.32',
-        role: 'observer',
+        role: 'full',
         syncStatus: 'unreachable',
         syncIntervalMs: 75_000,
         isSelf: false,
