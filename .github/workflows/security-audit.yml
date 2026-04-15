@@ -256,6 +256,7 @@ jobs:
           exit-code: '0'
           ignore-unfixed: true
           vuln-type: os,library
+          cache: "false"
 
       - name: Upload Trivy SARIF to GitHub Security tab
         if: always()
@@ -272,6 +273,7 @@ jobs:
           image-ref: ${{ matrix.image }}:audit
           format: cyclonedx
           output: sbom-${{ matrix.image }}.cdx.json
+          cache: "false"
 
       - name: Upload SBOM as artifact
         uses: actions/upload-artifact@v7.0.1
