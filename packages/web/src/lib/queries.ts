@@ -1805,6 +1805,22 @@ export function usePingSyncPeer() {
   });
 }
 
+/**
+ * Ask a mesh peer to self-update via `POST /api/sync/peers/:peerId/update`
+ * (roadmap §33.11 slice 1). The *local* CP proxies the signed request to the
+ * peer's CP; the peer's CP is the only one that actually runs the update
+ * script — it rejects any `peerId` that doesn't match its own machine id.
+ */
+export function useUpdateSyncPeer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (machineId: string) => api.updateSyncPeer(machineId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.syncPeers });
+    },
+  });
+}
+
 export function useResolveSyncConflict() {
   const qc = useQueryClient();
   return useMutation({
