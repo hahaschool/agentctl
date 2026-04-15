@@ -31,6 +31,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Required for actions/attest-build-provenance: mints an OIDC token
+      # used to sign the attestation, and writes the attestation bundle back
+      # to the repository's attestation store.
+      id-token: write
+      attestations: write
 
     strategy:
       fail-fast: false
@@ -95,6 +100,19 @@ jobs:
           # Provenance attestation for supply chain security
           provenance: true
           sbom: true
+
+      # ── Signed build provenance attestation (SLSA v1.0) ──────────
+      # Publishes a signed attestation to the repo's attestation store
+      # keyed by the pushed image digest. deploy-fleet.yml verifies these
+      # before any docker pull so peers refuse unattested images.
+      # Ref: https://github.com/actions/attest-build-provenance
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
       # ── Trivy vulnerability scan ─────────────────────────────────
       # Non-blocking: Trivy binary installation can fail on GHA runners
