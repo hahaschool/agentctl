@@ -3,6 +3,7 @@ import { ControlPlaneError, checkWithTimeout } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
+import { getAppVersion, getGitSha, getSchemaVersion } from '../../build-info.js';
 import type { Database } from '../../db/index.js';
 import type { Mem0Client } from '../../memory/mem0-client.js';
 import type { LiteLLMClient } from '../../router/litellm-client.js';
@@ -17,6 +18,13 @@ export type HealthRoutesOptions = {
   machineId?: string;
   /** Ed25519 public key (base64) for peer auth. */
   syncPublicKey?: string;
+  /**
+   * Mesh version observability (roadmap §33.9). Optional overrides used
+   * primarily for tests; production defaults come from `build-info`.
+   */
+  appVersion?: string;
+  gitSha?: string;
+  schemaVersion?: number;
 };
 
 type MemoryUsage = {
@@ -30,6 +38,12 @@ type HealthResponse = {
   timestamp: string;
   uptime: number;
   nodeVersion: string;
+  /** AgentCTL semver (e.g. "0.4.0"). Producer's release string for §33.9 drift detection. */
+  appVersion: string;
+  /** Short git SHA at build time, or "unknown" if not stamped. */
+  gitSha: string;
+  /** Highest drizzle migration sequence shipped with this build. §33.10 apply-gate input. */
+  schemaVersion: number;
   memoryUsage: MemoryUsage;
   machineId?: string | null;
   nodePublicKey?: string | null;
@@ -46,6 +60,9 @@ const OK_STATUS: DependencyStatus = { status: 'ok', latencyMs: 0 };
 
 export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app, opts) => {
   const { db, redis, mem0Client, litellmClient } = opts;
+  const appVersion = opts.appVersion ?? getAppVersion();
+  const gitSha = opts.gitSha ?? getGitSha();
+  const schemaVersion = opts.schemaVersion ?? getSchemaVersion();
 
   /** Run all dependency health checks in parallel. */
   function runHealthChecks(): Promise<
@@ -155,6 +172,9 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
         timestamp,
         uptime: process.uptime(),
         nodeVersion: process.version,
+        appVersion,
+        gitSha,
+        schemaVersion,
         memoryUsage,
         machineId: opts.machineId ?? null,
         nodePublicKey: opts.syncPublicKey ?? null,
