@@ -28,6 +28,8 @@
 
 > Follow-up sync (2026-04-15): PR #514 exposed a global Security Audit dependency-audit failure after npm retired the legacy audit endpoints used by `pnpm audit` (`/-/npm/v1/security/audits` and `/audits/quick`). PR #515 replaces those workflow calls with `pnpm audit:deps --audit-level=high`, a repository script that reads `pnpm-lock.yaml`, calls npm's supported bulk advisory endpoint, and keeps high/critical advisories blocking while avoiding lockfile or package-manager churn.
 
+> Follow-up sync (2026-04-15): PR #516 and PR #518 moved the backend-independent `/machines` and `/agents` list browser slices into the focused Web E2E CI lane, with `@agentctl/shared` built before Playwright so cold CI checkouts can compile shared-contract imports. PR #520 modernized Docker publish Grype output with `anchore/scan-action@v7.4.0` and explicit per-image SARIF validation, PR #522 scoped explicit CI `node_modules` cache keys by run/attempt to remove duplicate immutable cache-save annotations, and PR #523 moved Docker publish, Security Audit container scans, and local-mode DAST Docker builds onto Node24 action majors while disabling Buildx binary caching and Trivy's internal action cache. At the post-#523 checkpoint, `main@1d77f4e9` had green CI `24436282633`, Security Audit `24436282625`, and Build & Publish Docker Images `24436282616`, with 0 open code-scanning, Dependabot, or secret-scanning alerts.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
