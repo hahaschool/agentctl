@@ -2,7 +2,8 @@
 
 ## Status
 
-Implemented in PR #499.
+Implemented in PR #499. CI gating follow-up in PR #516 adds the backend-independent
+`machines.spec.ts` slice to the focused web `test:e2e:ci` allowlist.
 
 ## Scope
 
@@ -19,5 +20,6 @@ operator surfaces without touching the terminal-specific flows covered by `machi
 ## Validation
 
 - `WEB_PORT=5391 pnpm --filter @agentctl/web exec playwright test e2e/machines.spec.ts`
+- `WEB_PORT=5391 pnpm --filter @agentctl/web test:e2e:ci`
 - `pnpm lint`
 - `git diff --check`
