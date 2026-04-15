@@ -30,6 +30,8 @@
 
 > Follow-up sync (2026-04-15): PR #516 and PR #518 moved the backend-independent `/machines` and `/agents` list browser slices into the focused Web E2E CI lane, with `@agentctl/shared` built before Playwright so cold CI checkouts can compile shared-contract imports. PR #520 modernized Docker publish Grype output with `anchore/scan-action@v7.4.0` and explicit per-image SARIF validation, PR #522 scoped explicit CI `node_modules` cache keys by run/attempt to remove duplicate immutable cache-save annotations, and PR #523 moved Docker publish, Security Audit container scans, and local-mode DAST Docker builds onto Node24 action majors while disabling Buildx binary caching and Trivy's internal action cache. At the post-#523 checkpoint, `main@1d77f4e9` had green CI `24436282633`, Security Audit `24436282625`, and Build & Publish Docker Images `24436282616`, with 0 open code-scanning, Dependabot, or secret-scanning alerts.
 
+> Follow-up sync (2026-04-15): PR #524 synced the roadmap/main-stability checkpoint after the Docker-action cleanup, and PR #525 expanded sidebar keyboard access with `1-9,0` digit navigation plus `g`-prefix Go To chords for all sidebar destinations. The PR #525 review follow-up also made Settings render the grouped shortcut catalog and added regression coverage so modified second keys preserve browser/app shortcuts. At the post-#525 checkpoint, `main@0f49e772` has green CI `24437117041`, Security Audit `24437117038`, and Build & Publish Docker Images `24437117043`.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`

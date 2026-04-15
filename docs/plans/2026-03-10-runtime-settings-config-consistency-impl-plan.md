@@ -136,6 +136,11 @@ Expected: PASS.
 
 ### Task 4: Integrate new sections into SettingsView
 
+> Follow-up sync (2026-04-15): PR #525 later changed `SettingsView` to render
+> the shared grouped shortcut catalog (`SHORTCUT_GROUPS`) so the Settings page
+> now documents the sidebar `Go To` chord group alongside the existing runtime
+> settings sections.
+
 **Files:**
 - Modify: `packages/web/src/views/SettingsView.tsx`
 - Modify: `packages/web/src/views/SettingsView.test.tsx`

@@ -8,6 +8,8 @@
 
 **Tech Stack:** Next.js App Router, React, TypeScript, TanStack Query, shared TypeScript types, Vitest, Playwright.
 
+> Follow-up sync (2026-04-15): PR #525 updated `SettingsView` after the runtime-centric redesign to render the shared `SHORTCUT_GROUPS` catalog, including the new `Go To` sidebar navigation chord group. The settings implementation should now be read as covering both runtime sections and grouped keyboard shortcut documentation.
+
 ---
 
 ### Task 1: Define runtime-centric settings view model
