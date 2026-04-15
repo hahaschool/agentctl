@@ -485,6 +485,12 @@ async function main(): Promise<void> {
     dispatchVerificationConfig,
     machineId,
     syncPublicKey: dispatchSigningKeyPair?.publicKey,
+    syncSigningSecretKey: dispatchSigningKeyPair?.secretKey,
+    selfSyncUrl: CONTROL_PLANE_URL,
+    selfHostname: (await import('node:os')).hostname(),
+    selfTailscaleIp: process.env.TAILSCALE_IP ?? null,
+    reverseRegistrationToken:
+      process.env.SYNC_PEER_REVERSE_REGISTRATION_TOKEN ?? process.env.SYNC_PEER_REGISTRATION_TOKEN,
   });
 
   // Run dependency health checks before starting the server.

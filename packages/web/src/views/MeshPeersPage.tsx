@@ -23,6 +23,7 @@ import {
   syncPeersQuery,
   useDeleteSyncPeer,
   usePingSyncPeer,
+  useRegisterReverseSyncPeer,
   useUpdateSyncPeer,
   useUpsertSyncPeer,
 } from '@/lib/queries';
@@ -197,6 +198,16 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
       onSuccess: (res) => {
         const machineId = res.peer?.machineId ?? result.body.machineId;
         toast.success(`Peer ${machineId} ${isUpdate ? 'updated' : 'saved'}`);
+        // §33.8: surface reverse-registration outcome inline so the operator
+        // learns about one-way meshes without hunting the row badge.
+        const reverse = res.peer?.reverseRegistrationStatus ?? null;
+        if (!isUpdate && reverse === 'ok') {
+          toast.success(`Peer ${machineId} also registered this node in reverse`);
+        } else if (!isUpdate && reverse === 'failed') {
+          toast.error(
+            `Peer ${machineId} saved but reverse registration failed — retry from the peer row`,
+          );
+        }
         onClose();
       },
       onError: (err) => {
@@ -460,10 +471,12 @@ type PeerRowProps = {
   onEdit: (peer: SyncPeer) => void;
   onDelete: (peer: SyncPeer) => void;
   onUpdate: (peer: SyncPeerWithVersion) => void;
+  onRetryReverse: (peer: SyncPeer) => void;
   isPinging: boolean;
   pingingId: string | null;
   deletingId: string | null;
   updatingId: string | null;
+  reverseRetryingId: string | null;
 };
 
 /**
@@ -479,6 +492,54 @@ function canUpdatePeer(peer: SyncPeerWithVersion, localVersion: string): boolean
   return peerVersion !== localVersion;
 }
 
+type ReverseBadgeProps = {
+  peer: SyncPeer;
+  onRetry: (peer: SyncPeer) => void;
+  isRetrying: boolean;
+};
+
+/**
+ * §33.8 — Show a compact "One-way" warning badge when reverse registration
+ * failed. Self rows never render this (reverse registration is skipped).
+ */
+export function ReverseRegistrationBadge({
+  peer,
+  onRetry,
+  isRetrying,
+}: ReverseBadgeProps): React.JSX.Element | null {
+  if (peer.isSelf) return null;
+  const status = peer.reverseRegistrationStatus;
+  if (status !== 'failed') return null;
+  const tooltip = peer.reverseRegistrationError
+    ? `Reverse registration failed: ${peer.reverseRegistrationError}`
+    : 'Reverse registration failed';
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        data-testid={`reverse-badge-${peer.machineId}`}
+        title={tooltip}
+        className="px-1.5 py-px rounded-sm bg-yellow-500/15 text-yellow-400 text-[10px] font-semibold tracking-wide uppercase"
+      >
+        One-way
+      </span>
+      <button
+        type="button"
+        onClick={() => onRetry(peer)}
+        disabled={isRetrying}
+        data-testid={`reverse-retry-${peer.machineId}`}
+        title="Retry reverse registration"
+        className={cn(
+          'px-1.5 py-px rounded-sm text-[10px] font-medium border border-yellow-500/40 bg-yellow-500/5 text-yellow-300 hover:bg-yellow-500/10',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
+        )}
+      >
+        {isRetrying ? 'Retrying…' : 'Retry'}
+      </button>
+    </span>
+  );
+}
+
 export function MeshPeerRow({
   peer,
   localVersion,
@@ -486,16 +547,19 @@ export function MeshPeerRow({
   onEdit,
   onDelete,
   onUpdate,
+  onRetryReverse,
   isPinging,
   pingingId,
   deletingId,
   updatingId,
+  reverseRetryingId,
 }: PeerRowProps): React.JSX.Element {
   const thisRowIsPinging = isPinging && pingingId === peer.machineId;
   const canPing = Boolean(peer.syncUrl) && !peer.isSelf;
   const thisRowIsDeleting = deletingId === peer.machineId;
   const thisRowIsUpdating = updatingId === peer.machineId;
   const updatable = canUpdatePeer(peer, localVersion);
+  const thisRowIsRetryingReverse = reverseRetryingId === peer.machineId;
 
   return (
     <tr className="border-t border-border hover:bg-accent/5">
@@ -513,14 +577,21 @@ export function MeshPeerRow({
         </div>
       </td>
       <td className="px-4 py-3 align-top">
-        <span
-          className={cn(
-            'px-2 py-0.5 rounded-sm text-[10px] font-semibold tracking-wide uppercase',
-            statusClasses(peer.syncStatus),
-          )}
-        >
-          {peer.syncStatus}
-        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span
+            className={cn(
+              'px-2 py-0.5 rounded-sm text-[10px] font-semibold tracking-wide uppercase',
+              statusClasses(peer.syncStatus),
+            )}
+          >
+            {peer.syncStatus}
+          </span>
+          <ReverseRegistrationBadge
+            peer={peer}
+            onRetry={onRetryReverse}
+            isRetrying={thisRowIsRetryingReverse}
+          />
+        </div>
       </td>
       <td className="px-4 py-3 align-top whitespace-nowrap">
         <VersionCell
@@ -634,6 +705,7 @@ export function MeshPeersPage(): React.JSX.Element {
   const pingMutation = usePingSyncPeer();
   const deleteMutation = useDeleteSyncPeer();
   const updateMutation = useUpdateSyncPeer();
+  const reverseRetryMutation = useRegisterReverseSyncPeer();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogPeer, setDialogPeer] = useState<SyncPeer | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SyncPeer | null>(null);
@@ -725,6 +797,31 @@ export function MeshPeersPage(): React.JSX.Element {
   const updatingId = updateMutation.isPending
     ? ((updateMutation.variables as string | undefined) ?? null)
     : null;
+  const reverseRetryingId = reverseRetryMutation.isPending
+    ? ((reverseRetryMutation.variables as string | undefined) ?? null)
+    : null;
+
+  const handleRetryReverse = useCallback(
+    (peer: SyncPeer) => {
+      reverseRetryMutation.mutate(peer.machineId, {
+        onSuccess: (res) => {
+          if (res.ok) {
+            toast.success(`Reverse registration for ${peer.machineId} succeeded`);
+          } else {
+            toast.error(
+              res.message
+                ? `Reverse registration still failing: ${res.message}`
+                : `Reverse registration for ${peer.machineId} still failing`,
+            );
+          }
+        },
+        onError: (err) => {
+          toast.error(errorMessage(err, 'Failed to retry reverse registration'));
+        },
+      });
+    },
+    [reverseRetryMutation, toast],
+  );
 
   return (
     <div className="relative p-4 md:p-6 max-w-[1400px] animate-page-enter">
@@ -878,10 +975,12 @@ export function MeshPeersPage(): React.JSX.Element {
                     onEdit={openEditDialog}
                     onDelete={setPendingDelete}
                     onUpdate={setPendingUpdate}
+                    onRetryReverse={handleRetryReverse}
                     isPinging={pingMutation.isPending}
                     pingingId={pingingId}
                     deletingId={deletingId}
                     updatingId={updatingId}
+                    reverseRetryingId={reverseRetryingId}
                   />
                 ))}
               </tbody>

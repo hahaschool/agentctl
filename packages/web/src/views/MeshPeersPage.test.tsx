@@ -14,6 +14,7 @@ const {
   mockUseUpsertSyncPeer,
   mockUseDeleteSyncPeer,
   mockUseUpdateSyncPeer,
+  mockUseRegisterReverseSyncPeer,
   mockToastSuccess,
   mockToastError,
 } = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ const {
   mockUseUpsertSyncPeer: vi.fn(),
   mockUseDeleteSyncPeer: vi.fn(),
   mockUseUpdateSyncPeer: vi.fn(),
+  mockUseRegisterReverseSyncPeer: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
 }));
@@ -74,6 +76,7 @@ vi.mock('@/lib/queries', () => ({
   useUpsertSyncPeer: () => mockUseUpsertSyncPeer(),
   useDeleteSyncPeer: () => mockUseDeleteSyncPeer(),
   useUpdateSyncPeer: () => mockUseUpdateSyncPeer(),
+  useRegisterReverseSyncPeer: () => mockUseRegisterReverseSyncPeer(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -147,6 +150,7 @@ describe('MeshPeersPage', () => {
     mockUseUpsertSyncPeer.mockReturnValue(makeMutationHook());
     mockUseDeleteSyncPeer.mockReturnValue(makeMutationHook());
     mockUseUpdateSyncPeer.mockReturnValue(makeMutationHook());
+    mockUseRegisterReverseSyncPeer.mockReturnValue(makeMutationHook());
   });
 
   afterEach(() => {
@@ -644,5 +648,127 @@ describe('MeshPeersPage', () => {
     expect(submit.disabled).toBe(true);
     fireEvent.click(submit);
     expect(mutate).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.8 — Reverse registration badge + retry
+  // ---------------------------------------------------------------------------
+
+  describe('reverse registration badge', () => {
+    it('renders the "One-way" badge + Retry button for a failed peer', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-broken',
+              reverseRegistrationStatus: 'failed',
+              reverseRegistrationError: 'HTTP 401 Unauthorized bootstrap token invalid',
+            }),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('reverse-badge-peer-broken')).toBeDefined();
+      });
+      const badge = screen.getByTestId('reverse-badge-peer-broken');
+      expect(badge.textContent).toContain('One-way');
+      expect(badge.getAttribute('title')).toContain('HTTP 401 Unauthorized');
+
+      const retry = screen.getByTestId('reverse-retry-peer-broken');
+      expect(retry.textContent).toContain('Retry');
+    });
+
+    it('does not render the badge when reverse registration is ok', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [makePeer({ machineId: 'peer-ok', reverseRegistrationStatus: 'ok' })],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getAllByRole('row').length).toBeGreaterThan(0);
+      });
+      expect(screen.queryByTestId('reverse-badge-peer-ok')).toBeNull();
+      expect(screen.queryByTestId('reverse-retry-peer-ok')).toBeNull();
+    });
+
+    it('does not render the badge for self rows even when status=failed', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-self',
+              isSelf: true,
+              reverseRegistrationStatus: 'failed',
+              reverseRegistrationError: 'ignored',
+            }),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getAllByRole('row').length).toBeGreaterThan(0);
+      });
+      expect(screen.queryByTestId('reverse-badge-peer-self')).toBeNull();
+    });
+
+    it('clicking Retry invokes the register-reverse mutation for the peer', async () => {
+      const mutate = vi.fn();
+      mockUseRegisterReverseSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-broken',
+              reverseRegistrationStatus: 'failed',
+              reverseRegistrationError: 'HTTP 500',
+            }),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('reverse-retry-peer-broken')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('reverse-retry-peer-broken'));
+
+      expect(mutate).toHaveBeenCalledTimes(1);
+      expect(mutate.mock.calls[0]?.[0]).toBe('peer-broken');
+    });
+
+    it('disables the Retry button while the mutation is pending for that row', async () => {
+      mockUseRegisterReverseSyncPeer.mockReturnValue(
+        makeMutationHook({ isPending: true, variables: 'peer-broken' }),
+      );
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'peer-broken',
+              reverseRegistrationStatus: 'failed',
+              reverseRegistrationError: 'HTTP 500',
+            }),
+          ],
+        }),
+      });
+
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('reverse-retry-peer-broken')).toBeDefined();
+      });
+      const retry = screen.getByTestId('reverse-retry-peer-broken') as HTMLButtonElement;
+      expect(retry.disabled).toBe(true);
+      expect(retry.textContent).toContain('Retrying');
+    });
   });
 });

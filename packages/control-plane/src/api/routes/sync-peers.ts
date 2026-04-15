@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import rateLimit from '@fastify/rate-limit';
 import { sql } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import type { Logger } from 'pino';
 
 import type { Database } from '../../db/index.js';
 import { extractRows } from '../../db/index.js';
@@ -13,6 +14,11 @@ import {
   readPeerVersionInfo,
 } from '../../sync/peer-health.js';
 import { verifyPeerRegistrationSignature } from '../../sync/peer-registration.js';
+import {
+  performReverseRegistration,
+  type ReverseRegistrationResult,
+  type SelfIdentity,
+} from '../../sync/peer-reverse-registration.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
 const DEFAULT_INTERVAL_MS = 30_000;
@@ -67,6 +73,27 @@ type PingPeerResult =
 type SyncPeersRoutesOptions = {
   db: Database;
   registrationToken?: string;
+  /**
+   * Identity of THIS control plane — used as the "signer" of outbound reverse
+   * registration envelopes when an operator adds a new peer locally (§33.8).
+   * When omitted the reverse handshake is skipped (and the new column stays
+   * NULL). Callers that know their own machine id / sync URL should pass it.
+   */
+  selfIdentity?: SelfIdentity | null;
+  /**
+   * Ed25519 secret key (base64) used to sign outbound registration envelopes.
+   * Without it we cannot sign, so the reverse handshake is skipped.
+   */
+  signingSecretKey?: string | null;
+  /** Optional bootstrap token to present to the remote peer. */
+  reverseRegistrationToken?: string | null;
+  /**
+   * Fetch implementation used for outbound reverse registration. Injected for
+   * tests so we never hit the real network. Defaults to `globalThis.fetch`.
+   */
+  fetchImpl?: typeof fetch;
+  /** Logger for outbound reverse-registration errors. */
+  logger?: Pick<Logger, 'warn' | 'debug'>;
 };
 
 type SyncPeerRow = {
@@ -86,7 +113,12 @@ type SyncPeerRow = {
   peer_version: string | null;
   peer_git_sha: string | null;
   peer_schema_version: number | null;
+  reverse_registration_status: string | null;
+  reverse_registration_error: string | null;
+  reverse_registration_at: string | Date | null;
 };
+
+const SYNC_NODE_COLUMNS = sql`id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version, reverse_registration_status, reverse_registration_error, reverse_registration_at`;
 
 type UpsertSyncPeerBody = {
   machineId?: string;
@@ -407,6 +439,15 @@ function toIsoString(value: string | Date | null): string | null {
   return value instanceof Date ? value.toISOString() : value;
 }
 
+function normalizeReverseRegistrationStatus(
+  value: string | null,
+): 'pending' | 'ok' | 'failed' | null {
+  if (value === 'pending' || value === 'ok' || value === 'failed') {
+    return value;
+  }
+  return null;
+}
+
 function mapSyncPeerRow(row: SyncPeerRow) {
   return {
     machineId: row.id,
@@ -426,18 +467,39 @@ function mapSyncPeerRow(row: SyncPeerRow) {
     peerVersion: row.peer_version ?? null,
     peerGitSha: row.peer_git_sha ?? null,
     peerSchemaVersion: row.peer_schema_version ?? null,
+    // §33.8: outbound reverse registration outcome.
+    reverseRegistrationStatus: normalizeReverseRegistrationStatus(row.reverse_registration_status),
+    reverseRegistrationError: row.reverse_registration_error ?? null,
+    reverseRegistrationAt: toIsoString(row.reverse_registration_at),
   };
 }
 
 async function fetchPeer(db: Database, machineId: string): Promise<SyncPeerRow | null> {
   const result = await db.execute(sql`
-    SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
+    SELECT ${SYNC_NODE_COLUMNS}
     FROM sync_nodes
     WHERE id = ${machineId}
     LIMIT 1
   `);
   const [peer] = extractRows<SyncPeerRow>(result);
   return peer ?? null;
+}
+
+async function updateReverseRegistration(
+  db: Database,
+  machineId: string,
+  outcome: ReverseRegistrationResult,
+): Promise<SyncPeerRow | null> {
+  const result = await db.execute(sql`
+    UPDATE sync_nodes
+    SET reverse_registration_status = ${outcome.status},
+        reverse_registration_error = ${outcome.error},
+        reverse_registration_at = now()
+    WHERE id = ${machineId}
+    RETURNING ${SYNC_NODE_COLUMNS}
+  `);
+  const [row] = extractRows<SyncPeerRow>(result);
+  return row ?? null;
 }
 
 function normalizePingErrorCategory(value: string | null): PingErrorCategory | null {
@@ -575,7 +637,7 @@ async function updatePingResult(
               peer_git_sha = ${result.version.gitSha},
               peer_schema_version = ${result.version.schemaVersion}
           WHERE id = ${machineId}
-          RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
+          RETURNING ${SYNC_NODE_COLUMNS}
         `)
       : await db.execute(sql`
           UPDATE sync_nodes
@@ -584,7 +646,7 @@ async function updatePingResult(
               last_ping_error = ${result.error.category},
               last_ping_status_code = ${result.error.httpStatusCode}
           WHERE id = ${machineId}
-          RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
+          RETURNING ${SYNC_NODE_COLUMNS}
         `);
 
   const [updatedPeer] = extractRows<SyncPeerRow>(updateResult);
@@ -593,6 +655,33 @@ async function updatePingResult(
 
 export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async (app, opts) => {
   const { db } = opts;
+
+  /**
+   * Attempt reverse registration against a newly-added peer and persist the
+   * outcome. Returns the refreshed row when update succeeds, or null when the
+   * feature is disabled (no self identity / signing key) or the row disappeared
+   * between calls.
+   */
+  async function tryReverseRegistration(
+    peer: SyncPeerRow,
+  ): Promise<{ row: SyncPeerRow | null; result: ReverseRegistrationResult } | null> {
+    const { selfIdentity, signingSecretKey } = opts;
+    if (!selfIdentity || !signingSecretKey || !peer.sync_url || peer.is_self) {
+      return null;
+    }
+
+    const outcome = await performReverseRegistration({
+      targetSyncUrl: peer.sync_url,
+      self: selfIdentity,
+      signingSecretKey,
+      registrationToken: opts.reverseRegistrationToken ?? null,
+      fetchImpl: opts.fetchImpl,
+      logger: opts.logger,
+    });
+
+    const row = await updateReverseRegistration(db, peer.id, outcome);
+    return { row, result: outcome };
+  }
   const registrationRateLimitMax = readRateLimitEnv(
     'SYNC_PEER_REGISTRATION_RATE_LIMIT_MAX',
     REGISTRATION_RATE_LIMIT.max,
@@ -717,7 +806,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
     },
     async () => {
       const result = await db.execute(sql`
-        SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
+        SELECT ${SYNC_NODE_COLUMNS}
         FROM sync_nodes
         ORDER BY hostname ASC, id ASC
       `);
@@ -827,13 +916,91 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           sync_interval_ms = EXCLUDED.sync_interval_ms,
           is_self = EXCLUDED.is_self,
           public_key = EXCLUDED.public_key
-        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
+        RETURNING ${SYNC_NODE_COLUMNS}
       `);
       const [peer] = extractRows<SyncPeerRow>(result);
 
+      // §33.8: fire a reverse registration handshake so the remote peer also
+      // knows about us. Failures do NOT roll back — operator can retry from
+      // the UI via POST /:peerId/register-reverse.
+      let refreshed: SyncPeerRow | null = peer ?? null;
+      if (peer) {
+        const reverse = await tryReverseRegistration(peer);
+        if (reverse?.row) {
+          refreshed = reverse.row;
+        }
+      }
+
       return reply.code(201).send({
         ok: true,
-        peer: peer ? mapSyncPeerRow(peer) : null,
+        peer: refreshed ? mapSyncPeerRow(refreshed) : null,
+      });
+    },
+  );
+
+  app.post<{ Params: { machineId: string } }>(
+    '/:machineId/register-reverse',
+    {
+      schema: {
+        tags: ['sync'],
+        summary: 'Retry reverse registration against an existing peer (§33.8)',
+      },
+    },
+    async (request, reply) => {
+      const { machineId } = request.params;
+      if (!isNonEmptyString(machineId)) {
+        return reply.code(400).send({
+          error: 'INVALID_MACHINE_ID',
+          message: 'A non-empty "machineId" path parameter is required',
+        });
+      }
+
+      const peer = await fetchPeer(db, machineId.trim());
+      if (!peer) {
+        return reply.code(404).send({
+          error: 'SYNC_PEER_NOT_FOUND',
+          message: `Sync peer '${machineId}' not found`,
+        });
+      }
+
+      if (peer.is_self) {
+        return reply.code(400).send({
+          error: 'REVERSE_REGISTRATION_NOT_APPLICABLE',
+          message: 'Cannot reverse-register with self',
+        });
+      }
+
+      if (!isNonEmptyString(peer.sync_url)) {
+        return reply.code(400).send({
+          error: 'SYNC_PEER_MISSING_URL',
+          message: `Sync peer '${machineId}' does not have a syncUrl configured`,
+        });
+      }
+
+      if (!opts.selfIdentity || !opts.signingSecretKey) {
+        return reply.code(503).send({
+          error: 'REVERSE_REGISTRATION_DISABLED',
+          message: 'Reverse registration requires self identity and signing key',
+        });
+      }
+
+      const attempt = await tryReverseRegistration(peer);
+      const refreshed = attempt?.row ?? peer;
+      if (!attempt || attempt.result.status === 'ok') {
+        return reply.code(200).send({
+          ok: true,
+          status: 'ok',
+          peer: mapSyncPeerRow(refreshed),
+        });
+      }
+
+      // Failed outcome — return 502 so the UI can render a distinct error,
+      // while still including the persisted row for the inline badge.
+      return reply.code(502).send({
+        ok: false,
+        error: 'REVERSE_REGISTRATION_FAILED',
+        message: attempt.result.error ?? 'Reverse registration failed',
+        peer: mapSyncPeerRow(refreshed),
       });
     },
   );
@@ -876,7 +1043,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           sync_interval_ms = EXCLUDED.sync_interval_ms,
           is_self = false,
           public_key = EXCLUDED.public_key
-        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
+        RETURNING ${SYNC_NODE_COLUMNS}
       `);
       const [peer] = extractRows<SyncPeerRow>(result);
 
@@ -908,7 +1075,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
       const result = await db.execute(sql`
         DELETE FROM sync_nodes
         WHERE id = ${machineId.trim()}
-        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version
+        RETURNING ${SYNC_NODE_COLUMNS}
       `);
       const [peer] = extractRows<SyncPeerRow>(result);
 

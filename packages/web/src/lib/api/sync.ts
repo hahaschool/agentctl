@@ -31,6 +31,11 @@ export type SyncPeer = {
   publicKey: string | null;
   lastSeen: string | null;
   createdAt: string | null;
+  // §33.8: outbound reverse-registration outcome. Optional for backward
+  // compatibility with older backends that pre-date the 0026 migration.
+  reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
+  reverseRegistrationError?: string | null;
+  reverseRegistrationAt?: string | null;
 };
 
 export type SyncPeersResponse = {
@@ -78,6 +83,14 @@ export type UpdateSyncPeerResponse = {
   exitCode: number;
   stdoutTail: string;
   stderrTail: string;
+};
+
+export type ReverseRegisterSyncPeerResponse = {
+  ok: boolean;
+  status?: 'ok';
+  error?: string;
+  message?: string;
+  peer: SyncPeer | null;
 };
 
 export const syncApi = {
@@ -134,4 +147,15 @@ export const syncApi = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+
+  /**
+   * §33.8 — Retry reverse registration against an existing peer. Returns the
+   * updated peer row regardless of outcome so the UI can refresh the inline
+   * badge immediately.
+   */
+  registerReverseSyncPeer: (machineId: string) =>
+    request<ReverseRegisterSyncPeerResponse>(
+      `/api/sync/peers/${encodeURIComponent(machineId)}/register-reverse`,
+      { method: 'POST' },
+    ),
 };

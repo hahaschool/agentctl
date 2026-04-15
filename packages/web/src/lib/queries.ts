@@ -1821,6 +1821,22 @@ export function useUpdateSyncPeer() {
   });
 }
 
+/**
+ * §33.8 — Retry reverse registration against an existing peer.
+ *
+ * Always invalidates the peer list so the "one-way" badge reflects the
+ * latest reverse-registration outcome, regardless of success or failure.
+ */
+export function useRegisterReverseSyncPeer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (machineId: string) => api.registerReverseSyncPeer(machineId),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.syncPeers });
+    },
+  });
+}
+
 export function useResolveSyncConflict() {
   const qc = useQueryClient();
   return useMutation({

@@ -81,6 +81,17 @@ export type SyncNode = {
   peerVersion?: string | null;
   peerGitSha?: string | null;
   peerSchemaVersion?: number | null;
+  /**
+   * Outbound reverse registration outcome (roadmap §33.8).
+   *
+   * When an operator adds a peer locally, the control plane calls the peer's
+   * `POST /api/sync/peers/register` endpoint so the mesh becomes symmetric
+   * without manual ceremony. These fields expose that outcome so UIs can
+   * render a "one-way" badge + retry button when it failed.
+   */
+  reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
+  reverseRegistrationError?: string | null;
+  reverseRegistrationAt?: string | null;
 };
 
 /**

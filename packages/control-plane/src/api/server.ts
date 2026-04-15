@@ -155,6 +155,19 @@ type CreateServerOptions = {
   machineId?: string;
   /** Ed25519 public key (base64) for mesh peer auth. */
   syncPublicKey?: string;
+  /**
+   * Ed25519 secret key (base64) used to sign outbound reverse-registration
+   * envelopes (§33.8). If omitted, reverse registration is a no-op.
+   */
+  syncSigningSecretKey?: string;
+  /** This control plane's reachable sync URL (used for reverse registration). */
+  selfSyncUrl?: string;
+  /** Hostname reported to remote peers during reverse registration. */
+  selfHostname?: string;
+  /** Tailscale IP of this node, reported during reverse registration. */
+  selfTailscaleIp?: string | null;
+  /** Bootstrap token presented to remote peers during reverse registration. */
+  reverseRegistrationToken?: string;
 };
 
 export async function createServer({
@@ -178,6 +191,11 @@ export async function createServer({
   dispatchVerificationConfig = null,
   machineId,
   syncPublicKey,
+  syncSigningSecretKey,
+  selfSyncUrl,
+  selfHostname,
+  selfTailscaleIp = null,
+  reverseRegistrationToken,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
@@ -775,10 +793,28 @@ export async function createServer({
     });
 
     // Mesh peer sync routes
+    const selfIdentity =
+      machineId && selfSyncUrl && syncPublicKey && selfHostname
+        ? {
+            machineId,
+            hostname: selfHostname,
+            tailscaleIp: selfTailscaleIp,
+            syncUrl: selfSyncUrl,
+            publicKey: syncPublicKey,
+          }
+        : null;
     await app.register(syncPeersRoutes, {
       prefix: '/api/sync/peers',
       db,
       registrationToken: process.env.SYNC_PEER_REGISTRATION_TOKEN,
+      selfIdentity,
+      signingSecretKey: syncSigningSecretKey ?? null,
+      reverseRegistrationToken:
+        reverseRegistrationToken ??
+        process.env.SYNC_PEER_REVERSE_REGISTRATION_TOKEN ??
+        process.env.SYNC_PEER_REGISTRATION_TOKEN ??
+        null,
+      logger: logger.child({ component: 'sync-peers-reverse' }),
     });
 
     // Mesh peer self-update route (§33.11 slice 1)
