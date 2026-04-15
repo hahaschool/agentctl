@@ -26,6 +26,7 @@ import {
   useUpdateWebhook,
   webhooksQuery,
 } from '@/lib/queries';
+import { MAX_WEBHOOK_URL_LENGTH, URL_LENGTH_COUNTER_THRESHOLD } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -128,9 +129,18 @@ export function WebhookFormDialog({
     }));
   };
 
+  const trimmedUrl = state.url.trim();
+  const urlLength = trimmedUrl.length;
+  const urlTooLong = urlLength > MAX_WEBHOOK_URL_LENGTH;
+  const showUrlCounter =
+    urlLength > 0 && urlLength >= MAX_WEBHOOK_URL_LENGTH - URL_LENGTH_COUNTER_THRESHOLD;
+
   const validate = (): string | null => {
-    if (!state.url.trim()) return 'URL is required';
-    if (!isValidHttpUrl(state.url.trim())) return 'URL must be a valid http(s) URL';
+    if (!trimmedUrl) return 'URL is required';
+    if (urlTooLong) {
+      return `URL too long (${urlLength}/${MAX_WEBHOOK_URL_LENGTH})`;
+    }
+    if (!isValidHttpUrl(trimmedUrl)) return 'URL must be a valid http(s) URL';
     if (state.eventTypes.length === 0) return 'Select at least one event type';
     return null;
   };
@@ -211,8 +221,37 @@ export function WebhookFormDialog({
                 value={state.url}
                 onChange={(e) => setState((p) => ({ ...p, url: e.target.value }))}
                 placeholder="https://example.com/hook"
-                className="w-full bg-muted border border-border rounded-md text-xs px-2 py-1.5 font-mono text-foreground"
+                aria-invalid={urlTooLong || undefined}
+                aria-describedby={
+                  urlTooLong
+                    ? 'webhook-url-error'
+                    : showUrlCounter
+                      ? 'webhook-url-counter'
+                      : undefined
+                }
+                className={cn(
+                  'w-full bg-muted border rounded-md text-xs px-2 py-1.5 font-mono text-foreground',
+                  urlTooLong ? 'border-red-500/60' : 'border-border',
+                )}
               />
+              {urlTooLong ? (
+                <p
+                  id="webhook-url-error"
+                  role="alert"
+                  data-testid="webhook-url-length-error"
+                  className="mt-1 text-[11px] text-red-400"
+                >
+                  URL too long ({urlLength}/{MAX_WEBHOOK_URL_LENGTH})
+                </p>
+              ) : showUrlCounter ? (
+                <p
+                  id="webhook-url-counter"
+                  data-testid="webhook-url-length-counter"
+                  className="mt-1 text-[11px] text-muted-foreground"
+                >
+                  {urlLength}/{MAX_WEBHOOK_URL_LENGTH}
+                </p>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -315,7 +354,7 @@ export function WebhookFormDialog({
             </button>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || urlTooLong}
               data-testid="webhook-submit"
               className={cn(
                 'px-3 py-1.5 rounded-md text-xs font-medium',
