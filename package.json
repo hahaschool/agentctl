@@ -24,7 +24,8 @@
     "clean": "pnpm -r exec rm -rf dist",
     "agentctl": "tsx scripts/agentctl.ts",
     "coord": "tsx scripts/agent-coord.ts",
-    "agentctl:deploy": "npx tsx scripts/deploy.ts"
+    "agentctl:deploy": "npx tsx scripts/deploy.ts",
+    "peer-update": "tsx scripts/peer-update.ts"
   },
   "pnpm": {
     "overrides": {
