@@ -36,6 +36,8 @@ tailscale ping <other-node-hostname>
 
 ## Step 3: Run the bootstrap script
 
+**On the first node:**
+
 ```bash
 ./scripts/setup-mesh-node.sh
 ```
@@ -44,7 +46,17 @@ This will:
 - Check prerequisites (node, pnpm, psql, redis-cli)
 - Create a local PostgreSQL database (`agentctl_mesh`)
 - Detect your Tailscale IP
-- Generate `.env.mesh` with all configuration
+- Generate a fresh `SYNC_PEER_REGISTRATION_TOKEN` (printed at the end of the script)
+- Write `.env.mesh` with all configuration
+
+**On every subsequent node**, reuse the token the first node printed so reverse-registration works across the mesh:
+
+```bash
+export SYNC_PEER_REGISTRATION_TOKEN='<paste-token-from-first-node>'
+./scripts/setup-mesh-node.sh
+```
+
+Without a matching token across the fleet, adding a peer on node A won't auto-register node A on node B — you'd have to add the reverse row manually on every machine.
 
 ## Step 4: Build and start
 
@@ -69,15 +81,22 @@ curl http://localhost:8080/health
 
 ## Step 6: Add peers
 
-Other mesh nodes will auto-discover this node via Tailscale if both have `tag:mesh-node`. You can also add peers manually:
+Other mesh nodes will auto-discover this node via Tailscale if both have `tag:mesh-node`. You can also add peers manually — as long as every node shares the same `SYNC_PEER_REGISTRATION_TOKEN`, a single add-peer call on node A registers both sides:
 
 ```bash
-# From any mesh node's web UI: Machines page → Mesh Peers section
+# From any mesh node's web UI: Mesh Peers page → "+ Add peer"
 # Or via API:
 curl -X POST http://localhost:8080/api/sync/peers \
   -H 'Content-Type: application/json' \
-  -d '{"hostname": "other-node", "syncUrl": "http://<tailscale-ip>:8080"}'
+  -d '{
+        "machineId": "other-node",
+        "hostname": "other-node",
+        "syncUrl": "http://<tailscale-ip>:8080",
+        "publicKey": "<other-nodes-nodePublicKey-from-/health>"
+      }'
 ```
+
+If the response shows `reverseRegistrationStatus: "failed"` with `PEER_REGISTRATION_DISABLED`, the remote node is missing `SYNC_PEER_REGISTRATION_TOKEN` — set it and restart the control plane.
 
 ## How sync works
 

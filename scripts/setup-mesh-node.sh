@@ -80,9 +80,41 @@ fi
 
 echo ""
 
-# ── Write .env.mesh ────────────────────────────────────────────────────────
+# ── Peer reverse-registration token ────────────────────────────────────────
+#
+# Every node in the same mesh must share the same SYNC_PEER_REGISTRATION_TOKEN
+# so that adding a peer on one node auto-registers the caller on the other.
+# Preserve an existing token if .env.mesh already has one; otherwise honour
+# $SYNC_PEER_REGISTRATION_TOKEN from the environment (for copying across the
+# fleet); finally fall back to generating a fresh one locally.
 
 ENV_FILE=".env.mesh"
+
+EXISTING_TOKEN=""
+if [ -f "$ENV_FILE" ]; then
+  EXISTING_TOKEN=$(grep -E '^SYNC_PEER_REGISTRATION_TOKEN=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)
+fi
+
+if [ -n "$EXISTING_TOKEN" ]; then
+  PEER_TOKEN="$EXISTING_TOKEN"
+  TOKEN_SOURCE="preserved from existing $ENV_FILE"
+elif [ -n "${SYNC_PEER_REGISTRATION_TOKEN:-}" ]; then
+  PEER_TOKEN="$SYNC_PEER_REGISTRATION_TOKEN"
+  TOKEN_SOURCE="inherited from environment (fleet-wide rollout)"
+else
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "ERROR: openssl is required to generate SYNC_PEER_REGISTRATION_TOKEN."
+    echo "Either install openssl or set SYNC_PEER_REGISTRATION_TOKEN in the env before re-running."
+    exit 1
+  fi
+  PEER_TOKEN=$(openssl rand -hex 32)
+  TOKEN_SOURCE="freshly generated — copy to every peer in the mesh"
+fi
+
+echo "Peer token:    ${TOKEN_SOURCE}"
+echo ""
+
+# ── Write .env.mesh ────────────────────────────────────────────────────────
 
 cat > "$ENV_FILE" << EOF
 # AgentCTL Mesh Node Configuration
@@ -98,6 +130,12 @@ CONTROL_PLANE_URL=http://localhost:8080
 CONTROL_URL=http://localhost:8080
 TAILSCALE_IP=$TS_IP
 NODE_ENV=production
+
+# Shared bootstrap token for mesh peer reverse-registration.
+# Must match across every node in the mesh — copy this value into each peer's
+# .env.mesh (or export SYNC_PEER_REGISTRATION_TOKEN before re-running this
+# script on the next node). See .env.mesh.template for details.
+SYNC_PEER_REGISTRATION_TOKEN=$PEER_TOKEN
 
 # Uncomment and set if you use encrypted API credentials:
 # CREDENTIAL_ENCRYPTION_KEY=
@@ -120,3 +158,12 @@ echo "  3. pm2 save && pm2 startup"
 echo ""
 echo "Migrations will run automatically on first CP startup."
 echo "The node will be discoverable by other mesh peers via Tailscale at $TS_IP."
+echo ""
+if [ "$TOKEN_SOURCE" = "freshly generated — copy to every peer in the mesh" ]; then
+  echo "IMPORTANT: SYNC_PEER_REGISTRATION_TOKEN was freshly generated on this node."
+  echo "For reverse-registration to work, EVERY other node must use the same value."
+  echo "Copy this command to each peer before re-running setup-mesh-node.sh there:"
+  echo ""
+  echo "  export SYNC_PEER_REGISTRATION_TOKEN='$PEER_TOKEN'"
+  echo ""
+fi
