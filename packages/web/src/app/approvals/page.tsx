@@ -256,6 +256,8 @@ export default function ApprovalsPage(): React.JSX.Element {
                   <button
                     type="button"
                     onClick={() => toggleSession(group.sessionId)}
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} resolved requests for session ${group.sessionId.slice(0, 12)}`}
                     className="w-full flex items-start justify-between gap-3 px-4 py-3 text-left hover:bg-muted/20 transition-colors"
                   >
                     <div className="min-w-0 flex-1">
