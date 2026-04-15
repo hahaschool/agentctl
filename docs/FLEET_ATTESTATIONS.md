@@ -106,10 +106,82 @@ This complements §33.10's envelope schema-ahead rejection:
   refuses to roll out until an operator confirms the destructive change
   is intended).
 
+## Rollback
+
+Both topologies support rollback, but the mechanics differ. In both cases
+rollback is allowed to bypass the _fresh_ attestation verification because
+the target tag was verified at the time it was originally applied — a
+record of that verification is what authorises the bypass.
+
+### PM2 topology — `agentctl peer update --rollback`
+
+The PM2 peer-update CLI records every apply in
+`~/.agentctl/update-history.json` (cap 100 entries). A rollback consults
+that history to decide whether to skip `gh attestation verify`.
+
+```bash
+# Roll back to the previous successful tag (auto-target)
+pnpm agentctl peer update --rollback
+
+# Roll back to a specific previously-applied tag
+pnpm agentctl peer update --tag v0.3.3 --rollback
+
+# Inspect rollback history and mode per entry
+cat ~/.agentctl/update-history.json | jq '.[] | {toTag, mode, rolledBackFrom, success, finishedAt}'
+```
+
+Key guarantees:
+
+- **`--rollback` without `--tag`** resolves the target to the most recent
+  non-dry-run, successful entry whose `toTag` differs from the currently
+  checked-out tag. If no such entry exists, the CLI exits non-zero with
+  `NO_ROLLBACK_TARGET`.
+- **`--tag <v> --rollback`** refuses to proceed unless `<v>` appears in
+  `update-history.json` as a previously-successful, non-dry-run entry.
+  Exits non-zero with `ROLLBACK_TARGET_NOT_IN_HISTORY` otherwise. This is
+  what prevents `--rollback` from being used to downgrade to an unverified
+  tag.
+- The attestation step is replaced by a warn-level log line ("skipping
+  attestation verification: `<tag>` was previously verified-applied…")
+  so rollbacks are visible in the operator's console and in the run JSON.
+- The persisted history entry for a rollback is tagged with
+  `mode: "rollback"` and `rolledBackFrom: "<previous tag>"`, making the
+  history file auditable and distinguishable from forward-rolls.
+- Forward-rolls via explicit `--tag <v>` (without `--rollback`) always
+  run `gh attestation verify` — explicit targeting is not a bypass.
+
+If the rollback itself fails (checkout, build, PM2 reload, or health
+poll), the CLI exits non-zero and writes a failed history entry — it
+does _not_ attempt a recursive rollback, because by definition we are
+already on the "previous known-good" path.
+
+### Docker topology — re-invoke `rollback.yml`
+
+The Docker fleet rollback is already implemented as a manual workflow:
+`.github/workflows/rollback.yml` (input: `environment`, `image_tag`).
+To roll back:
+
+1. Open the repository's **Actions → Rollback Deployment → Run workflow**.
+2. Pick the target `environment` (`dev` or `production`).
+3. Enter the prior image tag (e.g. a `sha-<shortsha>` or `vX.Y.Z-1`) that
+   was previously deployed successfully.
+4. Run the workflow.
+
+Image attestation enforcement for rollback deploys is handled by
+`deploy-fleet.yml`'s `validate` gate (see "How deploy-fleet enforces it"
+above). If you need to roll back to a tag that predates 33.11 (and thus
+was never attested), use the `skip_attestation_verification` escape
+hatch on `deploy-fleet.yml` — see
+"[Emergency escape-hatch](#emergency-escape-hatch-skip_attestation_verification)".
+`rollback.yml` itself does not accept a skip-attestation input; the
+trust decision lives in `deploy-fleet.yml`.
+
 ## Related
 
 - Build workflow: `.github/workflows/build-images.yml`
 - Deploy workflow: `.github/workflows/deploy-fleet.yml`
 - Migration gate reusable workflow: `.github/workflows/migration-check.yml`
+- Docker rollback workflow: `.github/workflows/rollback.yml`
+- PM2 peer-update CLI: `scripts/peer-update.ts` (entrypoint: `pnpm peer-update`)
 - Roadmap section: [33.11](./ROADMAP.md#3311-fleet-rollout--peer-auto-update-p1-two-topology--in-progress)
 - Mesh schema/protocol compat (separate but adjacent trust gate): [MESH_COMPAT.md](./MESH_COMPAT.md)
