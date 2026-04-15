@@ -31,7 +31,7 @@
 
 ## Review Corrections
 
-This v1.1 plan supersedes the original PR #584 draft. It incorporates the review blockers before implementation starts:
+This v1.3 plan supersedes the original PR #584 draft. It incorporates the review blockers before implementation starts:
 
 - Migration numbers now start after the current latest migration, `0027_sync_nodes_schema_ahead_rejection.sql`. Use `0028`, `0029`, `0030`, and later numbers as listed below. If `main` advances before implementation, stop and update this plan instead of silently reusing occupied numbers.
 - `wing` / `room` were removed from the schema. Existing `memory_scopes.scope` is the only durable hierarchy. `topic` is an optional room-like label.
@@ -44,6 +44,7 @@ This v1.1 plan supersedes the original PR #584 draft. It incorporates the review
 - Backfill from Claude Code JSONL and `claude-mem` is explicit, so evals have real drawer data.
 - Phase order is changed to build data before drawer-aware search: eval -> schema/chunker -> backfill -> checkpoint capture -> provenance/injection bridge -> search.
 - Round-2 findings in [2026-04-15-mempalace-additional-findings.md](2026-04-15-mempalace-additional-findings.md) are folded into this plan: PreCompact timeout contract, query-hygiene gate, dev/held-out eval discipline, rank-bucket boosts, per-category reporting, entity canonicalization, shared redaction keys, and embedding rotation playbooks.
+- Round-3 findings in [2026-04-16-mempalace-additional-findings-round-3.md](2026-04-16-mempalace-additional-findings-round-3.md) are folded into this plan: three-stage query sanitizer, empty-DB/cold-start contract, `memory_dedup_check`, `memory_traverse`, planted-needle recall bench, `sanitizeName()` validation, null-arguments MCP defenses, and explicit "do not steal" notes for MemPalace patterns that do not fit AgentCTL.
 
 ## Research Summary
 
@@ -83,6 +84,7 @@ AgentCTL sources reviewed:
 - `packages/agent-worker/src/api/routes/memory-*.ts`
 - `packages/shared/src/types/memory.ts`
 - `docs/plans/2026-04-15-mempalace-additional-findings.md`
+- `docs/plans/2026-04-16-mempalace-additional-findings-round-3.md`
 
 ## Glossary
 
@@ -120,8 +122,10 @@ AgentCTL already has a strong memory system:
 - `MemorySearch` fuses vector, BM25, and graph results with Reciprocal Rank Fusion and boosts by recency, strength, scope, and role affinity.
 - `MemoryInjector` supports pinned, on-demand, and triggered tiers but currently has one overall `maxTokens` budget and injects fact content only.
 - Worker routes expose `memory_search`, `memory_store`, `memory_recall`, `memory_feedback`, `memory_report`, and `memory_promote`.
+- Round-3 MCP comparison found MemPalace exposes 29 tools, but most are hierarchy CRUD endpoints that AgentCTL's `scope` model does not need. The useful gaps are `memory_dedup_check` and `memory_traverse`, not a wholesale MCP surface copy.
 - Web UI covers browser, graph, dashboard, consolidation, reports, import, scopes, synthesis, maintenance, decay, provenance filters, and contextual session/agent/machine memory views.
 - Post-session `ExperienceExtractor` mines decisions, patterns, errors, and experiences from completed transcripts.
+- AgentCTL already has much stronger test and lifecycle infrastructure than MemPalace in several places: thousands of unit tests plus Playwright coverage, PG/LISTEN/NOTIFY-friendly mesh primitives instead of single-process inode polling, and `memory-decay` / `memory-consolidation` routes where upstream has no real pruning or GC answer.
 - `MemoryObservation.narrative` from `claude-mem` migration is semantically closer to a drawer than a fact and must be handled that way in the new import path.
 - `docs/LESSONS_LEARNED.md` explicitly warns that JSONL session files can be enormous, memory injection placement matters, and `claude-mem` code cannot be embedded because of AGPL.
 
@@ -423,6 +427,14 @@ export const MEMORY_REDACT_KEYS: ReadonlySet<string> = new Set([
 
 The raw-transcript sanitizer, `AuditLogger` memory write path, checkpoint metadata logs, and future memory audit surfaces must call `redactKeys()` before writing structured context. Add a Vitest suite that covers the helper and greps memory audit call sites to ensure the helper is on the write path.
 
+Create a shared name-field validator:
+
+- Create: `packages/shared/src/memory/validation.ts`
+- Export: `MEMORY_NAME_MAX_LENGTH = 128`
+- Export: `sanitizeName(name: string): string`
+- Reject `..`, NUL bytes, control characters, and path separators that would become path traversal if scope/entity names are later used for export paths.
+- Apply to `memory_facts.entity_name`, `memory_facts.scope`, `memory_edges.subject_name`, `memory_edges.object_name`, and `memory_drawers.scope` on insert/update.
+
 Minimum patterns:
 
 - OpenAI/Anthropic style keys: `sk-*`, `sk-ant-*`
@@ -585,19 +597,33 @@ Signals:
 
 Query hygiene is part of the search contract, not a downstream caller concern.
 
-Rules:
+Implement a shared sanitizer in `packages/shared/src/memory/query-sanitizer.ts`. Both `packages/agent-worker/src/api/routes/memory-search.ts` and `packages/control-plane/src/memory/memory-search.ts` must call `sanitizeQuery()` before embedding; neither surface trusts the other.
 
-- Embedding input must be bare query text only.
-- Strip leading whitespace, role tags such as `User:` / `Assistant:`, code fences, and any content before the last user-turn marker when the caller passes a rendered conversation.
-- Reject queries over `MEMORY_QUERY_MAX_TOKENS` with `400 query_too_long`; default max is `256`.
-- Log `query.token_count` and `query.has_prefix_smell` for every search. Prefix smells include multi-turn role markers, system-prompt markers, or long prompt/conversation separators.
-- Validate in both `packages/agent-worker/src/api/routes/memory-search.ts` and `packages/control-plane/src/memory/memory-search.ts`; neither surface trusts the other.
+Three-stage pipeline:
 
-Required contamination test:
+1. Passthrough:
+   - If `query.length <= MEMORY_QUERY_MAX_CHARS` and no role markers, system-prompt smell, code-fence prefix, or rendered conversation separators are present, pass through unchanged except trimming.
+2. Question extraction:
+   - If the input is contaminated but contains a trailing question sentence, take the minimal suffix ending in `?`.
+   - Multi-question inputs use the last question. This mirrors the common "long wake-up prompt + actual user question" failure mode.
+3. Tail-sentence fallback:
+   - If no `?` exists, split on `/[.!?]\s+/` and take the last sentence bounded by `MEMORY_QUERY_MAX_CHARS`.
+   - If the fallback remains too long, hard-truncate with a warning log instead of embedding the full contaminated prompt.
 
-- Prepend every eval fixture query with a 2,000-token harmless prefix.
-- Assert held-out NDCG@10 drops by less than 5 points.
-- If it drops more, retrieval is input-contaminated and Phase 4 cannot ship.
+Defaults and logs:
+
+- `MEMORY_QUERY_MAX_CHARS` default: `250`.
+- Log `query.sanitizer_stage` as one of `passthrough`, `question_extracted`, `tail_fallback`, `truncated`, or `empty`.
+- Log `query.has_prefix_smell`, `query.original_chars`, and `query.sanitized_chars` for every search.
+- Alert if more than `MEMORY_SANITIZER_FALLBACK_WARN_RATIO` of searches fall into `tail_fallback` or `truncated`; default ratio is `0.05`.
+- Empty or whitespace-only inputs return `400 query_empty` after sanitizer, never an embedding call.
+
+Required contamination tests:
+
+- Mirror MemPalace's 14 query-sanitizer pollution vectors before Phase 4 can ship.
+- Include at minimum: 2,000-char system prompt prefix plus one question, role-tagged conversation dump, code fence plus question, multi-question query where the last question wins, no-question tail fallback, empty input, and whitespace-only input.
+- Prepend every eval fixture query with a 2,000-token harmless prefix and assert NDCG@10 drops by less than 5 points.
+- If the drop exceeds 5 points, retrieval is input-contaminated and Phase 4 cannot ship.
 
 ### Result Shape
 
@@ -701,6 +727,8 @@ Mobile constraint:
 - Create: `packages/control-plane/src/memory/memory-eval.ts`
 - Create: `packages/control-plane/src/memory/memory-eval.test.ts`
 - Create: `packages/control-plane/src/memory/memory-eval.fixture.test.ts`
+- Create: `packages/control-plane/src/memory/eval/planted-needle.bench.ts`
+- Create: `packages/agent-worker/src/api/routes/__tests__/memory-cold-start.test.ts`
 - Create: `docs/fixtures/memory-eval/agentctl-memory-eval.sample.json`
 - Add: `scripts/memory-eval.ts`
 - Modify: `package.json`
@@ -737,6 +765,20 @@ Mobile constraint:
 10. Held-out regression budget: >2 point NDCG@10 drop between release evals is a release blocker.
 11. CI uses deterministic mock embeddings to verify retrieval logic. Nightly or local eval uses real embeddings against dev-1/dev-2 configuration.
 12. Baseline numbers must be written into this plan or a follow-up eval report before Phase 4 defaults can change.
+13. Add planted-needle PR regression bench:
+   - Insert `MEMORY_BENCH_NEEDLE_COUNT` synthetic facts or drawers with `NEEDLE_<uuid>:` prefixes; default count is 100.
+   - Insert `MEMORY_BENCH_NOISE_COUNT` templated noise facts; default count is 2,000.
+   - Query each needle without the `NEEDLE_` prefix.
+   - Block the PR if recall@5 falls below `MEMORY_BENCH_MIN_RECALL`; default is `0.85`.
+   - Report p50, p95, and p99 search latency.
+   - Run larger N={100,1000,5000} curves on release tags, not on every PR.
+14. Add empty-DB contract matrix before any new route ships:
+   - `memory_search` returns `{ results: [], total: 0 }`.
+   - `memory_recall` returns `{ facts: [], edges: [] }`.
+   - `memory_report` / stats route returns zero counts, not nulls.
+   - `memory_traverse` for a missing entity returns an empty graph, not `404`.
+   - `memory_dedup_check` on an empty DB recommends `store_new` with `nearest_matches: []`.
+   - Every MCP route accepts `{ arguments: null }` without hanging and returns a structured `400` within one second.
 
 **Tests:**
 
@@ -748,6 +790,9 @@ Mobile constraint:
 - A test asserts fixture failure-mode coverage.
 - Per-category report output is stable markdown.
 - Contaminated-query eval fixture path exists for Phase 4.
+- Planted-needle bench enforces recall@5 threshold on mock embeddings.
+- Empty-DB MCP route contract returns structured empty results.
+- Null MCP `arguments` test covers current routes and planned memory routes.
 
 **Rollback:** No product behavior change.
 
@@ -763,6 +808,8 @@ Mobile constraint:
 - Modify: `packages/control-plane/src/db/schema.test.ts`
 - Modify: `packages/shared/src/types/memory.ts`
 - Create: `packages/shared/src/memory/constants.ts`
+- Create: `packages/shared/src/memory/validation.ts`
+- Create: `packages/shared/src/memory/validation.test.ts`
 - Create: `packages/control-plane/src/memory/memory-drawer-types.ts`
 - Create: `packages/control-plane/src/memory/memory-drawer-chunker.ts`
 - Create: `packages/control-plane/src/memory/memory-drawer-sanitizer.ts`
@@ -782,11 +829,13 @@ Mobile constraint:
 4. Implement raw-transcript sanitizer and quarantine logic.
 5. Store only sanitized content, sanitized hash, and sanitized embeddings.
 6. Add memory write audit entry kind to existing `AuditLogger`.
-7. Do not add sync triggers for drawers in this phase.
+7. Apply `sanitizeName()` to scope/entity fields before drawer/fact/edge writes.
+8. Do not add sync triggers for drawers in this phase.
 
 **Tests:**
 
 - Red-team sanitizer covers API keys, Bearer tokens, GitHub tokens, JWTs, DB URLs, cookies, env assignments, and private keys.
+- Name validator caps names at 128 chars and rejects `..`, NUL bytes, control characters, and path-traversal separators.
 - Sanitizer runs before hash and embedding.
 - Quarantined drawers are not searchable by default.
 - Duplicate `content_sha256` across different sources is legal.
@@ -931,10 +980,13 @@ Mobile constraint:
 - Modify: `packages/control-plane/src/memory/memory-search.ts`
 - Create: `packages/control-plane/src/memory/memory-drawer-search.ts`
 - Create: `packages/control-plane/src/memory/memory-drawer-search.test.ts`
+- Create: `packages/shared/src/memory/query-sanitizer.ts`
+- Create: `packages/shared/src/memory/query-sanitizer.test.ts`
 - Modify: `packages/control-plane/src/api/routes/memory-facts.ts`
 - Modify: `packages/agent-worker/src/api/routes/memory-search.ts`
 - Create: `packages/agent-worker/src/api/routes/memory-drawer-search.ts`
 - Create: `packages/agent-worker/src/api/routes/memory-drawer-get.ts`
+- Create: `packages/agent-worker/src/api/routes/memory-dedup-check.ts`
 - Modify: `packages/shared/src/types/memory.ts`
 - Modify: `packages/web/src/components/memory/BrowserDetailPanel.tsx`
 - Modify: `packages/web/src/components/memory/FactCard.tsx`
@@ -949,10 +1001,17 @@ Mobile constraint:
 4. Fuse fact and drawer paths with RRF.
 5. Return discriminated union results with token estimates.
 6. Implement MCP parity for `memory_drawer_search` and `memory_drawer_get`.
-7. Implement query hygiene in both worker route and control-plane search before embedding.
-8. Basic temporal parser supports relative dates only.
-9. Event-anchored temporal search is Phase 4b and must not block Phase 4.
-10. Report eval before/after using dev during tuning. Default enablement requires drawer-aware dev R@5 >= facts-only dev R@5 and no p95 regression beyond the accepted threshold. Held-out comparison happens only in release/weekly eval jobs.
+7. Implement `memory_dedup_check` as a pre-store similarity gate:
+   - Request: `{ scope, entity_type?, content_preview, embedding_precomputed? }`
+   - Response: `{ is_duplicate, nearest_matches, recommendation, rationale }`
+   - `recommendation` is `skip` when top similarity >= `MEMORY_DEDUP_SKIP_THRESHOLD`, `merge` when >= `MEMORY_DEDUP_MERGE_THRESHOLD`, otherwise `store_new`.
+   - Defaults: skip `0.92`, merge `0.82`.
+   - Empty DB returns `store_new` with no matches.
+   - `memory_store` prompt/tool docs should call `memory_dedup_check` first by default, with an explicit `force_store` escape hatch.
+8. Implement the three-stage query sanitizer in both worker route and control-plane search before embedding.
+9. Basic temporal parser supports relative dates only.
+10. Event-anchored temporal search is Phase 4b and must not block Phase 4.
+11. Report eval before/after using dev during tuning. Default enablement requires drawer-aware dev R@5 >= facts-only dev R@5 and no p95 regression beyond the accepted threshold. Held-out comparison happens only in release/weekly eval jobs.
 
 **Tests:**
 
@@ -965,10 +1024,12 @@ Mobile constraint:
 - Strict BM25 zero-result path falls back cleanly.
 - Basic temporal boost changes ranking only when temporal signal exists.
 - Search result token budget cannot exceed requested cap.
-- Queries longer than `MEMORY_QUERY_MAX_TOKENS` return `query_too_long`.
+- Empty and whitespace-only queries return `query_empty`.
+- Query sanitizer has passthrough, question-extraction, tail-sentence fallback, and truncation tests.
 - Query hygiene strips role-prefix/system-prefix contamination before embedding.
 - Contamination eval prepends a 2,000-token prefix and asserts held-out NDCG@10 drop stays under 5 points.
 - Rank-bucket boost test proves boosts are fixed by result position and do not scale with raw cosine distance.
+- `memory_dedup_check` returns `skip`, `merge`, and `store_new` decisions at threshold boundaries.
 
 **Rollback:** `MEMORY_DRAWER_SEARCH_ENABLED=false`; schema and backfilled data remain.
 
@@ -1013,6 +1074,7 @@ Mobile constraint:
 - Create: `packages/control-plane/src/memory/entity-extraction-benchmark.ts`
 - Create: `packages/control-plane/src/api/routes/memory-timeline.ts`
 - Create: `packages/agent-worker/src/api/routes/memory-timeline.ts`
+- Create: `packages/agent-worker/src/api/routes/memory-traverse.ts`
 - Modify: `packages/web/src/app/memory/graph/page.tsx`
 - Modify: `packages/web/src/components/memory/GraphTableView.tsx`
 - Modify: `packages/web/src/components/memory/GraphNodeDetail.tsx`
@@ -1039,8 +1101,15 @@ Mobile constraint:
    - `asOf`: ISO-8601 UTC string; omitted means now.
    - `limit`: default 20, max 100.
    - `cursor`: opaque pagination cursor.
-7. Auth: mutation routes require the same account/admin scope as existing memory mutation routes; read routes follow existing memory read visibility.
-8. If canonicalization is too large for the Phase 6 timebox, Phase 6 may ship only with a visible timeline UI warning that same-name entities can appear as distinct nodes and a follow-up PR already filed.
+7. Add MCP `memory_traverse`:
+   - Request: `{ start_entity_canonical_id, max_hops, relation_types?, min_confidence?, as_of? }`.
+   - `max_hops` is bounded to `1..MEMORY_TRAVERSE_MAX_HOPS`, default 3, hard cap 10.
+   - Implement with a recursive CTE over `memory_edges`.
+   - Return `{ nodes, edges, partial }`; cap nodes at `MEMORY_TRAVERSE_MAX_NODES`, default 100.
+   - Missing entity returns an empty graph, not `404`.
+   - Log hop count, result size, partial flag, and duration for DoS visibility.
+8. Auth: mutation routes require the same account/admin scope as existing memory mutation routes; read routes follow existing memory read visibility.
+9. If canonicalization is too large for the Phase 6 timebox, Phase 6 may ship only with a visible timeline UI warning that same-name entities can appear as distinct nodes and a follow-up PR already filed.
 
 **Tests:**
 
@@ -1052,6 +1121,8 @@ Mobile constraint:
 - `"John"`, `"John Smith"`, and `"john smith"` can resolve to one canonical ID after reviewed backfill.
 - `"John Doe"` remains separate.
 - Ambiguous alias logs and UI review marker appear without auto-merging.
+- `memory_traverse` enforces hop/node caps and returns deterministic empty graph for missing entities.
+- `memory_traverse` applies validity windows when `as_of` is provided.
 
 **Rollback:** Disable timeline routes and keep new columns unused; if sync schema was bumped, follow mesh rollback docs before downgrading.
 
@@ -1084,7 +1155,12 @@ Mobile constraint:
 3. Add raw source filters: source type, topic, has evidence, redaction status.
 4. Add "include raw drawers" toggle to context picker memory panel.
 5. Add "why this matched" row: vector, keyword, drawer-grep, graph, temporal, source boost.
-6. Dashboard metrics:
+6. Keep MCP surface intentionally narrow:
+   - Adopt `memory_dedup_check` and `memory_traverse`.
+   - Keep `memory_drawer_search`, `memory_drawer_get`, `memory_timeline`, and `memory_diary` as planned.
+   - Do not copy MemPalace's per-wing/per-room/per-hall CRUD endpoints because AgentCTL's `scope` column subsumes that hierarchy.
+   - Do not add MemPalace's reconnect/cache-invalidation tool unless a real AgentCTL cache-staleness incident appears; PG/LISTEN/NOTIFY is the stronger fit for our mesh.
+7. Dashboard metrics:
    - `memory_drawer_write_total`
    - `memory_drawer_write_duration_ms`
    - `memory_embedding_queue_depth`
@@ -1092,8 +1168,8 @@ Mobile constraint:
    - `memory_search_result_count`
    - `memory_fact_source_coverage`
    - `memory_redaction_events_total`
-7. Pino logs for drawer write/search/checkpoint include `agentId`, `machineId`, `taskId` where applicable plus `drawerId`, `chunkIndex`, `sourceType`, and `searchPath`.
-8. Keep mobile snippets to top-1 and 120 chars.
+8. Pino logs for drawer write/search/checkpoint include `agentId`, `machineId`, `taskId` where applicable plus `drawerId`, `chunkIndex`, `sourceType`, and `searchPath`.
+9. Keep mobile snippets to top-1 and 120 chars.
 
 **Tests:**
 
@@ -1119,7 +1195,12 @@ Add env vars through the existing centralized config path used by control-plane/
 | `MEMORY_ASSISTANT_REFERENCE_SEARCH_ENABLED` | boolean | `false` | control-plane |
 | `MEMORY_RERANK_ENABLED` | boolean | `false` | control-plane |
 | `MEMORY_RANK_BOOSTS` | comma-separated numbers | `0.40,0.25,0.15,0.08,0.04` | control-plane |
-| `MEMORY_QUERY_MAX_TOKENS` | number | `256` | worker/control-plane |
+| `MEMORY_QUERY_MAX_CHARS` | number | `250` | worker/control-plane |
+| `MEMORY_SANITIZER_FALLBACK_WARN_RATIO` | number | `0.05` | worker/control-plane |
+| `MEMORY_DEDUP_SKIP_THRESHOLD` | number | `0.92` | worker/control-plane |
+| `MEMORY_DEDUP_MERGE_THRESHOLD` | number | `0.82` | worker/control-plane |
+| `MEMORY_TRAVERSE_MAX_HOPS` | number | `10` | worker/control-plane |
+| `MEMORY_TRAVERSE_MAX_NODES` | number | `100` | worker/control-plane |
 | `MEMORY_CHECKPOINT_ENABLED` | boolean | `false` | worker |
 | `MEMORY_CHECKPOINT_MESSAGE_INTERVAL` | number | `15` | worker |
 | `MEMORY_CHECKPOINT_MAX_CHARS` | number | `40000` | worker |
@@ -1127,12 +1208,15 @@ Add env vars through the existing centralized config path used by control-plane/
 | `MEMORY_DRAWER_EXTRACTION_QUEUE_ENABLED` | boolean | `true` where queue is available | worker/control-plane |
 | `MEMORY_INJECTION_RESULT_MODE` | enum | `fact-only` | control-plane |
 | `MEMORY_EVIDENCE_TOKEN_CAP` | number | `800` | control-plane |
+| `MEMORY_BENCH_NEEDLE_COUNT` | number | `100` | control-plane/scripts |
+| `MEMORY_BENCH_NOISE_COUNT` | number | `2000` | control-plane/scripts |
+| `MEMORY_BENCH_MIN_RECALL` | number | `0.85` | control-plane/scripts |
 | `EVAL_SPLIT_SEED` | number | `42` | control-plane/scripts |
 
 ## Suggested PR Slices
 
 1. **PR A: Eval Harness**
-   - Adds fixture schema, mock embedding eval, sanitized sample fixture, and baseline command.
+   - Adds fixture schema, mock embedding eval, sanitized sample fixture, planted-needle bench, cold-start MCP contract tests, and baseline command.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
@@ -1151,13 +1235,13 @@ Add env vars through the existing centralized config path used by control-plane/
    - Adds `0029`, fact-source links, injector budget modes, and Surface A dry-run generator.
 
 6. **PR F: Drawer-Aware Search**
-   - Adds drawer search behind feature flags, MCP parity, eval comparison, and no default enablement until metrics pass.
+   - Adds drawer search behind feature flags, three-stage query sanitizer, `memory_dedup_check`, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
 
 7. **PR G: Diaries**
    - Adds diary-as-fact route and basic UI.
 
 8. **PR H: Temporal Timeline**
-   - Adds edge temporal fields only after mesh sync gate.
+   - Adds edge temporal fields and `memory_traverse` only after mesh sync gate.
 
 9. **PR I: UI/Observability Polish**
    - Completes dashboard metrics, evidence views, mobile truncation, and Playwright coverage.
@@ -1194,7 +1278,10 @@ Add env vars through the existing centralized config path used by control-plane/
 | Drawer encryption at rest | Rely on current Postgres/disk controls for now; revisit after sanitizer/retention. |
 | Full CJK search optimization | `simple` config is a safer baseline; deeper CJK search is a later initiative. |
 | Cross-machine drawer conflict resolution | Phase 1 only does idempotent source-local insert; sync policy comes later. |
-| Full MCP naming refactor | Add missing drawer/timeline tools without renaming existing tools. |
+| Full MCP naming refactor | Add missing drawer/dedup/traverse/timeline tools without renaming existing tools. |
+| MemPalace reconnect/inode polling model | AgentCTL's PG/LISTEN/NOTIFY and mesh sync model is a better fit. |
+| MemPalace test infrastructure migration | Only adopt the planted-needle pattern; AgentCTL already has much broader unit/e2e coverage. |
+| MemPalace pruning/GC approach | Upstream has no useful GC answer; keep AgentCTL memory-decay and memory-consolidation as the baseline. |
 
 ## Acceptance Criteria
 
@@ -1205,9 +1292,13 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, and p95 search time.
 - [ ] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42; ranker tuning runs on dev only.
 - [ ] Eval report prints per-category metrics and includes at least five examples for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
+- [ ] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock embeddings.
+- [ ] Cold-start tests prove memory search, recall, stats/report, dedup-check, and traverse return structured empty results from an empty DB.
+- [ ] Every memory MCP route rejects `{ arguments: null }` within one second without hanging.
 - [ ] Phase 0 records a facts-only baseline number before drawer-aware search changes ranking.
 - [ ] Drawer-aware search is not default-enabled unless R@5 is at least the facts-only baseline and p95 stays within the accepted threshold.
-- [ ] Query hygiene rejects oversized/prefix-contaminated search inputs and contamination eval NDCG@10 drop stays under 5 points.
+- [ ] Query sanitizer implements passthrough, question-extraction, and tail-sentence fallback stages, and contamination eval NDCG@10 drop stays under 5 points.
+- [ ] `memory_dedup_check` returns `skip`, `merge`, and `store_new` recommendations and defaults empty DB to `store_new`.
 - [ ] Memory Browser can show why a result matched and where it came from.
 - [ ] Injector supports fact-only, fact-plus-snippet, and full-drawer modes with per-tier caps.
 - [ ] Checkpoint capture cannot block an agent run, proven by simulated PG/embedding failure tests.
@@ -1215,6 +1306,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts.
 - [ ] Mesh sync behavior for drawers and temporal edge fields is explicit before any sync payload changes.
 - [ ] Phase 6 includes entity canonicalization or ships with an explicit UI warning and follow-up PR.
+- [ ] `memory_traverse` enforces hop/node caps and returns an empty graph for missing entities.
 - [ ] Mobile evidence display truncates to one 120-char snippet without layout overflow.
 
 ## First Implementation Choice
