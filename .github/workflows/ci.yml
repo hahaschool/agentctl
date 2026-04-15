@@ -154,7 +154,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Persist node_modules across jobs so downstream jobs skip `pnpm install`
+      # Persist node_modules across jobs in this run so downstream jobs skip `pnpm install`
       - name: Cache node_modules
         uses: actions/cache/save@v5
         with:
@@ -165,7 +165,7 @@ jobs:
             packages/agent-worker/node_modules
             packages/mobile/node_modules
             packages/web/node_modules
-          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
 
   # ---------------------------------------------------------------------------
   # Lint — runs in parallel with build. Biome is fast; no build needed.
@@ -198,7 +198,7 @@ jobs:
             packages/agent-worker/node_modules
             packages/mobile/node_modules
             packages/web/node_modules
-          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Single Biome invocation covers all categories — no need for separate
       # "biome check" + "biome lint --rule-categories" steps.
@@ -241,7 +241,7 @@ jobs:
             packages/agent-worker/node_modules
             packages/mobile/node_modules
             packages/web/node_modules
-          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Cache both .tsbuildinfo AND dist/ together — restoring only
       # .tsbuildinfo without dist/ causes tsc to skip compilation,
@@ -346,7 +346,7 @@ jobs:
             packages/agent-worker/node_modules
             packages/mobile/node_modules
             packages/web/node_modules
-          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Reuse build output from the build job — no second `pnpm build`
       # upload-artifact strips the longest common path prefix (packages/),
@@ -411,7 +411,7 @@ jobs:
             packages/agent-worker/node_modules
             packages/mobile/node_modules
             packages/web/node_modules
-          key: nm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install Playwright Chromium
         run: pnpm --filter @agentctl/web exec playwright install --with-deps chromium
