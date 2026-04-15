@@ -162,6 +162,41 @@
       "when": 1711238400000,
       "tag": "0020_add_mobile_push_devices",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1711324800000,
+      "tag": "0021_mesh_change_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1711411200000,
+      "tag": "0022_mesh_peer_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1711497600000,
+      "tag": "0023_sync_peer_ping_diagnostics",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1711584000000,
+      "tag": "0024_add_machine_origin_node_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1711670400000,
+      "tag": "0025_sync_nodes_peer_version",
+      "breakpoints": true
     }
   ]
 }
