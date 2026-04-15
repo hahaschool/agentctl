@@ -2,6 +2,8 @@
 
 > For agentic workers: REQUIRED: use `superpowers:subagent-driven-development` (if subagents are available) or `superpowers:executing-plans` to execute this plan. Steps use checkbox syntax for progress tracking.
 
+> Status: Delivered on `main`; unchecked step boxes below are historical execution prompts, not open roadmap work. PR #526 reconciled the sidebar keyboard-accessibility plan history after the PR #525 landing.
+
 **Goal:** ship the first production-safe slice of collaboration in AgentCTL:
 - durable `Space` / `Thread` / `SpaceEvent` primitives in PostgreSQL via Drizzle
 - Fastify routes for CRUD + append-only events
