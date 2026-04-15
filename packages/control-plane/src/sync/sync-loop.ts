@@ -141,7 +141,7 @@ export async function syncFromPeer(opts: {
 
     for (const change of data.changes) {
       try {
-        const result = await applyChange(change, db);
+        const result = await applyChange(change, db, logger);
         if (result === 'applied') applied++;
         if (result === 'conflict') conflicts++;
         lastSuccessId = change.id;
