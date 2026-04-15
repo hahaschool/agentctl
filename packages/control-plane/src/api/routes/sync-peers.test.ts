@@ -5,9 +5,20 @@ import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Database } from '../../db/index.js';
+import type { SelfIdentity } from '../../sync/peer-reverse-registration.js';
 import { syncPeersRoutes } from './sync-peers.js';
 
 const REGISTRATION_TOKEN = 'registration-token';
+
+const REVERSE_SIGNING_KEYS = generateDispatchSigningKeyPair();
+
+const SELF_IDENTITY: SelfIdentity = {
+  machineId: 'self-machine',
+  hostname: 'self-host',
+  tailscaleIp: '100.64.0.1',
+  syncUrl: 'http://100.64.0.1:8080',
+  publicKey: REVERSE_SIGNING_KEYS.publicKey,
+};
 
 function makePeerRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -27,6 +38,9 @@ function makePeerRow(overrides: Record<string, unknown> = {}) {
     peer_version: null,
     peer_git_sha: null,
     peer_schema_version: null,
+    reverse_registration_status: null,
+    reverse_registration_error: null,
+    reverse_registration_at: null,
     ...overrides,
   };
 }
@@ -848,5 +862,318 @@ describe('syncPeersRoutes', () => {
         peerSchemaVersion: null,
       },
     });
+  });
+});
+
+describe('syncPeersRoutes reverse registration (§33.8)', () => {
+  let app: FastifyInstance;
+  let db: Database;
+  let execute: ReturnType<typeof vi.fn>;
+  let fetchImpl: ReturnType<typeof vi.fn>;
+
+  async function buildReverseApp(
+    options: {
+      selfIdentity?: SelfIdentity | null;
+      signingSecretKey?: string | null;
+      reverseRegistrationToken?: string | null;
+    } = {},
+  ): Promise<FastifyInstance> {
+    const instance = Fastify({ logger: false });
+    await instance.register(syncPeersRoutes, {
+      prefix: '/api/sync/peers',
+      db,
+      registrationToken: REGISTRATION_TOKEN,
+      selfIdentity: 'selfIdentity' in options ? options.selfIdentity : SELF_IDENTITY,
+      signingSecretKey:
+        'signingSecretKey' in options ? options.signingSecretKey : REVERSE_SIGNING_KEYS.secretKey,
+      reverseRegistrationToken:
+        'reverseRegistrationToken' in options ? options.reverseRegistrationToken : 'reverse-token',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await instance.ready();
+    return instance;
+  }
+
+  beforeEach(async () => {
+    db = createMockDb();
+    execute = vi.mocked(db.execute);
+    fetchImpl = vi.fn();
+    app = await buildReverseApp();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    vi.restoreAllMocks();
+  });
+
+  it('persists reverse_registration_status=ok after successful upsert handshake', async () => {
+    fetchImpl.mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    // First call: INSERT ... ON CONFLICT ... RETURNING
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          hostname: 'mesh-worker',
+          sync_url: 'http://100.64.0.9:8080',
+          tailscale_ip: '100.64.0.9',
+        }),
+      ],
+    });
+    // Second call: UPDATE ... SET reverse_registration_status ... RETURNING
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          hostname: 'mesh-worker',
+          sync_url: 'http://100.64.0.9:8080',
+          tailscale_ip: '100.64.0.9',
+          reverse_registration_status: 'ok',
+          reverse_registration_error: null,
+          reverse_registration_at: '2026-04-01T00:00:00.000Z',
+        }),
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers',
+      payload: makeValidUpsertPayload(),
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      peer: {
+        machineId: 'machine-9',
+        reverseRegistrationStatus: 'ok',
+        reverseRegistrationError: null,
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('http://100.64.0.9:8080/api/sync/peers/register');
+    expect(init?.method).toBe('POST');
+    expect(init?.headers?.['x-sync-registration-token']).toBe('reverse-token');
+  });
+
+  it('persists reverse_registration_status=failed when peer returns 401', async () => {
+    fetchImpl.mockResolvedValueOnce(
+      new Response('bootstrap token invalid', { status: 401, statusText: 'Unauthorized' }),
+    );
+
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          hostname: 'mesh-worker',
+          sync_url: 'http://100.64.0.9:8080',
+          tailscale_ip: '100.64.0.9',
+        }),
+      ],
+    });
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          hostname: 'mesh-worker',
+          sync_url: 'http://100.64.0.9:8080',
+          tailscale_ip: '100.64.0.9',
+          reverse_registration_status: 'failed',
+          reverse_registration_error: 'HTTP 401 Unauthorized bootstrap token invalid',
+          reverse_registration_at: '2026-04-01T00:00:00.000Z',
+        }),
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers',
+      payload: makeValidUpsertPayload(),
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      peer: {
+        machineId: 'machine-9',
+        reverseRegistrationStatus: 'failed',
+        reverseRegistrationError: 'HTTP 401 Unauthorized bootstrap token invalid',
+      },
+    });
+    // Confirm the UPDATE path received a 'failed' status
+    const updateCall = execute.mock.calls[1]?.[0];
+    expect(JSON.stringify(updateCall)).toContain('failed');
+  });
+
+  it('skips reverse registration on upsert when selfIdentity is missing', async () => {
+    await app.close();
+    app = await buildReverseApp({ selfIdentity: null });
+
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          hostname: 'mesh-worker',
+          sync_url: 'http://100.64.0.9:8080',
+        }),
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers',
+      payload: makeValidUpsertPayload(),
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    // Only the INSERT executed — no follow-up UPDATE
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 404 when register-reverse targets an unknown peer', async () => {
+    execute.mockResolvedValueOnce({ rows: [] });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-missing/register-reverse',
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: 'SYNC_PEER_NOT_FOUND' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('returns 200 and refreshed peer when register-reverse succeeds', async () => {
+    // fetchPeer
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          sync_url: 'http://100.64.0.9:8080',
+          reverse_registration_status: 'failed',
+          reverse_registration_error: 'HTTP 401 Unauthorized',
+        }),
+      ],
+    });
+    // updateReverseRegistration
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          sync_url: 'http://100.64.0.9:8080',
+          reverse_registration_status: 'ok',
+          reverse_registration_error: null,
+          reverse_registration_at: '2026-04-01T00:00:00.000Z',
+        }),
+      ],
+    });
+    fetchImpl.mockResolvedValueOnce(new Response(null, { status: 201 }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-9/register-reverse',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      status: 'ok',
+      peer: {
+        machineId: 'machine-9',
+        reverseRegistrationStatus: 'ok',
+      },
+    });
+  });
+
+  it('returns 502 with REVERSE_REGISTRATION_FAILED when the retry handshake fails', async () => {
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          sync_url: 'http://100.64.0.9:8080',
+          reverse_registration_status: null,
+        }),
+      ],
+    });
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          sync_url: 'http://100.64.0.9:8080',
+          reverse_registration_status: 'failed',
+          reverse_registration_error: 'HTTP 500 Internal Server Error',
+          reverse_registration_at: '2026-04-01T00:00:00.000Z',
+        }),
+      ],
+    });
+    fetchImpl.mockResolvedValueOnce(
+      new Response('boom', { status: 500, statusText: 'Internal Server Error' }),
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-9/register-reverse',
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toMatchObject({
+      ok: false,
+      error: 'REVERSE_REGISTRATION_FAILED',
+      peer: {
+        machineId: 'machine-9',
+        reverseRegistrationStatus: 'failed',
+        reverseRegistrationError: 'HTTP 500 Internal Server Error',
+      },
+    });
+  });
+
+  it('returns 400 when register-reverse targets self row', async () => {
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'self-machine',
+          sync_url: 'http://100.64.0.1:8080',
+          is_self: true,
+        }),
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/self-machine/register-reverse',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'REVERSE_REGISTRATION_NOT_APPLICABLE' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 when register-reverse is disabled (no signing key)', async () => {
+    await app.close();
+    app = await buildReverseApp({ signingSecretKey: null });
+
+    execute.mockResolvedValueOnce({
+      rows: [
+        makePeerRow({
+          id: 'machine-9',
+          sync_url: 'http://100.64.0.9:8080',
+        }),
+      ],
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/sync/peers/machine-9/register-reverse',
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({ error: 'REVERSE_REGISTRATION_DISABLED' });
   });
 });
