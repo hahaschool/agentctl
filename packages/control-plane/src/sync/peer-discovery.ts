@@ -212,6 +212,15 @@ export async function probePeerHealth(
 ): Promise<ProbePeerResult> {
   const target = `${syncUrl.replace(/\/$/, '')}/health`;
   try {
+    // This function intentionally fetches a URL derived from operator-supplied
+    // input — it's the whole purpose of the mesh peer discover/probe flow
+    // (§33.7). Callers pass a syncUrl that has already been restricted by
+    // `deriveSyncUrlFromTarget` (scheme http(s) only, no credentials, bounded
+    // length, loopback/link-local/metadata literals blocked) OR constructed
+    // internally from Tailscale CLI output. The fetch is bounded by
+    // AbortSignal.timeout and the response is reduced to a small JSON summary,
+    // so this is not a usable SSRF gadget.
+    // codeql[js/request-forgery]
     const response = await fetchImpl(target, {
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     });
