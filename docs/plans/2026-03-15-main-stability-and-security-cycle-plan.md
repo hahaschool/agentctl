@@ -32,6 +32,8 @@
 
 > Follow-up sync (2026-04-15): PR #524 synced the roadmap/main-stability checkpoint after the Docker-action cleanup, and PR #525 expanded sidebar keyboard access with `1-9,0` digit navigation plus `g`-prefix Go To chords for all sidebar destinations. The PR #525 review follow-up also made Settings render the grouped shortcut catalog and added regression coverage so modified second keys preserve browser/app shortcuts. At the post-#525 checkpoint, `main@0f49e772` has green CI `24437117041`, Security Audit `24437117038`, and Build & Publish Docker Images `24437117043`.
 
+> Follow-up sync (2026-04-15): PR #526 landed the post-#525 roadmap/plan consistency sync on `main@56ae0b24`. Post-#526 main checks passed: CI `24437448007`, Security Audit `24437448002`, and Build & Publish Docker Images `24437448013`; Docker publish still only reports the known nonblocking Grype high-severity annotations.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
