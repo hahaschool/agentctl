@@ -129,24 +129,29 @@ jobs:
       - name: Run Grype vulnerability scanner
         id: grype-scan
         continue-on-error: true
-        uses: anchore/scan-action@v4
+        uses: anchore/scan-action@v7.4.0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}:sha-${{ steps.short-sha.outputs.sha }}
+          grype-version: v0.111.0
+          cache-db: "true"
           fail-build: false
           severity-cutoff: high
           output-format: sarif
+          output-file: grype-${{ matrix.package }}.sarif
 
       - name: Validate Grype SARIF output
         id: grype-sarif
-        if: always() && steps.grype-scan.outputs.sarif != ''
+        if: always()
+        env:
+          GRYPE_SARIF: grype-${{ matrix.package }}.sarif
         run: |
           set -euo pipefail
 
-          sarif="${{ steps.grype-scan.outputs.sarif }}"
+          sarif="$GRYPE_SARIF"
           if [[ -s "$sarif" ]] && jq -e '(.version | type == "string") and (.runs | type == "array")' "$sarif" >/dev/null 2>&1; then
             echo "path=$sarif" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::Grype SARIF is missing, empty, or invalid at '$sarif'; skipping SARIF upload and artifact."
+            echo "::warning::Grype SARIF is missing, empty, or invalid at '$sarif'; skipping Grype artifact."
           fi
 
       - name: Upload Grype report artifact
