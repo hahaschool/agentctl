@@ -395,6 +395,8 @@ export const syncNodes = pgTable('sync_nodes', {
   syncIntervalMs: integer('sync_interval_ms').default(30000),
   isSelf: boolean('is_self').default(false),
   publicKey: text('public_key'),
+  lastPingError: text('last_ping_error'),
+  lastPingStatusCode: integer('last_ping_status_code'),
 });
 
 export const syncChangeLog = pgTable(

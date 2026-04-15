@@ -16,12 +16,39 @@ const MIN_SYNC_INTERVAL_MS = 1_000;
 const MAX_SYNC_INTERVAL_MS = 300_000;
 const VALID_SYNC_ROLES = new Set(['full']);
 const VALID_SYNC_STATUSES = new Set(['unknown', 'reachable', 'unreachable']);
+const PING_ERROR_CATEGORIES = new Set([
+  'bad_url',
+  'connect_refused',
+  'dns',
+  'http_status',
+  'timeout',
+  'tls_handshake',
+  'other',
+]);
 const BLOCKED_SYNC_HOSTNAMES = new Set([
   'localhost',
   'metadata',
   'metadata.google.internal',
   'metadata.google.com',
 ]);
+
+type PingErrorCategory =
+  | 'bad_url'
+  | 'connect_refused'
+  | 'dns'
+  | 'http_status'
+  | 'timeout'
+  | 'tls_handshake'
+  | 'other';
+
+type PingError = {
+  category: PingErrorCategory;
+  httpStatusCode: number | null;
+};
+
+type PingPeerResult =
+  | { status: 'reachable'; error: null }
+  | { status: 'unreachable'; error: PingError };
 
 type SyncPeersRoutesOptions = {
   db: Database;
@@ -37,6 +64,8 @@ type SyncPeerRow = {
   sync_interval_ms: number | null;
   is_self: boolean | null;
   public_key: string | null;
+  last_ping_error: string | null;
+  last_ping_status_code: number | null;
   last_seen: string | Date | null;
   created_at: string | Date | null;
 };
@@ -314,6 +343,8 @@ function mapSyncPeerRow(row: SyncPeerRow) {
     syncIntervalMs: row.sync_interval_ms ?? DEFAULT_INTERVAL_MS,
     isSelf: row.is_self ?? false,
     publicKey: row.public_key,
+    lastPingError: normalizePingErrorCategory(row.last_ping_error),
+    lastPingStatusCode: row.last_ping_status_code ?? null,
     lastSeen: toIsoString(row.last_seen),
     createdAt: toIsoString(row.created_at),
   };
@@ -321,7 +352,7 @@ function mapSyncPeerRow(row: SyncPeerRow) {
 
 async function fetchPeer(db: Database, machineId: string): Promise<SyncPeerRow | null> {
   const result = await db.execute(sql`
-    SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_seen, created_at
+    SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
     FROM sync_nodes
     WHERE id = ${machineId}
     LIMIT 1
@@ -330,15 +361,146 @@ async function fetchPeer(db: Database, machineId: string): Promise<SyncPeerRow |
   return peer ?? null;
 }
 
-async function pingPeer(syncUrl: string): Promise<'reachable' | 'unreachable'> {
+function normalizePingErrorCategory(value: string | null): PingErrorCategory | null {
+  if (!value || !PING_ERROR_CATEGORIES.has(value)) {
+    return null;
+  }
+
+  return value as PingErrorCategory;
+}
+
+function describeUnknownError(value: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = value;
+
+  for (let depth = 0; current && depth < 4 && !seen.has(current); depth += 1) {
+    seen.add(current);
+
+    if (current instanceof Error) {
+      parts.push(current.name, current.message);
+      current = (current as Error & { cause?: unknown }).cause;
+      continue;
+    }
+
+    if (typeof current === 'object') {
+      const record = current as Record<string, unknown>;
+      for (const key of ['name', 'code', 'message']) {
+        const part = record[key];
+        if (typeof part === 'string') {
+          parts.push(part);
+        }
+      }
+      current = record.cause;
+      continue;
+    }
+
+    parts.push(String(current));
+    break;
+  }
+
+  return parts.join(' ').toLowerCase();
+}
+
+function classifyPingError(error: unknown): PingErrorCategory {
+  const details = describeUnknownError(error);
+
+  if (details.includes('timeout') || details.includes('aborterror')) {
+    return 'timeout';
+  }
+
+  if (details.includes('econnrefused') || details.includes('connection refused')) {
+    return 'connect_refused';
+  }
+
+  if (
+    details.includes('enotfound') ||
+    details.includes('eai_again') ||
+    details.includes('getaddrinfo')
+  ) {
+    return 'dns';
+  }
+
+  if (
+    details.includes('eproto') ||
+    details.includes('tls') ||
+    details.includes('ssl') ||
+    details.includes('certificate') ||
+    details.includes('wrong version number')
+  ) {
+    return 'tls_handshake';
+  }
+
+  return 'other';
+}
+
+async function pingPeer(syncUrl: string): Promise<PingPeerResult> {
   try {
     const response = await fetch(`${syncUrl}/health`, {
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
     });
-    return response.ok ? 'reachable' : 'unreachable';
-  } catch {
-    return 'unreachable';
+    if (response.ok) {
+      return { status: 'reachable', error: null };
+    }
+
+    return {
+      status: 'unreachable',
+      error: { category: 'http_status', httpStatusCode: response.status },
+    };
+  } catch (error) {
+    return {
+      status: 'unreachable',
+      error: { category: classifyPingError(error), httpStatusCode: null },
+    };
   }
+}
+
+function pingErrorResponse(error: PingError | null) {
+  if (!error) {
+    return null;
+  }
+
+  return {
+    category: error.category,
+    httpStatusCode: error.httpStatusCode,
+  };
+}
+
+async function updatePingResult(
+  db: Database,
+  machineId: string,
+  currentPeer: SyncPeerRow,
+  result: PingPeerResult,
+): Promise<SyncPeerRow | null> {
+  const nextInterval = computeNextInterval(
+    currentPeer.sync_interval_ms ?? DEFAULT_INTERVAL_MS,
+    result.status,
+  );
+
+  const updateResult =
+    result.status === 'reachable'
+      ? await db.execute(sql`
+          UPDATE sync_nodes
+          SET sync_status = 'reachable',
+              sync_interval_ms = ${nextInterval},
+              last_ping_error = NULL,
+              last_ping_status_code = NULL,
+              last_seen = now()
+          WHERE id = ${machineId}
+          RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+        `)
+      : await db.execute(sql`
+          UPDATE sync_nodes
+          SET sync_status = 'unreachable',
+              sync_interval_ms = ${nextInterval},
+              last_ping_error = ${result.error.category},
+              last_ping_status_code = ${result.error.httpStatusCode}
+          WHERE id = ${machineId}
+          RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
+        `);
+
+  const [updatedPeer] = extractRows<SyncPeerRow>(updateResult);
+  return updatedPeer ?? null;
 }
 
 export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async (app, opts) => {
@@ -354,7 +516,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
     },
     async () => {
       const result = await db.execute(sql`
-        SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_seen, created_at
+        SELECT id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
         FROM sync_nodes
         ORDER BY hostname ASC, id ASC
       `);
@@ -464,7 +626,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           sync_interval_ms = EXCLUDED.sync_interval_ms,
           is_self = EXCLUDED.is_self,
           public_key = EXCLUDED.public_key
-        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_seen, created_at
+        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
       `);
       const [peer] = extractRows<SyncPeerRow>(result);
 
@@ -496,7 +658,7 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
       const result = await db.execute(sql`
         DELETE FROM sync_nodes
         WHERE id = ${machineId.trim()}
-        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_seen, created_at
+        RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at
       `);
       const [peer] = extractRows<SyncPeerRow>(result);
 
@@ -549,38 +711,26 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
 
       const syncUrlResult = validateSyncUrl(peer.sync_url);
       if (!syncUrlResult.ok) {
-        return reply.code(400).send(validationFailureBody(syncUrlResult));
+        const result: PingPeerResult = {
+          status: 'unreachable',
+          error: { category: 'bad_url', httpStatusCode: null },
+        };
+        const updatedPeer = await updatePingResult(db, machineId.trim(), peer, result);
+
+        return reply.code(400).send({
+          ...validationFailureBody(syncUrlResult),
+          pingError: pingErrorResponse(result.error),
+          peer: updatedPeer ? mapSyncPeerRow(updatedPeer) : mapSyncPeerRow(peer),
+        });
       }
 
-      const status = await pingPeer(syncUrlResult.value);
-      const nextInterval = computeNextInterval(
-        peer.sync_interval_ms ?? DEFAULT_INTERVAL_MS,
-        status,
-      );
-
-      const updateResult =
-        status === 'reachable'
-          ? await db.execute(sql`
-              UPDATE sync_nodes
-              SET sync_status = 'reachable',
-                  sync_interval_ms = ${nextInterval},
-                  last_seen = now()
-              WHERE id = ${machineId.trim()}
-              RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_seen, created_at
-            `)
-          : await db.execute(sql`
-              UPDATE sync_nodes
-              SET sync_status = 'unreachable',
-                  sync_interval_ms = ${nextInterval}
-              WHERE id = ${machineId.trim()}
-              RETURNING id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_seen, created_at
-            `);
-
-      const [updatedPeer] = extractRows<SyncPeerRow>(updateResult);
+      const result = await pingPeer(syncUrlResult.value);
+      const updatedPeer = await updatePingResult(db, machineId.trim(), peer, result);
 
       return {
         ok: true,
-        status,
+        status: result.status,
+        pingError: pingErrorResponse(result.error),
         peer: updatedPeer ? mapSyncPeerRow(updatedPeer) : mapSyncPeerRow(peer),
       };
     },
