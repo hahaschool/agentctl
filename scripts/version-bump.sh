@@ -66,6 +66,15 @@ if [[ -f "$SIDEBAR_VERSION_FILE" ]]; then
   echo "  Updated: web/src/components/Sidebar.tsx → v${NEW_VERSION}"
 fi
 
+# Keep LOCAL_APP_VERSION constant in sync so the client-side compat banner
+# and sidebar footer reflect the shipped build (roadmap §33.9/§33.11).
+MESH_VERSION_FILE="${REPO_ROOT}/packages/web/src/lib/mesh-version.ts"
+if [[ -f "$MESH_VERSION_FILE" ]]; then
+  sed -E -i.bak "s/(LOCAL_APP_VERSION = ')v[0-9]+\\.[0-9]+\\.[0-9]+(')/\\1v${NEW_VERSION}\\2/" "$MESH_VERSION_FILE"
+  rm -f "${MESH_VERSION_FILE}.bak"
+  echo "  Updated: web/src/lib/mesh-version.ts LOCAL_APP_VERSION → v${NEW_VERSION}"
+fi
+
 # ── Update CHANGELOG.md ──────────────────────────────────────────────
 CHANGELOG="${REPO_ROOT}/CHANGELOG.md"
 DATE=$(date +%Y-%m-%d)

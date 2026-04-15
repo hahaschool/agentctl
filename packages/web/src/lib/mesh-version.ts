@@ -19,7 +19,7 @@ import type { SyncPeer } from './api';
  * When a true `/api/version` endpoint lands we can switch this to a runtime
  * fetch; the helpers below already accept the value as a parameter.
  */
-export const LOCAL_APP_VERSION = 'v0.4.0';
+export const LOCAL_APP_VERSION = 'v0.5.0';
 
 /**
  * The local control-plane's schema version — the highest migration number
@@ -28,7 +28,7 @@ export const LOCAL_APP_VERSION = 'v0.4.0';
  * convention. When a runtime `/api/version` endpoint lands we can switch
  * this to a fetched value; helpers below already accept it as a parameter.
  */
-export const LOCAL_SCHEMA_VERSION = 26;
+export const LOCAL_SCHEMA_VERSION = 27;
 
 /** Extension of `SyncPeer` with the upcoming version fields (PR #555). */
 export type SyncPeerWithVersion = SyncPeer & {
