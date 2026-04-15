@@ -2,6 +2,47 @@
 
 All notable changes to AgentCTL are documented in this file.
 
+## [0.4.0] — 2026-04-15
+
+283-commit backlog from v0.3.1 → v0.4.0. Highlights:
+
+### Web
+- New pages: /audit (#507), /agent-profiles (#498 + #506), /scheduler (#517), /memory/maintenance, /memory/synthesis, /memory/consolidation surfaces
+- ErrorBoundary wraps /logs and /settings (#540) to match the rest of the app shell
+- /settings Accounts: inline "Add managed credential" CTA in empty state + credential input a11y (#542)
+- /settings push-device surface + notification preferences coverage
+- Sidebar keyboard access: 1-9,0 digit shortcuts + g-prefix Go To chords + grouped Settings docs (#525)
+- Memory dashboard polish (ConfirmDialog primitive, loading/error/retry)
+- Webhooks delivery history viewer (#467, retry UI #488)
+- Consolidation: removed non-functional Edit button (#536)
+- Approvals: aria-expanded/aria-label on session group expander (#538)
+- Mesh peers Add/Delete flow (#483)
+- Web API client split into 11 domain modules (#481)
+
+### Control Plane
+- Rate-limit audit completed: OAuth PKCE (#423), accounts (#427), verification (#429), deferred write surfaces (#439)
+- Zod input validation + length bounds on checkpoint/mobile-push/knowledge-maintenance/webhooks/permission-requests/approvals/handoffs/sync-conflicts/memory-facts (#443, #448)
+- Sync-peer URL/SSRF hardening (#452)
+- Agent-profile PATCH endpoint + Edit dialog (#506)
+- Routing API payload bounds (#497)
+
+### Worker
+- Codex in-flight session discovery fix (#537)
+- Stale discovery type stubs removed after shared types became canonical (#479)
+
+### CI & Security
+- Docker publish Grype SARIF modernization + Node24 action majors (#508, #510, #520, #523)
+- Dependency Audit migrated from retired pnpm endpoint to npm bulk advisory (#515)
+- CI cache-save key scoped per run (#522)
+- Biome 2.4 security-lint restore + SARIF validation (#440)
+- Backend-independent Playwright coverage gated in CI for /webhooks, /agents, /machines, /agent-profiles, /audit, /logs, /memory/browser, /memory/import, /memory/scopes, /memory/graph, /memory/consolidation, /discover, /settings, /spaces, /tasks, /mesh-peers, /sessions/[id], /memory/dashboard, /scheduler
+
+### Dev Infrastructure
+- env-up.sh --dry-run preflight with redacted DB/Redis targets (#500)
+- db-provision-tier.ts dry-run-first helper (#482)
+- Dev-tier startup portability (#496)
+
+
 
 ## [0.3.1] — 2026-03-20
 
