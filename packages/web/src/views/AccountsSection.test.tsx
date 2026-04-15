@@ -213,4 +213,18 @@ describe('AccountsSection', () => {
     renderComponent();
     expect(screen.getByText(/No managed credentials configured yet/)).toBeDefined();
   });
+
+  it('renders an inline CTA in the empty state that opens the create dialog', () => {
+    mockAccountsQuery.mockReturnValue({
+      queryKey: ['accounts'],
+      queryFn: vi.fn().mockResolvedValue([]),
+      initialData: [],
+    });
+    renderComponent();
+    const ctas = screen.getAllByText('Add managed credential');
+    // One in the header, one in the empty state
+    expect(ctas.length).toBe(2);
+    fireEvent.click(ctas[1]);
+    expect(screen.getByTestId('dialog')).toBeDefined();
+  });
 });

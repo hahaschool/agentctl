@@ -325,9 +325,14 @@ export function AccountsSection(): React.JSX.Element {
           <Skeleton className="h-16 w-full" />
         </div>
       ) : accounts.length === 0 ? (
-        <div className="text-[13px] text-muted-foreground py-6 text-center">
-          No managed credentials configured yet. Add one to route Claude Code or Codex through the
-          control plane.
+        <div className="flex flex-col items-center gap-3 py-6 text-center">
+          <p className="text-[13px] text-muted-foreground">
+            No managed credentials configured yet. Add one to route Claude Code or Codex through the
+            control plane.
+          </p>
+          <Button size="sm" variant="default" onClick={() => setShowAdd(true)}>
+            Add managed credential
+          </Button>
         </div>
       ) : (
         <div className="space-y-2">
@@ -525,12 +530,24 @@ export function AccountsSection(): React.JSX.Element {
                   onBlur={() =>
                     setCredentialWarning(validateCredentialFormat(provider, credential))
                   }
+                  aria-invalid={credentialWarning ? true : undefined}
+                  aria-describedby={
+                    credentialWarning
+                      ? 'account-credential-hint account-credential-warning'
+                      : 'account-credential-hint'
+                  }
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p id="account-credential-hint" className="text-[11px] text-muted-foreground">
                   {getCredentialConfig(provider).hint}
                 </p>
                 {credentialWarning && (
-                  <p className="text-[11px] text-amber-500">{credentialWarning}</p>
+                  <p
+                    id="account-credential-warning"
+                    role="alert"
+                    className="text-[11px] text-amber-500"
+                  >
+                    {credentialWarning}
+                  </p>
                 )}
               </div>
             )}
