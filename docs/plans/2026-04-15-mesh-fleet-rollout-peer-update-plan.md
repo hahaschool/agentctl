@@ -1,6 +1,6 @@
 # Mesh Fleet Rollout + Peer Update Plan
 
-**Status:** Planned
+**Status:** In progress — PR #563 delivered the first PM2 manual update slice; CLI/provenance/rollback/schedulers and Docker fleet activation remain
 **Roadmap:** 33.11 Fleet Rollout & Peer Auto-Update
 **Created:** 2026-04-15
 
@@ -15,7 +15,10 @@ Rollout work depends on 33.9 for drift visibility and 33.10 for safe
 schema/protocol compatibility checks. PR #561 completes the 33.9 drift signal
 by persisting peer metadata from on-demand and background pings. PR #557
 delivered the backend envelope stamping and apply-side compat gate for 33.10,
-but operator UI warnings and two-node proof still gate fleet rollout.
+but operator UI warnings and two-node proof still gate full fleet rollout.
+PR #563 delivered the first manual PM2 peer-update slice: `scripts/peer-update.sh`,
+a signed self-update route, route-local Fastify rate limiting before auth,
+mutex protection, structured responses, and the `/mesh-peers` Update action.
 
 ## Scope
 
@@ -27,7 +30,9 @@ but operator UI warnings and two-node proof still gate fleet rollout.
    - Exercise `deploy-fleet.yml` first in dry-run, then canary mode.
 
 2. Add a PM2 mesh peer update path.
-   - Add `scripts/peer-update.sh`.
+   - Delivered in PR #563: `scripts/peer-update.sh`, signed peer-auth
+     self-update route, per-route rate limiting before authorization, update
+     mutex, structured result payloads, and `/mesh-peers` Update action.
    - Add a `pnpm agentctl peer update` subcommand.
    - Resolve target release, verify provenance, checkout the tag, run mesh
      migrations, build, reload PM2, poll `/health`, and roll back on failure.
@@ -40,7 +45,8 @@ but operator UI warnings and two-node proof still gate fleet rollout.
 
 4. Add operator UI.
    - `/settings` shows mesh auto-update status for the current node.
-   - `/mesh-peers` offers a reachable-peer "Update" action.
+   - Delivered in PR #563: `/mesh-peers` offers a reachable-peer "Update"
+     action backed by the signed self-update route.
    - "Update available" banners point to dry-run instructions until the action
      is fully wired.
 
@@ -57,7 +63,10 @@ but operator UI warnings and two-node proof still gate fleet rollout.
 
 ## Verification
 
-- CLI dry-run tests for the PM2 update flow.
+- PR #563 verification: focused peer-update route tests, `/mesh-peers` UI
+  tests, CodeQL pass after route-local rate limiting moved before auth, and
+  main CI/Security checks after merge.
+- CLI dry-run tests for the remaining PM2 update flow.
 - Unit tests for release/tag/provenance checks and rollback state handling.
 - Focused UI coverage for settings state and peer update affordances.
 - Two-node fixture after 33.9/33.10 lands: drift appears, compatibility gate
