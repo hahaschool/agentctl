@@ -2,6 +2,34 @@
 
 All notable changes to AgentCTL are documented in this file.
 
+
+## [0.5.0] — 2026-04-15
+
+mesh: ping diagnostics, bidirectional registration warnings, peer-update CLI/schedulers, /api/version-compat, peer-ahead rejection UI, health panel, Docker fleet attestations
+
+### Changes
+
+- 311416ff ci(fleet): build provenance attestations + deploy-fleet verification (33.11) (#575)
+- 5701f34c docs: sync roadmap §33.10/§33.11 after PRs #567-#573 (#574)
+- bce59bf8 feat(mesh): persist and surface per-peer schema-ahead rejections on /mesh-peers (33.10) (#573)
+- 0c8d7451 feat(mesh): opt-in launchd + systemd peer-update schedulers (33.11) (#572)
+- 38ca5e80 feat(mesh): /api/version-compat endpoint + client compat banner (33.11) (#570)
+- 0a65612b feat(mesh): pnpm agentctl peer update CLI with rollback + history (33.11) (#571)
+- a4773795 feat(mesh): ping diagnostics UI + Tailscale discover/probe endpoints (33.7) (#569)
+- 0e27c838 feat(web): one-way registration warning badge on /machines (33.8 followup) (#568)
+- 0e865bde feat(web): peer-ahead per-row banner on /mesh-peers (33.10 followup) (#567)
+- 86dcf10d docs(roadmap): sync mesh checkpoint through PR 565 (#566)
+- ff4cbd34 feat(mesh): auto reverse-register peer on add (33.8) (#564)
+- 9efcd36c fix(control-plane): add missing journal entries for migrations 0021-0025 (#565)
+- 657f2047 feat(mesh): manual "Update peer" action [33.11 slice 1] (#563)
+- 51005b25 test(control-plane): cover peer health version persistence (#562)
+- 482d68bc feat(control-plane): persist peer version fields from /health pings (33.9) (#561)
+- 3d87d225 docs(roadmap): sync mesh version and compat status
+- 2bdd54f2 feat(web): show peer version column + mesh drift banner (33.9) (#558)
+- 7c0f0fa3 feat(control-plane): mesh envelope schema + protocol compat gate (33.10) (#557)
+- 11bd3b5f feat(control-plane): expose appVersion + gitSha + schemaVersion on /health (#556)
+- fe42df07 feat(control-plane): persist peer version on sync_nodes (33.9 partial) (#555)
+
 ## [0.4.0] — 2026-04-15
 
 283-commit backlog from v0.3.1 → v0.4.0. Highlights:
