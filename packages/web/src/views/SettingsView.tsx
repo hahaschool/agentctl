@@ -17,6 +17,7 @@ import { PreferencesSection } from './PreferencesSection';
 import { ProjectAccountsSection } from './ProjectAccountsSection';
 import { RuntimeAccessSection } from './RuntimeAccessSection';
 import { RuntimeConsistencySection } from './RuntimeConsistencySection';
+import { MeshAutoUpdateSection } from './settings/MeshAutoUpdateSection';
 import { RuntimeProfilesSection } from './settings/RuntimeProfilesSection';
 import { SettingsSection, SettingsShell } from './settings/SettingsShell';
 import { WorkersSyncSection } from './settings/WorkersSyncSection';
@@ -142,6 +143,7 @@ export function SettingsView(): React.JSX.Element {
           >
             <div className="space-y-6">
               <WorkersSyncSection />
+              <MeshAutoUpdateSection />
               <RuntimeAccessSection />
               <RuntimeConsistencySection />
             </div>
