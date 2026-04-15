@@ -100,22 +100,35 @@ function emptyPeerForm(): PeerFormState {
   };
 }
 
+function peerFormFromPeer(peer: SyncPeer): PeerFormState {
+  return {
+    machineId: peer.machineId,
+    hostname: peer.hostname,
+    tailscaleIp: peer.tailscaleIp ?? '',
+    syncUrl: peer.syncUrl ?? '',
+    syncIntervalSeconds: String(Math.max(1, Math.round(peer.syncIntervalMs / 1000))),
+    publicKey: peer.publicKey ?? '',
+  };
+}
+
 type PeerFormDialogProps = {
   open: boolean;
+  peer: SyncPeer | null;
   onClose: () => void;
 };
 
-function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Element | null {
+function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX.Element | null {
   const toast = useToast();
   const upsertPeer = useUpsertSyncPeer();
   const [state, setState] = useState<PeerFormState>(() => emptyPeerForm());
   const [error, setError] = useState<string | null>(null);
 
-  const key = open ? 'open' : 'closed';
+  const isUpdate = Boolean(peer);
+  const key = open ? `open:${peer?.machineId ?? 'new'}` : 'closed';
   const [lastKey, setLastKey] = useState(key);
   if (key !== lastKey) {
     setLastKey(key);
-    setState(emptyPeerForm());
+    setState(peer ? peerFormFromPeer(peer) : emptyPeerForm());
     setError(null);
   }
 
@@ -152,8 +165,8 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
         hostname,
         syncUrl,
         tailscaleIp: state.tailscaleIp.trim() || null,
-        role: 'full',
-        syncStatus: 'unknown',
+        role: peer?.role ?? 'full',
+        syncStatus: peer?.syncStatus ?? 'unknown',
         syncIntervalMs: intervalSeconds * 1000,
         isSelf: false,
         publicKey: state.publicKey.trim() || null,
@@ -172,7 +185,8 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
     setError(null);
     upsertPeer.mutate(result.body, {
       onSuccess: (res) => {
-        toast.success(`Peer ${res.peer?.machineId ?? result.body.machineId} saved`);
+        const machineId = res.peer?.machineId ?? result.body.machineId;
+        toast.success(`Peer ${machineId} ${isUpdate ? 'updated' : 'saved'}`);
         onClose();
       },
       onError: (err) => {
@@ -193,7 +207,7 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
         <form onSubmit={handleSubmit} className="flex flex-col" noValidate>
           <div className="px-5 py-3 border-b border-border">
             <h2 id="mesh-peer-form-title" className="text-sm font-semibold text-foreground">
-              Add mesh peer
+              {isUpdate ? 'Update mesh peer' : 'Add mesh peer'}
             </h2>
           </div>
 
@@ -210,6 +224,7 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
                   id="mesh-peer-machine-id"
                   value={state.machineId}
                   onChange={(e) => setState((p) => ({ ...p, machineId: e.target.value }))}
+                  disabled={isUpdate}
                   className="w-full bg-muted border border-border rounded-md text-xs px-2 py-1.5 font-mono text-foreground"
                   placeholder="machine-beta"
                 />
@@ -329,8 +344,12 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
             </div>
 
             <p className="text-[11px] text-muted-foreground">
-              Role is fixed to <span className="font-mono text-foreground">full</span>. The backend
-              still enforces URL and SSRF safety on save.
+              {isUpdate
+                ? 'This updates the existing peer through the same idempotent save path. '
+                : 'Role is fixed to '}
+              {!isUpdate && <span className="font-mono text-foreground">full</span>}
+              {!isUpdate && '. '}
+              The backend still enforces URL and SSRF safety on save.
             </p>
 
             {error && (
@@ -355,7 +374,7 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
               data-testid="mesh-peer-submit"
               className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
             >
-              {upsertPeer.isPending ? 'Saving…' : 'Save peer'}
+              {upsertPeer.isPending ? 'Saving…' : isUpdate ? 'Update peer' : 'Save peer'}
             </button>
           </div>
         </form>
@@ -371,6 +390,7 @@ function PeerFormDialog({ open, onClose }: PeerFormDialogProps): React.JSX.Eleme
 type PeerRowProps = {
   peer: SyncPeer;
   onPing: (machineId: string) => void;
+  onEdit: (peer: SyncPeer) => void;
   onDelete: (peer: SyncPeer) => void;
   isPinging: boolean;
   pingingId: string | null;
@@ -380,6 +400,7 @@ type PeerRowProps = {
 export function MeshPeerRow({
   peer,
   onPing,
+  onEdit,
   onDelete,
   isPinging,
   pingingId,
@@ -433,6 +454,20 @@ export function MeshPeerRow({
         <div className="flex justify-end gap-2">
           <button
             type="button"
+            onClick={() => onEdit(peer)}
+            disabled={peer.isSelf}
+            data-testid={`edit-${peer.machineId}`}
+            title={peer.isSelf ? 'Cannot edit self' : 'Edit peer'}
+            className={cn(
+              'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
+              'border-border bg-muted hover:bg-accent/10 text-foreground',
+              'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-muted',
+            )}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
             onClick={() => onPing(peer.machineId)}
             disabled={!canPing || thisRowIsPinging}
             className={cn(
@@ -481,11 +516,28 @@ export function MeshPeersPage(): React.JSX.Element {
   const pingMutation = usePingSyncPeer();
   const deleteMutation = useDeleteSyncPeer();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogPeer, setDialogPeer] = useState<SyncPeer | null>(null);
   const [pendingDelete, setPendingDelete] = useState<SyncPeer | null>(null);
 
   const peers = peersData.data?.peers ?? [];
   const reachableCount = peers.filter((p) => p.syncStatus === 'reachable').length;
   const unreachableCount = peers.filter((p) => p.syncStatus === 'unreachable').length;
+
+  const openAddDialog = useCallback(() => {
+    setDialogPeer(null);
+    setDialogOpen(true);
+  }, []);
+
+  const openEditDialog = useCallback((peer: SyncPeer) => {
+    if (peer.isSelf) return;
+    setDialogPeer(peer);
+    setDialogOpen(true);
+  }, []);
+
+  const closePeerDialog = useCallback(() => {
+    setDialogOpen(false);
+    setDialogPeer(null);
+  }, []);
 
   const handlePing = useCallback(
     (machineId: string) => {
@@ -554,7 +606,7 @@ export function MeshPeersPage(): React.JSX.Element {
           />
           <button
             type="button"
-            onClick={() => setDialogOpen(true)}
+            onClick={openAddDialog}
             data-testid="add-mesh-peer"
             className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
           >
@@ -595,7 +647,7 @@ export function MeshPeersPage(): React.JSX.Element {
           </p>
           <button
             type="button"
-            onClick={() => setDialogOpen(true)}
+            onClick={openAddDialog}
             data-testid="empty-add-mesh-peer"
             className="mt-4 px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
           >
@@ -626,6 +678,7 @@ export function MeshPeersPage(): React.JSX.Element {
                     key={peer.machineId}
                     peer={peer}
                     onPing={handlePing}
+                    onEdit={openEditDialog}
                     onDelete={setPendingDelete}
                     isPinging={pingMutation.isPending}
                     pingingId={pingingId}
@@ -638,7 +691,7 @@ export function MeshPeersPage(): React.JSX.Element {
         </div>
       )}
 
-      <PeerFormDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      <PeerFormDialog open={dialogOpen} peer={dialogPeer} onClose={closePeerDialog} />
 
       {pendingDelete && (
         <div
