@@ -8,6 +8,13 @@ import type { Logger } from 'pino';
 import type { Database } from '../../db/index.js';
 import { extractRows } from '../../db/index.js';
 import {
+  deriveSyncUrlFromTarget,
+  fetchTailscaleMeshPeers,
+  type ProbePeerResult,
+  probePeerHealth,
+  type TailscalePeer,
+} from '../../sync/peer-discovery.js';
+import {
   computeNextInterval,
   EMPTY_PEER_VERSION_INFO,
   type PeerVersionInfo,
@@ -94,6 +101,13 @@ type SyncPeersRoutesOptions = {
   fetchImpl?: typeof fetch;
   /** Logger for outbound reverse-registration errors. */
   logger?: Pick<Logger, 'warn' | 'debug'>;
+  /**
+   * Injectable Tailscale peer source used by `GET /discover` (§33.7).
+   * Returns the list of online `tag:mesh-node` peers. When omitted, the real
+   * implementation shells out to `tailscale status --json` via
+   * `fetchTailscaleMeshPeers`. Tests pass a stub to avoid touching the CLI.
+   */
+  tailscalePeerSource?: (logger: Pick<Logger, 'debug'>) => Promise<TailscalePeer[]>;
 };
 
 type SyncPeerRow = {
@@ -1264,6 +1278,123 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
         pingError: pingErrorResponse(result.error),
         peer: updatedPeer ? mapSyncPeerRow(updatedPeer) : mapSyncPeerRow(peer),
       };
+    },
+  );
+
+  /**
+   * §33.7 — List Tailscale mesh-node peers that are not yet registered in
+   * `sync_nodes`. Shells out to `tailscale status --json`, filters to
+   * `Online && tag:mesh-node`, probes each candidate's `/health` on port 8080,
+   * and returns an enriched list the operator can bulk-add.
+   *
+   * Never throws — missing Tailscale, unreachable peers, and /health without
+   * `machineId` all degrade into `reachable: false` entries so the UI can
+   * still render something meaningful.
+   */
+  app.get(
+    '/discover',
+    {
+      schema: {
+        tags: ['sync'],
+        summary: 'Discover Tailscale mesh-node peer candidates (§33.7)',
+      },
+    },
+    async (_request, reply) => {
+      const source = opts.tailscalePeerSource ?? fetchTailscaleMeshPeers;
+      const discoveryLogger = opts.logger ?? { debug: () => undefined, warn: () => undefined };
+      const candidates = await source(discoveryLogger);
+
+      if (candidates.length === 0) {
+        return reply.code(200).send({ peers: [], source: 'none' });
+      }
+
+      const existingResult = await db.execute(sql`SELECT id FROM sync_nodes`);
+      const existingIds = new Set(
+        extractRows<{ id: string }>(existingResult)
+          .map((row) => row.id)
+          .filter(isNonEmptyString),
+      );
+
+      const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+      const probed = await Promise.all(
+        candidates.map(async (candidate) => {
+          const syncUrl = `http://${candidate.tailscaleIp}:8080`;
+          const probe = await probePeerHealth(syncUrl, fetchImpl);
+          return { candidate, probe };
+        }),
+      );
+
+      const peers = probed
+        .filter(({ probe }) => {
+          // Drop already-registered peers (by machineId reported from /health).
+          // Unreachable candidates still surface so the operator can see them.
+          if (probe.reachable && probe.identity.machineId) {
+            return !existingIds.has(probe.identity.machineId);
+          }
+          return true;
+        })
+        .map(({ candidate, probe }) => ({
+          hostname: candidate.hostname,
+          tailscaleIp: candidate.tailscaleIp,
+          syncUrl: probe.syncUrl,
+          reachable: probe.reachable,
+          machineId: probe.reachable ? probe.identity.machineId : null,
+          nodePublicKey: probe.reachable ? probe.identity.nodePublicKey : null,
+          appVersion: probe.reachable ? probe.identity.appVersion : null,
+          schemaVersion: probe.reachable ? probe.identity.schemaVersion : null,
+          error: probe.reachable ? null : probe.error,
+        }));
+
+      return reply.code(200).send({ peers, source: 'tailscale' });
+    },
+  );
+
+  /**
+   * §33.7 — Probe a single candidate target (hostname, IP literal, or full
+   * http/https URL) and return `/health` identity + version metadata. Used by
+   * the add-peer dialog's "Probe" button so the operator can auto-fill
+   * `machineId` / `publicKey` / `syncUrl` before saving.
+   *
+   * SSRF-validated via `deriveSyncUrlFromTarget` (same block-list as
+   * `validateSyncUrl`). Rate-limited implicitly via the plugin-scoped limiter
+   * already registered for `/register`.
+   */
+  app.get<{ Querystring: { target?: string } }>(
+    '/probe',
+    {
+      schema: {
+        tags: ['sync'],
+        summary: 'Probe a candidate mesh peer /health endpoint (§33.7)',
+      },
+    },
+    async (request, reply) => {
+      const derived = deriveSyncUrlFromTarget(request.query.target);
+      if (!derived.ok) {
+        return reply.code(400).send({ error: 'INVALID_TARGET', message: derived.error });
+      }
+
+      const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+      const probe: ProbePeerResult = await probePeerHealth(derived.syncUrl, fetchImpl);
+
+      if (!probe.reachable) {
+        return reply.code(200).send({
+          reachable: false,
+          syncUrl: probe.syncUrl,
+          statusCode: probe.statusCode,
+          error: probe.error,
+        });
+      }
+
+      return reply.code(200).send({
+        reachable: true,
+        syncUrl: probe.syncUrl,
+        statusCode: probe.statusCode,
+        machineId: probe.identity.machineId,
+        nodePublicKey: probe.identity.nodePublicKey,
+        appVersion: probe.identity.appVersion,
+        gitSha: probe.identity.gitSha,
+        schemaVersion: probe.identity.schemaVersion,
+      });
     },
   );
 };
