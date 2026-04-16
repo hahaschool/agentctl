@@ -260,7 +260,7 @@ describe('GET /api/mesh/config/preflight', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/mesh/config/preflight?targetSyncUrl=http://peer:8080',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
     });
 
     expect(res.statusCode).toBe(200);
@@ -274,7 +274,7 @@ describe('GET /api/mesh/config/preflight', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/mesh/config/preflight?targetSyncUrl=http://peer:8080',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
     });
 
     expect(res.statusCode).toBe(200);
@@ -289,7 +289,7 @@ describe('GET /api/mesh/config/preflight', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/mesh/config/preflight?targetSyncUrl=http://peer:8080',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
     });
 
     expect(res.statusCode).toBe(200);
@@ -311,7 +311,7 @@ describe('GET /api/mesh/config/preflight', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/mesh/config/preflight?targetSyncUrl=http://peer:8080',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
     });
 
     expect(res.statusCode).toBe(200);
@@ -326,7 +326,7 @@ describe('GET /api/mesh/config/preflight', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/mesh/config/preflight?targetSyncUrl=http://peer:8080',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
     });
 
     expect(res.statusCode).toBe(200);
@@ -344,6 +344,47 @@ describe('GET /api/mesh/config/preflight', () => {
     });
 
     expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects non-Tailscale hostname (SSRF guard)', async () => {
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://evil.example.com:8080',
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('INVALID_SYNC_URL');
+  });
+
+  it('allows localhost for development', async () => {
+    mockFetchResponse(400, { error: 'INVALID_MACHINE_ID', message: 'machineId is required' });
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://localhost:8080',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('compatible');
+  });
+
+  it('handles trailing slashes in targetSyncUrl safely', async () => {
+    mockFetchResponse(400, { error: 'INVALID_MACHINE_ID', message: 'machineId is required' });
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080///',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('compatible');
   });
 
   it('rejects invalid targetSyncUrl', async () => {

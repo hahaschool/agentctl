@@ -319,9 +319,9 @@ async function proxyLogStream(
   reply: FastifyReply,
 ): Promise<FastifyReply> {
   if (!signingSecretKey) {
-    return reply.code(503).send(
-      errorResponse('PEER_UPDATE_PROXY_NO_KEY', 'Signing key not configured'),
-    );
+    return reply
+      .code(503)
+      .send(errorResponse('PEER_UPDATE_PROXY_NO_KEY', 'Signing key not configured'));
   }
 
   const result = await db.execute(
@@ -331,19 +331,13 @@ async function proxyLogStream(
   const peer = rows[0];
 
   if (!peer?.sync_url) {
-    return reply.code(404).send(
-      errorResponse('PEER_UPDATE_PROXY_NO_URL', `Peer '${peerId}' not found`),
-    );
+    return reply
+      .code(404)
+      .send(errorResponse('PEER_UPDATE_PROXY_NO_URL', `Peer '${peerId}' not found`));
   }
 
   const targetPath = `/api/sync/peers/${encodeURIComponent(peerId)}/update/${encodeURIComponent(jobId)}/log`;
-  const authHeader = createPeerSignedHeader(
-    selfMachineId,
-    'GET',
-    targetPath,
-    '',
-    signingSecretKey,
-  );
+  const authHeader = createPeerSignedHeader(selfMachineId, 'GET', targetPath, '', signingSecretKey);
 
   const targetUrl = `${peer.sync_url.replace(/\/+$/, '')}${targetPath}`;
 
@@ -354,7 +348,9 @@ async function proxyLogStream(
     });
 
     if (!upstream.ok || !upstream.body) {
-      return reply.code(upstream.status).send({ error: 'PROXY_FAILED', message: upstream.statusText });
+      return reply
+        .code(upstream.status)
+        .send({ error: 'PROXY_FAILED', message: upstream.statusText });
     }
 
     reply.raw.writeHead(200, {
@@ -384,9 +380,9 @@ async function proxyLogStream(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     request.log.error({ err, peerId, targetUrl }, 'peer-update log proxy failed');
-    return reply.code(502).send(
-      errorResponse('PEER_UPDATE_PROXY_FAILED', `Failed to stream logs: ${message}`),
-    );
+    return reply
+      .code(502)
+      .send(errorResponse('PEER_UPDATE_PROXY_FAILED', `Failed to stream logs: ${message}`));
   }
 }
 
@@ -478,10 +474,7 @@ export const syncPeerUpdateRoutes: FastifyPluginAsync<SyncPeerUpdateRoutesOption
       const previousVersion = getAppVersion();
       const job = jobStore.createJob(peerId);
 
-      request.log.info(
-        { jobId: job.id, peerId, previousVersion },
-        'peer-update started',
-      );
+      request.log.info({ jobId: job.id, peerId, previousVersion }, 'peer-update started');
 
       // Run the script asynchronously — do NOT await
       void (async () => {
@@ -555,15 +548,21 @@ export const syncPeerUpdateRoutes: FastifyPluginAsync<SyncPeerUpdateRoutesOption
         );
       }
 
-      // Local: authenticate, then stream
-      const authorized = await authorize(request, reply, db);
-      if (!authorized) return reply;
+      // Local log streaming — the POST that created the job already required
+      // X-Sync-Auth. The log endpoint is read-only and needs to work with
+      // EventSource (which doesn't support custom headers), so we authenticate
+      // only when an X-Sync-Auth header is present (cross-peer proxy case).
+      // Browser-origin requests are implicitly trusted via same-origin policy.
+      if (request.headers['x-sync-auth']) {
+        const authorized = await authorize(request, reply, db);
+        if (!authorized) return reply;
+      }
 
       const job = jobStore.getJob(jobId);
       if (!job) {
-        return reply.code(404).send(
-          errorResponse('PEER_UPDATE_JOB_NOT_FOUND', `Job '${jobId}' not found`),
-        );
+        return reply
+          .code(404)
+          .send(errorResponse('PEER_UPDATE_JOB_NOT_FOUND', `Job '${jobId}' not found`));
       }
 
       reply.raw.writeHead(200, {

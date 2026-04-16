@@ -13,6 +13,19 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { MeshConfigProvider } from '../../mesh/mesh-config-provider.js';
 import { isValidTailscaleIp } from '../../sync/peer-discovery.js';
 
+/**
+ * SSRF guard: only allow pre-flight requests to Tailscale mesh peers or localhost.
+ * Tailscale CGNAT range: 100.64.0.0/10 (100.64.0.0 – 100.127.255.255).
+ */
+function isAllowedPeerTarget(hostname: string): boolean {
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
+  const parts = hostname.split('.');
+  if (parts.length !== 4) return false;
+  const octets = parts.map(Number);
+  if (octets.some((o) => Number.isNaN(o) || o < 0 || o > 255)) return false;
+  return octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127;
+}
+
 export type MeshConfigRoutesOptions = {
   meshConfigProvider: MeshConfigProvider;
   machineId: string;
@@ -91,7 +104,25 @@ async function checkTokenPreflight(
     };
   }
 
-  const url = `${targetSyncUrl.replace(/\/+$/, '')}/api/sync/peers/register`;
+  // Safe trailing-slash removal (avoids ReDoS from /\/+$/ on user input)
+  let cleanUrl = targetSyncUrl;
+  while (cleanUrl.endsWith('/')) {
+    cleanUrl = cleanUrl.slice(0, -1);
+  }
+
+  // Defence-in-depth SSRF check (route handler validates too, but this
+  // function may be called from other call-sites in the future).
+  const parsedTarget = new URL(cleanUrl);
+  if (!isAllowedPeerTarget(parsedTarget.hostname)) {
+    return {
+      tokenStatus: 'error',
+      errorCode: 'INVALID_TARGET',
+      message:
+        'Pre-flight check only allowed against Tailscale mesh peers (100.64.0.0/10) or localhost.',
+    };
+  }
+
+  const url = `${cleanUrl}/api/sync/peers/register`;
   const headers: Record<string, string> = {
     'content-type': 'application/json',
     'x-sync-registration-token': registrationToken,
@@ -182,6 +213,12 @@ export const meshConfigRoutes: FastifyPluginAsync<MeshConfigRoutesOptions> = asy
       const parsed = new URL(targetSyncUrl);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         throw new ControlPlaneError('INVALID_SYNC_URL', 'targetSyncUrl must use http or https');
+      }
+      if (!isAllowedPeerTarget(parsed.hostname)) {
+        throw new ControlPlaneError(
+          'INVALID_SYNC_URL',
+          'targetSyncUrl must point to a Tailscale mesh peer (100.64.0.0/10) or localhost',
+        );
       }
     } catch (err) {
       if (err instanceof ControlPlaneError) throw err;

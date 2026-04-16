@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 import { DiscoverPeersDialog } from './mesh/DiscoverPeersDialog';
 import { MeshHealthSummary } from './mesh/MeshHealthSummary';
 import { MeshVersionBanner } from './mesh/MeshVersionBanner';
+import { PeerUpdateLogModal } from './mesh/PeerUpdateLogModal';
 import { SelfIdentityCard } from './mesh/SelfIdentityCard';
 
 // ---------------------------------------------------------------------------
@@ -1298,6 +1299,11 @@ export function MeshPeersPage(): React.JSX.Element {
   // §33.8: a single peer row can be expanded at a time to reveal cursor drill-down.
   const [expandedPeerId, setExpandedPeerId] = useState<string | null>(null);
   const [staleCleanupConfirm, setStaleCleanupConfirm] = useState(false);
+  const [activeUpdateJob, setActiveUpdateJob] = useState<{
+    machineId: string;
+    jobId: string;
+    previousVersion: string;
+  } | null>(null);
   const toggleExpand = useCallback((machineId: string) => {
     setExpandedPeerId((prev) => (prev === machineId ? null : machineId));
   }, []);
@@ -1376,13 +1382,16 @@ export function MeshPeersPage(): React.JSX.Element {
     const target = pendingUpdate;
     updateMutation.mutate(target.machineId, {
       onSuccess: (res) => {
-        toast.success(
-          `Peer ${target.machineId} updated: ${res.previousVersion} -> ${res.newVersion}`,
-        );
+        // Open the log modal to stream live output
+        setActiveUpdateJob({
+          machineId: target.machineId,
+          jobId: res.jobId,
+          previousVersion: res.previousVersion,
+        });
         setPendingUpdate(null);
       },
       onError: (err) => {
-        toast.error(errorMessage(err, 'Failed to update peer'));
+        toast.error(errorMessage(err, 'Failed to start peer update'));
         setPendingUpdate(null);
       },
     });
@@ -1761,6 +1770,20 @@ export function MeshPeersPage(): React.JSX.Element {
             </div>
           </div>
         </div>
+      )}
+
+      {activeUpdateJob && (
+        <PeerUpdateLogModal
+          machineId={activeUpdateJob.machineId}
+          jobId={activeUpdateJob.jobId}
+          previousVersion={activeUpdateJob.previousVersion}
+          localVersion={localVersion}
+          onClose={() => {
+            setActiveUpdateJob(null);
+            // Refresh peer list to pick up new version
+            void peersData.refetch();
+          }}
+        />
       )}
     </div>
   );
