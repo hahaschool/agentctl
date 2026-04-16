@@ -152,6 +152,27 @@ export function Sidebar(): React.JSX.Element {
       if (msg.type === 'permission_request_created' || msg.type === 'permission_request_resolved') {
         queryClient.invalidateQueries({ queryKey: ['permission-requests'] });
       }
+      if (msg.type === 'permission_request_created') {
+        toast.info('New approval request');
+      }
+      if (msg.type === 'agent_event') {
+        const { event: eventName, data } = msg.event;
+        if (eventName === 'status') {
+          queryClient.invalidateQueries({ queryKey: ['agents'] });
+          const status = data.status as string | undefined;
+          if (status === 'error') {
+            toast.error(`Agent errored: ${(data.reason as string) || 'unknown'}`);
+          } else if (status === 'completed') {
+            toast.success('Agent completed');
+          } else if (status === 'stopped') {
+            toast.info('Agent stopped');
+          }
+        } else if (eventName === 'approval_needed') {
+          toast.info(`Agent needs approval: ${data.tool as string}`);
+        } else if (eventName === 'loop_complete') {
+          toast.success(`Loop complete: ${data.totalIterations as number} iterations`);
+        }
+      }
     },
   });
 
