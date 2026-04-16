@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MemoryBrowserView } from '@/views/MemoryBrowserView';
 
@@ -27,8 +28,10 @@ function BrowserSkeleton() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<BrowserSkeleton />}>
-      <MemoryBrowserView />
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={<BrowserSkeleton />}>
+        <MemoryBrowserView />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
