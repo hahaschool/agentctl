@@ -20,7 +20,7 @@ const DEFAULT_CONTENT_MODEL = 'text-embedding-3-small';
 
 export type MemoryStoreOptions = {
   pool: Pool;
-  embeddingClient: EmbeddingClient;
+  embeddingClient?: EmbeddingClient;
   logger: Logger;
 };
 
@@ -123,7 +123,7 @@ function parseSource(value: unknown): FactSource {
 
 export class MemoryStore {
   private readonly pool: Pool;
-  private readonly embeddingClient: EmbeddingClient;
+  private readonly embeddingClient: EmbeddingClient | undefined;
   private readonly logger: Logger;
 
   constructor(options: MemoryStoreOptions) {
@@ -138,14 +138,16 @@ export class MemoryStore {
     const tags = input.tags ?? [];
 
     let embeddingLiteral: string | null = null;
-    try {
-      const embedding = await this.embeddingClient.embed(input.content);
-      embeddingLiteral = `[${embedding.join(',')}]`;
-    } catch (error: unknown) {
-      this.logger.warn(
-        { err: error, factId: id },
-        'Failed to generate embedding; storing fact without vector',
-      );
+    if (this.embeddingClient) {
+      try {
+        const embedding = await this.embeddingClient.embed(input.content);
+        embeddingLiteral = `[${embedding.join(',')}]`;
+      } catch (error: unknown) {
+        this.logger.warn(
+          { err: error, factId: id },
+          'Failed to generate embedding; storing fact without vector',
+        );
+      }
     }
 
     await this.pool.query(
@@ -390,14 +392,16 @@ export class MemoryStore {
       assignments.push(`content = $${params.length}`);
 
       let embeddingLiteral: string | null = null;
-      try {
-        const embedding = await this.embeddingClient.embed(input.content);
-        embeddingLiteral = `[${embedding.join(',')}]`;
-      } catch (error: unknown) {
-        this.logger.warn(
-          { err: error, factId: id },
-          'Failed to regenerate embedding while updating memory fact',
-        );
+      if (this.embeddingClient) {
+        try {
+          const embedding = await this.embeddingClient.embed(input.content);
+          embeddingLiteral = `[${embedding.join(',')}]`;
+        } catch (error: unknown) {
+          this.logger.warn(
+            { err: error, factId: id },
+            'Failed to regenerate embedding while updating memory fact',
+          );
+        }
       }
 
       params.push(embeddingLiteral);

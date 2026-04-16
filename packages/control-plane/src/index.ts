@@ -346,33 +346,45 @@ async function main(): Promise<void> {
     ? (db as Database & { $client: import('pg').Pool }).$client
     : undefined;
 
-  const canUsePostgresMemory = Boolean(db && LITELLM_URL);
+  const canUsePostgresMemory = Boolean(db && pgPool);
 
   if (MEMORY_BACKEND === 'postgres' || (MEMORY_BACKEND === 'auto' && canUsePostgresMemory)) {
-    if (db && LITELLM_URL && pgPool) {
-      const embeddingClient = new EmbeddingClient({
-        baseUrl: LITELLM_URL,
-        model: 'text-embedding-3-small',
-        logger: logger.child({ component: 'embedding-client' }),
-      });
+    if (db && pgPool) {
+      // Embedding client is optional — when LITELLM_URL is absent, fact CRUD
+      // still works but without vector embeddings (semantic search disabled).
+      let embeddingClient: EmbeddingClient | undefined;
+      if (LITELLM_URL) {
+        embeddingClient = new EmbeddingClient({
+          baseUrl: LITELLM_URL,
+          model: 'text-embedding-3-small',
+          logger: logger.child({ component: 'embedding-client' }),
+        });
+      }
 
       memoryStore = new MemoryStore({
         pool: pgPool,
         embeddingClient,
         logger: logger.child({ component: 'memory-store' }),
       });
-      memorySearch = new MemorySearch({
-        pool: pgPool,
-        embeddingClient,
-        logger: logger.child({ component: 'memory-search' }),
-      });
-      memoryInjector = new MemoryInjector({
-        backend: 'postgres',
-        memorySearch,
-        memoryStore,
-        logger: logger.child({ component: 'memory-injector' }),
-      });
-      logger.info({ memoryBackend: 'postgres' }, 'PostgreSQL memory backend initialised');
+
+      if (embeddingClient) {
+        memorySearch = new MemorySearch({
+          pool: pgPool,
+          embeddingClient,
+          logger: logger.child({ component: 'memory-search' }),
+        });
+        memoryInjector = new MemoryInjector({
+          backend: 'postgres',
+          memorySearch,
+          memoryStore,
+          logger: logger.child({ component: 'memory-injector' }),
+        });
+      }
+
+      logger.info(
+        { memoryBackend: 'postgres', hasEmbeddings: Boolean(embeddingClient) },
+        'PostgreSQL memory backend initialised',
+      );
     } else {
       logger.warn(
         {

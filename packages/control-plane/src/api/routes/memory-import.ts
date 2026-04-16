@@ -376,6 +376,15 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
         const totalRow = sqliteDb.prepare('SELECT COUNT(*) as cnt FROM observations').get();
         const totalObservations = (totalRow?.cnt as number) ?? 0;
 
+        // Count observations with importable content (non-empty title or narrative or text)
+        const importableRow = sqliteDb
+          .prepare(
+            `SELECT COUNT(*) as cnt FROM observations
+             WHERE COALESCE(TRIM(title), '') != '' OR COALESCE(TRIM(narrative), '') != '' OR COALESCE(TRIM(text), '') != ''`,
+          )
+          .get();
+        const importableCount = (importableRow?.cnt as number) ?? 0;
+
         const typeRows = sqliteDb
           .prepare('SELECT type, COUNT(*) as cnt FROM observations GROUP BY type ORDER BY cnt DESC')
           .all() as Array<{ type: string; cnt: number }>;
@@ -405,7 +414,7 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
           totalObservations,
           byType,
           alreadyImported,
-          newToImport: totalObservations - alreadyImported,
+          newToImport: Math.max(0, importableCount - alreadyImported),
           sampleTitles,
         };
 
