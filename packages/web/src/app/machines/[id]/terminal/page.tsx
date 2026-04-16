@@ -4,13 +4,14 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { InteractiveTerminal } from '@/components/InteractiveTerminal';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { TERMINAL_SPAWN_COLS, TERMINAL_SPAWN_ROWS } from '@/lib/ui-constants';
 
-export default function MachineTerminalPage() {
+function MachineTerminalPageContent() {
   const params = useParams<{ id: string }>();
   const machineId = params.id;
   const router = useRouter();
@@ -172,5 +173,13 @@ export default function MachineTerminalPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function MachineTerminalPage() {
+  return (
+    <ErrorBoundary>
+      <MachineTerminalPageContent />
+    </ErrorBoundary>
   );
 }
