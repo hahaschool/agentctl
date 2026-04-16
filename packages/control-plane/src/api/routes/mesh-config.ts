@@ -12,19 +12,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 import type { MeshConfigProvider } from '../../mesh/mesh-config-provider.js';
 import { isValidTailscaleIp } from '../../sync/peer-discovery.js';
-
-/**
- * SSRF guard: only allow pre-flight requests to Tailscale mesh peers or localhost.
- * Tailscale CGNAT range: 100.64.0.0/10 (100.64.0.0 – 100.127.255.255).
- */
-function isAllowedPeerTarget(hostname: string): boolean {
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
-  const parts = hostname.split('.');
-  if (parts.length !== 4) return false;
-  const octets = parts.map(Number);
-  if (octets.some((o) => Number.isNaN(o) || o < 0 || o > 255)) return false;
-  return octets[0] === 100 && octets[1] >= 64 && octets[1] <= 127;
-}
+import { isAllowedPeerTarget } from '../../sync/url-guards.js';
 
 export type MeshConfigRoutesOptions = {
   meshConfigProvider: MeshConfigProvider;

@@ -6,6 +6,7 @@ import {
   PEER_REGISTRATION_AGENT_ID,
   type PeerRegistrationFields,
 } from './peer-registration.js';
+import { isAllowedPeerTarget, stripTrailingSlashes } from './url-guards.js';
 
 /**
  * Roadmap §33.8 — outbound reverse peer registration.
@@ -115,7 +116,7 @@ async function describeHttpError(response: Response): Promise<HttpErrorDetail> {
 }
 
 function buildRegistrationUrl(targetSyncUrl: string): string {
-  const trimmed = targetSyncUrl.replace(/\/+$/, '');
+  const trimmed = stripTrailingSlashes(targetSyncUrl);
   return `${trimmed}/api/sync/peers/register`;
 }
 
@@ -158,6 +159,32 @@ export async function performReverseRegistration(
   };
   if (registrationToken && registrationToken.trim().length > 0) {
     headers['x-sync-registration-token'] = registrationToken;
+  }
+
+  // SSRF guard — only allow Tailscale CGNAT peers or localhost
+  try {
+    const parsedUrl = new URL(stripTrailingSlashes(targetSyncUrl));
+    if (!isAllowedPeerTarget(parsedUrl.hostname)) {
+      opts.logger?.warn(
+        { machineId: self.machineId, peerSyncUrl: targetSyncUrl },
+        'reverse registration blocked — target is not in Tailscale CGNAT range',
+      );
+      return {
+        status: 'failed',
+        error: truncateReverseRegistrationError(
+          'Target URL is not a Tailscale mesh peer (100.64.0.0/10) or localhost',
+        ),
+        errorCode: 'INVALID_TARGET',
+        httpStatus: null,
+      };
+    }
+  } catch {
+    return {
+      status: 'failed',
+      error: truncateReverseRegistrationError(`Invalid target URL: ${targetSyncUrl}`),
+      errorCode: 'INVALID_TARGET',
+      httpStatus: null,
+    };
   }
 
   try {

@@ -26,6 +26,7 @@ import { extractRows } from '../../db/index.js';
 import { createPeerSignedHeader, verifyPeerSignature } from '../../sync/peer-auth.js';
 import type { JobResult, PeerUpdateJobStore } from '../../sync/peer-update-jobs.js';
 import { loadKnownPeers } from '../../sync/sync-auth.js';
+import { stripTrailingSlashes } from '../../sync/url-guards.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -271,7 +272,7 @@ async function proxyUpdateToRemotePeer(
     signingSecretKey,
   );
 
-  const targetUrl = `${peer.sync_url.replace(/\/+$/, '')}${targetPath}`;
+  const targetUrl = `${stripTrailingSlashes(peer.sync_url)}${targetPath}`;
 
   try {
     const upstream = await fetchImpl(targetUrl, {
@@ -339,7 +340,7 @@ async function proxyLogStream(
   const targetPath = `/api/sync/peers/${encodeURIComponent(peerId)}/update/${encodeURIComponent(jobId)}/log`;
   const authHeader = createPeerSignedHeader(selfMachineId, 'GET', targetPath, '', signingSecretKey);
 
-  const targetUrl = `${peer.sync_url.replace(/\/+$/, '')}${targetPath}`;
+  const targetUrl = `${stripTrailingSlashes(peer.sync_url)}${targetPath}`;
 
   try {
     const upstream = await fetchImpl(targetUrl, {
