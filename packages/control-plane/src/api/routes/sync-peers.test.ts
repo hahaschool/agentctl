@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Database } from '../../db/index.js';
+import type { TailscalePeer } from '../../sync/peer-discovery.js';
 import type { SelfIdentity } from '../../sync/peer-reverse-registration.js';
 import { syncPeersRoutes } from './sync-peers.js';
 
@@ -1323,6 +1324,338 @@ describe('syncPeersRoutes reverse registration (§33.8)', () => {
           lastAckAt: null,
         }),
       ]);
+    });
+  });
+});
+
+describe('syncPeersRoutes discover + probe (§33.7)', () => {
+  let app: FastifyInstance;
+  let db: Database;
+  let execute: ReturnType<typeof vi.fn>;
+  let fetchImpl: ReturnType<typeof vi.fn>;
+  let tailscalePeerSource: ReturnType<typeof vi.fn>;
+
+  async function buildDiscoverApp(): Promise<FastifyInstance> {
+    const instance = Fastify({ logger: false });
+    await instance.register(syncPeersRoutes, {
+      prefix: '/api/sync/peers',
+      db,
+      registrationToken: REGISTRATION_TOKEN,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      tailscalePeerSource: tailscalePeerSource as unknown as (logger: {
+        debug: (...args: unknown[]) => void;
+      }) => Promise<TailscalePeer[]>,
+    });
+    await instance.ready();
+    return instance;
+  }
+
+  beforeEach(async () => {
+    db = createMockDb();
+    execute = vi.mocked(db.execute);
+    fetchImpl = vi.fn();
+    tailscalePeerSource = vi.fn();
+    app = await buildDiscoverApp();
+  });
+
+  afterEach(async () => {
+    await app.close();
+    vi.restoreAllMocks();
+  });
+
+  describe('GET /api/sync/peers/discover', () => {
+    it('returns empty list with source="none" when Tailscale has no mesh peers', async () => {
+      tailscalePeerSource.mockResolvedValueOnce([]);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ peers: [], source: 'none' });
+      expect(execute).not.toHaveBeenCalled();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('probes each candidate and filters out machines already in sync_nodes', async () => {
+      tailscalePeerSource.mockResolvedValueOnce([
+        { hostname: 'peer-a', tailscaleIp: '100.64.0.2' },
+        { hostname: 'peer-b', tailscaleIp: '100.64.0.3' },
+      ]);
+
+      // Existing sync_nodes query — peer-a's machineId is already registered.
+      execute.mockResolvedValueOnce({ rows: [{ id: 'machine-a' }] });
+
+      fetchImpl
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              machineId: 'machine-a',
+              nodePublicKey: 'pk-a',
+              appVersion: 'v0.5.1',
+              schemaVersion: 42,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              machineId: 'machine-b',
+              nodePublicKey: 'pk-b',
+              appVersion: 'v0.5.1',
+              schemaVersion: 42,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        source: string;
+        peers: Array<{ machineId: string | null; hostname: string }>;
+      };
+      expect(body.source).toBe('tailscale');
+      expect(body.peers).toHaveLength(1);
+      expect(body.peers[0]).toMatchObject({
+        hostname: 'peer-b',
+        tailscaleIp: '100.64.0.3',
+        syncUrl: 'http://100.64.0.3:8080',
+        reachable: true,
+        machineId: 'machine-b',
+        nodePublicKey: 'pk-b',
+        appVersion: 'v0.5.1',
+        schemaVersion: 42,
+        error: null,
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const [firstUrl] = fetchImpl.mock.calls[0];
+      expect(firstUrl).toBe('http://100.64.0.2:8080/health');
+    });
+
+    it('surfaces unreachable candidates with reachable=false + error category', async () => {
+      tailscalePeerSource.mockResolvedValueOnce([
+        { hostname: 'peer-down', tailscaleIp: '100.64.0.5' },
+      ]);
+      execute.mockResolvedValueOnce({ rows: [] });
+
+      fetchImpl.mockRejectedValueOnce(
+        Object.assign(new Error('connect ECONNREFUSED'), {
+          code: 'ECONNREFUSED',
+        }),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { peers: Array<Record<string, unknown>> };
+      expect(body.peers).toHaveLength(1);
+      expect(body.peers[0]).toMatchObject({
+        hostname: 'peer-down',
+        tailscaleIp: '100.64.0.5',
+        reachable: false,
+        machineId: null,
+        nodePublicKey: null,
+        error: 'connect_refused',
+      });
+    });
+
+    it('keeps reachable peers whose /health lacks machineId (cannot dedupe)', async () => {
+      tailscalePeerSource.mockResolvedValueOnce([
+        { hostname: 'peer-ancient', tailscaleIp: '100.64.0.7' },
+      ]);
+      execute.mockResolvedValueOnce({ rows: [] });
+
+      fetchImpl.mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/discover',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { peers: Array<Record<string, unknown>> };
+      expect(body.peers).toHaveLength(1);
+      expect(body.peers[0]).toMatchObject({
+        hostname: 'peer-ancient',
+        reachable: true,
+        machineId: null,
+      });
+    });
+  });
+
+  describe('GET /api/sync/peers/probe', () => {
+    it('rejects missing target with 400 INVALID_TARGET', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_TARGET' });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('rejects localhost targets to prevent SSRF', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe?target=localhost',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_TARGET' });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('rejects loopback IPv4 literals', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe?target=127.0.0.1',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_TARGET' });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('rejects link-local metadata targets', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe?target=169.254.169.254',
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: 'INVALID_TARGET' });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('wraps a bare Tailscale IP and returns identity + version metadata', async () => {
+      fetchImpl.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            machineId: 'machine-probed',
+            nodePublicKey: 'pk-probed',
+            appVersion: 'v0.5.1',
+            gitSha: 'abc1234',
+            schemaVersion: 42,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe?target=100.64.0.9',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        reachable: true,
+        syncUrl: 'http://100.64.0.9:8080',
+        statusCode: 200,
+        machineId: 'machine-probed',
+        nodePublicKey: 'pk-probed',
+        appVersion: 'v0.5.1',
+        gitSha: 'abc1234',
+        schemaVersion: 42,
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      const [url] = fetchImpl.mock.calls[0];
+      expect(url).toBe('http://100.64.0.9:8080/health');
+    });
+
+    it('accepts a full http URL target (no wrapping)', async () => {
+      fetchImpl.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            machineId: 'machine-url',
+            nodePublicKey: 'pk-url',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe?target=http%3A%2F%2F100.64.0.9%3A8080',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        reachable: true,
+        syncUrl: 'http://100.64.0.9:8080',
+        machineId: 'machine-url',
+      });
+    });
+
+    it('returns reachable=false with HTTP status on non-2xx response', async () => {
+      fetchImpl.mockResolvedValueOnce(new Response('bad gateway', { status: 502 }));
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe?target=100.64.0.9',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        reachable: false,
+        syncUrl: 'http://100.64.0.9:8080',
+        statusCode: 502,
+        error: 'HTTP 502',
+      });
+    });
+
+    it('returns reachable=false with error=timeout when fetch aborts', async () => {
+      fetchImpl.mockRejectedValueOnce(
+        Object.assign(new Error('The operation was aborted due to timeout'), {
+          name: 'AbortError',
+        }),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe?target=100.64.0.9',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        reachable: false,
+        syncUrl: 'http://100.64.0.9:8080',
+        statusCode: null,
+        error: 'timeout',
+      });
+    });
+
+    it('returns reachable=false with error=dns when host cannot be resolved', async () => {
+      fetchImpl.mockRejectedValueOnce(
+        Object.assign(new Error('getaddrinfo ENOTFOUND no-such-host'), { code: 'ENOTFOUND' }),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/sync/peers/probe?target=no-such-host',
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        reachable: false,
+        syncUrl: 'http://no-such-host:8080',
+        error: 'dns',
+      });
     });
   });
 });
