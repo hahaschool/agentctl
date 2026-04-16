@@ -3,6 +3,33 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.5.7] — 2026-04-16
+
+Mesh peers display fixes: self node fields, version prefix consistency, downgrade prevention
+
+### Changes
+
+- ceca83a3 fix(mesh): self node display, version prefix consistency, downgrade prevention (#624)
+- d390a4aa feat(web): §33.12 Phase 2.4 — mesh identity settings UI (#622)
+- 73a93dde docs: sync roadmap for PRs #608-#617 (#621)
+- 778469eb fix(web): add empty state to DeploymentView when no tiers configured (#620)
+- a9056f07 feat(mesh): §33.12 Phase 2 — local-only mesh config + dynamic provider (#619)
+- 2fe7766e feat(mesh): §33.12 Phase 1 — Tailscale IP auto-detection (#617)
+- acbfb6e3 fix(web): add ErrorBoundary to memory, tasks, and settings router pages (#616)
+- 0d8daf90 ci(web): expand e2e CI allowlist with 8 backend-independent specs (#608)
+- 81cedbfb fix(web): add loading spinners to form buttons and aria-live to skeleton loaders (#611)
+- 9741e963 fix(mesh): phase-0 bug fixes for §33.12 peering overhaul (#610)
+- 3e8a0fea docs: sync roadmap for PRs #596-#607 and worktree cleanup (#609)
+- fa60a033 fix(discover): increase worker timeout and prevent auto-refresh flicker (#607)
+- 9d71de44 fix(deps): update hono to 4.12.14 to fix HTML injection vulnerability (#606)
+- 6fe1bedb docs(mesh): document §33.12 peering UX & reliability overhaul plan (#604)
+- 26e5d3f1 fix(lint): resolve Biome import ordering and formatting in sync-peer-update (#605)
+- f786ebb9 fix(web): fetch local version from CP at runtime instead of hardcoded constant (#603)
+- 7333f1eb fix(mesh): use Tailscale IP for selfSyncUrl in reverse registration (#602)
+- f3dad13f fix(mesh): peer-update.sh path resolution for compiled JS (#601)
+- f6c831b2 fix(mesh): pass object (not string) to createPeerSignedHeader in proxy (#600)
+
+
 ## [0.5.6] — 2026-04-16
 
 fix proxy body hash + script path resolution
