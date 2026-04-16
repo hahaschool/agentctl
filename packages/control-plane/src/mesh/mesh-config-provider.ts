@@ -139,17 +139,22 @@ export class MeshConfigProvider {
   // ── Private helpers ────────────────────────────────────────────
 
   private async readDbConfig(): Promise<Map<string, string>> {
-    const rows = await this.db
-      .select({ key: meshLocalConfig.key, value: meshLocalConfig.value })
-      .from(meshLocalConfig);
+    try {
+      const rows = await this.db
+        .select({ key: meshLocalConfig.key, value: meshLocalConfig.value })
+        .from(meshLocalConfig);
 
-    const map = new Map<string, string>();
-    for (const row of rows) {
-      if (row.value !== null) {
-        map.set(row.key, row.value);
+      const map = new Map<string, string>();
+      for (const row of rows) {
+        if (row.value !== null) {
+          map.set(row.key, row.value);
+        }
       }
+      return map;
+    } catch {
+      this.logger.debug('mesh_local_config table not available — falling back to env/auto-detect');
+      return new Map();
     }
-    return map;
   }
 
   private resolveTailscaleIp(dbValues: Map<string, string>): {
