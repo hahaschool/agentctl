@@ -184,7 +184,7 @@ test.describe('Security Findings page', () => {
     await page.goto('/security-findings');
 
     await expect(page.getByRole('heading', { name: 'Security Findings' })).toBeVisible();
-    await expect(page.getByText('No security findings.')).toBeVisible();
+    await expect(page.getByText('No security findings')).toBeVisible();
     await expect(page.getByRole('table', { name: 'Security findings' })).toHaveCount(0);
   });
 

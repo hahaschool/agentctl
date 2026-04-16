@@ -359,7 +359,7 @@ describe('MeshPeersPage', () => {
     });
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('No mesh peers registered.')).toBeDefined();
+      expect(screen.getByText('No mesh peers registered')).toBeDefined();
     });
   });
 
@@ -1378,7 +1378,7 @@ describe('MeshPeersPage', () => {
       renderPage();
 
       await waitFor(() => {
-        expect(screen.getByText('No mesh peers registered.')).toBeDefined();
+        expect(screen.getByText('No mesh peers registered')).toBeDefined();
       });
       expect(screen.queryByTestId('mesh-health-summary')).toBeNull();
     });

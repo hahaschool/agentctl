@@ -251,7 +251,7 @@ describe('MemoryScopeManagerView', () => {
     render(<MemoryScopeManagerView />);
 
     expect(screen.getByTestId('scopes-empty')).toBeDefined();
-    expect(screen.getByText('No memory scopes found.')).toBeDefined();
+    expect(screen.getByText('No memory scopes found')).toBeDefined();
   });
 
   // ---------------------------------------------------------------------------

@@ -1,10 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Check, Github, ShieldAlert, Trash2 } from 'lucide-react';
+import { Check, Github, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
+import { EmptyState } from '@/components/EmptyState';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
@@ -405,13 +406,11 @@ export function SecurityFindingsPage(): React.JSX.Element {
       )}
 
       {!findingsQ.isLoading && !findingsQ.error && findings.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground text-sm">
-          <p>No security findings.</p>
-          <p className="mt-1 text-xs">
-            Findings are ingested via <span className="font-mono">POST /api/security/findings</span>{' '}
-            from agent scans.
-          </p>
-        </div>
+        <EmptyState
+          icon={ShieldCheck}
+          title="No security findings"
+          description="Findings are ingested via POST /api/security/findings from agent scans."
+        />
       )}
 
       {findings.length > 0 && (

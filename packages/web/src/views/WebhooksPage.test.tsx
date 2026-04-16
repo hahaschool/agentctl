@@ -165,7 +165,7 @@ describe('WebhooksPage', () => {
     });
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('No webhook subscriptions yet.')).toBeDefined();
+      expect(screen.getByText('No webhook subscriptions yet')).toBeDefined();
     });
   });
 

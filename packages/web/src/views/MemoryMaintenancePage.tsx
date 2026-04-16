@@ -14,6 +14,7 @@ import Link from 'next/link';
 import type React from 'react';
 import { type ReactNode, useCallback, useState } from 'react';
 
+import { EmptyState } from '@/components/EmptyState';
 import { ScopeSelector } from '@/components/memory/ScopeSelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -501,25 +502,19 @@ export function MemoryMaintenancePage(): React.JSX.Element {
           </CollapsibleSection>
 
           {findingTotal === 0 ? (
-            <div className="rounded-md border border-dashed border-border bg-card/40 px-4 py-8 text-center">
-              <SparklesIcon className="mx-auto size-5 text-muted-foreground" aria-hidden="true" />
-              <p className="mt-2 text-sm text-foreground">Memory is clean.</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                No stale entries, deleted-file references, clusters, or coverage gaps in this scope.
-              </p>
-            </div>
+            <EmptyState
+              icon={SparklesIcon}
+              title="Memory is clean"
+              description="No stale entries, deleted-file references, clusters, or coverage gaps in this scope."
+            />
           ) : null}
         </div>
       ) : runMaintenance.isPending ? null : (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card/40 px-6 py-14 text-center">
-          <AlertTriangleIcon className="size-5 text-muted-foreground" aria-hidden="true" />
-          <p className="text-sm text-foreground">No maintenance results yet</p>
-          <p className="max-w-md text-xs text-muted-foreground">
-            Run maintenance to lint memory facts against the current codebase, cluster related
-            facts, and audit directory coverage. A memory report is saved on completion and
-            consolidation items may be enqueued for review. Rate-limited at 20 requests per minute.
-          </p>
-        </div>
+        <EmptyState
+          icon={AlertTriangleIcon}
+          title="No maintenance results yet"
+          description="Run maintenance to lint memory facts against the current codebase, cluster related facts, and audit directory coverage. A memory report is saved on completion and consolidation items may be enqueued for review."
+        />
       )}
     </div>
   );

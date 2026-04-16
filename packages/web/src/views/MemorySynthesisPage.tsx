@@ -13,6 +13,7 @@ import Link from 'next/link';
 import type React from 'react';
 import { type ReactNode, useCallback, useState } from 'react';
 
+import { EmptyState } from '@/components/EmptyState';
 import { ScopeSelector } from '@/components/memory/ScopeSelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -433,25 +434,19 @@ export function MemorySynthesisPage(): React.JSX.Element {
           </CollapsibleSection>
 
           {lintTotal === 0 && result.synthesisGroups.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border bg-card/40 px-4 py-8 text-center">
-              <GitMergeIcon className="mx-auto size-5 text-muted-foreground" aria-hidden="true" />
-              <p className="mt-2 text-sm text-foreground">Knowledge graph looks clean.</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                No structural issues or synthesis opportunities detected in this scope.
-              </p>
-            </div>
+            <EmptyState
+              icon={GitMergeIcon}
+              title="Knowledge graph looks clean"
+              description="No structural issues or synthesis opportunities detected in this scope."
+            />
           ) : null}
         </div>
       ) : runSynthesis.isPending ? null : (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card/40 px-6 py-14 text-center">
-          <AlertTriangleIcon className="size-5 text-muted-foreground" aria-hidden="true" />
-          <p className="text-sm text-foreground">No synthesis results yet</p>
-          <p className="max-w-md text-xs text-muted-foreground">
-            Run synthesis to scan memory for near-duplicates, stale facts, orphan nodes, and
-            entity-type clusters that could be synthesised into higher-level principles. The scan is
-            read-only and rate-limited at 20 requests per minute.
-          </p>
-        </div>
+        <EmptyState
+          icon={AlertTriangleIcon}
+          title="No synthesis results yet"
+          description="Run synthesis to scan memory for near-duplicates, stale facts, orphan nodes, and entity-type clusters that could be synthesised into higher-level principles. The scan is read-only and rate-limited at 20 requests per minute."
+        />
       )}
     </div>
   );
