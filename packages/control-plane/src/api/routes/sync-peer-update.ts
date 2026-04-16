@@ -28,8 +28,11 @@ import { loadKnownPeers } from '../../sync/sync-auth.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const SCRIPT_RELATIVE_PATH = '../../../../scripts/peer-update.sh';
-const DEFAULT_SCRIPT_PATH = path.resolve(CURRENT_FILE_DIR, SCRIPT_RELATIVE_PATH);
+// Navigate to the monorepo root from either src/api/routes (dev/vitest)
+// or dist/api/routes (compiled JS). Both are inside packages/control-plane/.
+const PACKAGE_ROOT = path.resolve(CURRENT_FILE_DIR, '..', '..', '..');
+const MONOREPO_ROOT = path.resolve(PACKAGE_ROOT, '..', '..');
+const DEFAULT_SCRIPT_PATH = path.join(MONOREPO_ROOT, 'scripts', 'peer-update.sh');
 const DEFAULT_PM2_ECOSYSTEM = 'agentctl-beta';
 const OUTPUT_TAIL_BYTES = 4_096;
 const PROXY_TIMEOUT_MS = 120_000;
