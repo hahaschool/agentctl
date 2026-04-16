@@ -51,7 +51,8 @@ export type PeerUpdateErrorCode =
   | 'PEER_UPDATE_HEALTH_TIMEOUT'
   | 'PEER_UPDATE_PROXY_FAILED'
   | 'PEER_UPDATE_PROXY_NO_URL'
-  | 'PEER_UPDATE_PROXY_NO_KEY';
+  | 'PEER_UPDATE_PROXY_NO_KEY'
+  | 'PEER_UPDATE_DOWNGRADE_REJECTED';
 
 export type PeerUpdateError = {
   error: PeerUpdateErrorCode;
@@ -115,7 +116,36 @@ type SyncNodeRow = {
   id: string;
   sync_url: string | null;
   is_self: boolean;
+  peer_version: string | null;
 };
+
+/**
+ * Lightweight semver comparison: returns -1 | 0 | 1 | null.
+ * Strips leading "v", ignores pre-release/build metadata.
+ * null when either side is unparseable.
+ */
+function compareSemver(a: string | null | undefined, b: string | null | undefined): number | null {
+  if (!a || !b) return null;
+  const parse = (v: string): [number, number, number] | null => {
+    const core = v.trim().replace(/^v/i, '').split(/[-+]/)[0] ?? '';
+    const parts = core.split('.');
+    if (parts.length === 0) return null;
+    const nums = [Number(parts[0]), Number(parts[1] ?? '0'), Number(parts[2] ?? '0')] as [
+      number,
+      number,
+      number,
+    ];
+    return nums.every(Number.isFinite) ? nums : null;
+  };
+  const pa = parse(a);
+  const pb = parse(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < 3; i += 1) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+  return 0;
+}
 
 /**
  * Proxy a `/:peerId/update` request to a remote peer by signing it with
@@ -145,7 +175,7 @@ async function proxyUpdateToRemotePeer(
   }
 
   const result = await db.execute(
-    sql`SELECT id, sync_url, is_self FROM sync_nodes WHERE id = ${peerId} AND NOT is_self LIMIT 1`,
+    sql`SELECT id, sync_url, is_self, peer_version FROM sync_nodes WHERE id = ${peerId} AND NOT is_self LIMIT 1`,
   );
   const rows = extractRows<SyncNodeRow>(result);
   const peer = rows[0];
@@ -157,6 +187,21 @@ async function proxyUpdateToRemotePeer(
         errorResponse(
           'PEER_UPDATE_PROXY_NO_URL',
           `Peer '${peerId}' not found or has no syncUrl configured`,
+        ),
+      );
+  }
+
+  // Reject downgrades: if the remote peer is already running a version >=
+  // local, pushing our (older or equal) code to them would be a downgrade.
+  const localVersion = getAppVersion();
+  const cmp = compareSemver(peer.peer_version, localVersion);
+  if (cmp !== null && cmp >= 0) {
+    return reply
+      .code(409)
+      .send(
+        errorResponse(
+          'PEER_UPDATE_DOWNGRADE_REJECTED',
+          `Peer is at ${peer.peer_version ?? 'unknown'} which is >= local ${localVersion} — refusing downgrade`,
         ),
       );
   }

@@ -13,6 +13,7 @@ import type { SyncPeer, SyncPeerCursors, UpsertSyncPeerInput } from '@/lib/api';
 import {
   classifyDrift,
   classifySchemaDrift,
+  compareSemver,
   type DriftRelation,
   formatVersionGroups,
   groupPeerVersions,
@@ -706,9 +707,15 @@ type VersionCellProps = {
   isSelf: boolean;
 };
 
+/** Normalise a version string for display — always "v"-prefixed. */
+function normaliseVersionDisplay(version: string): string {
+  return version.startsWith('v') ? version : `v${version}`;
+}
+
 function VersionCell({ peerVersion, localVersion, isSelf }: VersionCellProps): React.JSX.Element {
   // The self-row always matches itself; skip drift computation.
-  const displayVersion = isSelf ? (peerVersion ?? localVersion) : (peerVersion ?? null);
+  const rawVersion = isSelf ? (peerVersion ?? localVersion) : (peerVersion ?? null);
+  const displayVersion = rawVersion ? normaliseVersionDisplay(rawVersion) : null;
   const relation: DriftRelation = isSelf ? 'match' : classifyDrift(peerVersion, localVersion);
 
   if (!displayVersion) {
@@ -763,16 +770,18 @@ type PeerRowProps = {
 };
 
 /**
- * A peer is "updatable" only when both versions are known and differ. We
- * intentionally do NOT enable the button when `peerVersion` is missing —
- * §33.11 slice 1 is opt-in per operator action, not a fleet-wide rollout.
+ * A peer is "updatable" only when both versions are known and the peer is
+ * strictly BEHIND the local version. This prevents downgrades — a node
+ * running an older version must not push its version to a newer peer.
  */
 function canUpdatePeer(peer: SyncPeerWithVersion, localVersion: string): boolean {
   if (peer.isSelf) return false;
   if (!peer.syncUrl) return false;
   const peerVersion = peer.peerVersion ?? null;
   if (!peerVersion || !localVersion) return false;
-  return peerVersion !== localVersion;
+  const cmp = compareSemver(peerVersion, localVersion);
+  // cmp < 0 means peer is behind local → updatable
+  return cmp !== null && cmp < 0;
 }
 
 type ReverseBadgeProps = {
@@ -1102,9 +1111,11 @@ export function MeshPeerRow({
                     ? 'Peer has no syncUrl configured'
                     : !peer.peerVersion
                       ? 'Peer has not reported a version yet'
-                      : peer.peerVersion === localVersion
+                      : compareSemver(peer.peerVersion, localVersion) === 0
                         ? 'Peer already matches local version'
-                        : `Update peer from ${peer.peerVersion} to ${localVersion}`
+                        : compareSemver(peer.peerVersion, localVersion) === null
+                          ? 'Cannot compare versions'
+                          : `Update peer from ${normaliseVersionDisplay(peer.peerVersion)} to ${normaliseVersionDisplay(localVersion)}`
               }
               className={cn(
                 'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
@@ -1638,7 +1649,10 @@ export function MeshPeersPage(): React.JSX.Element {
               {pendingUpdate.machineId}
               {' · '}
               <span className="text-muted-foreground">
-                {pendingUpdate.peerVersion ?? '?'} → {localVersion}
+                {pendingUpdate.peerVersion
+                  ? normaliseVersionDisplay(pendingUpdate.peerVersion)
+                  : '?'}{' '}
+                → {normaliseVersionDisplay(localVersion)}
               </span>
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">

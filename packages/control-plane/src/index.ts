@@ -14,6 +14,7 @@ import { sql } from 'drizzle-orm';
 import IORedis from 'ioredis';
 
 import { createServer } from './api/server.js';
+import { getAppVersion, getGitSha, getSchemaVersion } from './build-info.js';
 import type { Database } from './db/index.js';
 import { createDb } from './db/index.js';
 import { ensureSchemaCompatibility } from './db/schema-compat.js';
@@ -319,9 +320,10 @@ async function main(): Promise<void> {
 
     await ensureSchemaCompatibility(db, logger.child({ component: 'schema-compat' }));
 
-    // Register this mesh node in sync_nodes with is_self=true
+    // Register this mesh node in sync_nodes with is_self=true (basic fields).
+    // A second upsert after sync identity resolution fills in sync_url + version.
     try {
-      await upsertSelfNode(db, machineId, process.env.TAILSCALE_IP);
+      await upsertSelfNode({ db, machineId, tailscaleIp: process.env.TAILSCALE_IP });
     } catch {
       logger.debug('sync_nodes table not available yet — skipping node registration');
     }
@@ -491,6 +493,30 @@ async function main(): Promise<void> {
   // If MeshConfigProvider is available, use it for initial config.
   // Otherwise fall back to the static Phase 1 identity.
   const resolvedMeshConfig = meshConfigProvider ? await meshConfigProvider.resolve() : null;
+
+  // Second upsert: now that sync identity + version info are available, fill
+  // in sync_url, peer_version, peer_git_sha, peer_schema_version so the Mesh
+  // Peers page shows accurate data for the self row.
+  if (db) {
+    const selfSyncUrl = resolvedMeshConfig?.syncUrl ?? syncIdentity.selfSyncUrl;
+    try {
+      await upsertSelfNode({
+        db,
+        machineId,
+        tailscaleIp: resolvedMeshConfig?.tailscaleIp ?? syncIdentity.selfTailscaleIp ?? undefined,
+        syncUrl: selfSyncUrl,
+        peerVersion: getAppVersion(),
+        peerGitSha: getGitSha(),
+        peerSchemaVersion: getSchemaVersion(),
+      });
+      logger.info(
+        { machineId, syncUrl: selfSyncUrl, version: getAppVersion() },
+        'Self node registration updated with sync identity + version',
+      );
+    } catch {
+      logger.debug('Failed to update self node with sync identity — non-fatal');
+    }
+  }
 
   const server = await createServer({
     logger,
