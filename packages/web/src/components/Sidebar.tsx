@@ -136,6 +136,14 @@ export function Sidebar(): React.JSX.Element {
   const { status: wsStatus } = useWebSocket({
     onOpen: () => {
       if (wasConnectedRef.current) {
+        // Events may have been missed while disconnected — refresh
+        // all dashboard-visible data so stale state is replaced.
+        queryClient.invalidateQueries({ queryKey: ['agents'] });
+        queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        queryClient.invalidateQueries({ queryKey: ['runtime-sessions'] });
+        queryClient.invalidateQueries({ queryKey: ['machines'] });
+        queryClient.invalidateQueries({ queryKey: ['metrics'] });
+        queryClient.invalidateQueries({ queryKey: ['health'] });
         toast.success('Reconnected to control plane');
       }
       wasConnectedRef.current = true;
@@ -160,6 +168,15 @@ export function Sidebar(): React.JSX.Element {
         if (eventName === 'status') {
           queryClient.invalidateQueries({ queryKey: ['agents'] });
           const status = data.status as string | undefined;
+          // When an agent run ends, refresh dashboard-visible data so
+          // session lists, cost metrics, and health counters update
+          // without a manual page reload.
+          if (status === 'completed' || status === 'stopped' || status === 'error') {
+            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['runtime-sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['metrics'] });
+            queryClient.invalidateQueries({ queryKey: ['health'] });
+          }
           if (status === 'error') {
             toast.error(`Agent errored: ${(data.reason as string) || 'unknown'}`);
           } else if (status === 'completed') {
@@ -170,6 +187,8 @@ export function Sidebar(): React.JSX.Element {
         } else if (eventName === 'approval_needed') {
           toast.info(`Agent needs approval: ${data.tool as string}`);
         } else if (eventName === 'loop_complete') {
+          queryClient.invalidateQueries({ queryKey: ['sessions'] });
+          queryClient.invalidateQueries({ queryKey: ['metrics'] });
           toast.success(`Loop complete: ${data.totalIterations as number} iterations`);
         }
       }
