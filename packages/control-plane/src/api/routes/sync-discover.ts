@@ -1,10 +1,10 @@
 // ---------------------------------------------------------------------------
 // Mesh peer discovery + URL probe routes — roadmap §33.7.
 //
-// `GET  /api/sync/discover` — return candidate Tailscale peers the operator
-//   could add. Shells out to `TAILSCALE_STATUS_CMD` when set; otherwise the
-//   endpoint returns an empty list with `source: "none"` (the CI default).
-//   Zero database writes — the route is strictly read-only.
+// `GET  /api/sync/discover` — **DEPRECATED** in favour of
+//   `GET /api/sync/peers/discover` which adds tag:mesh-node filtering and
+//   health probes. This endpoint is kept for backward compatibility and will
+//   be removed in a future release.
 //
 // `POST /api/sync/probe`   — fire a 2s-timeout GET to `<syncUrl>/health` and
 //   report reachability + a small slice of version metadata. Used by the web
@@ -306,6 +306,9 @@ export const syncDiscoverRoutes: FastifyPluginAsync<SyncDiscoverRoutesOptions> =
       schema: {
         tags: ['sync'],
         summary: 'List Tailscale mesh peer candidates',
+        deprecated: true,
+        description:
+          'Deprecated — use GET /api/sync/peers/discover instead, which supports tag filtering and health probes.',
       },
       preHandler: [app.rateLimit(discoverRateLimitConfig)],
     },
@@ -313,6 +316,10 @@ export const syncDiscoverRoutes: FastifyPluginAsync<SyncDiscoverRoutesOptions> =
     // legacy fastify-rate-limit plugin for this rule.
     // codeql[js/missing-rate-limiting]
     async (_request: FastifyRequest, reply: FastifyReply) => {
+      app.log.warn(
+        'GET /api/sync/discover is deprecated — use GET /api/sync/peers/discover instead',
+      );
+
       let output: string | null;
       try {
         output = await runTailscaleStatus();
