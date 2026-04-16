@@ -30,6 +30,7 @@ import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
 import { getMachineId, upsertSelfNode } from './sync/machine-identity.js';
+import { resolveSyncIdentity } from './sync/peer-discovery.js';
 import { startSyncLoops } from './sync/sync-loop.js';
 import {
   createSyncMaintenanceWorker,
@@ -465,6 +466,13 @@ async function main(): Promise<void> {
     }
   }
 
+  // §33.12 Phase 1: resolve selfSyncUrl via env → tailscale CLI → fallback chain
+  const syncIdentity = await resolveSyncIdentity({
+    port: PORT,
+    controlPlaneUrl: CONTROL_PLANE_URL,
+    logger,
+  });
+
   const server = await createServer({
     logger,
     taskQueue,
@@ -486,11 +494,10 @@ async function main(): Promise<void> {
     machineId,
     syncPublicKey: dispatchSigningKeyPair?.publicKey,
     syncSigningSecretKey: dispatchSigningKeyPair?.secretKey,
-    selfSyncUrl: process.env.TAILSCALE_IP
-      ? `http://${process.env.TAILSCALE_IP}:${PORT}`
-      : CONTROL_PLANE_URL,
+    selfSyncUrl: syncIdentity.selfSyncUrl,
     selfHostname: (await import('node:os')).hostname(),
-    selfTailscaleIp: process.env.TAILSCALE_IP ?? null,
+    selfTailscaleIp: syncIdentity.selfTailscaleIp,
+    selfSyncUrlSource: syncIdentity.selfSyncUrlSource,
     reverseRegistrationToken:
       process.env.SYNC_PEER_REVERSE_REGISTRATION_TOKEN ?? process.env.SYNC_PEER_REGISTRATION_TOKEN,
   });

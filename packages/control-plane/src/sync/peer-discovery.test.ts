@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   __resetTailscaleBinCacheForTests,
+  __resetTailscaleIpCacheForTests,
   deriveSyncUrlFromTarget,
+  isValidTailscaleIp,
   parseTailscalePeers,
   probePeerHealth,
+  resolveSyncIdentity,
   resolveTailscaleBin,
 } from './peer-discovery.js';
 
@@ -293,5 +296,96 @@ describe('resolveTailscaleBin', () => {
     const result = resolveTailscaleBin();
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe('isValidTailscaleIp', () => {
+  it('accepts valid CGNAT IPs', () => {
+    expect(isValidTailscaleIp('100.64.0.1')).toBe(true);
+    expect(isValidTailscaleIp('100.113.212.131')).toBe(true);
+  });
+
+  it('accepts private RFC1918 IPs', () => {
+    expect(isValidTailscaleIp('192.168.1.100')).toBe(true);
+    expect(isValidTailscaleIp('10.0.0.5')).toBe(true);
+  });
+
+  it('rejects loopback addresses', () => {
+    expect(isValidTailscaleIp('127.0.0.1')).toBe(false);
+    expect(isValidTailscaleIp('127.255.255.255')).toBe(false);
+  });
+
+  it('rejects all-zeros', () => {
+    expect(isValidTailscaleIp('0.0.0.0')).toBe(false);
+  });
+
+  it('rejects link-local addresses', () => {
+    expect(isValidTailscaleIp('169.254.1.1')).toBe(false);
+    expect(isValidTailscaleIp('169.254.255.255')).toBe(false);
+  });
+
+  it('rejects non-IPv4 formats', () => {
+    expect(isValidTailscaleIp('not-an-ip')).toBe(false);
+    expect(isValidTailscaleIp('::1')).toBe(false);
+    expect(isValidTailscaleIp('')).toBe(false);
+  });
+
+  it('trims whitespace', () => {
+    expect(isValidTailscaleIp('  100.64.0.1  ')).toBe(true);
+  });
+});
+
+describe('resolveSyncIdentity', () => {
+  beforeEach(() => {
+    __resetTailscaleIpCacheForTests();
+    __resetTailscaleBinCacheForTests();
+  });
+
+  afterEach(() => {
+    __resetTailscaleIpCacheForTests();
+    __resetTailscaleBinCacheForTests();
+    vi.unstubAllEnvs();
+  });
+
+  it('uses TAILSCALE_IP env var when valid', async () => {
+    vi.stubEnv('TAILSCALE_IP', '100.64.0.5');
+    const result = await resolveSyncIdentity({
+      port: 8080,
+      controlPlaneUrl: 'http://localhost:8080',
+    });
+    expect(result.selfSyncUrl).toBe('http://100.64.0.5:8080');
+    expect(result.selfTailscaleIp).toBe('100.64.0.5');
+    expect(result.selfSyncUrlSource).toBe('env-var');
+  });
+
+  it('rejects loopback TAILSCALE_IP and falls through', async () => {
+    vi.stubEnv('TAILSCALE_IP', '127.0.0.1');
+    const result = await resolveSyncIdentity({
+      port: 8080,
+      controlPlaneUrl: 'http://localhost:8080',
+    });
+    expect(result.selfSyncUrlSource).not.toBe('env-var');
+  });
+
+  it('uses controlPlaneUrl when no env var set and CLI unavailable', async () => {
+    vi.stubEnv('TAILSCALE_IP', '');
+    vi.stubEnv('TAILSCALE_BIN', '/nonexistent/tailscale');
+    const result = await resolveSyncIdentity({
+      port: 9090,
+      controlPlaneUrl: 'http://my-host:9090',
+    });
+    expect(result.selfSyncUrl).toBe('http://my-host:9090');
+    expect(result.selfTailscaleIp).toBeNull();
+    expect(result.selfSyncUrlSource).toBe('control-plane-url');
+  });
+
+  it('trims env var whitespace', async () => {
+    vi.stubEnv('TAILSCALE_IP', '  100.64.0.5  ');
+    const result = await resolveSyncIdentity({
+      port: 8080,
+      controlPlaneUrl: 'http://localhost:8080',
+    });
+    expect(result.selfSyncUrl).toBe('http://100.64.0.5:8080');
+    expect(result.selfTailscaleIp).toBe('100.64.0.5');
   });
 });

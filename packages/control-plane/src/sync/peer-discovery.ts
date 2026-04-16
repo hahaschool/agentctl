@@ -137,6 +137,130 @@ export function __resetTailscaleBinCacheForTests(): void {
   resolvedTailscaleBin = null;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 1 (§33.12): Tailscale IP auto-detection
+// ---------------------------------------------------------------------------
+
+const TAILSCALE_IP_TIMEOUT_MS = 3_000;
+
+export type TailscaleIpSource = 'env-var' | 'tailscale-cli' | 'control-plane-url';
+
+export type ResolvedSyncIdentity = {
+  selfSyncUrl: string;
+  selfTailscaleIp: string | null;
+  selfSyncUrlSource: TailscaleIpSource;
+};
+
+/**
+ * Validate that an IPv4 string is safe to use as a Tailscale IP. Rejects
+ * loopback (`127.0.0.0/8`), link-local (`169.254.0.0/16`), all-zeros, and
+ * non-IPv4 formats. Does NOT restrict to CGNAT only — some operators run
+ * Tailscale with custom subnet routes.
+ */
+export function isValidTailscaleIp(ip: string): boolean {
+  const trimmed = ip.trim();
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(trimmed)) return false;
+  if (/^127(?:\.\d{1,3}){3}$/.test(trimmed)) return false;
+  if (trimmed === '0.0.0.0') return false;
+  if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(trimmed)) return false;
+  return true;
+}
+
+let cachedTailscaleIp: string | null | undefined;
+
+/**
+ * Run `tailscale ip -4` to auto-detect the local node's Tailscale IPv4.
+ * Result is cached for the process lifetime. Returns `null` when the CLI
+ * is unavailable, times out, or returns an invalid address.
+ */
+export async function detectTailscaleIp(
+  logger?: Pick<Logger, 'debug' | 'warn'>,
+): Promise<string | null> {
+  if (cachedTailscaleIp !== undefined) return cachedTailscaleIp;
+
+  try {
+    const bin = resolveTailscaleBin();
+    const { stdout } = await execFileAsync(bin, ['ip', '-4'], {
+      timeout: TAILSCALE_IP_TIMEOUT_MS,
+    });
+    const ip = stdout.trim().split('\n')[0]?.trim() ?? '';
+    if (isValidTailscaleIp(ip)) {
+      cachedTailscaleIp = ip;
+      logger?.debug?.({ ip }, 'Auto-detected Tailscale IP via CLI');
+      return ip;
+    }
+    logger?.warn?.({ rawOutput: ip }, 'tailscale ip -4 returned invalid address');
+    cachedTailscaleIp = null;
+    return null;
+  } catch (err: unknown) {
+    logger?.debug?.(
+      { err: err instanceof Error ? err.message : String(err) },
+      'Tailscale IP auto-detect failed',
+    );
+    cachedTailscaleIp = null;
+    return null;
+  }
+}
+
+/** Test-only: reset the cached Tailscale IP so tests can override env. */
+export function __resetTailscaleIpCacheForTests(): void {
+  cachedTailscaleIp = undefined;
+}
+
+/**
+ * Resolve the local node's sync identity using the Phase 1 resolution chain:
+ *
+ * 1. `TAILSCALE_IP` env var (validated — loopback/link-local rejected with warning)
+ * 2. `tailscale ip -4` auto-detect (cached)
+ * 3. `controlPlaneUrl` fallback (e.g. `http://localhost:8080`)
+ */
+export async function resolveSyncIdentity(opts: {
+  port: number;
+  controlPlaneUrl: string;
+  logger?: Pick<Logger, 'info' | 'warn' | 'debug'>;
+}): Promise<ResolvedSyncIdentity> {
+  const { port, controlPlaneUrl, logger } = opts;
+
+  // 1. TAILSCALE_IP env var — validated
+  const envIp = process.env.TAILSCALE_IP;
+  if (envIp) {
+    if (isValidTailscaleIp(envIp)) {
+      const selfSyncUrl = `http://${envIp.trim()}:${port}`;
+      logger?.info?.(
+        { selfSyncUrl, source: 'env-var' },
+        'selfSyncUrl resolved from TAILSCALE_IP env var',
+      );
+      return { selfSyncUrl, selfTailscaleIp: envIp.trim(), selfSyncUrlSource: 'env-var' };
+    }
+    logger?.warn?.(
+      { envValue: envIp },
+      'TAILSCALE_IP env var is loopback/link-local/invalid — falling through to auto-detect',
+    );
+  }
+
+  // 2. tailscale ip -4 auto-detect
+  const autoIp = await detectTailscaleIp(logger);
+  if (autoIp) {
+    const selfSyncUrl = `http://${autoIp}:${port}`;
+    logger?.info?.(
+      { selfSyncUrl, source: 'tailscale-cli' },
+      'selfSyncUrl resolved via tailscale CLI',
+    );
+    return { selfSyncUrl, selfTailscaleIp: autoIp, selfSyncUrlSource: 'tailscale-cli' };
+  }
+
+  // 3. controlPlaneUrl fallback
+  logger?.info?.(
+    { selfSyncUrl: controlPlaneUrl, source: 'control-plane-url' },
+    'selfSyncUrl resolved from CONTROL_PLANE_URL fallback',
+  );
+  return {
+    selfSyncUrl: controlPlaneUrl,
+    selfTailscaleIp: null,
+    selfSyncUrlSource: 'control-plane-url',
+  };
+}
+
 /**
  * Shell out to the local Tailscale CLI and return the parsed mesh-node peers.
  * Returns an empty array on any failure so callers never see exceptions for
