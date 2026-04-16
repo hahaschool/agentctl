@@ -50,6 +50,7 @@ module.exports = {
           process.env.DISPATCH_SIGNING_SECRET_KEY ||
           deriveStableDispatchSigningSecretKey('beta'),
         CONTROL_PLANE_URL: 'http://127.0.0.1:8080',
+        TAILSCALE_IP: process.env.TAILSCALE_IP || '',
         SYNC_PEER_REGISTRATION_TOKEN:
           process.env.SYNC_PEER_REGISTRATION_TOKEN || '',
         SKIP_MIGRATIONS: 'true',
