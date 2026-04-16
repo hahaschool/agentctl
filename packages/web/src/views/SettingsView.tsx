@@ -18,6 +18,7 @@ import { ProjectAccountsSection } from './ProjectAccountsSection';
 import { RuntimeAccessSection } from './RuntimeAccessSection';
 import { RuntimeConsistencySection } from './RuntimeConsistencySection';
 import { MeshAutoUpdateSection } from './settings/MeshAutoUpdateSection';
+import { MeshConfigSection } from './settings/MeshConfigSection';
 import { RuntimeProfilesSection } from './settings/RuntimeProfilesSection';
 import { SettingsSection, SettingsShell } from './settings/SettingsShell';
 import { WorkersSyncSection } from './settings/WorkersSyncSection';
@@ -42,6 +43,11 @@ const SETTINGS_NAV = [
     id: 'workers-sync',
     label: 'Workers & Sync',
     detail: 'Runtime installation, authentication, drift, and mirrored access state.',
+  },
+  {
+    id: 'mesh-identity',
+    label: 'Mesh Identity',
+    detail: 'Tailscale IP, sync URL, registration token, and public key for this node.',
   },
   {
     id: 'routing-autonomy',
@@ -147,6 +153,14 @@ export function SettingsView(): React.JSX.Element {
               <RuntimeAccessSection />
               <RuntimeConsistencySection />
             </div>
+          </SettingsSection>
+
+          <SettingsSection
+            id="mesh-identity"
+            title="Mesh Identity"
+            description="This node's Tailscale IP, sync URL, registration token, and public key. Overrides take effect immediately without restart."
+          >
+            <MeshConfigSection />
           </SettingsSection>
 
           <SettingsSection

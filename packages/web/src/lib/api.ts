@@ -116,6 +116,7 @@ export * from './api/deployment';
 export * from './api/machines';
 export * from './api/memory';
 export * from './api/mesh-auto-update';
+export * from './api/mesh-config';
 export * from './api/scheduler';
 export * from './api/security';
 export * from './api/sessions';
@@ -131,6 +132,7 @@ import { deploymentApi } from './api/deployment';
 import { machinesApi } from './api/machines';
 import { memoryApi } from './api/memory';
 import { meshAutoUpdateApi } from './api/mesh-auto-update';
+import { meshConfigApi } from './api/mesh-config';
 import { schedulerApi } from './api/scheduler';
 import { securityApi } from './api/security';
 import { sessionsApi } from './api/sessions';
@@ -157,6 +159,7 @@ export const api = {
   ...spacesApi,
   ...deploymentApi,
   ...meshAutoUpdateApi,
+  ...meshConfigApi,
   ...syncApi,
   ...webhooksApi,
 };
