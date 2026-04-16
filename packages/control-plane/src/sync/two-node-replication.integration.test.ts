@@ -236,9 +236,7 @@ describe.skipIf(!DATABASE_URL)('two-node machine replication (integration)', () 
     await applyChange(insertEntry, dbB, logger);
 
     // --- Node A updates the machine status ---
-    await dbA.execute(
-      sql`UPDATE machines SET status = 'offline' WHERE id = ${machineId}`,
-    );
+    await dbA.execute(sql`UPDATE machines SET status = 'offline' WHERE id = ${machineId}`);
 
     // --- Read the UPDATE change log entry ---
     const updateResult = await dbA.execute(
@@ -293,12 +291,8 @@ describe.skipIf(!DATABASE_URL)('two-node machine replication (integration)', () 
     await applyChange(insertEntry, dbB, logger);
 
     // --- Node A updates twice (vclock goes to {node-a: 3}) ---
-    await dbA.execute(
-      sql`UPDATE machines SET status = 'maintenance' WHERE id = ${machineId}`,
-    );
-    await dbA.execute(
-      sql`UPDATE machines SET status = 'online' WHERE id = ${machineId}`,
-    );
+    await dbA.execute(sql`UPDATE machines SET status = 'maintenance' WHERE id = ${machineId}`);
+    await dbA.execute(sql`UPDATE machines SET status = 'online' WHERE id = ${machineId}`);
 
     // --- Replicate both updates to B ---
     const updatesResult = await dbA.execute(
