@@ -1,7 +1,7 @@
 'use client';
 
 import type React from 'react';
-
+import { Spinner } from '@/components/Spinner';
 import { FORK_AGENT_TYPES } from '@/lib/model-options';
 
 type ConvertToAgentFormProps = {
@@ -94,7 +94,13 @@ export function ConvertToAgentForm({
           disabled={isPending}
           className="h-8 px-3.5 bg-emerald-700 text-white rounded-md text-xs font-medium cursor-pointer transition-all duration-200 hover:bg-emerald-600 disabled:opacity-50"
         >
-          {isPending ? 'Creating...' : 'Create Agent'}
+          {isPending ? (
+            <>
+              <Spinner size="sm" /> Creating...
+            </>
+          ) : (
+            'Create Agent'
+          )}
         </button>
         <button
           type="button"
