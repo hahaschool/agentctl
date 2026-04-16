@@ -121,7 +121,7 @@ echo "  Updated: CHANGELOG.md"
 
 # ── Git commit + tag ─────────────────────────────────────────────────
 cd "$REPO_ROOT"
-git add packages/*/package.json packages/web/src/components/Sidebar.tsx CHANGELOG.md
+git add packages/*/package.json packages/web/src/components/Sidebar.tsx packages/web/src/lib/mesh-version.ts CHANGELOG.md
 git commit -m "chore: bump version to ${NEW_VERSION}
 
 ${DESCRIPTION}"
