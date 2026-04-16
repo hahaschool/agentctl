@@ -8,18 +8,34 @@
 // reported them yet.
 // ---------------------------------------------------------------------------
 
+import { useQuery } from '@tanstack/react-query';
+
 import type { SyncPeer } from './api';
+import { versionCompatQuery } from './queries';
 
 /**
- * The local control-plane's `appVersion`. Hardcoded in the sidebar footer
- * historically; centralised here so the mesh-peers page can compare against
- * it without importing UI components.
+ * Hardcoded fallback used only while the `/api/version-compat` fetch is
+ * in-flight. All runtime consumers should prefer `useLocalVersion()` which
+ * fetches the live value from the control-plane's `/api/version-compat`
+ * endpoint — this eliminates the stale-constant problem that caused version
+ * display mismatches across mesh nodes (each node built its own web bundle
+ * with a potentially outdated constant).
  *
- * Kept in lockstep with `packages/web/package.json#version` by convention.
- * When a true `/api/version` endpoint lands we can switch this to a runtime
- * fetch; the helpers below already accept the value as a parameter.
+ * @deprecated Prefer `useLocalVersion()` in React components.
  */
 export const LOCAL_APP_VERSION = 'v0.5.1';
+
+/**
+ * React hook that returns the live `appVersion` from the local control-plane
+ * via `/api/version-compat`. Falls back to `LOCAL_APP_VERSION` while loading
+ * or on error so the UI never shows a blank version.
+ */
+export function useLocalVersion(): string {
+  const compat = useQuery(versionCompatQuery());
+  return compat.data?.appVersion
+    ? `v${compat.data.appVersion.replace(/^v/i, '')}`
+    : LOCAL_APP_VERSION;
+}
 
 /**
  * The local control-plane's schema version — the highest migration number

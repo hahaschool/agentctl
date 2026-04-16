@@ -42,8 +42,8 @@ import { KEYBOARD_HELP_OPEN_EVENT } from '../lib/keyboard-shortcuts';
 import {
   formatVersionGroups,
   groupPeerVersions,
-  LOCAL_APP_VERSION,
   type SyncPeerWithVersion,
+  useLocalVersion,
 } from '../lib/mesh-version';
 import { syncConflictCountQuery, syncPeersQuery } from '../lib/queries';
 import { CommandPalette } from './CommandPalette';
@@ -102,6 +102,7 @@ export function Sidebar(): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const localVersion = useLocalVersion();
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -127,8 +128,8 @@ export function Sidebar(): React.JSX.Element {
   }, [syncPeers.data]);
 
   const versionLinkTitle = peerVersionSummary
-    ? `Local ${LOCAL_APP_VERSION} • Peers: ${peerVersionSummary}`
-    : `Local ${LOCAL_APP_VERSION} • No peer versions reported yet`;
+    ? `Local ${localVersion} • Peers: ${peerVersionSummary}`
+    : `Local ${localVersion} • No peer versions reported yet`;
 
   // Track WS connection for reconnect/disconnect toasts (skip initial connect)
   const wasConnectedRef = useRef(false);
@@ -468,7 +469,7 @@ export function Sidebar(): React.JSX.Element {
               onFocus={armPeerSummary}
               className="text-[11px] font-mono text-muted-foreground hover:text-blue-500 transition-colors flex items-center gap-1 max-md:inline-flex hidden lg:flex"
             >
-              {LOCAL_APP_VERSION}
+              {localVersion}
               <ExternalLink className="size-2.5" aria-hidden="true" />
             </a>
             {mounted ? (

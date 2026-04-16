@@ -17,9 +17,9 @@ import {
   formatVersionGroups,
   groupPeerVersions,
   hasMeshDrift,
-  LOCAL_APP_VERSION,
   LOCAL_SCHEMA_VERSION,
   type SyncPeerWithVersion,
+  useLocalVersion,
 } from '@/lib/mesh-version';
 import {
   syncPeerCursorsQuery,
@@ -1242,6 +1242,7 @@ export type { SyncPeerCursors };
 
 export function MeshPeersPage(): React.JSX.Element {
   const toast = useToast();
+  const localVersion = useLocalVersion();
   const peersData = useQuery(syncPeersQuery());
   const pingMutation = usePingSyncPeer();
   const deleteMutation = useDeleteSyncPeer();
@@ -1265,7 +1266,7 @@ export function MeshPeersPage(): React.JSX.Element {
   const reachableCount = peers.filter((p) => p.syncStatus === 'reachable').length;
   const unreachableCount = peers.filter((p) => p.syncStatus === 'unreachable').length;
   const versionGroups = groupPeerVersions(peers);
-  const meshHasDrift = hasMeshDrift(peers, LOCAL_APP_VERSION);
+  const meshHasDrift = hasMeshDrift(peers, localVersion);
   const showDriftBanner = meshHasDrift && !driftBannerDismissed;
   const driftSummary = formatVersionGroups(versionGroups);
 
@@ -1549,7 +1550,7 @@ export function MeshPeersPage(): React.JSX.Element {
                   <MeshPeerRow
                     key={peer.machineId}
                     peer={peer}
-                    localVersion={LOCAL_APP_VERSION}
+                    localVersion={localVersion}
                     onPing={handlePing}
                     onEdit={openEditDialog}
                     onDelete={setPendingDelete}
@@ -1637,7 +1638,7 @@ export function MeshPeersPage(): React.JSX.Element {
               {pendingUpdate.machineId}
               {' · '}
               <span className="text-muted-foreground">
-                {pendingUpdate.peerVersion ?? '?'} → {LOCAL_APP_VERSION}
+                {pendingUpdate.peerVersion ?? '?'} → {localVersion}
               </span>
             </p>
             <div className="mt-4 flex items-center justify-end gap-2">
