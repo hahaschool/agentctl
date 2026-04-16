@@ -3,6 +3,21 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.6.0] — 2026-04-16
+
+Real claude-mem import with dedup, mesh phases 3+4, preflight token, error boundaries, SSRF guards
+
+### Changes
+
+- 067340ba feat(memory): implement real claude-mem import with dedup and preview (#630)
+- 86843710 fix(web): wrap 3 detail pages with ErrorBoundary (#629)
+- 2fe44dd1 feat(web): wire mesh preflight token check into add-peer dialog (#628)
+- 22391c0d fix(security): extract SSRF/ReDoS guards to shared util, fix remaining instances (#627)
+- 9aafccb1 docs: sync roadmap for PR #623 (§33.12 Phases 3+4) (#626)
+- 17d896ab feat(mesh): §33.12 Phases 3+4 — structured errors, retry, identity, stale cleanup (#623)
+- e6596351 fix(mesh): handle missing mesh_local_config table gracefully (#625)
+
+
 ## [0.5.7] — 2026-04-16
 
 Mesh peers display fixes: self node fields, version prefix consistency, downgrade prevention
