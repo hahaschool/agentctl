@@ -1,4 +1,5 @@
 import {
+  DEFAULT_WORKER_PORT,
   type DiscoveredMcpServer,
   type DiscoveredSkill,
   isManagedRuntime,
@@ -75,7 +76,7 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
   app,
   opts,
 ) => {
-  const { dbRegistry, workerPort = 9000 } = opts;
+  const { dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
 
   /**
    * GET /api/agents/:id/config-preview
@@ -245,12 +246,20 @@ export const agentConfigPreviewRoutes: FastifyPluginAsync<AgentConfigPreviewRout
         signal: AbortSignal.timeout(10_000),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        return reply.code(response.status).send(data);
+        let errorBody: unknown;
+        try {
+          errorBody = await response.json();
+        } catch {
+          errorBody = {
+            error: 'WORKER_ERROR',
+            message: `Worker returned HTTP ${response.status}`,
+          };
+        }
+        return reply.code(response.status).send(errorBody);
       }
 
+      const data = await response.json();
       return reply.send(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

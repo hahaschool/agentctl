@@ -7,7 +7,7 @@ import type {
   ResumeManagedSessionRequest,
   RunHandoffDecision,
 } from '@agentctl/shared';
-import { ControlPlaneError, isExecutionEnvironmentId } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_WORKER_PORT, isExecutionEnvironmentId } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -40,7 +40,7 @@ export const runtimeSessionRoutes: FastifyPluginAsync<RuntimeSessionRoutesOption
     runtimeConfigStore,
     runHandoffDecisionStore,
     dbRegistry,
-    workerPort = 9000,
+    workerPort = DEFAULT_WORKER_PORT,
   } = opts;
 
   app.get<{

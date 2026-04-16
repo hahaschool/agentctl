@@ -1,4 +1,5 @@
 import {
+  DEFAULT_WORKER_PORT,
   type ExportHandoffSnapshotRequest,
   HANDOFF_REASONS,
   type HandoffManagedSessionRequest,
@@ -122,7 +123,7 @@ export const handoffRoutes: FastifyPluginAsync<HandoffRoutesOptions> = async (ap
     handoffStore,
     runtimeConfigStore,
     dbRegistry,
-    workerPort = 9000,
+    workerPort = DEFAULT_WORKER_PORT,
   } = opts;
 
   app.get<{
