@@ -15,18 +15,21 @@ vi.mock('./peer-registration.js', () => ({
   PEER_REGISTRATION_AGENT_ID: 'peer-registration',
 }));
 
+// Use a Tailscale CGNAT IP for all test targets (SSRF guard blocks arbitrary hostnames)
+const TAILSCALE_PEER_URL = 'http://100.64.0.10:8080';
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 function makeOpts(overrides?: Partial<ReverseRegistrationOptions>): ReverseRegistrationOptions {
   return {
-    targetSyncUrl: 'http://peer-b:8080',
+    targetSyncUrl: TAILSCALE_PEER_URL,
     self: {
       machineId: 'machine-a',
       hostname: 'host-a',
       tailscaleIp: '100.64.0.1',
-      syncUrl: 'http://machine-a:8080',
+      syncUrl: 'http://100.64.0.1:8080',
       publicKey: 'pk-a',
     },
     signingSecretKey: 'sk-a',
@@ -119,6 +122,45 @@ describe('performReverseRegistration', () => {
       expect.objectContaining({ errorCode: 'TOKEN_MISMATCH', status: 403 }),
       expect.any(String),
     );
+  });
+
+  it('blocks non-Tailscale hostnames (SSRF guard)', async () => {
+    const fetchImpl = vi.fn();
+    const result = await performReverseRegistration(
+      makeOpts({ targetSyncUrl: 'http://evil.example.com:8080', fetchImpl }),
+    );
+    expect(result.status).toBe('failed');
+    expect(result.errorCode).toBe('INVALID_TARGET');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('blocks private IPs outside CGNAT (SSRF guard)', async () => {
+    const fetchImpl = vi.fn();
+    const result = await performReverseRegistration(
+      makeOpts({ targetSyncUrl: 'http://192.168.1.1:8080', fetchImpl }),
+    );
+    expect(result.status).toBe('failed');
+    expect(result.errorCode).toBe('INVALID_TARGET');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('allows localhost target', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(mockResponse(200, ''));
+    const result = await performReverseRegistration(
+      makeOpts({ targetSyncUrl: 'http://localhost:8080', fetchImpl }),
+    );
+    expect(result.status).toBe('ok');
+    expect(fetchImpl).toHaveBeenCalled();
+  });
+
+  it('returns INVALID_TARGET for malformed URLs', async () => {
+    const fetchImpl = vi.fn();
+    const result = await performReverseRegistration(
+      makeOpts({ targetSyncUrl: 'not-a-url', fetchImpl }),
+    );
+    expect(result.status).toBe('failed');
+    expect(result.errorCode).toBe('INVALID_TARGET');
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 
