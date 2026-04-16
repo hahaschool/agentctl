@@ -105,7 +105,7 @@ export function PeerUpdateLogModal({
         {/* Log output */}
         <div
           data-testid="peer-update-log-output"
-          className="flex-1 overflow-y-auto p-3 font-mono text-xs leading-relaxed bg-[#0a0a0a] min-h-[200px]"
+          className="flex-1 overflow-y-auto p-3 font-mono text-xs leading-relaxed bg-[var(--color-terminal-bg)] min-h-[200px]"
         >
           {logs.length === 0 && isRunning && (
             <div className="text-muted-foreground animate-pulse">Waiting for output...</div>

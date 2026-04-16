@@ -218,7 +218,7 @@ export function InteractiveTerminal({
 
   return (
     <div className={cn('relative flex-1 min-h-0', className)}>
-      <div ref={containerRef} className="absolute inset-0 bg-[#0a0a0a]" />
+      <div ref={containerRef} className="absolute inset-0 bg-[var(--color-terminal-bg)]" />
       <div className="absolute top-2 right-3 flex items-center gap-1.5 z-10">
         <span
           className={cn('w-1.5 h-1.5 rounded-full', connected ? 'bg-green-500' : 'bg-red-500')}

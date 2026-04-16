@@ -337,7 +337,7 @@ function AgentProfileFormDialog({
               type="submit"
               disabled={isPending}
               data-testid="agent-profile-submit"
-              className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+              className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
             >
               {submitLabel}
             </button>
@@ -508,7 +508,7 @@ export function AgentProfilesPage(): React.JSX.Element {
             type="button"
             onClick={() => setDialogOpen(true)}
             data-testid="new-agent-profile"
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90"
           >
             + New profile
           </button>
@@ -552,7 +552,7 @@ export function AgentProfilesPage(): React.JSX.Element {
             type="button"
             onClick={() => setDialogOpen(true)}
             data-testid="empty-new-agent-profile"
-            className="mt-4 px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+            className="mt-4 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90"
           >
             Create your first profile
           </button>

@@ -216,9 +216,9 @@ describe('InteractiveTerminal', () => {
       expect(container.firstChild).toBeDefined();
     });
 
-    it('renders the terminal container with bg-[#0a0a0a]', () => {
+    it('renders the terminal container with theme-aware background', () => {
       const { container } = render(<InteractiveTerminal {...defaultProps} />);
-      const termDiv = container.querySelector('.bg-\\[\\#0a0a0a\\]');
+      const termDiv = container.querySelector('.bg-\\[var\\(--color-terminal-bg\\)\\]');
       expect(termDiv).not.toBeNull();
     });
 
@@ -311,7 +311,7 @@ describe('InteractiveTerminal', () => {
     it('opens terminal into the container div element', async () => {
       const { container } = render(<InteractiveTerminal {...defaultProps} />);
       await flushAsyncInit();
-      const termDiv = container.querySelector('.bg-\\[\\#0a0a0a\\]');
+      const termDiv = container.querySelector('.bg-\\[var\\(--color-terminal-bg\\)\\]');
       expect(mockOpen).toHaveBeenCalledWith(termDiv);
     });
 

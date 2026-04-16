@@ -785,7 +785,7 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
               title={
                 saveBlockedByProbe ? 'Probe the sync URL first, or choose Save anyway' : undefined
               }
-              className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+              className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
             >
               {upsertPeer.isPending ? 'Saving…' : isUpdate ? 'Update peer' : 'Save peer'}
             </button>
@@ -1615,7 +1615,7 @@ export function MeshPeersPage(): React.JSX.Element {
             type="button"
             onClick={openAddDialog}
             data-testid="add-mesh-peer"
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90"
           >
             + Add peer
           </button>
@@ -1715,7 +1715,7 @@ export function MeshPeersPage(): React.JSX.Element {
                 type="button"
                 onClick={openAddDialog}
                 data-testid="empty-add-mesh-peer"
-                className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90"
               >
                 Add manually
               </button>
@@ -1858,7 +1858,7 @@ export function MeshPeersPage(): React.JSX.Element {
                 onClick={confirmUpdate}
                 disabled={updateMutation.isPending}
                 data-testid="confirm-update-mesh-peer"
-                className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
               >
                 {updateMutation.isPending ? 'Updating…' : 'Update'}
               </button>

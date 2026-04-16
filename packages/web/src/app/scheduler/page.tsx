@@ -321,7 +321,7 @@ function CreateJobDialog({
               type="submit"
               disabled={isPending}
               data-testid="scheduler-submit"
-              className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+              className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
             >
               {isPending ? 'Creating…' : 'Create job'}
             </button>
@@ -408,7 +408,7 @@ export function SchedulerPage(): React.JSX.Element {
             onClick={() => setDialogOpen(true)}
             disabled={notConfigured}
             data-testid="new-scheduler-job"
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
           >
             + New job
           </button>
@@ -462,7 +462,7 @@ export function SchedulerPage(): React.JSX.Element {
             type="button"
             onClick={() => setDialogOpen(true)}
             data-testid="empty-new-scheduler-job"
-            className="mt-4 px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+            className="mt-4 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90"
           >
             Create your first job
           </button>

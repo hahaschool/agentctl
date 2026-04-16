@@ -84,9 +84,9 @@ describe('TerminalView', () => {
       expect(container.firstChild).toBeDefined();
     });
 
-    it('renders the bg-[#0a0a0a] inner container', () => {
+    it('renders the theme-aware background inner container', () => {
       const { container } = render(<TerminalView rawOutput={[]} />);
-      const termDiv = container.querySelector('.bg-\\[\\#0a0a0a\\]');
+      const termDiv = container.querySelector('.bg-\\[var\\(--color-terminal-bg\\)\\]');
       expect(termDiv).not.toBeNull();
     });
 
@@ -243,7 +243,7 @@ describe('TerminalView', () => {
     it('opens terminal into the container div element', async () => {
       const { container } = render(<TerminalView rawOutput={[]} />);
       await flushAsyncInit();
-      const termDiv = container.querySelector('.bg-\\[\\#0a0a0a\\]');
+      const termDiv = container.querySelector('.bg-\\[var\\(--color-terminal-bg\\)\\]');
       expect(mockOpen).toHaveBeenCalledWith(termDiv);
     });
 

@@ -160,7 +160,7 @@ function SelectStep({
                   type="checkbox"
                   checked={allReachableSelected}
                   onChange={() => onToggleAll(!allReachableSelected)}
-                  className="accent-[#3b82f6]"
+                  className="accent-primary"
                   data-testid="discover-select-all"
                 />
                 Select all reachable
@@ -194,7 +194,7 @@ function SelectStep({
                         checked={candidate.selected}
                         disabled={!candidate.reachable}
                         onChange={() => onToggle(index)}
-                        className="accent-[#3b82f6]"
+                        className="accent-primary"
                         aria-label={`Select ${candidate.hostname}`}
                       />
                     </td>
@@ -238,7 +238,7 @@ function SelectStep({
             onClick={onNext}
             disabled={selectedCount === 0}
             data-testid="discover-next"
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
           >
             Next: configure
           </button>
@@ -384,7 +384,7 @@ function ConfirmStep({
             onClick={onConfirm}
             disabled={isAdding}
             data-testid="discover-confirm"
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
           >
             {isAdding
               ? 'Adding...'
@@ -519,7 +519,7 @@ export function DiscoverPeersDialog({
       <div className="w-full max-w-2xl rounded-md border border-border bg-card shadow-xl">
         {step === 'loading' && (
           <div className="px-5 py-12 text-center">
-            <div className="inline-block size-5 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin" />
+            <div className="inline-block size-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             <p className="mt-3 text-xs text-muted-foreground">
               Discovering Tailscale mesh peers...
             </p>

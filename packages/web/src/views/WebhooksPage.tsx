@@ -359,7 +359,7 @@ export function WebhookFormDialog({
               data-testid="webhook-submit"
               className={cn(
                 'px-3 py-1.5 rounded-md text-xs font-medium',
-                'bg-[#3b82f6] text-white hover:bg-[#2563eb] disabled:opacity-50',
+                'bg-primary text-white hover:bg-primary/90 disabled:opacity-50',
               )}
             >
               {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create webhook'}
@@ -425,7 +425,7 @@ export function WebhookRow({
       </td>
       <td className="px-3 py-2.5 text-xs whitespace-nowrap">
         {webhook.active ? (
-          <span className="px-1.5 py-0.5 rounded-sm bg-[#3b82f6]/15 text-[#3b82f6] text-[10px] font-semibold uppercase tracking-wide">
+          <span className="px-1.5 py-0.5 rounded-sm bg-primary/15 text-primary text-[10px] font-semibold uppercase tracking-wide">
             Active
           </span>
         ) : (
@@ -578,7 +578,7 @@ export function WebhooksPage(): React.JSX.Element {
             type="button"
             onClick={openCreate}
             data-testid="add-webhook"
-            className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+            className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90"
           >
             + Add Webhook
           </button>
@@ -616,7 +616,7 @@ export function WebhooksPage(): React.JSX.Element {
             <button
               type="button"
               onClick={openCreate}
-              className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+              className="px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-white hover:bg-primary/90"
             >
               + Add Webhook
             </button>
