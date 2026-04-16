@@ -3,6 +3,31 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.5.2] — 2026-04-16
+
+PM2 sync peer token passthrough + stale LOCAL_APP_VERSION fix
+
+### Changes
+
+- 68b9eccc docs: sync roadmap for PM2 token + version fix (PR #596) (#597)
+- c79253a1 fix(mesh): pass SYNC_PEER_REGISTRATION_TOKEN through PM2 env + update LOCAL_APP_VERSION (#596)
+- 1c483311 docs: sync roadmap §33.10 delivered + §33.11 machines.yml (PRs #593-#594) (#595)
+- adddccc6 test(mesh): schema compat two-node integration + schema-ahead E2E (33.10) (#594)
+- 0696b0b3 chore(infra): document fleet topology in machines.yml (33.11) (#593)
+- 6d9e6519 docs: sync roadmap §33.7 delivered + §33.8 integration proof (PRs #589-#591) (#592)
+- e6056aca test(mesh): add E2E coverage for ping diagnostics, health summary, and version banner (33.7) (#591)
+- 01c5c135 feat(mesh): discover peers UI flow + probe auto-fill (33.7) (#590)
+- 948332e9 test(mesh): two-node machine replication integration proof (33.8) (#589)
+- b1bd8318 docs: sync roadmap §33.7 after discover/probe backend delivery (PR #586, #587) (#588)
+- 20c9817f chore(deps): bump fastify in the npm_and_yarn group across 1 directory (#587)
+- 70287081 feat(mesh): GET /api/sync/peers/discover + /probe endpoints (33.7) (#586)
+- 5c078b1e docs(memory): plan MemPalace-inspired memory evolution (#584)
+- d8415cfc docs(mesh): document SYNC_PEER_REGISTRATION_TOKEN for peer reverse-registration (#585)
+- cfc38efe docs: sync roadmap §33.7/§33.11 after PRs #579/#580/#582 (#583)
+- 8f855bee feat(mesh): ping failure details + update-available banner on /mesh-peers (33.7, 33.11) (#582)
+- 2805e5d7 feat(mesh): agentctl peer update --rollback for PM2 topology (33.11) (#580)
+
+
 ## [0.5.1] — 2026-04-15
 
 fix: stale LOCAL_APP_VERSION in web client bundle
