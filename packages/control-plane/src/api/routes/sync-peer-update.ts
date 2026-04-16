@@ -16,9 +16,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import rateLimit from '@fastify/rate-limit';
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
-
 import { sql } from 'drizzle-orm';
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getAppVersion } from '../../build-info.js';
 import type { Database } from '../../db/index.js';
@@ -135,12 +134,14 @@ async function proxyUpdateToRemotePeer(
   reply: FastifyReply,
 ): Promise<FastifyReply> {
   if (!signingSecretKey) {
-    return reply.code(503).send(
-      errorResponse(
-        'PEER_UPDATE_PROXY_NO_KEY',
-        'Cannot forward update — signing key not configured on this node',
-      ),
-    );
+    return reply
+      .code(503)
+      .send(
+        errorResponse(
+          'PEER_UPDATE_PROXY_NO_KEY',
+          'Cannot forward update — signing key not configured on this node',
+        ),
+      );
   }
 
   const result = await db.execute(
@@ -150,12 +151,14 @@ async function proxyUpdateToRemotePeer(
   const peer = rows[0];
 
   if (!peer?.sync_url) {
-    return reply.code(404).send(
-      errorResponse(
-        'PEER_UPDATE_PROXY_NO_URL',
-        `Peer '${peerId}' not found or has no syncUrl configured`,
-      ),
-    );
+    return reply
+      .code(404)
+      .send(
+        errorResponse(
+          'PEER_UPDATE_PROXY_NO_URL',
+          `Peer '${peerId}' not found or has no syncUrl configured`,
+        ),
+      );
   }
 
   const targetPath = `/api/sync/peers/${encodeURIComponent(peerId)}/update`;
@@ -193,15 +196,11 @@ async function proxyUpdateToRemotePeer(
 
     return reply.code(upstream.status).send(parsed);
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : String(err);
+    const message = err instanceof Error ? err.message : String(err);
     request.log.error({ err, peerId, targetUrl }, 'peer-update proxy failed');
-    return reply.code(502).send(
-      errorResponse(
-        'PEER_UPDATE_PROXY_FAILED',
-        `Failed to reach peer: ${message}`,
-      ),
-    );
+    return reply
+      .code(502)
+      .send(errorResponse('PEER_UPDATE_PROXY_FAILED', `Failed to reach peer: ${message}`));
   }
 }
 
