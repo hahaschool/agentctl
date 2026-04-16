@@ -198,7 +198,7 @@ function SvgGraph({
   onSelectNode,
 }: SvgGraphProps): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     const el = containerRef.current;

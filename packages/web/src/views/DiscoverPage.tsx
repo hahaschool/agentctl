@@ -482,8 +482,11 @@ export function DiscoverPage(): React.JSX.Element {
 
       {/* Runtime filter */}
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-sm text-muted-foreground">Runtime:</span>
+        <label htmlFor="runtime-filter" className="text-sm text-muted-foreground">
+          Runtime:
+        </label>
         <select
+          id="runtime-filter"
           value={runtimeFilter}
           onChange={(e) => setRuntimeFilter(e.target.value)}
           className="bg-muted border border-border rounded px-2 py-1 text-xs text-foreground outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40"
