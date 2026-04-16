@@ -27,6 +27,15 @@ type SyncPeer = {
   peerVersion?: string | null;
   peerGitSha?: string | null;
   peerSchemaVersion?: number | null;
+  // 33.7 Ping diagnostics — failure category + HTTP status.
+  lastPingError?: string | null;
+  lastPingStatusCode?: number | null;
+  // 33.8 Reverse registration + health panel fields.
+  reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
+  reverseRegistrationError?: string | null;
+  reverseRegistrationAt?: string | null;
+  lastPullAt?: string | null;
+  lastAckAt?: string | null;
 };
 
 type PingResult = { ok: boolean; status: 'reachable' | 'unreachable'; peer: SyncPeer | null };
@@ -78,6 +87,18 @@ type MockState = {
   deleteCalls?: string[];
   deleteStatus?: number;
   deleteError?: { error: string; message: string };
+  /** §33.8: reverse registration retry responses keyed by machineId. */
+  reverseResponses?: Map<string, { ok: boolean; message?: string; peer: SyncPeer | null }>;
+  reverseRetryCalls?: string[];
+  /** Version-compat response for the MeshVersionBanner. */
+  versionCompat?: {
+    appVersion: string;
+    gitSha: string;
+    schemaVersion: number;
+    minSupportedMobileBuild: number;
+  } | null;
+  /** §33.7: probe response for the add-peer dialog. */
+  probeResponses?: Map<string, { reachable: boolean; statusCode?: number; appVersion?: string; error?: string }>;
 };
 
 async function mountApiMocks(page: Page, state: MockState): Promise<void> {
@@ -159,11 +180,89 @@ async function mountApiMocks(page: Page, state: MockState): Promise<void> {
         status: 'unreachable' as const,
         peer: null,
       };
-      // Reflect the new syncStatus in the peers list for the next poll.
-      state.peers = state.peers.map((p) =>
-        p.machineId === machineId ? { ...p, syncStatus: response.status } : p,
-      );
+      // Reflect the new syncStatus (and ping diagnostics when present) in
+      // the peers list for the next poll.
+      state.peers = state.peers.map((p) => {
+        if (p.machineId !== machineId) return p;
+        const updatedPeer = response.peer;
+        return {
+          ...p,
+          syncStatus: response.status,
+          lastPingError: updatedPeer?.lastPingError ?? p.lastPingError,
+          lastPingStatusCode: updatedPeer?.lastPingStatusCode ?? p.lastPingStatusCode,
+        };
+      });
       await fulfillJson(route, response);
+      return;
+    }
+
+    // §33.8 — Reverse registration retry
+    const reverseMatch = pathname.match(/^\/api\/sync\/peers\/([^/]+)\/register-reverse$/);
+    if (method === 'POST' && reverseMatch) {
+      const machineId = decodeURIComponent(reverseMatch[1] ?? '');
+      state.reverseRetryCalls ??= [];
+      state.reverseRetryCalls.push(machineId);
+      const response = state.reverseResponses?.get(machineId) ?? {
+        ok: false,
+        message: 'Reverse registration failed',
+        peer: null,
+      };
+      // Apply updated reverse status to the peers list when the response
+      // carries an updated peer object.
+      if (response.peer) {
+        state.peers = state.peers.map((p) =>
+          p.machineId === machineId
+            ? {
+                ...p,
+                reverseRegistrationStatus: response.peer?.reverseRegistrationStatus ?? p.reverseRegistrationStatus,
+                reverseRegistrationError: response.peer?.reverseRegistrationError ?? p.reverseRegistrationError,
+              }
+            : p,
+        );
+      }
+      await fulfillJson(route, response);
+      return;
+    }
+
+    // §33.8 — Peer cursors (row drill-down)
+    const cursorsMatch = pathname.match(/^\/api\/sync\/peers\/([^/]+)\/cursors$/);
+    if (method === 'GET' && cursorsMatch) {
+      const machineId = decodeURIComponent(cursorsMatch[1] ?? '');
+      await fulfillJson(route, {
+        machineId,
+        localNodeId: 'local-node',
+        remoteNodeId: machineId,
+        pulledCursor: 42,
+        ackedCursor: 41,
+        lastPullAt: new Date(Date.now() - 30_000).toISOString(),
+        lastAckAt: new Date(Date.now() - 60_000).toISOString(),
+        updatedAt: new Date(Date.now() - 30_000).toISOString(),
+      });
+      return;
+    }
+
+    // §33.11 — Version compat (drives the MeshVersionBanner)
+    if (method === 'GET' && pathname === '/api/version-compat') {
+      const compat = state.versionCompat ?? {
+        appVersion: '0.5.1',
+        gitSha: 'test',
+        schemaVersion: 26,
+        minSupportedMobileBuild: 0,
+      };
+      await fulfillJson(route, compat);
+      return;
+    }
+
+    // §33.7 — Probe sync URL (pre-flight check in add-peer dialog)
+    if (method === 'POST' && pathname === '/api/sync/probe') {
+      const body = JSON.parse(req.postData() ?? '{}') as { syncUrl?: string };
+      const syncUrl = body.syncUrl ?? '';
+      const probeResult = state.probeResponses?.get(syncUrl) ?? {
+        reachable: true,
+        statusCode: 200,
+        appVersion: '0.5.1',
+      };
+      await fulfillJson(route, probeResult);
       return;
     }
 
@@ -429,6 +528,14 @@ test.describe('Mesh Peers page', () => {
     await dialog.getByLabel('Sync interval seconds').fill('45');
     await dialog.getByLabel('Public key').fill('mesh-public-key');
 
+    // §33.7: Probe the URL before Save becomes enabled.
+    const probeRequest = page.waitForRequest(
+      (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/api/sync/probe',
+    );
+    await dialog.getByTestId('mesh-peer-probe').click();
+    await probeRequest;
+    await expect(dialog.getByTestId('mesh-peer-probe-success')).toBeVisible();
+
     const upsertRequest = page.waitForRequest(
       (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/api/sync/peers',
     );
@@ -561,6 +668,16 @@ test.describe('Mesh Peers page', () => {
     expect(state.upsertRequests).toEqual([]);
 
     await dialog.getByLabel('Sync URL').fill('http://localhost:8080');
+
+    // §33.7: Probe the URL first — mock returns reachable but the backend
+    // will reject the SSRF-blocked address on save. The probe unblocks Submit.
+    const probeRequest = page.waitForRequest(
+      (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/api/sync/probe',
+    );
+    await dialog.getByTestId('mesh-peer-probe').click();
+    await probeRequest;
+    await expect(dialog.getByTestId('mesh-peer-probe-success')).toBeVisible();
+
     const upsertRequest = page.waitForRequest(
       (r) => r.method() === 'POST' && new URL(r.url()).pathname === '/api/sync/peers',
     );
@@ -651,5 +768,396 @@ test.describe('Mesh Peers page', () => {
     await expect(page.getByRole('alert').filter({ hasText: /not found/i })).toBeVisible();
     await expect(page.getByTestId('mesh-peer-delete-confirm')).toHaveCount(0);
     await expect(table.getByRole('row').filter({ hasText: 'beta.tail.ts.net' })).toBeVisible();
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.7 — Ping failure details (category badge + diagnostic line)
+  // ---------------------------------------------------------------------------
+
+  test('shows ping failure category badge and diagnostic line on unreachable peer', async ({
+    page,
+  }) => {
+    const peer = makePeer({
+      machineId: 'machine-fail',
+      hostname: 'fail.tail.ts.net',
+      syncStatus: 'unreachable',
+      lastPingError: 'connect_refused',
+      lastPingStatusCode: null,
+    });
+    const state: MockState = {
+      peers: [peer],
+      pingResponses: new Map(),
+      pingCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    const row = page
+      .getByRole('table', { name: 'Mesh sync peers' })
+      .getByRole('row')
+      .filter({ hasText: 'fail.tail.ts.net' });
+
+    // The status pill shows "unreachable".
+    await expect(row.getByText('unreachable', { exact: true })).toBeVisible();
+
+    // The category badge renders inline next to the status pill.
+    const badge = page.getByTestId('peer-ping-category-machine-fail');
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText('connect_refused');
+
+    // The diagnostic line renders below the status row with the full reason.
+    const diagnostic = page.getByTestId('peer-ping-diagnostic-machine-fail');
+    await expect(diagnostic).toBeVisible();
+    await expect(diagnostic).toContainText('connect_refused');
+  });
+
+  test('shows HTTP status code prefix in ping diagnostic when present', async ({ page }) => {
+    const peer = makePeer({
+      machineId: 'machine-http-fail',
+      hostname: 'httpfail.tail.ts.net',
+      syncStatus: 'unreachable',
+      lastPingError: 'Service Unavailable',
+      lastPingStatusCode: 503,
+    });
+    const state: MockState = {
+      peers: [peer],
+      pingResponses: new Map(),
+      pingCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    // The diagnostic line should include the HTTP prefix.
+    const diagnostic = page.getByTestId('peer-ping-diagnostic-machine-http-fail');
+    await expect(diagnostic).toBeVisible();
+    await expect(diagnostic).toContainText('HTTP 503');
+    await expect(diagnostic).toContainText('Service Unavailable');
+  });
+
+  test('ping failure updates the row with failure category from response', async ({ page }) => {
+    const peer = makePeer({
+      machineId: 'machine-timeout',
+      hostname: 'timeout.tail.ts.net',
+      syncStatus: 'reachable',
+    });
+    const failedPeer: SyncPeer = {
+      ...peer,
+      syncStatus: 'unreachable',
+      lastPingError: 'timeout',
+      lastPingStatusCode: null,
+    };
+    const state: MockState = {
+      peers: [peer],
+      pingResponses: new Map([
+        [
+          'machine-timeout',
+          { ok: false, status: 'unreachable' as const, peer: failedPeer },
+        ],
+      ]),
+      pingCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    // Initially reachable — no category badge.
+    await expect(page.getByTestId('peer-ping-category-machine-timeout')).toHaveCount(0);
+
+    // Click Ping — the response carries failure details.
+    const pingRequest = page.waitForRequest(
+      (r) =>
+        r.method() === 'POST' &&
+        new URL(r.url()).pathname === '/api/sync/peers/machine-timeout/ping',
+    );
+    await page.getByTestId('ping-machine-timeout').click();
+    await pingRequest;
+
+    // After refetch, the row should show the failure category badge.
+    const badge = page.getByTestId('peer-ping-category-machine-timeout');
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText('timeout');
+  });
+
+  test('hides ping diagnostic for reachable peers', async ({ page }) => {
+    const peer = makePeer({
+      machineId: 'machine-ok',
+      hostname: 'ok.tail.ts.net',
+      syncStatus: 'reachable',
+      lastPingError: null,
+      lastPingStatusCode: null,
+    });
+    const state: MockState = {
+      peers: [peer],
+      pingResponses: new Map(),
+      pingCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    // Neither the category badge nor the diagnostic line should be present.
+    await expect(page.getByTestId('peer-ping-category-machine-ok')).toHaveCount(0);
+    await expect(page.getByTestId('peer-ping-diagnostic-machine-ok')).toHaveCount(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.8 — MeshHealthSummary panel
+  // ---------------------------------------------------------------------------
+
+  test('renders MeshHealthSummary with correct counts', async ({ page }) => {
+    const now = Date.now();
+    const recentPull = new Date(now - 2 * 60 * 1000).toISOString(); // 2 min ago
+    const stalePull = new Date(now - 15 * 60 * 1000).toISOString(); // 15 min ago
+
+    const peers: SyncPeer[] = [
+      makePeer({
+        machineId: 'machine-self',
+        hostname: 'self.tail.ts.net',
+        isSelf: true,
+        syncStatus: 'reachable',
+      }),
+      makePeer({
+        machineId: 'machine-bi-1',
+        hostname: 'bi1.tail.ts.net',
+        syncStatus: 'reachable',
+        reverseRegistrationStatus: 'ok',
+        lastPullAt: recentPull,
+      }),
+      makePeer({
+        machineId: 'machine-bi-2',
+        hostname: 'bi2.tail.ts.net',
+        syncStatus: 'reachable',
+        reverseRegistrationStatus: 'ok',
+        lastPullAt: recentPull,
+      }),
+      makePeer({
+        machineId: 'machine-oneway',
+        hostname: 'oneway.tail.ts.net',
+        syncStatus: 'unreachable',
+        reverseRegistrationStatus: 'failed',
+        lastPullAt: stalePull,
+      }),
+      makePeer({
+        machineId: 'machine-stale',
+        hostname: 'stale.tail.ts.net',
+        syncStatus: 'reachable',
+        reverseRegistrationStatus: 'ok',
+        lastPullAt: stalePull,
+      }),
+    ];
+
+    const state: MockState = {
+      peers,
+      pingResponses: new Map(),
+      pingCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    // The health summary panel should be visible.
+    const summary = page.getByTestId('mesh-health-summary');
+    await expect(summary).toBeVisible();
+
+    // Total: 4 non-self peers.
+    const totalMetric = page.getByTestId('mesh-health-total');
+    await expect(totalMetric).toContainText('4');
+    await expect(totalMetric).toContainText('peers');
+
+    // Bidirectional: 3 peers with reverseRegistrationStatus === 'ok'.
+    const biMetric = page.getByTestId('mesh-health-bidirectional');
+    await expect(biMetric).toContainText('3');
+    await expect(biMetric).toContainText('bidirectional');
+
+    // One-way: 1 peer with failed reverse registration.
+    const oneWayMetric = page.getByTestId('mesh-health-one-way');
+    await expect(oneWayMetric).toContainText('1');
+    await expect(oneWayMetric).toContainText('one-way');
+
+    // Stale: 2 peers with lastPullAt older than 10 min.
+    const staleMetric = page.getByTestId('mesh-health-stale');
+    await expect(staleMetric).toContainText('2');
+    await expect(staleMetric).toContainText('stale');
+  });
+
+  test('MeshHealthSummary is hidden when no peers are registered', async ({ page }) => {
+    const state: MockState = {
+      peers: [],
+      pingResponses: new Map(),
+      pingCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    await expect(page.getByTestId('mesh-health-summary')).toHaveCount(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.8 — One-way badge + reverse registration retry
+  // ---------------------------------------------------------------------------
+
+  test('shows One-way badge and Retry button for failed reverse registration', async ({
+    page,
+  }) => {
+    const peer = makePeer({
+      machineId: 'machine-oneway',
+      hostname: 'oneway.tail.ts.net',
+      syncStatus: 'reachable',
+      reverseRegistrationStatus: 'failed',
+      reverseRegistrationError: 'Connection refused',
+    });
+    const updatedPeer: SyncPeer = {
+      ...peer,
+      reverseRegistrationStatus: 'ok',
+      reverseRegistrationError: null,
+    };
+    const state: MockState = {
+      peers: [peer],
+      pingResponses: new Map(),
+      pingCalls: [],
+      reverseRetryCalls: [],
+      reverseResponses: new Map([
+        ['machine-oneway', { ok: true, peer: updatedPeer }],
+      ]),
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    // One-way badge should be visible.
+    const badge = page.getByTestId('reverse-badge-machine-oneway');
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText('One-way');
+
+    // Retry button should be present.
+    const retryBtn = page.getByTestId('reverse-retry-machine-oneway');
+    await expect(retryBtn).toBeVisible();
+    await expect(retryBtn).toContainText('Retry');
+
+    // Click retry — after success, the refetch should clear the badge.
+    const reverseRequest = page.waitForRequest(
+      (r) =>
+        r.method() === 'POST' &&
+        new URL(r.url()).pathname === '/api/sync/peers/machine-oneway/register-reverse',
+    );
+    await retryBtn.click();
+    await reverseRequest;
+
+    expect(state.reverseRetryCalls).toEqual(['machine-oneway']);
+
+    // After a successful retry the toast should appear.
+    await expect(page.getByRole('alert').filter({ hasText: /succeeded/i })).toBeVisible();
+  });
+
+  test('hides One-way badge when reverse registration is ok', async ({ page }) => {
+    const peer = makePeer({
+      machineId: 'machine-good',
+      hostname: 'good.tail.ts.net',
+      syncStatus: 'reachable',
+      reverseRegistrationStatus: 'ok',
+    });
+    const state: MockState = {
+      peers: [peer],
+      pingResponses: new Map(),
+      pingCalls: [],
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    await expect(page.getByTestId('reverse-badge-machine-good')).toHaveCount(0);
+    await expect(page.getByTestId('reverse-retry-machine-good')).toHaveCount(0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // §33.11 — MeshVersionBanner (update-available banner)
+  // ---------------------------------------------------------------------------
+
+  test('renders update-available banner when a peer is ahead of local version', async ({
+    page,
+  }) => {
+    const peers: SyncPeer[] = [
+      makePeer({
+        machineId: 'machine-self',
+        hostname: 'self.tail.ts.net',
+        isSelf: true,
+        syncStatus: 'reachable',
+        peerVersion: 'v0.5.1',
+      }),
+      makePeer({
+        machineId: 'machine-ahead',
+        hostname: 'ahead.tail.ts.net',
+        syncStatus: 'reachable',
+        peerVersion: 'v0.6.0',
+      }),
+    ];
+    const state: MockState = {
+      peers,
+      pingResponses: new Map(),
+      pingCalls: [],
+      versionCompat: {
+        appVersion: '0.5.1',
+        gitSha: 'abc123',
+        schemaVersion: 26,
+        minSupportedMobileBuild: 0,
+      },
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    const banner = page.getByTestId('mesh-version-update-banner');
+    await expect(banner).toBeVisible();
+
+    const headline = page.getByTestId('mesh-version-update-headline');
+    await expect(headline).toContainText('Update available');
+    await expect(headline).toContainText('0.5.1');
+    await expect(headline).toContainText('0.6.0');
+
+    // The command hint should be present.
+    const command = page.getByTestId('mesh-version-update-command');
+    await expect(command).toContainText('peer-update.sh --dry-run');
+
+    // Settings link should be present.
+    const settingsLink = page.getByTestId('mesh-version-update-settings-link');
+    await expect(settingsLink).toBeVisible();
+    await expect(settingsLink).toHaveAttribute('href', '/settings');
+  });
+
+  test('hides update-available banner when all peers match local version', async ({ page }) => {
+    const peers: SyncPeer[] = [
+      makePeer({
+        machineId: 'machine-self',
+        hostname: 'self.tail.ts.net',
+        isSelf: true,
+        syncStatus: 'reachable',
+        peerVersion: 'v0.5.1',
+      }),
+      makePeer({
+        machineId: 'machine-same',
+        hostname: 'same.tail.ts.net',
+        syncStatus: 'reachable',
+        peerVersion: 'v0.5.1',
+      }),
+    ];
+    const state: MockState = {
+      peers,
+      pingResponses: new Map(),
+      pingCalls: [],
+      versionCompat: {
+        appVersion: '0.5.1',
+        gitSha: 'abc123',
+        schemaVersion: 26,
+        minSupportedMobileBuild: 0,
+      },
+    };
+    await mountApiMocks(page, state);
+
+    await page.goto('/mesh-peers');
+
+    await expect(page.getByTestId('mesh-version-update-banner')).toHaveCount(0);
   });
 });
