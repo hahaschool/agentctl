@@ -597,6 +597,41 @@ export function securityFindingsSummaryQuery() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Security findings mutations
+// ---------------------------------------------------------------------------
+
+export function useAcknowledgeSecurityFinding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; acknowledgedBy: string; reason?: string }) =>
+      api.acknowledgeSecurityFinding(id, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['security-findings'] });
+    },
+  });
+}
+
+export function useDeleteSecurityFinding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteSecurityFinding(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['security-findings'] });
+    },
+  });
+}
+
+export function useCreateGithubIssuesFromFindings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createGithubIssuesFromFindings,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['security-findings'] });
+    },
+  });
+}
+
 export function routerModelsQuery() {
   return queryOptions({
     queryKey: queryKeys.routerModels,
