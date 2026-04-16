@@ -1928,6 +1928,17 @@ export function useProbeSyncUrl() {
 }
 
 /**
+ * §33.12 Phase 3.3 — Check token compatibility with a remote peer. Triggered
+ * after a successful probe in the add-peer dialog so the operator knows whether
+ * the registration token will be accepted before saving.
+ */
+export function usePreflightMeshConfig() {
+  return useMutation({
+    mutationFn: (targetSyncUrl: string) => api.preflightMeshConfig(targetSyncUrl),
+  });
+}
+
+/**
  * §33.8 — Retry reverse registration against an existing peer.
  *
  * Always invalidates the peer list so the "one-way" badge reflects the
