@@ -24,6 +24,9 @@ vi.mock('@tanstack/react-query', () => ({
   queryOptions: (opts: unknown) => opts,
 }));
 
+const mockDeleteMutate = vi.fn();
+const mockDeleteMutation = { mutate: mockDeleteMutate, isPending: false };
+
 vi.mock('@/lib/queries', () => ({
   memoryFactsQuery: (params?: unknown) => ({
     queryKey: ['memory', 'facts', params],
@@ -43,7 +46,7 @@ vi.mock('@/lib/queries', () => ({
   },
   useCreateMemoryFact: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateMemoryFact: () => ({ mutate: vi.fn(), isPending: false }),
-  useDeleteMemoryFact: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteMemoryFact: () => mockDeleteMutation,
   useSubmitFactFeedback: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -159,5 +162,67 @@ describe('MemoryBrowserView', () => {
     fireEvent.change(screen.getByLabelText('Search facts'), { target: { value: 'test query' } });
 
     expect(window.history.replaceState).toHaveBeenCalled();
+  });
+
+  describe('delete confirmation dialog', () => {
+    it('shows confirmation dialog when bulk delete is triggered', () => {
+      render(<MemoryBrowserView />);
+
+      // Select a fact via its checkbox
+      const checkbox = screen.getByLabelText(/Select fact: First fact/);
+      fireEvent.click(checkbox);
+
+      // Click Delete button in the bulk action bar
+      const deleteButton = screen.getByRole('button', { name: /Delete/ });
+      fireEvent.click(deleteButton);
+
+      // Dialog should appear
+      expect(screen.getByTestId('memory-delete-confirm')).toBeDefined();
+      expect(screen.getByText('Delete 1 facts?')).toBeDefined();
+      expect(
+        screen.getByText('This will permanently remove the selected facts from memory.'),
+      ).toBeDefined();
+
+      // mutate should NOT have been called yet
+      expect(mockDeleteMutate).not.toHaveBeenCalled();
+    });
+
+    it('does not delete when cancel is clicked', () => {
+      render(<MemoryBrowserView />);
+
+      // Select and trigger delete
+      const checkbox = screen.getByLabelText(/Select fact: First fact/);
+      fireEvent.click(checkbox);
+      const deleteButton = screen.getByRole('button', { name: /Delete/ });
+      fireEvent.click(deleteButton);
+
+      // Click Cancel
+      fireEvent.click(screen.getByTestId('memory-delete-cancel'));
+
+      // Dialog should be gone
+      expect(screen.queryByTestId('memory-delete-confirm')).toBeNull();
+
+      // mutate should NOT have been called
+      expect(mockDeleteMutate).not.toHaveBeenCalled();
+    });
+
+    it('calls delete mutation when confirmed', () => {
+      render(<MemoryBrowserView />);
+
+      // Select and trigger delete
+      const checkbox = screen.getByLabelText(/Select fact: First fact/);
+      fireEvent.click(checkbox);
+      const deleteButton = screen.getByRole('button', { name: /Delete/ });
+      fireEvent.click(deleteButton);
+
+      // Click the confirm Delete button
+      fireEvent.click(screen.getByTestId('memory-delete-confirm-btn'));
+
+      // mutate should have been called with the fact id
+      expect(mockDeleteMutate).toHaveBeenCalledWith('fact-1');
+
+      // Dialog should be gone
+      expect(screen.queryByTestId('memory-delete-confirm')).toBeNull();
+    });
   });
 });

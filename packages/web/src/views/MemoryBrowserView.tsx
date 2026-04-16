@@ -24,6 +24,11 @@ import {
 } from '@/lib/queries';
 
 const PAGE_SIZE = 50;
+const DELETE_PREVIEW_MAX_LENGTH = 120;
+
+type PendingDelete =
+  | { readonly kind: 'single'; readonly factId: string; readonly preview: string }
+  | { readonly kind: 'bulk'; readonly factIds: ReadonlySet<string> };
 
 function parseFiltersFromSearchParams(searchParams: URLSearchParams): BrowserFilters {
   const entityTypesRaw = searchParams.get('entityTypes');
@@ -189,6 +194,9 @@ export function MemoryBrowserView(): React.JSX.Element {
   const updateFact = useUpdateMemoryFact();
   const deleteFact = useDeleteMemoryFact();
 
+  // Delete confirmation state
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+
   const handleSelectFact = useCallback((fact: MemoryFact) => {
     setSelectedFactId((prev) => (prev === fact.id ? null : fact.id));
   }, []);
@@ -224,14 +232,9 @@ export function MemoryBrowserView(): React.JSX.Element {
   );
 
   const handleDeleteSelected = useCallback(() => {
-    for (const id of selectedIds) {
-      deleteFact.mutate(id);
-    }
-    setSelectedIds(new Set());
-    if (selectedFactId && selectedIds.has(selectedFactId)) {
-      setSelectedFactId(null);
-    }
-  }, [selectedIds, deleteFact, selectedFactId]);
+    if (selectedIds.size === 0) return;
+    setPendingDelete({ kind: 'bulk', factIds: selectedIds });
+  }, [selectedIds]);
 
   const handleUpdateFact = useCallback(
     (
@@ -250,13 +253,41 @@ export function MemoryBrowserView(): React.JSX.Element {
 
   const handleDeleteFact = useCallback(
     (id: string) => {
-      deleteFact.mutate(id);
-      if (selectedFactId === id) {
+      const fact = filteredFacts.find((f) => f.id === id);
+      const preview = fact
+        ? fact.content.length > DELETE_PREVIEW_MAX_LENGTH
+          ? `${fact.content.slice(0, DELETE_PREVIEW_MAX_LENGTH)}...`
+          : fact.content
+        : id;
+      setPendingDelete({ kind: 'single', factId: id, preview });
+    },
+    [filteredFacts],
+  );
+
+  const confirmDelete = useCallback(() => {
+    if (!pendingDelete) return;
+
+    if (pendingDelete.kind === 'single') {
+      deleteFact.mutate(pendingDelete.factId);
+      if (selectedFactId === pendingDelete.factId) {
         setSelectedFactId(null);
       }
-    },
-    [deleteFact, selectedFactId],
-  );
+    } else {
+      for (const id of pendingDelete.factIds) {
+        deleteFact.mutate(id);
+      }
+      setSelectedIds(new Set());
+      if (selectedFactId && pendingDelete.factIds.has(selectedFactId)) {
+        setSelectedFactId(null);
+      }
+    }
+
+    setPendingDelete(null);
+  }, [pendingDelete, deleteFact, selectedFactId]);
+
+  const cancelDelete = useCallback(() => {
+    setPendingDelete(null);
+  }, []);
 
   const handleCloseDetail = useCallback(() => {
     setSelectedFactId(null);
@@ -335,6 +366,58 @@ export function MemoryBrowserView(): React.JSX.Element {
           className="hidden w-80 shrink-0 xl:flex"
         />
       ) : null}
+
+      {/* Delete Confirmation Dialog */}
+      {pendingDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="memory-delete-title"
+          data-testid="memory-delete-confirm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="w-full max-w-sm rounded-md border border-border bg-card shadow-xl p-5">
+            <h2 id="memory-delete-title" className="text-sm font-semibold text-foreground">
+              {pendingDelete.kind === 'single'
+                ? 'Delete this fact?'
+                : `Delete ${pendingDelete.factIds.size} facts?`}
+            </h2>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {pendingDelete.kind === 'single'
+                ? 'This will permanently remove the fact from memory.'
+                : 'This will permanently remove the selected facts from memory.'}
+            </p>
+            {pendingDelete.kind === 'single' && (
+              <p
+                className="mt-1.5 text-[11px] font-mono text-foreground break-all line-clamp-3"
+                data-testid="memory-delete-preview"
+              >
+                {pendingDelete.preview}
+              </p>
+            )}
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={cancelDelete}
+                disabled={deleteFact.isPending}
+                data-testid="memory-delete-cancel"
+                className="px-3 py-1.5 rounded-md border border-border bg-muted text-xs text-foreground hover:bg-accent/10 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deleteFact.isPending}
+                data-testid="memory-delete-confirm-btn"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleteFact.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
