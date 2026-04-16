@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetTailscaleBinCacheForTests,
   deriveSyncUrlFromTarget,
+  isValidTailscaleIp,
   parseTailscalePeers,
   probePeerHealth,
   resolveTailscaleBin,
@@ -293,5 +294,45 @@ describe('resolveTailscaleBin', () => {
     const result = resolveTailscaleBin();
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+// ── §33.12 Phase 1: Tailscale IP validation ────────────────────
+
+describe('isValidTailscaleIp', () => {
+  it('accepts standard Tailscale CGNAT addresses', () => {
+    expect(isValidTailscaleIp('100.64.0.1')).toBe(true);
+    expect(isValidTailscaleIp('100.100.100.100')).toBe(true);
+    expect(isValidTailscaleIp('100.127.255.254')).toBe(true);
+  });
+
+  it('accepts RFC1918 addresses (not blocked)', () => {
+    expect(isValidTailscaleIp('10.0.0.1')).toBe(true);
+    expect(isValidTailscaleIp('192.168.1.1')).toBe(true);
+    expect(isValidTailscaleIp('172.16.0.1')).toBe(true);
+  });
+
+  it('rejects loopback addresses', () => {
+    expect(isValidTailscaleIp('127.0.0.1')).toBe(false);
+    expect(isValidTailscaleIp('127.255.255.255')).toBe(false);
+  });
+
+  it('rejects link-local addresses', () => {
+    expect(isValidTailscaleIp('169.254.0.1')).toBe(false);
+    expect(isValidTailscaleIp('169.254.169.254')).toBe(false);
+  });
+
+  it('rejects all-zeroes', () => {
+    expect(isValidTailscaleIp('0.0.0.0')).toBe(false);
+  });
+
+  it('rejects non-IPv4 values', () => {
+    expect(isValidTailscaleIp('')).toBe(false);
+    expect(isValidTailscaleIp('not-an-ip')).toBe(false);
+    expect(isValidTailscaleIp('::1')).toBe(false);
+    expect(isValidTailscaleIp('100.64.0')).toBe(false);
+    expect(isValidTailscaleIp('100.64.0.1.2')).toBe(false);
+    expect(isValidTailscaleIp('256.0.0.1')).toBe(false);
+    expect(isValidTailscaleIp('100.64.0.-1')).toBe(false);
   });
 });

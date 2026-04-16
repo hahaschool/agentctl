@@ -165,6 +165,8 @@ type CreateServerOptions = {
   syncSigningSecretKey?: string;
   /** This control plane's reachable sync URL (used for reverse registration). */
   selfSyncUrl?: string;
+  /** How the selfSyncUrl was resolved: 'env-var' | 'tailscale-cli' | 'control-plane-url'. */
+  selfSyncUrlSource?: string;
   /** Hostname reported to remote peers during reverse registration. */
   selfHostname?: string;
   /** Tailscale IP of this node, reported during reverse registration. */
@@ -196,6 +198,7 @@ export async function createServer({
   syncPublicKey,
   syncSigningSecretKey,
   selfSyncUrl,
+  selfSyncUrlSource,
   selfHostname,
   selfTailscaleIp = null,
   reverseRegistrationToken,
@@ -349,6 +352,8 @@ export async function createServer({
     litellmClient,
     machineId,
     syncPublicKey,
+    selfSyncUrl,
+    selfSyncUrlSource,
   });
   // Public pre-auth compatibility surface for mobile + web bootstrap (§33.11).
   await app.register(versionCompatRoutes, { prefix: '/api' });

@@ -137,6 +137,115 @@ export function __resetTailscaleBinCacheForTests(): void {
   resolvedTailscaleBin = null;
 }
 
+// ---------------------------------------------------------------------------
+// Tailscale IP auto-detection — §33.12 Phase 1
+// ---------------------------------------------------------------------------
+
+const TAILSCALE_IP_DETECT_TIMEOUT_MS = 3_000;
+
+/**
+ * Validate an IPv4 address for use as the machine's Tailscale identity.
+ * Rejects loopback (127/8), link-local (169.254/16), all-zeros, and
+ * non-IPv4 values. Accepts Tailscale CGNAT (100.64/10) and RFC1918
+ * ranges for edge cases.
+ */
+export function isValidTailscaleIp(ip: string): boolean {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some((p) => !Number.isFinite(p) || p < 0 || p > 255)) {
+    return false;
+  }
+  if (isBlockedIpv4Literal(ip)) return false;
+  return true;
+}
+
+export type TailscaleIpSource = 'env-var' | 'tailscale-cli' | 'control-plane-url';
+
+export type TailscaleIpResult = {
+  ip: string;
+  source: TailscaleIpSource;
+};
+
+/**
+ * Auto-detect this machine's Tailscale IPv4 address by running
+ * `tailscale ip -4`. Returns null if Tailscale is not installed,
+ * not connected, or the output is not a valid IPv4 address.
+ * Result is cached for process lifetime.
+ */
+let cachedAutoDetectedIp: string | null | undefined;
+
+export async function detectTailscaleIp(
+  logger?: Pick<Logger, 'debug' | 'warn'>,
+): Promise<string | null> {
+  if (cachedAutoDetectedIp !== undefined) return cachedAutoDetectedIp;
+
+  try {
+    const bin = resolveTailscaleBin();
+    const { stdout } = await execFileAsync(bin, ['ip', '-4'], {
+      timeout: TAILSCALE_IP_DETECT_TIMEOUT_MS,
+    });
+
+    const ip = stdout.trim().split('\n')[0]?.trim() ?? '';
+    if (!ip || !isValidTailscaleIp(ip)) {
+      logger?.warn({ detectedIp: ip }, 'Tailscale IP auto-detect returned invalid address');
+      cachedAutoDetectedIp = null;
+      return null;
+    }
+
+    logger?.debug({ ip }, 'Auto-detected Tailscale IP');
+    cachedAutoDetectedIp = ip;
+    return ip;
+  } catch (error: unknown) {
+    logger?.debug(
+      { err: error instanceof Error ? error.message : String(error) },
+      'Tailscale IP auto-detect failed (Tailscale may not be installed or connected)',
+    );
+    cachedAutoDetectedIp = null;
+    return null;
+  }
+}
+
+/** Test-only: reset the cached auto-detected IP. */
+export function __resetAutoDetectedIpCacheForTests(): void {
+  cachedAutoDetectedIp = undefined;
+}
+
+/**
+ * Resolve the Tailscale IP for this machine using the resolution chain:
+ * 1. TAILSCALE_IP env var (validated — loopback/link-local skipped with warning)
+ * 2. `tailscale ip -4` auto-detect (cached)
+ * 3. null (caller should fall back to CONTROL_PLANE_URL)
+ */
+export async function resolveTailscaleIp(
+  logger?: Pick<Logger, 'debug' | 'warn' | 'info'>,
+): Promise<TailscaleIpResult | null> {
+  const envIp = process.env.TAILSCALE_IP;
+  if (envIp) {
+    if (isValidTailscaleIp(envIp)) {
+      logger?.info(
+        { ip: envIp, source: 'env-var' },
+        'Tailscale IP resolved from TAILSCALE_IP env var',
+      );
+      return { ip: envIp, source: 'env-var' };
+    }
+    logger?.warn(
+      { envValue: envIp },
+      'TAILSCALE_IP env var is loopback/link-local/invalid — falling through to auto-detect',
+    );
+  }
+
+  const autoIp = await detectTailscaleIp(logger);
+  if (autoIp) {
+    logger?.info(
+      { ip: autoIp, source: 'tailscale-cli' },
+      'Tailscale IP resolved via tailscale CLI auto-detect',
+    );
+    return { ip: autoIp, source: 'tailscale-cli' };
+  }
+
+  logger?.debug('No Tailscale IP available from env or auto-detect');
+  return null;
+}
+
 /**
  * Shell out to the local Tailscale CLI and return the parsed mesh-node peers.
  * Returns an empty array on any failure so callers never see exceptions for

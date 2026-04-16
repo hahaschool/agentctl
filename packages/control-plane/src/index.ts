@@ -30,6 +30,7 @@ import { createRepeatableJobManager } from './scheduler/repeatable-jobs.js';
 import { createTaskQueue } from './scheduler/task-queue.js';
 import { createTaskWorker } from './scheduler/task-worker.js';
 import { getMachineId, upsertSelfNode } from './sync/machine-identity.js';
+import { resolveTailscaleIp } from './sync/peer-discovery.js';
 import { startSyncLoops } from './sync/sync-loop.js';
 import {
   createSyncMaintenanceWorker,
@@ -223,6 +224,15 @@ async function main(): Promise<void> {
   const machineId = getMachineId();
   logger.info({ machineId }, 'Mesh machine identity initialized');
 
+  // Resolve Tailscale IP via env → CLI auto-detect → null fallback (§33.12)
+  const tailscaleIpResult = await resolveTailscaleIp(logger);
+  if (tailscaleIpResult) {
+    logger.info(
+      { ip: tailscaleIpResult.ip, source: tailscaleIpResult.source },
+      'Tailscale IP resolved for mesh peering',
+    );
+  }
+
   // Optionally connect to PostgreSQL when DATABASE_URL is provided.
   let db: Database | undefined;
   let dbRegistry: DbAgentRegistry | undefined;
@@ -319,7 +329,7 @@ async function main(): Promise<void> {
 
     // Register this mesh node in sync_nodes with is_self=true
     try {
-      await upsertSelfNode(db, machineId, process.env.TAILSCALE_IP);
+      await upsertSelfNode(db, machineId, tailscaleIpResult?.ip);
     } catch {
       logger.debug('sync_nodes table not available yet — skipping node registration');
     }
@@ -486,11 +496,10 @@ async function main(): Promise<void> {
     machineId,
     syncPublicKey: dispatchSigningKeyPair?.publicKey,
     syncSigningSecretKey: dispatchSigningKeyPair?.secretKey,
-    selfSyncUrl: process.env.TAILSCALE_IP
-      ? `http://${process.env.TAILSCALE_IP}:${PORT}`
-      : CONTROL_PLANE_URL,
+    selfSyncUrl: tailscaleIpResult ? `http://${tailscaleIpResult.ip}:${PORT}` : CONTROL_PLANE_URL,
+    selfSyncUrlSource: tailscaleIpResult?.source ?? 'control-plane-url',
     selfHostname: (await import('node:os')).hostname(),
-    selfTailscaleIp: process.env.TAILSCALE_IP ?? null,
+    selfTailscaleIp: tailscaleIpResult?.ip ?? null,
     reverseRegistrationToken:
       process.env.SYNC_PEER_REVERSE_REGISTRATION_TOKEN ?? process.env.SYNC_PEER_REGISTRATION_TOKEN,
   });

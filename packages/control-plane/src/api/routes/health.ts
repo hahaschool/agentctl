@@ -25,6 +25,10 @@ export type HealthRoutesOptions = {
   appVersion?: string;
   gitSha?: string;
   schemaVersion?: number;
+  /** Resolved selfSyncUrl for mesh peering (§33.12 Phase 1). */
+  selfSyncUrl?: string;
+  /** How the selfSyncUrl was resolved: 'env-var' | 'tailscale-cli' | 'control-plane-url'. */
+  selfSyncUrlSource?: string;
 };
 
 type MemoryUsage = {
@@ -47,6 +51,10 @@ type HealthResponse = {
   memoryUsage: MemoryUsage;
   machineId?: string | null;
   nodePublicKey?: string | null;
+  /** Resolved mesh peering URL (§33.12). */
+  selfSyncUrl?: string | null;
+  /** How selfSyncUrl was resolved: 'env-var' | 'tailscale-cli' | 'control-plane-url'. */
+  selfSyncUrlSource?: string | null;
   dependencies?: {
     postgres: DependencyStatus;
     redis: DependencyStatus;
@@ -178,6 +186,8 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
         memoryUsage,
         machineId: opts.machineId ?? null,
         nodePublicKey: opts.syncPublicKey ?? null,
+        selfSyncUrl: opts.selfSyncUrl ?? null,
+        selfSyncUrlSource: opts.selfSyncUrlSource ?? null,
       };
 
       if (!detail) {
