@@ -18,6 +18,10 @@ export type HealthRoutesOptions = {
   machineId?: string;
   /** Ed25519 public key (base64) for peer auth. */
   syncPublicKey?: string;
+  /** This node's reachable sync URL (§33.12 Phase 1). */
+  selfSyncUrl?: string;
+  /** How the sync URL was resolved (§33.12 Phase 1 observability). */
+  selfSyncUrlSource?: 'env-var' | 'tailscale-cli' | 'control-plane-url';
   /**
    * Mesh version observability (roadmap §33.9). Optional overrides used
    * primarily for tests; production defaults come from `build-info`.
@@ -47,6 +51,8 @@ type HealthResponse = {
   memoryUsage: MemoryUsage;
   machineId?: string | null;
   nodePublicKey?: string | null;
+  selfSyncUrl?: string | null;
+  selfSyncUrlSource?: string | null;
   dependencies?: {
     postgres: DependencyStatus;
     redis: DependencyStatus;
@@ -178,6 +184,8 @@ export const healthRoutes: FastifyPluginAsync<HealthRoutesOptions> = async (app,
         memoryUsage,
         machineId: opts.machineId ?? null,
         nodePublicKey: opts.syncPublicKey ?? null,
+        selfSyncUrl: opts.selfSyncUrl ?? null,
+        selfSyncUrlSource: opts.selfSyncUrlSource ?? null,
       };
 
       if (!detail) {

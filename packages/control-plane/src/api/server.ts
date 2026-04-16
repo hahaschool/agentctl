@@ -169,6 +169,8 @@ type CreateServerOptions = {
   selfHostname?: string;
   /** Tailscale IP of this node, reported during reverse registration. */
   selfTailscaleIp?: string | null;
+  /** How `selfSyncUrl` was resolved (§33.12 Phase 1 observability). */
+  selfSyncUrlSource?: 'env-var' | 'tailscale-cli' | 'control-plane-url';
   /** Bootstrap token presented to remote peers during reverse registration. */
   reverseRegistrationToken?: string;
 };
@@ -198,6 +200,7 @@ export async function createServer({
   selfSyncUrl,
   selfHostname,
   selfTailscaleIp = null,
+  selfSyncUrlSource,
   reverseRegistrationToken,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
@@ -349,6 +352,8 @@ export async function createServer({
     litellmClient,
     machineId,
     syncPublicKey,
+    selfSyncUrl,
+    selfSyncUrlSource,
   });
   // Public pre-auth compatibility surface for mobile + web bootstrap (§33.11).
   await app.register(versionCompatRoutes, { prefix: '/api' });
