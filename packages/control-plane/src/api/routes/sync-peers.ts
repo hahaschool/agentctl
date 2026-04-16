@@ -26,6 +26,7 @@ import {
   type ReverseRegistrationResult,
   type SelfIdentity,
 } from '../../sync/peer-reverse-registration.js';
+import type { ReverseRegistrationRetryScheduler } from '../../sync/reverse-registration-retry.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
 const DEFAULT_INTERVAL_MS = 30_000;
@@ -108,6 +109,12 @@ type SyncPeersRoutesOptions = {
    * `fetchTailscaleMeshPeers`. Tests pass a stub to avoid touching the CLI.
    */
   tailscalePeerSource?: (logger: Pick<Logger, 'debug'>) => Promise<TailscalePeer[]>;
+  /**
+   * §33.12 Phase 4.1 — Automatic retry scheduler for failed reverse
+   * registrations. When provided, the routes will schedule retries on failure
+   * and cancel pending retries on manual retry or peer deletion.
+   */
+  retryScheduler?: ReverseRegistrationRetryScheduler;
 };
 
 type SyncPeerRow = {
@@ -1063,6 +1070,10 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
         if (reverse?.row) {
           refreshed = reverse.row;
         }
+        // §33.12 Phase 4.1: schedule automatic retries on failure
+        if (reverse && reverse.result.status === 'failed' && opts.retryScheduler) {
+          opts.retryScheduler.scheduleRetry(peer.id);
+        }
       }
 
       return reply.code(201).send({
@@ -1118,6 +1129,9 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
         });
       }
 
+      // §33.12 Phase 4.1: cancel any pending automatic retry before manual attempt
+      opts.retryScheduler?.cancel(machineId.trim());
+
       const attempt = await tryReverseRegistration(peer);
       const refreshed = attempt?.row ?? peer;
       if (!attempt || attempt.result.status === 'ok') {
@@ -1127,6 +1141,9 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           peer: mapSyncPeerRow(refreshed),
         });
       }
+
+      // §33.12 Phase 4.1: schedule automatic retries after manual retry also fails
+      opts.retryScheduler?.scheduleRetry(peer.id);
 
       // Failed outcome — return 502 so the UI can render a distinct error,
       // while still including the persisted row for the inline badge.
@@ -1205,6 +1222,9 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           message: 'A non-empty "machineId" path parameter is required',
         });
       }
+
+      // §33.12 Phase 4.1: cancel any pending automatic retry for deleted peer
+      opts.retryScheduler?.cancel(machineId.trim());
 
       const result = await db.execute(sql`
         DELETE FROM sync_nodes
