@@ -419,6 +419,14 @@ export const syncNodes = pgTable('sync_nodes', {
   reverseRegistrationAt: timestamp('reverse_registration_at', { withTimezone: true }),
 });
 
+// §33.12 Phase 2: Local-only mesh identity config. NOT synced — each machine
+// manages its own identity independently. No sync trigger must ever be added.
+export const meshLocalConfig = pgTable('mesh_local_config', {
+  key: text('key').primaryKey(),
+  value: text('value'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+});
+
 export const syncChangeLog = pgTable(
   'sync_change_log',
   {

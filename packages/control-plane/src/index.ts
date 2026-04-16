@@ -23,6 +23,7 @@ import { Mem0Client } from './memory/mem0-client.js';
 import { MemoryInjector } from './memory/memory-injector.js';
 import { MemorySearch } from './memory/memory-search.js';
 import { MemoryStore } from './memory/memory-store.js';
+import { MeshConfigProvider } from './mesh/mesh-config-provider.js';
 import { DbAgentRegistry } from './registry/db-registry.js';
 import { LiteLLMClient } from './router/litellm-client.js';
 import { MachineCircuitBreaker } from './scheduler/circuit-breaker.js';
@@ -473,6 +474,24 @@ async function main(): Promise<void> {
     logger,
   });
 
+  // §33.12 Phase 2: dynamic mesh config provider for per-request resolution.
+  // Uses Phase 1's auto-detected IP as the startup seed; DB overrides win at
+  // runtime so config changes from the web UI take effect without restart.
+  let meshConfigProvider: MeshConfigProvider | undefined;
+  if (db) {
+    meshConfigProvider = new MeshConfigProvider({
+      db,
+      autoDetectedIp: syncIdentity.selfTailscaleIp,
+      port: PORT,
+      controlPlaneUrl: CONTROL_PLANE_URL,
+      logger,
+    });
+  }
+
+  // If MeshConfigProvider is available, use it for initial config.
+  // Otherwise fall back to the static Phase 1 identity.
+  const resolvedMeshConfig = meshConfigProvider ? await meshConfigProvider.resolve() : null;
+
   const server = await createServer({
     logger,
     taskQueue,
@@ -494,12 +513,15 @@ async function main(): Promise<void> {
     machineId,
     syncPublicKey: dispatchSigningKeyPair?.publicKey,
     syncSigningSecretKey: dispatchSigningKeyPair?.secretKey,
-    selfSyncUrl: syncIdentity.selfSyncUrl,
+    selfSyncUrl: resolvedMeshConfig?.syncUrl ?? syncIdentity.selfSyncUrl,
     selfHostname: (await import('node:os')).hostname(),
-    selfTailscaleIp: syncIdentity.selfTailscaleIp,
+    selfTailscaleIp: resolvedMeshConfig?.tailscaleIp ?? syncIdentity.selfTailscaleIp,
     selfSyncUrlSource: syncIdentity.selfSyncUrlSource,
     reverseRegistrationToken:
-      process.env.SYNC_PEER_REVERSE_REGISTRATION_TOKEN ?? process.env.SYNC_PEER_REGISTRATION_TOKEN,
+      resolvedMeshConfig?.registrationToken ??
+      process.env.SYNC_PEER_REVERSE_REGISTRATION_TOKEN ??
+      process.env.SYNC_PEER_REGISTRATION_TOKEN,
+    meshConfigProvider,
   });
 
   // Run dependency health checks before starting the server.

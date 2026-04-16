@@ -33,6 +33,7 @@ import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MemorySearch } from '../memory/memory-search.js';
 import type { MemoryStore } from '../memory/memory-store.js';
+import type { MeshConfigProvider } from '../mesh/mesh-config-provider.js';
 import { ExpoPushDispatcher } from '../notifications/expo-push-dispatcher.js';
 import { MobilePushDeviceStore } from '../notifications/mobile-push-device-store.js';
 import type { MachineRegistryLike } from '../registry/agent-registry.js';
@@ -88,6 +89,7 @@ import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
 import { meshAutoUpdateRoutes } from './routes/mesh-auto-update.js';
+import { meshConfigRoutes } from './routes/mesh-config.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
 import { mobilePushDeviceRoutes } from './routes/mobile-push-devices.js';
 import { notificationPreferenceRoutes } from './routes/notification-preferences.js';
@@ -173,6 +175,8 @@ type CreateServerOptions = {
   selfSyncUrlSource?: 'env-var' | 'tailscale-cli' | 'control-plane-url';
   /** Bootstrap token presented to remote peers during reverse registration. */
   reverseRegistrationToken?: string;
+  /** §33.12 Phase 2: dynamic mesh config provider. */
+  meshConfigProvider?: MeshConfigProvider;
 };
 
 export async function createServer({
@@ -202,6 +206,7 @@ export async function createServer({
   selfTailscaleIp = null,
   selfSyncUrlSource,
   reverseRegistrationToken,
+  meshConfigProvider,
 }: CreateServerOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false,
@@ -848,6 +853,17 @@ export async function createServer({
       prefix: '/api/mesh',
       logger: logger.child({ component: 'mesh-auto-update' }),
     });
+
+    // Mesh config GET/PUT (§33.12 Phase 2).
+    if (meshConfigProvider && machineId) {
+      await app.register(meshConfigRoutes, {
+        prefix: '/api',
+        meshConfigProvider,
+        machineId,
+        hostname: selfHostname ?? 'unknown',
+        publicKey: syncPublicKey ?? null,
+      });
+    }
 
     // Mesh sync conflict resolution routes
     if (machineId) {
