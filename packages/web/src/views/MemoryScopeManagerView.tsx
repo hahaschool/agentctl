@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderSync,
+  FolderTree,
   Globe,
   MoreHorizontal,
   Plus,
@@ -17,6 +18,7 @@ import {
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
+import { EmptyState } from '@/components/EmptyState';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -637,17 +639,18 @@ export function MemoryScopeManagerView(): React.JSX.Element {
           )}
 
           {!isLoading && !error && scopes.length === 0 && (
-            <div data-testid="scopes-empty" className="px-2 py-8 text-center">
-              <p className="text-sm text-muted-foreground">No memory scopes found.</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => setCreateOpen(true)}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                Create your first scope
-              </Button>
+            <div data-testid="scopes-empty">
+              <EmptyState
+                icon={FolderTree}
+                title="No memory scopes found"
+                variant="compact"
+                action={
+                  <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    Create your first scope
+                  </Button>
+                }
+              />
             </div>
           )}
 

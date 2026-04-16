@@ -1,10 +1,12 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { GitPullRequestClosed } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 
 import { ConflictDiffView } from '@/components/ConflictDiffView';
+import { EmptyState } from '@/components/EmptyState';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
@@ -253,12 +255,13 @@ export function ConflictsPage(): React.JSX.Element {
 
       {/* Empty state */}
       {!conflictsData.isLoading && !conflictsData.error && conflicts.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground text-sm">
-          <p>No sync conflicts found.</p>
-          {filters.status === 'pending' && (
-            <p className="mt-1 text-xs">All conflicts have been resolved.</p>
-          )}
-        </div>
+        <EmptyState
+          icon={GitPullRequestClosed}
+          title="No sync conflicts found"
+          description={
+            filters.status === 'pending' ? 'All conflicts have been resolved.' : undefined
+          }
+        />
       )}
 
       {/* List + Detail */}

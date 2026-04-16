@@ -1,8 +1,10 @@
 'use client';
 
+import { Search } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
+import { EmptyState } from '@/components/EmptyState';
 import { useToast } from '@/components/Toast';
 import type { DiscoverCandidate, UpsertSyncPeerInput } from '@/lib/api';
 import { useDiscoverSyncPeers, useUpsertSyncPeer } from '@/lib/queries';
@@ -142,15 +144,13 @@ function SelectStep({
 
       <div className="px-5 py-3 max-h-[400px] overflow-y-auto">
         {candidates.length === 0 ? (
-          <div
-            data-testid="discover-empty"
-            className="text-center py-8 text-sm text-muted-foreground"
-          >
-            <p>No Tailscale mesh-node peers found.</p>
-            <p className="mt-1 text-xs">
-              All discovered peers may already be registered, or no peers carry the{' '}
-              <span className="font-mono text-foreground">tag:mesh-node</span> tag.
-            </p>
+          <div data-testid="discover-empty">
+            <EmptyState
+              icon={Search}
+              title="No Tailscale mesh-node peers found"
+              description="All discovered peers may already be registered, or no peers carry the tag:mesh-node tag."
+              variant="compact"
+            />
           </div>
         ) : (
           <>

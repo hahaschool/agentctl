@@ -246,7 +246,7 @@ describe('SecurityFindingsPage', () => {
     setFindings([], 0);
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('No security findings.')).toBeDefined();
+      expect(screen.getByText('No security findings')).toBeDefined();
     });
   });
 

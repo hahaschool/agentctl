@@ -657,7 +657,7 @@ describe('MachineDetailView', () => {
     });
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('No sessions found for this machine.')).toBeDefined();
+      expect(screen.getByText('No sessions found for this machine')).toBeDefined();
     });
   });
 
@@ -795,7 +795,7 @@ describe('MachineDetailView', () => {
     });
     renderView();
     await waitFor(() => {
-      expect(screen.getByText('No agents registered on this machine.')).toBeDefined();
+      expect(screen.getByText('No agents registered on this machine')).toBeDefined();
     });
   });
 

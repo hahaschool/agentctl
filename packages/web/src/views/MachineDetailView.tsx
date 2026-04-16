@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Box, Check, Cpu, X } from 'lucide-react';
+import { Bot, Box, Check, Cpu, ScrollText, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type React from 'react';
@@ -9,6 +9,7 @@ import { useMemo } from 'react';
 
 import { Breadcrumb } from '@/components/Breadcrumb';
 import { CopyableText } from '@/components/CopyableText';
+import { EmptyState } from '@/components/EmptyState';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { LastUpdated } from '@/components/LastUpdated';
@@ -512,12 +513,16 @@ export function MachineDetailView(): React.JSX.Element {
               onRetry={() => void agents.refetch()}
             />
           ) : machineAgents.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground text-sm">
-              No agents registered on this machine.{' '}
-              <Link href="/agents" className="text-primary underline underline-offset-2">
-                View all agents
-              </Link>
-            </div>
+            <EmptyState
+              icon={Bot}
+              title="No agents registered on this machine"
+              variant="compact"
+              action={
+                <Link href="/agents" className="text-xs text-primary underline underline-offset-2">
+                  View all agents
+                </Link>
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm" aria-label="Agents on this machine">
@@ -597,12 +602,19 @@ export function MachineDetailView(): React.JSX.Element {
               onRetry={() => void sessions.refetch()}
             />
           ) : recentSessions.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground text-sm">
-              No sessions found for this machine.{' '}
-              <Link href="/sessions" className="text-primary underline underline-offset-2">
-                View all sessions
-              </Link>
-            </div>
+            <EmptyState
+              icon={ScrollText}
+              title="No sessions found for this machine"
+              variant="compact"
+              action={
+                <Link
+                  href="/sessions"
+                  className="text-xs text-primary underline underline-offset-2"
+                >
+                  View all sessions
+                </Link>
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm" aria-label="Recent sessions on this machine">

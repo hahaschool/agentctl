@@ -1,10 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Webhook as WebhookIcon } from 'lucide-react';
+import { Bell, Webhook as WebhookIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
+import { EmptyState } from '@/components/EmptyState';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
@@ -607,10 +608,20 @@ export function WebhooksPage(): React.JSX.Element {
       )}
 
       {!webhooksQ.isLoading && !webhooksQ.error && webhooks.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground text-sm">
-          <p>No webhook subscriptions yet.</p>
-          <p className="mt-1 text-xs">Create one to receive event payloads at an HTTP endpoint.</p>
-        </div>
+        <EmptyState
+          icon={Bell}
+          title="No webhook subscriptions yet"
+          description="Create one to receive event payloads at an HTTP endpoint."
+          action={
+            <button
+              type="button"
+              onClick={openCreate}
+              className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+            >
+              + Add Webhook
+            </button>
+          }
+        />
       )}
 
       {webhooks.length > 0 && (

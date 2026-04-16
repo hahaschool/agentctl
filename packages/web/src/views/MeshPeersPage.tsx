@@ -1,10 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { RadioTower } from 'lucide-react';
+import { Network, RadioTower } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useState } from 'react';
 
+import { EmptyState } from '@/components/EmptyState';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
@@ -1696,31 +1697,31 @@ export function MeshPeersPage(): React.JSX.Element {
       )}
 
       {!peersData.isLoading && !peersData.error && peers.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground text-sm">
-          <p>No mesh peers registered.</p>
-          <p className="mt-1 text-xs">
-            Discover Tailscale peers automatically, add one manually, or let a machine register
-            through <span className="font-mono">POST /api/sync/peers</span>.
-          </p>
-          <div className="mt-4 flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => setDiscoverOpen(true)}
-              data-testid="empty-discover-mesh-peers"
-              className="px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-muted hover:bg-accent/10 text-foreground"
-            >
-              Discover peers
-            </button>
-            <button
-              type="button"
-              onClick={openAddDialog}
-              data-testid="empty-add-mesh-peer"
-              className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
-            >
-              Add manually
-            </button>
-          </div>
-        </div>
+        <EmptyState
+          icon={Network}
+          title="No mesh peers registered"
+          description="Discover Tailscale peers automatically, add one manually, or let a machine register through POST /api/sync/peers."
+          action={
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDiscoverOpen(true)}
+                data-testid="empty-discover-mesh-peers"
+                className="px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-muted hover:bg-accent/10 text-foreground"
+              >
+                Discover peers
+              </button>
+              <button
+                type="button"
+                onClick={openAddDialog}
+                data-testid="empty-add-mesh-peer"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+              >
+                Add manually
+              </button>
+            </div>
+          }
+        />
       )}
 
       {peers.length > 0 && <MeshVersionBanner peers={peers} />}
