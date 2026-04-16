@@ -160,6 +160,15 @@ export function Sidebar(): React.JSX.Element {
         if (eventName === 'status') {
           queryClient.invalidateQueries({ queryKey: ['agents'] });
           const status = data.status as string | undefined;
+          // When an agent run ends, refresh dashboard-visible data so
+          // session lists, cost metrics, and health counters update
+          // without a manual page reload.
+          if (status === 'completed' || status === 'stopped' || status === 'error') {
+            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['runtime-sessions'] });
+            queryClient.invalidateQueries({ queryKey: ['metrics'] });
+            queryClient.invalidateQueries({ queryKey: ['health'] });
+          }
           if (status === 'error') {
             toast.error(`Agent errored: ${(data.reason as string) || 'unknown'}`);
           } else if (status === 'completed') {
