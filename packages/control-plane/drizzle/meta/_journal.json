@@ -211,6 +211,13 @@
       "when": 1711843200000,
       "tag": "0027_sync_nodes_schema_ahead_rejection",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1713254400000,
+      "tag": "0028_mesh_local_config",
+      "breakpoints": true
     }
   ]
 }
