@@ -1,5 +1,5 @@
 import type { Machine } from '@agentctl/shared';
-import { isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
+import { DEFAULT_WORKER_PORT, isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -180,7 +180,7 @@ export async function syncMachineCapabilities(opts: {
 export const machineCapabilitiesRoutes: FastifyPluginAsync<
   MachineCapabilitiesRoutesOptions
 > = async (app, opts) => {
-  const { dbRegistry, workerPort = 9000 } = opts;
+  const { dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
 
   // POST /api/machines/:machineId/sync-capabilities
   app.post<{

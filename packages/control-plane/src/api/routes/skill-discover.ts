@@ -1,4 +1,4 @@
-import { isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
+import { DEFAULT_WORKER_PORT, isManagedRuntime, MANAGED_RUNTIMES } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { DbAgentRegistry } from '../../registry/db-registry.js';
@@ -21,7 +21,7 @@ export const skillDiscoverRoutes: FastifyPluginAsync<SkillDiscoverRoutesOptions>
   app,
   opts,
 ) => {
-  const { dbRegistry, workerPort = 9000 } = opts;
+  const { dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
 
   // GET /api/skills/discover — proxy skill discovery to a worker
   app.get<{
@@ -84,12 +84,20 @@ export const skillDiscoverRoutes: FastifyPluginAsync<SkillDiscoverRoutesOptions>
           signal: AbortSignal.timeout(10_000),
         });
 
-        const data = await response.json();
-
         if (!response.ok) {
-          return reply.code(response.status).send(data);
+          let errorBody: unknown;
+          try {
+            errorBody = await response.json();
+          } catch {
+            errorBody = {
+              error: 'WORKER_ERROR',
+              message: `Worker returned HTTP ${response.status}`,
+            };
+          }
+          return reply.code(response.status).send(errorBody);
         }
 
+        const data = await response.json();
         return reply.send(data);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

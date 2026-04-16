@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 
-import type {
-  ManagedRuntime,
-  ManagedRuntimeConfig,
-  RuntimeCapabilityState,
-  RuntimeConfigSyncRequest,
-  RuntimeConfigSyncResponse,
+import {
+  DEFAULT_WORKER_PORT,
+  type ManagedRuntime,
+  type ManagedRuntimeConfig,
+  type RuntimeCapabilityState,
+  type RuntimeConfigSyncRequest,
+  type RuntimeConfigSyncResponse,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -30,7 +31,7 @@ export const runtimeConfigRoutes: FastifyPluginAsync<RuntimeConfigRoutesOptions>
   app,
   opts,
 ) => {
-  const { runtimeConfigStore, dbRegistry = null, workerPort = 9000 } = opts;
+  const { runtimeConfigStore, dbRegistry = null, workerPort = DEFAULT_WORKER_PORT } = opts;
 
   app.get(
     '/defaults',

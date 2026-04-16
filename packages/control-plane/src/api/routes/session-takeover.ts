@@ -1,3 +1,4 @@
+import { DEFAULT_WORKER_PORT } from '@agentctl/shared';
 import { eq, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -102,7 +103,7 @@ export const sessionTakeoverRoutes: FastifyPluginAsync<SessionTakeoverRoutesOpti
   app,
   opts,
 ) => {
-  const { db, dbRegistry, workerPort = 9000 } = opts;
+  const { db, dbRegistry, workerPort = DEFAULT_WORKER_PORT } = opts;
 
   // -------------------------------------------------------------------------
   // POST /:sessionId/takeover — initiate interactive takeover
