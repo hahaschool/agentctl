@@ -179,6 +179,7 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
             ? `${workerBaseUrl}/api/sessions/discover?projectPath=${encodeURIComponent(projectPath)}`
             : `${workerBaseUrl}/api/sessions/discover`;
 
+          const startMs = Date.now();
           const response = await fetch(discoverUrl, {
             signal: AbortSignal.timeout(SESSION_DISCOVER_TIMEOUT_MS),
           });
@@ -192,6 +193,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           }
 
           const body = (await response.json()) as WorkerDiscoverResponse;
+          const elapsedMs = Date.now() - startMs;
+
+          app.log.debug(
+            { machineId: machine.id, hostname: machine.hostname, elapsedMs, sessionCount: body.sessions.length },
+            'Discovered sessions from worker',
+          );
 
           return {
             machine,
