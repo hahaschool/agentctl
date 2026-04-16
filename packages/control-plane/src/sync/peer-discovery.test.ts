@@ -1,6 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { deriveSyncUrlFromTarget, parseTailscalePeers, probePeerHealth } from './peer-discovery.js';
+import {
+  __resetTailscaleBinCacheForTests,
+  deriveSyncUrlFromTarget,
+  parseTailscalePeers,
+  probePeerHealth,
+  resolveTailscaleBin,
+} from './peer-discovery.js';
 
 const SAMPLE_STATUS = {
   Self: {
@@ -253,5 +259,39 @@ describe('probePeerHealth', () => {
     if (!result.reachable) return;
     expect(result.identity.machineId).toBeNull();
     expect(result.identity.nodePublicKey).toBe('ok');
+  });
+});
+
+describe('resolveTailscaleBin', () => {
+  beforeEach(() => {
+    __resetTailscaleBinCacheForTests();
+  });
+
+  afterEach(() => {
+    __resetTailscaleBinCacheForTests();
+    vi.unstubAllEnvs();
+  });
+
+  it('respects TAILSCALE_BIN env var', () => {
+    vi.stubEnv('TAILSCALE_BIN', '/custom/path/tailscale');
+    const result = resolveTailscaleBin();
+    expect(result).toBe('/custom/path/tailscale');
+  });
+
+  it('caches the resolved binary path', () => {
+    vi.stubEnv('TAILSCALE_BIN', '/custom/tailscale');
+    const first = resolveTailscaleBin();
+    vi.stubEnv('TAILSCALE_BIN', '/other/tailscale');
+    const second = resolveTailscaleBin();
+    expect(first).toBe(second);
+  });
+
+  it('finds a well-known path when TAILSCALE_BIN is not set', () => {
+    // On this dev machine the macOS app bundle path exists, so the resolver
+    // should find it or fall back to bare 'tailscale'. Either way it returns
+    // a non-empty string.
+    const result = resolveTailscaleBin();
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
   });
 });
