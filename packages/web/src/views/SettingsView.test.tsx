@@ -99,6 +99,10 @@ vi.mock('./settings/MeshAutoUpdateSection', () => ({
   ),
 }));
 
+vi.mock('./settings/MeshConfigSection', () => ({
+  MeshConfigSection: () => <div data-testid="mesh-config-section">MeshConfigSection</div>,
+}));
+
 import { SettingsView } from './SettingsView';
 
 function renderSettings() {

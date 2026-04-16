@@ -101,6 +101,7 @@ export const queryKeys = {
   accounts: ['accounts'] as const,
   accountDefaults: ['account-defaults'] as const,
   meshAutoUpdate: ['mesh-auto-update'] as const,
+  meshConfig: ['mesh-config'] as const,
   runtimeConfigDefaults: ['runtime-config', 'defaults'] as const,
   runtimeConfigDrift: (machineId?: string) =>
     machineId
@@ -517,6 +518,25 @@ export function useToggleMeshAutoUpdate() {
     mutationFn: api.toggleAutoUpdate,
     onSuccess: (status) => {
       qc.setQueryData(queryKeys.meshAutoUpdate, status);
+    },
+  });
+}
+
+export function meshConfigQuery() {
+  return queryOptions({
+    queryKey: queryKeys.meshConfig,
+    queryFn: api.getMeshConfig,
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useUpdateMeshConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.updateMeshConfig,
+    onSuccess: (config) => {
+      qc.setQueryData(queryKeys.meshConfig, config);
     },
   });
 }
