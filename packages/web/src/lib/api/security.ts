@@ -65,6 +65,30 @@ export type SecurityFindingsSummary = {
   byCategory: Record<string, number>;
 };
 
+export type AcknowledgeFindingInput = {
+  acknowledgedBy: string;
+  reason?: string;
+};
+
+export type AcknowledgeFindingResult = {
+  ok: boolean;
+};
+
+export type DeleteFindingResult = {
+  ok: boolean;
+};
+
+export type CreateGithubIssuesInput = {
+  owner: string;
+  repo: string;
+  labels?: string[];
+};
+
+export type CreateGithubIssuesResult = {
+  ok: boolean;
+  issuesCreated: number;
+};
+
 export const securityApi = {
   // Audit Trail
   queryAudit: (params?: {
@@ -111,4 +135,23 @@ export const securityApi = {
   },
   getSecurityFindingsSummary: () =>
     request<SecurityFindingsSummary>('/api/security/findings/summary'),
+
+  // Write operations
+  acknowledgeSecurityFinding: (id: string, body: AcknowledgeFindingInput) =>
+    request<AcknowledgeFindingResult>(
+      `/api/security/findings/${encodeURIComponent(id)}/acknowledge`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+    ),
+  deleteSecurityFinding: (id: string) =>
+    request<DeleteFindingResult>(`/api/security/findings/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+  createGithubIssuesFromFindings: (body: CreateGithubIssuesInput) =>
+    request<CreateGithubIssuesResult>('/api/security/findings/github-issues', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };

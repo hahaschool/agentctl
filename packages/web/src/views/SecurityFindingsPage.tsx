@@ -1,15 +1,23 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ShieldAlert } from 'lucide-react';
+import { Check, Github, ShieldAlert, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
+import { useToast } from '@/components/Toast';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { SecurityFinding, SecurityFindingSeverity } from '@/lib/api';
-import { securityFindingsQuery, securityFindingsSummaryQuery } from '@/lib/queries';
+import {
+  securityFindingsQuery,
+  securityFindingsSummaryQuery,
+  useAcknowledgeSecurityFinding,
+  useCreateGithubIssuesFromFindings,
+  useDeleteSecurityFinding,
+} from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 const FINDINGS_LIMIT = 200;
@@ -33,7 +41,7 @@ const SEVERITY_BADGE_CLASSES: Record<SecurityFindingSeverity, string> = {
 type SeverityFilter = 'all' | SecurityFindingSeverity;
 
 function formatLocation(finding: SecurityFinding): string {
-  if (!finding.file) return '—';
+  if (!finding.file) return '\u2014';
   return finding.line ? `${finding.file}:${String(finding.line)}` : finding.file;
 }
 
@@ -50,13 +58,32 @@ function formatRelative(iso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+// ---------------------------------------------------------------------------
+// FindingRow — individual row with per-row action buttons
+// ---------------------------------------------------------------------------
+
 type FindingRowProps = {
-  finding: SecurityFinding;
+  readonly finding: SecurityFinding;
+  readonly onAcknowledge: (id: string) => void;
+  readonly onDismiss: (id: string) => void;
+  readonly isAcknowledging: boolean;
 };
 
-export function SecurityFindingRow({ finding }: FindingRowProps): React.JSX.Element {
+export function SecurityFindingRow({
+  finding,
+  onAcknowledge,
+  onDismiss,
+  isAcknowledging,
+}: FindingRowProps): React.JSX.Element {
+  const isOpen = !finding.acknowledged && !finding.issueCreated;
+
   return (
-    <tr className="border-t border-border hover:bg-accent/5 align-top">
+    <tr
+      className={cn(
+        'border-t border-border hover:bg-accent/5 align-top',
+        finding.acknowledged && 'opacity-60',
+      )}
+    >
       <td className="px-3 py-2.5 whitespace-nowrap">
         <span
           className={cn(
@@ -104,12 +131,90 @@ export function SecurityFindingRow({ finding }: FindingRowProps): React.JSX.Elem
       <td className="px-3 py-2.5 text-[11px] text-muted-foreground whitespace-nowrap">
         {formatRelative(finding.createdAt)}
       </td>
+      <td className="px-3 py-2.5 whitespace-nowrap">
+        <div className="flex items-center gap-1">
+          {isOpen && (
+            <button
+              type="button"
+              data-testid={`ack-btn-${finding.id}`}
+              title="Acknowledge finding"
+              disabled={isAcknowledging}
+              onClick={() => onAcknowledge(finding.id)}
+              className="p-1 rounded-sm text-muted-foreground hover:text-green-400 hover:bg-green-500/10 disabled:opacity-40 transition-colors"
+            >
+              <Check size={14} />
+            </button>
+          )}
+          <button
+            type="button"
+            data-testid={`dismiss-btn-${finding.id}`}
+            title="Dismiss finding"
+            onClick={() => onDismiss(finding.id)}
+            className="p-1 rounded-sm text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </td>
     </tr>
   );
 }
 
+// ---------------------------------------------------------------------------
+// GitHub Issues Dialog — collects owner/repo before creating issues
+// ---------------------------------------------------------------------------
+
+type GithubIssuesDialogProps = {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onSubmit: (owner: string, repo: string) => Promise<void>;
+  readonly isPending: boolean;
+};
+
+function GithubIssuesDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  isPending,
+}: GithubIssuesDialogProps): React.JSX.Element | null {
+  const [owner, setOwner] = useState('');
+  const [repo, setRepo] = useState('');
+
+  if (!open) return null;
+
+  return (
+    <ConfirmDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          setOwner('');
+          setRepo('');
+        }
+        onOpenChange(next);
+      }}
+      title="Create GitHub Issues"
+      description="Create GitHub issues for all unacknowledged critical/high severity findings. Requires GITHUB_TOKEN on the server."
+      confirmLabel={isPending ? 'Creating...' : 'Create Issues'}
+      onConfirm={async () => {
+        await onSubmit(owner.trim(), repo.trim());
+      }}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+
 export function SecurityFindingsPage(): React.JSX.Element {
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
+  const [dismissTarget, setDismissTarget] = useState<string | null>(null);
+  const [githubDialogOpen, setGithubDialogOpen] = useState(false);
+
+  const toast = useToast();
+  const acknowledgeMutation = useAcknowledgeSecurityFinding();
+  const deleteMutation = useDeleteSecurityFinding();
+  const githubIssuesMutation = useCreateGithubIssuesFromFindings();
 
   const listParams = useMemo(
     () => ({
@@ -134,6 +239,62 @@ export function SecurityFindingsPage(): React.JSX.Element {
     info: summary?.info ?? 0,
   };
 
+  const hasCriticalOrHigh = severityCounts.critical > 0 || severityCounts.high > 0;
+
+  const handleAcknowledge = useCallback(
+    (id: string) => {
+      acknowledgeMutation.mutate(
+        { id, acknowledgedBy: 'operator' },
+        {
+          onSuccess: () => toast.success('Finding acknowledged'),
+          onError: (err) => toast.error(`Failed to acknowledge: ${err.message}`),
+        },
+      );
+    },
+    [acknowledgeMutation, toast],
+  );
+
+  const handleDismissConfirm = useCallback(async () => {
+    if (!dismissTarget) return;
+    await new Promise<void>((resolve, reject) => {
+      deleteMutation.mutate(dismissTarget, {
+        onSuccess: () => {
+          toast.success('Finding dismissed');
+          setDismissTarget(null);
+          resolve();
+        },
+        onError: (err) => {
+          reject(err);
+        },
+      });
+    });
+  }, [dismissTarget, deleteMutation, toast]);
+
+  const handleGithubSubmit = useCallback(
+    async (owner: string, repo: string) => {
+      if (!owner || !repo) {
+        toast.error('Owner and repo are required');
+        return;
+      }
+      await new Promise<void>((resolve, reject) => {
+        githubIssuesMutation.mutate(
+          { owner, repo },
+          {
+            onSuccess: (data) => {
+              toast.success(`Created ${String(data.issuesCreated)} GitHub issue(s)`);
+              setGithubDialogOpen(false);
+              resolve();
+            },
+            onError: (err) => {
+              reject(err);
+            },
+          },
+        );
+      });
+    },
+    [githubIssuesMutation, toast],
+  );
+
   return (
     <div className="relative p-4 md:p-6 max-w-[1400px] animate-page-enter">
       <FetchingBar isFetching={findingsQ.isFetching && !findingsQ.isLoading} />
@@ -152,13 +313,26 @@ export function SecurityFindingsPage(): React.JSX.Element {
             </span>
           )}
         </div>
-        <RefreshButton
-          onClick={() => {
-            void findingsQ.refetch();
-            void summaryQ.refetch();
-          }}
-          isFetching={findingsQ.isFetching && !findingsQ.isLoading}
-        />
+        <div className="flex items-center gap-2">
+          {hasCriticalOrHigh && (
+            <button
+              type="button"
+              data-testid="create-github-issues-btn"
+              onClick={() => setGithubDialogOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-muted border border-border text-foreground hover:bg-accent/20 transition-colors"
+            >
+              <Github size={14} />
+              Create Issues
+            </button>
+          )}
+          <RefreshButton
+            onClick={() => {
+              void findingsQ.refetch();
+              void summaryQ.refetch();
+            }}
+            isFetching={findingsQ.isFetching && !findingsQ.isLoading}
+          />
+        </div>
       </div>
 
       {summary !== undefined && (
@@ -252,17 +426,45 @@ export function SecurityFindingsPage(): React.JSX.Element {
                   <th className="px-3 py-2 font-medium">File:Line</th>
                   <th className="px-3 py-2 font-medium">State</th>
                   <th className="px-3 py-2 font-medium">Created</th>
+                  <th className="px-3 py-2 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {findings.map((finding) => (
-                  <SecurityFindingRow key={finding.id} finding={finding} />
+                  <SecurityFindingRow
+                    key={finding.id}
+                    finding={finding}
+                    onAcknowledge={handleAcknowledge}
+                    onDismiss={setDismissTarget}
+                    isAcknowledging={acknowledgeMutation.isPending}
+                  />
                 ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      {/* Dismiss confirmation dialog */}
+      <ConfirmDialog
+        open={dismissTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDismissTarget(null);
+        }}
+        title="Dismiss security finding?"
+        description="This will permanently delete the finding. This action cannot be undone."
+        confirmLabel="Dismiss"
+        destructive
+        onConfirm={handleDismissConfirm}
+      />
+
+      {/* GitHub issues dialog */}
+      <GithubIssuesDialog
+        open={githubDialogOpen}
+        onOpenChange={setGithubDialogOpen}
+        onSubmit={handleGithubSubmit}
+        isPending={githubIssuesMutation.isPending}
+      />
     </div>
   );
 }

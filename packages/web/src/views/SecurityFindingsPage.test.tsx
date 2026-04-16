@@ -8,9 +8,24 @@ import type { SecurityFinding, SecurityFindingSeverity, SecurityFindingsSummary 
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockFindingsQuery, mockSummaryQuery } = vi.hoisted(() => ({
+const {
+  mockFindingsQuery,
+  mockSummaryQuery,
+  mockAcknowledgeMutate,
+  mockDeleteMutate,
+  mockGithubMutate,
+  mockToast,
+} = vi.hoisted(() => ({
   mockFindingsQuery: vi.fn(),
   mockSummaryQuery: vi.fn(),
+  mockAcknowledgeMutate: vi.fn(),
+  mockDeleteMutate: vi.fn(),
+  mockGithubMutate: vi.fn(),
+  mockToast: {
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -48,9 +63,57 @@ vi.mock('@/components/RefreshButton', () => ({
   ),
 }));
 
+vi.mock('@/components/Toast', () => ({
+  useToast: () => mockToast,
+}));
+
+vi.mock('@/components/ui/confirm-dialog', () => ({
+  ConfirmDialog: ({
+    open,
+    title,
+    onConfirm,
+    onOpenChange,
+  }: {
+    open: boolean;
+    title: string;
+    description?: string;
+    confirmLabel?: string;
+    destructive?: boolean;
+    onConfirm: () => void | Promise<void>;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open ? (
+      <div data-testid="confirm-dialog" data-title={title}>
+        <span>{title}</span>
+        <button type="button" data-testid="confirm-dialog-confirm" onClick={() => void onConfirm()}>
+          Confirm
+        </button>
+        <button
+          type="button"
+          data-testid="confirm-dialog-cancel"
+          onClick={() => onOpenChange(false)}
+        >
+          Cancel
+        </button>
+      </div>
+    ) : null,
+}));
+
 vi.mock('@/lib/queries', () => ({
   securityFindingsQuery: (params?: unknown) => mockFindingsQuery(params),
   securityFindingsSummaryQuery: () => mockSummaryQuery(),
+  useAcknowledgeSecurityFinding: () => ({
+    mutate: mockAcknowledgeMutate,
+    isPending: false,
+  }),
+  useDeleteSecurityFinding: () => ({
+    mutate: mockDeleteMutate,
+    isPending: false,
+  }),
+  useCreateGithubIssuesFromFindings: () => ({
+    mutate: mockGithubMutate,
+    isPending: false,
+  }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -241,9 +304,11 @@ describe('SecurityFindingsPage', () => {
     ]);
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText(/acked/i)).toBeDefined();
-      expect(screen.getByText(/issue/i)).toBeDefined();
-      expect(screen.getByText(/open/i)).toBeDefined();
+      expect(screen.getByText('Acked')).toBeDefined();
+      // Use getAllByText since "Create Issues" button also contains "Issue"
+      const issueElements = screen.getAllByText(/^Issue$/i);
+      expect(issueElements.length).toBeGreaterThan(0);
+      expect(screen.getByText('Open')).toBeDefined();
     });
   });
 
@@ -252,6 +317,195 @@ describe('SecurityFindingsPage', () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText('Showing 2 of 10')).toBeDefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Write operation tests
+  // -------------------------------------------------------------------------
+
+  describe('acknowledge action', () => {
+    it('renders an acknowledge button for open findings', async () => {
+      setFindings([makeFinding({ id: 'f-open' })]);
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('ack-btn-f-open')).toBeDefined();
+      });
+    });
+
+    it('does not render an acknowledge button for already-acknowledged findings', async () => {
+      setFindings([makeFinding({ id: 'f-acked', acknowledged: true })]);
+      renderPage();
+      await waitFor(() => {
+        expect(screen.queryByTestId('ack-btn-f-acked')).toBeNull();
+      });
+    });
+
+    it('calls the acknowledge mutation when the button is clicked', async () => {
+      setFindings([makeFinding({ id: 'f-open' })]);
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('ack-btn-f-open')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('ack-btn-f-open'));
+
+      expect(mockAcknowledgeMutate).toHaveBeenCalledWith(
+        { id: 'f-open', acknowledgedBy: 'operator' },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+
+    it('shows a toast on acknowledge success', async () => {
+      setFindings([makeFinding({ id: 'f-open' })]);
+      mockAcknowledgeMutate.mockImplementation(
+        (_vars: unknown, opts: { onSuccess?: () => void }) => {
+          opts.onSuccess?.();
+        },
+      );
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('ack-btn-f-open')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('ack-btn-f-open'));
+
+      expect(mockToast.success).toHaveBeenCalledWith('Finding acknowledged');
+    });
+
+    it('shows a toast on acknowledge error', async () => {
+      setFindings([makeFinding({ id: 'f-open' })]);
+      mockAcknowledgeMutate.mockImplementation(
+        (_vars: unknown, opts: { onError?: (err: Error) => void }) => {
+          opts.onError?.(new Error('Server error'));
+        },
+      );
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('ack-btn-f-open')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('ack-btn-f-open'));
+
+      expect(mockToast.error).toHaveBeenCalledWith('Failed to acknowledge: Server error');
+    });
+  });
+
+  describe('dismiss action', () => {
+    it('renders a dismiss button for every finding', async () => {
+      setFindings([makeFinding({ id: 'f-1' }), makeFinding({ id: 'f-2', acknowledged: true })]);
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('dismiss-btn-f-1')).toBeDefined();
+        expect(screen.getByTestId('dismiss-btn-f-2')).toBeDefined();
+      });
+    });
+
+    it('opens a confirm dialog when dismiss is clicked', async () => {
+      setFindings([makeFinding({ id: 'f-1' })]);
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('dismiss-btn-f-1')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('dismiss-btn-f-1'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('confirm-dialog')).toBeDefined();
+        expect(screen.getByText('Dismiss security finding?')).toBeDefined();
+      });
+    });
+
+    it('calls the delete mutation when confirm is clicked', async () => {
+      setFindings([makeFinding({ id: 'f-target' })]);
+      mockDeleteMutate.mockImplementation((_id: string, opts: { onSuccess?: () => void }) => {
+        opts.onSuccess?.();
+      });
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('dismiss-btn-f-target')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('dismiss-btn-f-target'));
+      await waitFor(() => expect(screen.getByTestId('confirm-dialog-confirm')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('confirm-dialog-confirm'));
+
+      await waitFor(() => {
+        expect(mockDeleteMutate).toHaveBeenCalledWith(
+          'f-target',
+          expect.objectContaining({ onSuccess: expect.any(Function) }),
+        );
+      });
+    });
+
+    it('closes the dialog when cancel is clicked', async () => {
+      setFindings([makeFinding({ id: 'f-1' })]);
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('dismiss-btn-f-1')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('dismiss-btn-f-1'));
+      await waitFor(() => expect(screen.getByTestId('confirm-dialog-cancel')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('confirm-dialog-cancel'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('confirm-dialog')).toBeNull();
+      });
+    });
+  });
+
+  describe('GitHub issues action', () => {
+    it('renders the create-issues button when critical/high findings exist', async () => {
+      setFindings([makeFinding({ severity: 'critical' })]);
+      setSummary(makeSummary({ critical: 1, high: 0 }));
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByTestId('create-github-issues-btn')).toBeDefined();
+      });
+    });
+
+    it('does not render the create-issues button when no critical/high findings', async () => {
+      setFindings([makeFinding({ severity: 'low' })]);
+      setSummary(makeSummary({ critical: 0, high: 0, medium: 0, low: 1 }));
+      renderPage();
+      await waitFor(() => {
+        expect(screen.queryByTestId('create-github-issues-btn')).toBeNull();
+      });
+    });
+
+    it('opens the GitHub issues dialog on button click', async () => {
+      setFindings([makeFinding({ severity: 'critical' })]);
+      setSummary(makeSummary({ critical: 1 }));
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('create-github-issues-btn')).toBeDefined());
+
+      fireEvent.click(screen.getByTestId('create-github-issues-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('confirm-dialog')).toBeDefined();
+        expect(screen.getByText('Create GitHub Issues')).toBeDefined();
+      });
+    });
+  });
+
+  describe('acknowledged finding styling', () => {
+    it('applies muted styling (opacity) to acknowledged rows', async () => {
+      setFindings([makeFinding({ id: 'f-acked', acknowledged: true })]);
+      renderPage();
+      await waitFor(() => {
+        const row = screen.getByText('Acked').closest('tr');
+        expect(row?.className).toContain('opacity-60');
+      });
+    });
+
+    it('does not apply muted styling to open findings', async () => {
+      setFindings([makeFinding({ id: 'f-open' })]);
+      renderPage();
+      await waitFor(() => {
+        const row = screen.getByText('Open').closest('tr');
+        expect(row?.className).not.toContain('opacity-60');
+      });
+    });
+  });
+
+  describe('Actions column header', () => {
+    it('renders an Actions column header in the table', async () => {
+      setFindings([makeFinding()]);
+      renderPage();
+      await waitFor(() => {
+        expect(screen.getByText('Actions')).toBeDefined();
+      });
     });
   });
 });
