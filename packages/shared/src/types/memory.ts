@@ -42,6 +42,7 @@ export type FactSource = {
   machine_id: string | null;
   turn_index: number | null;
   extraction_method: 'llm' | 'rule' | 'manual' | 'import';
+  import_source_id?: string | null;
 };
 
 export type TriggerSpec = {
@@ -188,6 +189,14 @@ export type ImportJob = {
   errors: number;
   startedAt: string;
   completedAt: string | null;
+};
+
+export type ImportPreview = {
+  totalObservations: number;
+  byType: Record<string, number>;
+  alreadyImported: number;
+  newToImport: number;
+  sampleTitles: string[];
 };
 
 export type MemoryStats = {

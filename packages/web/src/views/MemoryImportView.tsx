@@ -1,5 +1,6 @@
 'use client';
 
+import type { ImportPreview } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -12,7 +13,12 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { importStatusQuery, useCancelImport, useStartImport } from '@/lib/queries';
+import {
+  importStatusQuery,
+  useCancelImport,
+  usePreviewImport,
+  useStartImport,
+} from '@/lib/queries';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,6 +27,11 @@ import { importStatusQuery, useCancelImport, useStartImport } from '@/lib/querie
 type WizardStep = 1 | 2 | 3 | 4;
 
 type ImportSource = 'claude-mem' | 'jsonl-history';
+
+const DEFAULT_PATHS: Record<ImportSource, string> = {
+  'claude-mem': '~/.claude-mem/claude-mem.db',
+  'jsonl-history': '~/.claude/projects/',
+};
 
 // ---------------------------------------------------------------------------
 // StepIndicator
@@ -67,6 +78,8 @@ function StepIndicator({ step, current }: { step: WizardStep; current: WizardSte
 type Step1Props = {
   source: ImportSource;
   dbPath: string;
+  loading: boolean;
+  error: string | null;
   onSourceChange: (s: ImportSource) => void;
   onDbPathChange: (p: string) => void;
   onNext: () => void;
@@ -75,6 +88,8 @@ type Step1Props = {
 function Step1SourceDetection({
   source,
   dbPath,
+  loading,
+  error,
   onSourceChange,
   onDbPathChange,
   onNext,
@@ -135,21 +150,30 @@ function Step1SourceDetection({
           type="text"
           value={dbPath}
           onChange={(e) => onDbPathChange(e.target.value)}
-          placeholder={
-            source === 'claude-mem' ? '~/.claude-mem/claude-mem.db' : '~/.claude/projects/'
-          }
+          placeholder={DEFAULT_PATHS[source]}
           className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
           data-testid="db-path-input"
         />
       </div>
 
+      {error && (
+        <div
+          className="flex items-center gap-2 text-sm text-destructive"
+          data-testid="preview-error"
+        >
+          <AlertCircle size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={onNext}
-        disabled={!dbPath.trim()}
-        className="px-4 py-2 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        disabled={!dbPath.trim() || loading}
+        className="flex items-center gap-2 px-4 py-2 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         data-testid="step1-next"
       >
+        {loading && <Loader2 size={14} className="animate-spin" />}
         Preview mapping
       </button>
     </div>
@@ -157,88 +181,121 @@ function Step1SourceDetection({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — Preview Mapping
+// Step 2 — Preview Mapping (real data from backend)
 // ---------------------------------------------------------------------------
 
 type Step2Props = {
-  source: ImportSource;
   dbPath: string;
-  enableCompression: boolean;
-  onCompressionChange: (v: boolean) => void;
+  preview: ImportPreview | null;
   onBack: () => void;
   onNext: () => void;
 };
 
-const FIELD_MAPPINGS: Record<ImportSource, Array<{ from: string; to: string }>> = {
-  'claude-mem': [
-    { from: 'observation.type', to: 'entity_type' },
-    { from: 'observation.title', to: 'content' },
-    { from: 'observation.facts', to: 'tags' },
-    { from: 'observation.created_at', to: 'created_at' },
-  ],
-  'jsonl-history': [
-    { from: 'message.content', to: 'content' },
-    { from: 'session.id', to: 'source.session_id' },
-    { from: 'turn_index', to: 'source.turn_index' },
-    { from: 'timestamp', to: 'created_at' },
-  ],
+const ENTITY_TYPE_LABELS: Record<string, string> = {
+  decision: 'decision',
+  bugfix: 'error',
+  feature: 'code_artifact',
+  refactor: 'pattern',
+  discovery: 'concept',
+  change: 'code_artifact',
 };
 
-function Step2PreviewMapping({
-  source,
-  dbPath,
-  enableCompression,
-  onCompressionChange,
-  onBack,
-  onNext,
-}: Step2Props) {
-  const mappings = FIELD_MAPPINGS[source];
+function Step2PreviewMapping({ dbPath, preview, onBack, onNext }: Step2Props) {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold mb-1">Preview field mapping</h2>
+        <h2 className="text-lg font-semibold mb-1">Preview import</h2>
         <p className="text-sm text-muted-foreground">
-          Review how fields from <span className="font-mono text-xs">{dbPath}</span> will be mapped
-          to memory facts.
+          Review data from <span className="font-mono text-xs">{dbPath}</span> before importing.
         </p>
       </div>
 
-      <div className="rounded-md border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">
-                Source field
-              </th>
-              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">
-                Memory field
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {mappings.map((m) => (
-              <tr key={m.from} className="border-b border-border last:border-0">
-                <td className="px-3 py-2 font-mono text-xs text-blue-400">{m.from}</td>
-                <td className="px-3 py-2 font-mono text-xs text-green-400">{m.to}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {preview && (
+        <>
+          {/* Stats grid */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-md border border-border p-3 text-center">
+              <div className="text-2xl font-bold text-foreground">
+                {preview.totalObservations.toLocaleString()}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Total observations</div>
+            </div>
+            <div className="rounded-md border border-border p-3 text-center">
+              <div className="text-2xl font-bold text-green-500">
+                {preview.newToImport.toLocaleString()}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">New to import</div>
+            </div>
+            <div className="rounded-md border border-border p-3 text-center">
+              <div className="text-2xl font-bold text-yellow-500">
+                {preview.alreadyImported.toLocaleString()}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Already imported</div>
+            </div>
+          </div>
 
-      <div className="flex items-center gap-3">
-        <input
-          id="compression-toggle"
-          type="checkbox"
-          checked={enableCompression}
-          onChange={(e) => onCompressionChange(e.target.checked)}
-          className="rounded border-border"
-          data-testid="compression-toggle"
-        />
-        <label htmlFor="compression-toggle" className="text-sm">
-          Enable semantic deduplication during import
-        </label>
-      </div>
+          {/* Type breakdown */}
+          <div className="rounded-md border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">
+                    Source type
+                  </th>
+                  <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">
+                    Maps to
+                  </th>
+                  <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">
+                    Count
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(preview.byType).map(([type, count]) => (
+                  <tr key={type} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2 font-mono text-xs text-blue-400">{type}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-green-400">
+                      {ENTITY_TYPE_LABELS[type] ?? 'concept'}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-xs">
+                      {count.toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Sample titles */}
+          {preview.sampleTitles.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Recent observations
+              </h3>
+              <div className="space-y-1">
+                {preview.sampleTitles.map((title, i) => (
+                  <div
+                    key={`sample-${i}`}
+                    className="text-xs text-muted-foreground font-mono truncate px-2 py-1 bg-muted/30 rounded"
+                  >
+                    {title}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {preview.alreadyImported > 0 && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
+              <CheckCircle2 size={14} className="text-yellow-500 shrink-0" />
+              <span>
+                {preview.alreadyImported.toLocaleString()} observations were previously imported and
+                will be skipped (deduplication).
+              </span>
+            </div>
+          )}
+        </>
+      )}
 
       <div className="flex gap-3">
         <button
@@ -252,10 +309,13 @@ function Step2PreviewMapping({
         <button
           type="button"
           onClick={onNext}
-          className="px-4 py-2 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors"
+          disabled={!preview || preview.newToImport === 0}
+          className="px-4 py-2 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           data-testid="step2-start"
         >
-          Start import
+          {preview && preview.newToImport === 0
+            ? 'Nothing new to import'
+            : `Import ${preview?.newToImport.toLocaleString() ?? ''} observations`}
         </button>
       </div>
     </div>
@@ -289,35 +349,55 @@ function ProgressBar({ value }: ProgressBarProps) {
 type Step3Props = {
   jobId: string | null;
   progress: number;
+  total: number;
   imported: number;
+  skipped: number;
   status: string;
   onCancel: () => void;
 };
 
-function Step3Progress({ jobId, progress, imported, status, onCancel }: Step3Props) {
+function Step3Progress({
+  jobId,
+  progress,
+  total,
+  imported,
+  skipped,
+  status,
+  onCancel,
+}: Step3Props) {
   const isRunning = status === 'running';
+  const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold mb-1">Importing</h2>
         <p className="text-sm text-muted-foreground">
-          {isRunning ? 'Your data is being imported into memory…' : `Import ${status}.`}
+          {isRunning ? 'Your data is being imported into memory...' : `Import ${status}.`}
         </p>
       </div>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Progress</span>
-          <span className="font-mono">{progress}%</span>
+          <span className="font-mono">
+            {progress.toLocaleString()} / {total.toLocaleString()} ({pct}%)
+          </span>
         </div>
-        <ProgressBar value={progress} />
-        <div className="text-xs text-muted-foreground">{imported} facts imported</div>
+        <ProgressBar value={pct} />
+        <div className="flex gap-4 text-xs text-muted-foreground">
+          <span>
+            <span className="text-green-500 font-mono">{imported.toLocaleString()}</span> imported
+          </span>
+          <span>
+            <span className="text-yellow-500 font-mono">{skipped.toLocaleString()}</span> skipped
+          </span>
+        </div>
       </div>
 
       {isRunning && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 size={14} className="animate-spin" />
-          <span>Processing…</span>
+          <span>Processing...</span>
         </div>
       )}
 
@@ -373,15 +453,15 @@ function Step4Summary({ imported, skipped, errors, status, onStartOver }: Step4P
       <div className="grid grid-cols-3 gap-3" data-testid="import-summary">
         <div className="rounded-md border border-border p-3 text-center">
           <div className="text-2xl font-bold text-green-500" data-testid="imported-count">
-            {imported}
+            {imported.toLocaleString()}
           </div>
           <div className="text-xs text-muted-foreground mt-1">Imported</div>
         </div>
         <div className="rounded-md border border-border p-3 text-center">
           <div className="text-2xl font-bold text-yellow-500" data-testid="skipped-count">
-            {skipped}
+            {skipped.toLocaleString()}
           </div>
-          <div className="text-xs text-muted-foreground mt-1">Skipped</div>
+          <div className="text-xs text-muted-foreground mt-1">Skipped (duplicates)</div>
         </div>
         <div className="rounded-md border border-border p-3 text-center">
           <div className="text-2xl font-bold text-red-500" data-testid="errors-count">
@@ -410,18 +490,21 @@ function Step4Summary({ imported, skipped, errors, status, onStartOver }: Step4P
 export function MemoryImportView() {
   const [step, setStep] = useState<WizardStep>(1);
   const [source, setSource] = useState<ImportSource>('claude-mem');
-  const [dbPath, setDbPath] = useState('');
-  const [enableCompression, setEnableCompression] = useState(false);
+  const [dbPath, setDbPath] = useState(DEFAULT_PATHS['claude-mem']);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const isPolling = step === 3;
 
   const statusQuery = useQuery(importStatusQuery(isPolling));
+  const previewImport = usePreviewImport();
   const startImport = useStartImport();
   const cancelImport = useCancelImport();
 
   const job = statusQuery.data?.job ?? null;
   const progress = job?.progress.current ?? 0;
+  const total = job?.progress.total ?? 0;
   const imported = job?.imported ?? 0;
   const skipped = job?.skipped ?? 0;
   const errors = job?.errors ?? 0;
@@ -436,11 +519,38 @@ export function MemoryImportView() {
     }
   }, [isImportDone, step]);
 
+  function handleSourceChange(newSource: ImportSource) {
+    setSource(newSource);
+    setDbPath(DEFAULT_PATHS[newSource]);
+    setPreviewError(null);
+    setPreview(null);
+  }
+
+  async function handlePreview() {
+    setPreviewError(null);
+    try {
+      const result = await previewImport.mutateAsync({ source, dbPath });
+      if (result.ok) {
+        setPreview(result.preview);
+        setStep(2);
+      } else {
+        setPreviewError(result.error ?? 'Failed to preview import source');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to connect to server';
+      setPreviewError(message);
+    }
+  }
+
   async function handleStartImport() {
-    const result = await startImport.mutateAsync({ source, dbPath });
-    if (result.job) {
-      setActiveJobId(result.job.id);
-      setStep(3);
+    try {
+      const result = await startImport.mutateAsync({ source, dbPath });
+      if (result.job) {
+        setActiveJobId(result.job.id);
+        setStep(3);
+      }
+    } catch {
+      // error handled by mutation state
     }
   }
 
@@ -452,8 +562,10 @@ export function MemoryImportView() {
 
   function handleStartOver() {
     setStep(1);
-    setDbPath('');
+    setDbPath(DEFAULT_PATHS[source]);
     setActiveJobId(null);
+    setPreview(null);
+    setPreviewError(null);
   }
 
   return (
@@ -479,18 +591,21 @@ export function MemoryImportView() {
           <Step1SourceDetection
             source={source}
             dbPath={dbPath}
-            onSourceChange={setSource}
-            onDbPathChange={setDbPath}
-            onNext={() => setStep(2)}
+            loading={previewImport.isPending}
+            error={previewError}
+            onSourceChange={handleSourceChange}
+            onDbPathChange={(p) => {
+              setDbPath(p);
+              setPreviewError(null);
+            }}
+            onNext={handlePreview}
           />
         )}
 
         {step === 2 && (
           <Step2PreviewMapping
-            source={source}
             dbPath={dbPath}
-            enableCompression={enableCompression}
-            onCompressionChange={setEnableCompression}
+            preview={preview}
             onBack={() => setStep(1)}
             onNext={handleStartImport}
           />
@@ -500,7 +615,9 @@ export function MemoryImportView() {
           <Step3Progress
             jobId={activeJobId}
             progress={progress}
+            total={total}
             imported={imported}
+            skipped={skipped}
             status={jobStatus}
             onCancel={handleCancel}
           />

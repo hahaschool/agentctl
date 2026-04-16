@@ -245,6 +245,7 @@ export type {
   ImportJob,
   ImportJobSource,
   ImportJobStatus,
+  ImportPreview,
   InjectionBudget,
   InjectionResult,
   InjectionTier,

@@ -5,6 +5,7 @@ import { memoryImportRoutes, resetActiveJobForTest } from './memory-import.js';
 
 async function buildApp() {
   const app = Fastify({ logger: false });
+  // Register without pool — preview/import will return 503/400 for DB-dependent paths
   await app.register(memoryImportRoutes, { prefix: '/api/memory' });
   await app.ready();
   return app;
@@ -24,39 +25,68 @@ describe('memoryImportRoutes', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // POST /api/memory/import/preview
+  // ---------------------------------------------------------------------------
+
+  describe('POST /api/memory/import/preview', () => {
+    it('returns 400 for unsupported source type', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import/preview',
+        payload: { source: 'jsonl-history', dbPath: '/tmp/x' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = res.json<{ ok: boolean; error: string }>();
+      expect(body.ok).toBe(false);
+      expect(body.error).toContain('Only claude-mem');
+    });
+
+    it('returns 400 for non-existent file', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import/preview',
+        payload: { source: 'claude-mem', dbPath: '/tmp/nonexistent-test-db-12345.db' },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = res.json<{ ok: boolean; error: string }>();
+      expect(body.ok).toBe(false);
+      expect(body.error).toContain('File not found');
+    });
+
+    it('returns 400 when body is missing required fields', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import/preview',
+        payload: { source: 'claude-mem' },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // POST /api/memory/import
   // ---------------------------------------------------------------------------
 
   describe('POST /api/memory/import', () => {
-    it('returns 202 and a running job when no job is active', async () => {
+    it('returns 503 when no pool is configured', async () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/memory/import',
         payload: { source: 'claude-mem', dbPath: '/tmp/claude-mem.db' },
       });
-      expect(res.statusCode).toBe(202);
-      const body = res.json<{ ok: boolean; job: { status: string; id: string } }>();
-      expect(body.ok).toBe(true);
-      expect(body.job.status).toBe('running');
-      expect(typeof body.job.id).toBe('string');
+      expect(res.statusCode).toBe(503);
+      const body = res.json<{ ok: boolean; error: string }>();
+      expect(body.ok).toBe(false);
+      expect(body.error).toContain('Database not configured');
     });
 
-    it('returns 409 when a job is already running', async () => {
-      // Start first job
-      await app.inject({
-        method: 'POST',
-        url: '/api/memory/import',
-        payload: { source: 'claude-mem', dbPath: '/tmp/claude-mem.db' },
-      });
-      // Second attempt should fail
+    it('returns 400 for unsupported source type', async () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/memory/import',
         payload: { source: 'jsonl-history', dbPath: '/tmp/history.jsonl' },
       });
-      expect(res.statusCode).toBe(409);
-      const body = res.json<{ ok: boolean }>();
-      expect(body.ok).toBe(false);
+      expect(res.statusCode).toBe(400);
     });
 
     it('returns 400 when body is missing required fields', async () => {
@@ -76,18 +106,6 @@ describe('memoryImportRoutes', () => {
       });
       expect(res.statusCode).toBe(400);
     });
-
-    it('sets importedAt and startedAt timestamps', async () => {
-      const before = Date.now();
-      const res = await app.inject({
-        method: 'POST',
-        url: '/api/memory/import',
-        payload: { source: 'jsonl-history', dbPath: '/tmp/history.jsonl' },
-      });
-      const body = res.json<{ job: { startedAt: string; completedAt: string | null } }>();
-      expect(new Date(body.job.startedAt).getTime()).toBeGreaterThanOrEqual(before);
-      expect(body.job.completedAt).toBeNull();
-    });
   });
 
   // ---------------------------------------------------------------------------
@@ -98,19 +116,6 @@ describe('memoryImportRoutes', () => {
     it('returns 404 when no job is active', async () => {
       const res = await app.inject({ method: 'GET', url: '/api/memory/import/status' });
       expect(res.statusCode).toBe(404);
-    });
-
-    it('returns 200 with the active job after starting one', async () => {
-      await app.inject({
-        method: 'POST',
-        url: '/api/memory/import',
-        payload: { source: 'claude-mem', dbPath: '/tmp/x.db' },
-      });
-      const res = await app.inject({ method: 'GET', url: '/api/memory/import/status' });
-      expect(res.statusCode).toBe(200);
-      const body = res.json<{ ok: boolean; job: { status: string } }>();
-      expect(body.ok).toBe(true);
-      expect(body.job.status).toBeDefined();
     });
   });
 
@@ -128,34 +133,11 @@ describe('memoryImportRoutes', () => {
     });
 
     it('returns 404 when id does not match active job', async () => {
-      await app.inject({
-        method: 'POST',
-        url: '/api/memory/import',
-        payload: { source: 'claude-mem', dbPath: '/tmp/x.db' },
-      });
       const res = await app.inject({
         method: 'DELETE',
         url: '/api/memory/import/wrong-id',
       });
       expect(res.statusCode).toBe(404);
-    });
-
-    it('cancels the active job and returns 200', async () => {
-      const startRes = await app.inject({
-        method: 'POST',
-        url: '/api/memory/import',
-        payload: { source: 'claude-mem', dbPath: '/tmp/x.db' },
-      });
-      const { job } = startRes.json<{ job: { id: string } }>();
-      const cancelRes = await app.inject({
-        method: 'DELETE',
-        url: `/api/memory/import/${job.id}`,
-      });
-      expect(cancelRes.statusCode).toBe(200);
-      const body = cancelRes.json<{ ok: boolean; job: { status: string; completedAt: string } }>();
-      expect(body.ok).toBe(true);
-      expect(body.job.status).toBe('cancelled');
-      expect(body.job.completedAt).toBeDefined();
     });
   });
 });
@@ -190,9 +172,7 @@ describe('Memory import rate limiting — /api/memory/import', () => {
 
     try {
       const payload = { source: 'claude-mem', dbPath: '/tmp/claude-mem.db' };
-      // First request starts the singleton job (202); subsequent requests
-      // collide and return 409, but every request still counts toward the
-      // rate-limit bucket.
+      // All requests hit 503 (no pool) or 400 (unsupported), but still count toward rate limit
       for (let i = 0; i < 3; i += 1) {
         const ok = await app.inject({
           method: 'POST',
@@ -201,7 +181,7 @@ describe('Memory import rate limiting — /api/memory/import', () => {
           headers: { 'x-forwarded-for': '10.0.0.70' },
           remoteAddress: '10.0.0.70',
         });
-        expect([202, 409]).toContain(ok.statusCode);
+        expect([400, 503]).toContain(ok.statusCode);
       }
 
       const blocked = await app.inject({
