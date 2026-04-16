@@ -179,6 +179,8 @@ export function Sidebar(): React.JSX.Element {
         } else if (eventName === 'approval_needed') {
           toast.info(`Agent needs approval: ${data.tool as string}`);
         } else if (eventName === 'loop_complete') {
+          queryClient.invalidateQueries({ queryKey: ['sessions'] });
+          queryClient.invalidateQueries({ queryKey: ['metrics'] });
           toast.success(`Loop complete: ${data.totalIterations as number} iterations`);
         }
       }
