@@ -199,6 +199,8 @@ jobs:
             packages/mobile/node_modules
             packages/web/node_modules
           key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            nm-${{ runner.os }}-${{ github.run_id }}-
 
       # Single Biome invocation covers all categories — no need for separate
       # "biome check" + "biome lint --rule-categories" steps.
@@ -242,6 +244,8 @@ jobs:
             packages/mobile/node_modules
             packages/web/node_modules
           key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            nm-${{ runner.os }}-${{ github.run_id }}-
 
       # Cache both .tsbuildinfo AND dist/ together — restoring only
       # .tsbuildinfo without dist/ causes tsc to skip compilation,
@@ -347,6 +351,8 @@ jobs:
             packages/mobile/node_modules
             packages/web/node_modules
           key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            nm-${{ runner.os }}-${{ github.run_id }}-
 
       # Reuse build output from the build job — no second `pnpm build`
       # upload-artifact strips the longest common path prefix (packages/),
@@ -412,6 +418,14 @@ jobs:
             packages/mobile/node_modules
             packages/web/node_modules
           key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            nm-${{ runner.os }}-${{ github.run_id }}-
+
+      - name: Fallback install (cache miss on re-run)
+        run: |
+          if [ ! -d "packages/web/node_modules" ]; then
+            pnpm install --frozen-lockfile
+          fi
 
       - name: Install Playwright Chromium
         run: pnpm --filter @agentctl/web exec playwright install --with-deps chromium
