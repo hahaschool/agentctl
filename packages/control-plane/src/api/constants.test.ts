@@ -91,8 +91,8 @@ describe('timeout constants', () => {
     expect(HEALTH_CHECK_TIMEOUT_MS).toBe(2_000);
   });
 
-  it('SESSION_DISCOVER_TIMEOUT_MS is 5 seconds', () => {
-    expect(SESSION_DISCOVER_TIMEOUT_MS).toBe(5_000);
+  it('SESSION_DISCOVER_TIMEOUT_MS is 15 seconds', () => {
+    expect(SESSION_DISCOVER_TIMEOUT_MS).toBe(15_000);
   });
 
   it('all timeouts are positive finite numbers', () => {

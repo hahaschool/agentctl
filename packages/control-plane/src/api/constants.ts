@@ -59,5 +59,7 @@ export const WS_HEARTBEAT_INTERVAL_MS = 30_000;
 /** Timeout for dependency health checks (DB, Redis, Mem0, LiteLLM). */
 export const HEALTH_CHECK_TIMEOUT_MS = 2_000;
 
-/** Timeout for session discovery requests to workers. */
-export const SESSION_DISCOVER_TIMEOUT_MS = 5_000;
+/** Timeout for session discovery requests to workers.
+ * Machines with many sessions (1000+) need more time for the synchronous
+ * filesystem scan, especially over the Tailscale mesh. */
+export const SESSION_DISCOVER_TIMEOUT_MS = 15_000;

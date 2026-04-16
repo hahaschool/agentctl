@@ -440,9 +440,24 @@ export function pendingPermissionRequestsQuery(agentId?: string) {
 export function discoverQuery() {
   return queryOptions({
     queryKey: queryKeys.discover,
-    queryFn: api.discoverSessions,
+    queryFn: async () => {
+      const result = await api.discoverSessions();
+      // When ALL machines fail, treat as an error so React Query keeps
+      // the previous successful data instead of replacing it with an
+      // empty result (which causes the UI to flash "0 sessions").
+      if (
+        result.machinesQueried > 0 &&
+        result.machinesFailed === result.machinesQueried &&
+        result.sessions.length === 0
+      ) {
+        throw new Error(`All ${String(result.machinesQueried)} machine(s) failed to respond`);
+      }
+      return result;
+    },
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
+    // Don't retry aggressively on transient failures.
+    retry: 1,
   });
 }
 
