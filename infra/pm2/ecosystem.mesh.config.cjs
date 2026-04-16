@@ -56,6 +56,8 @@ module.exports = {
           process.env.DISPATCH_SIGNING_SECRET_KEY ||
           deriveStableDispatchSigningSecretKey('mesh'),
         CONTROL_PLANE_URL: `http://127.0.0.1:${PORT}`,
+        SYNC_PEER_REGISTRATION_TOKEN:
+          process.env.SYNC_PEER_REGISTRATION_TOKEN || '',
         TIER_LABEL: 'mesh',
         REPO_ROOT,
       },
