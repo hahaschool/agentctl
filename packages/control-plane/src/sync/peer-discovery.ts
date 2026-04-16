@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { accessSync, constants as fsConstants } from 'node:fs';
 import { promisify } from 'node:util';
 
 import { sql } from 'drizzle-orm';
@@ -87,6 +88,56 @@ export function parseTailscalePeers(status: TailscaleStatus): TailscalePeer[] {
 }
 
 /**
+ * Well-known locations of the Tailscale CLI binary, checked in order.
+ * - macOS App Store installs to `/Applications/Tailscale.app/Contents/MacOS/Tailscale`
+ * - Homebrew / standalone installs typically land in `/usr/local/bin/tailscale`
+ * - Linux packages put it in `/usr/bin/tailscale`
+ *
+ * The bare name `tailscale` is tried last via PATH lookup.
+ */
+const TAILSCALE_BIN_CANDIDATES = [
+  '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
+  '/usr/local/bin/tailscale',
+  '/usr/bin/tailscale',
+];
+
+let resolvedTailscaleBin: string | null = null;
+
+/**
+ * Resolve the Tailscale CLI binary path. Respects `TAILSCALE_BIN` env var,
+ * then probes well-known paths, falling back to the bare name for PATH
+ * lookup. The result is cached for the process lifetime.
+ */
+export function resolveTailscaleBin(): string {
+  if (resolvedTailscaleBin !== null) return resolvedTailscaleBin;
+
+  const envOverride = process.env.TAILSCALE_BIN;
+  if (envOverride) {
+    resolvedTailscaleBin = envOverride;
+    return resolvedTailscaleBin;
+  }
+
+  for (const candidate of TAILSCALE_BIN_CANDIDATES) {
+    try {
+      accessSync(candidate, fsConstants.X_OK);
+      resolvedTailscaleBin = candidate;
+      return resolvedTailscaleBin;
+    } catch {
+      // not found or not executable — try next
+    }
+  }
+
+  // Fallback: rely on PATH
+  resolvedTailscaleBin = 'tailscale';
+  return resolvedTailscaleBin;
+}
+
+/** Test-only: reset the cached binary path so tests can override env. */
+export function __resetTailscaleBinCacheForTests(): void {
+  resolvedTailscaleBin = null;
+}
+
+/**
  * Shell out to the local Tailscale CLI and return the parsed mesh-node peers.
  * Returns an empty array on any failure so callers never see exceptions for
  * missing/offline Tailscale — the operator simply sees "no candidates".
@@ -98,7 +149,8 @@ export async function fetchTailscaleMeshPeers(
   logger: Pick<Logger, 'debug'>,
 ): Promise<TailscalePeer[]> {
   try {
-    const { stdout } = await execFileAsync('tailscale', ['status', '--json'], {
+    const bin = resolveTailscaleBin();
+    const { stdout } = await execFileAsync(bin, ['status', '--json'], {
       timeout: TAILSCALE_TIMEOUT_MS,
     });
 
