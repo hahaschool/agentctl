@@ -1160,15 +1160,17 @@ export function SessionsPage(): React.JSX.Element {
           }
         >
           {sessions.isLoading ? (
-            <div className="p-3 space-y-1">
-              {Array.from({ length: 6 }, (_, i) => (
-                <div key={`sk-${String(i)}`} className="flex items-center gap-3 px-3 py-2.5">
-                  <Skeleton className="w-[7px] h-[7px] rounded-full shrink-0" />
-                  <Skeleton className="h-4 flex-1" />
-                  <Skeleton className="h-3 w-12 shrink-0" />
-                </div>
-              ))}
-            </div>
+            <output aria-live="polite" aria-label="Loading sessions" className="block">
+              <div className="p-3 space-y-1">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div key={`sk-${String(i)}`} className="flex items-center gap-3 px-3 py-2.5">
+                    <Skeleton className="w-[7px] h-[7px] rounded-full shrink-0" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-3 w-12 shrink-0" />
+                  </div>
+                ))}
+              </div>
+            </output>
           ) : filteredSessions.length === 0 ? (
             unifiedSessionList.length === 0 ? (
               <EmptyState

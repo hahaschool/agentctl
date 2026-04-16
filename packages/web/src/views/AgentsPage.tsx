@@ -514,26 +514,28 @@ export function AgentsPage(): React.JSX.Element {
 
       {/* Agent cards grid */}
       {agents.isLoading ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
-          {Array.from({ length: 4 }, (_, i) => (
-            <div
-              key={`sk-${String(i)}`}
-              className="p-4 bg-card border border-border/50 rounded-lg space-y-3 transition-colors hover:border-border"
-            >
-              <div className="flex justify-between items-center">
-                <Skeleton className="h-5 w-32" />
-                <Skeleton className="h-5 w-16 rounded-full" />
+        <output aria-live="polite" aria-label="Loading agents" className="block">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div
+                key={`sk-${String(i)}`}
+                className="p-4 bg-card border border-border/50 rounded-lg space-y-3 transition-colors hover:border-border"
+              >
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
+                <Skeleton className="h-8 w-20 mt-2" />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-4 w-2/3" />
-              </div>
-              <Skeleton className="h-8 w-20 mt-2" />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </output>
       ) : filteredAgents.length === 0 ? (
         agentList.length === 0 ? (
           <Card className="border-border/60 py-0">

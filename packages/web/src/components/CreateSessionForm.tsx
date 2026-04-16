@@ -12,6 +12,7 @@ import { ErrorBanner } from './ErrorBanner';
 import { RuntimeAwareMachineSelect } from './RuntimeAwareMachineSelect';
 import { RuntimeAwareModelSelect } from './RuntimeAwareModelSelect';
 import { RuntimeSelector } from './RuntimeSelector';
+import { Spinner } from './Spinner';
 import { useToast } from './Toast';
 
 type CreateSessionFormProps = {
@@ -232,7 +233,13 @@ export function CreateSessionForm({
             : 'opacity-100 cursor-pointer hover:bg-primary/90',
         )}
       >
-        {submitting ? 'Creating...' : 'Create Session'}
+        {submitting ? (
+          <>
+            <Spinner size="sm" /> Creating...
+          </>
+        ) : (
+          'Create Session'
+        )}
       </button>
     </div>
   );

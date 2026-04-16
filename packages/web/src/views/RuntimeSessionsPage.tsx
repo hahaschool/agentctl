@@ -18,6 +18,7 @@ import { FetchingBar } from '@/components/FetchingBar';
 import { LastUpdated } from '@/components/LastUpdated';
 import { PathBadge } from '@/components/PathBadge';
 import { RefreshButton } from '@/components/RefreshButton';
+import { Spinner } from '@/components/Spinner';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/Toast';
 import { cn } from '@/lib/utils';
@@ -430,7 +431,13 @@ export function RuntimeSessionsPage(): React.JSX.Element {
               disabled={createMutation.isPending}
               className="w-full rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {createMutation.isPending ? 'Creating...' : 'Create Managed Session'}
+              {createMutation.isPending ? (
+                <>
+                  <Spinner size="sm" /> Creating...
+                </>
+              ) : (
+                'Create Managed Session'
+              )}
             </button>
           </div>
         </div>

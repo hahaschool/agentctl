@@ -11,6 +11,7 @@ import { Bug, FileText, FlaskConical, GitPullRequest, type LucideIcon } from 'lu
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CronBuilder } from '@/components/CronBuilder';
+import { Spinner } from '@/components/Spinner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -954,7 +955,13 @@ export function AgentFormDialog({
                   Cancel
                 </Button>
                 <Button onClick={handleSubmit} disabled={isDisabled}>
-                  {isPending ? 'Starting...' : 'Start Agent'}
+                  {isPending ? (
+                    <>
+                      <Spinner size="sm" /> Starting...
+                    </>
+                  ) : (
+                    'Start Agent'
+                  )}
                 </Button>
               </DialogFooter>
             </>
@@ -1061,7 +1068,13 @@ export function AgentFormDialog({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={isDisabled}>
-            {isPending ? 'Saving...' : 'Save Changes'}
+            {isPending ? (
+              <>
+                <Spinner size="sm" /> Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

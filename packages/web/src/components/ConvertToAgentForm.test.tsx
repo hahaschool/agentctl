@@ -98,13 +98,20 @@ describe('ConvertToAgentForm', () => {
   describe('pending state', () => {
     it('shows "Creating..." when isPending is true', () => {
       render(<ConvertToAgentForm {...defaultProps} isPending={true} />);
-      expect(screen.getByRole('button', { name: 'Creating...' })).toBeDefined();
+      expect(screen.getByText('Creating...')).toBeDefined();
+    });
+
+    it('shows a loading spinner when isPending is true', () => {
+      render(<ConvertToAgentForm {...defaultProps} isPending={true} />);
+      expect(screen.getByRole('status', { name: 'Loading' })).toBeDefined();
     });
 
     it('disables the submit button when isPending is true', () => {
       render(<ConvertToAgentForm {...defaultProps} isPending={true} />);
-      const button = screen.getByRole('button', { name: 'Creating...' });
-      expect(button.hasAttribute('disabled')).toBe(true);
+      const textEl = screen.getByText('Creating...');
+      const button = textEl.closest('button');
+      expect(button).not.toBeNull();
+      expect(button?.hasAttribute('disabled')).toBe(true);
     });
 
     it('submit button is enabled when isPending is false', () => {
@@ -148,8 +155,10 @@ describe('ConvertToAgentForm', () => {
     it('does not call onSubmit when button is disabled (isPending)', () => {
       const onSubmit = vi.fn();
       render(<ConvertToAgentForm {...defaultProps} isPending={true} onSubmit={onSubmit} />);
-      const button = screen.getByRole('button', { name: 'Creating...' });
-      fireEvent.click(button);
+      const textEl = screen.getByText('Creating...');
+      const button = textEl.closest('button');
+      expect(button).not.toBeNull();
+      if (button) fireEvent.click(button);
       // disabled buttons don't fire click events in the DOM
       expect(onSubmit).not.toHaveBeenCalled();
     });
