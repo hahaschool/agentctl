@@ -500,11 +500,14 @@ export async function createServer({
     });
   }
 
-  if (memorySearch && memoryStore) {
+  if (memoryStore) {
+    // Fact CRUD routes work with just memoryStore; semantic search is
+    // available only when memorySearch (LITELLM_URL) is also configured.
     await app.register(memoryFactRoutes, {
       prefix: '/api/memory/facts',
       memorySearch,
       memoryStore,
+      pool: pgPool,
     });
     await app.register(memoryEdgeRoutes, {
       prefix: '/api/memory/edges',
@@ -522,11 +525,13 @@ export async function createServer({
       prefix: '/api/memory/scopes',
       memoryStore,
     });
-    await app.register(memoryRoutes, {
-      prefix: '/api/memory',
-      memorySearch,
-      memoryStore,
-    });
+    if (memorySearch) {
+      await app.register(memoryRoutes, {
+        prefix: '/api/memory',
+        memorySearch,
+        memoryStore,
+      });
+    }
   } else if (mem0Client) {
     await app.register(memoryRoutes, {
       prefix: '/api/memory',

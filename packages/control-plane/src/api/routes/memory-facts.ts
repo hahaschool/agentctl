@@ -6,6 +6,7 @@ import type {
   MemoryScope,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
+import type { Pool } from 'pg';
 import { z } from 'zod';
 
 import type { MemorySearch } from '../../memory/memory-search.js';
@@ -23,7 +24,7 @@ const MAX_FACT_QUERY_LENGTH = 1_024;
 const MAX_FACT_LIMIT = 500;
 
 type MemoryFactRoutesOptions = {
-  memorySearch: Pick<MemorySearch, 'search'>;
+  memorySearch?: Pick<MemorySearch, 'search'>;
   memoryStore: Pick<
     MemoryStore,
     | 'addFact'
@@ -34,6 +35,7 @@ type MemoryFactRoutesOptions = {
     | 'recordFeedback'
     | 'updateFact'
   >;
+  pool?: Pool;
 };
 
 const DEFAULT_LIMIT = 50;
@@ -102,7 +104,7 @@ const DEFAULT_SOURCE: FactSource = {
 };
 
 export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = async (app, opts) => {
-  const { memorySearch, memoryStore } = opts;
+  const { memorySearch, memoryStore, pool } = opts;
 
   app.get<{
     Querystring: {
@@ -135,29 +137,48 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       const minConfidenceValue = parseFloatValue(minConfidence);
 
       if (q && q.trim().length > 0) {
-        const visibleScopes = scope ? [scope as MemoryScope] : [];
-        const results = await memorySearch.search({
-          query: q,
-          visibleScopes,
-          limit: limit + offset,
-          entityType: entityType as EntityType | undefined,
-        });
-        const facts = results
-          .map((result) => result.fact)
-          .filter((fact) =>
-            factMatchesFilters(fact, {
-              sessionId,
-              agentId,
-              machineId,
-              minConfidence: minConfidenceValue,
-            }),
-          );
+        // Semantic search when available, SQL ILIKE fallback otherwise
+        if (memorySearch) {
+          const visibleScopes = scope ? [scope as MemoryScope] : [];
+          const results = await memorySearch.search({
+            query: q,
+            visibleScopes,
+            limit: limit + offset,
+            entityType: entityType as EntityType | undefined,
+          });
+          const facts = results
+            .map((result) => result.fact)
+            .filter((fact) =>
+              factMatchesFilters(fact, {
+                sessionId,
+                agentId,
+                machineId,
+                minConfidence: minConfidenceValue,
+              }),
+            );
 
-        return {
-          ok: true,
-          facts: facts.slice(offset, offset + limit),
-          total: facts.length,
-        };
+          return {
+            ok: true,
+            facts: facts.slice(offset, offset + limit),
+            total: facts.length,
+          };
+        }
+
+        // Fallback: SQL ILIKE text search when no embedding service
+        if (pool) {
+          const facts = await sqlTextSearch(pool, {
+            q,
+            scope: scope as MemoryScope | undefined,
+            entityType: entityType as EntityType | undefined,
+            sessionId,
+            agentId,
+            machineId,
+            minConfidence: minConfidenceValue,
+            limit,
+            offset,
+          });
+          return { ok: true, facts, total: facts.length };
+        }
       }
 
       const facts = await memoryStore.listFacts({
@@ -290,6 +311,93 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
     },
   );
 };
+
+// ---------------------------------------------------------------------------
+// SQL ILIKE fallback for text search when no embedding service is available
+// ---------------------------------------------------------------------------
+
+async function sqlTextSearch(
+  pool: Pool,
+  filters: {
+    q: string;
+    scope?: MemoryScope;
+    entityType?: EntityType;
+    sessionId?: string;
+    agentId?: string;
+    machineId?: string;
+    minConfidence?: number;
+    limit: number;
+    offset: number;
+  },
+): Promise<MemoryFact[]> {
+  const params: unknown[] = [];
+  const conditions = ['valid_until IS NULL'];
+
+  params.push(`%${filters.q}%`);
+  conditions.push(`content ILIKE $${params.length}`);
+
+  if (filters.scope) {
+    params.push(filters.scope);
+    conditions.push(`scope = $${params.length}`);
+  }
+  if (filters.entityType) {
+    params.push(filters.entityType);
+    conditions.push(`entity_type = $${params.length}`);
+  }
+  if (filters.sessionId) {
+    params.push(filters.sessionId);
+    conditions.push(`source_json->>'session_id' = $${params.length}`);
+  }
+  if (filters.agentId) {
+    params.push(filters.agentId);
+    conditions.push(`source_json->>'agent_id' = $${params.length}`);
+  }
+  if (filters.machineId) {
+    params.push(filters.machineId);
+    conditions.push(`source_json->>'machine_id' = $${params.length}`);
+  }
+  if (filters.minConfidence !== undefined) {
+    params.push(filters.minConfidence);
+    conditions.push(`confidence >= $${params.length}`);
+  }
+
+  params.push(filters.limit);
+  params.push(filters.offset);
+
+  const { rows } = await pool.query(
+    `SELECT id, scope, content, content_model, entity_type,
+            confidence::real, strength::real, source_json,
+            valid_from, valid_until, created_at, accessed_at,
+            tags, usage_count
+     FROM memory_facts
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY created_at DESC
+     LIMIT $${params.length - 1}
+     OFFSET $${params.length}`,
+    params,
+  );
+
+  return (rows as Record<string, unknown>[]).map(rowToFact);
+}
+
+function rowToFact(row: Record<string, unknown>): MemoryFact {
+  return {
+    id: row.id as string,
+    scope: row.scope as MemoryScope,
+    content: row.content as string,
+    content_model: (row.content_model as string) ?? 'none',
+    entity_type: row.entity_type as EntityType,
+    confidence: Number(row.confidence ?? 0.8),
+    strength: Number(row.strength ?? 1.0),
+    source: (row.source_json as FactSource) ?? DEFAULT_SOURCE,
+    valid_from: (row.valid_from as string) ?? '',
+    valid_until: (row.valid_until as string) ?? null,
+    created_at: (row.created_at as string) ?? '',
+    accessed_at: (row.accessed_at as string) ?? null,
+    tags: (row.tags as string[]) ?? [],
+    usage_count: Number(row.usage_count ?? 0),
+  };
+}
 
 function parseInteger(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? '', 10);
