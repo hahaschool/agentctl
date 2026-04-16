@@ -3,6 +3,15 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.5.5] — 2026-04-16
+
+fix proxy body hash mismatch in peer update forwarding
+
+### Changes
+
+- f6c831b2 fix(mesh): pass object (not string) to createPeerSignedHeader in proxy (#600)
+
+
 ## [0.5.4] — 2026-04-16
 
 resolve Tailscale CLI path for macOS app bundle
