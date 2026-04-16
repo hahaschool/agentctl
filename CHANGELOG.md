@@ -3,6 +3,17 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.6.1] — 2026-04-16
+
+Fix pgPool availability for memory import routes
+
+### Changes
+
+- f8756e60 fix(cp): extract pgPool from db unconditionally for import routes (#633)
+- 42ddb88a fix(web): add confirmation dialog before memory fact deletion (#631)
+- 696d18ac docs: sync roadmap for PRs #627-#630 (#632)
+
+
 ## [0.6.0] — 2026-04-16
 
 Real claude-mem import with dedup, mesh phases 3+4, preflight token, error boundaries, SSRF guards
