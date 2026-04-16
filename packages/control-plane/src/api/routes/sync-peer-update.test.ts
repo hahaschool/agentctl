@@ -109,28 +109,20 @@ describe('syncPeerUpdateRoutes', () => {
     expect(runScript).not.toHaveBeenCalled();
   });
 
-  it('returns 404 with PEER_UPDATE_NOT_LOCAL when peerId does not match self', async () => {
-    const keyPair = generateDispatchSigningKeyPair();
-    const db = createMockDb({ [REMOTE_MACHINE_ID]: keyPair.publicKey });
+  it('returns 503 PEER_UPDATE_PROXY_NO_KEY when forwarding without a signing key', async () => {
+    const db = createMockDb({});
     const runScript = vi.fn<RunScriptFn>();
+    // No signingSecretKey provided → proxy path returns 503
     app = await buildApp({ db, runScript });
-
-    const body = {};
-    const targetPeerId = 'some-other-id';
-    const header = signRequest(keyPair, REMOTE_MACHINE_ID, targetPeerId, body);
 
     const response = await app.inject({
       method: 'POST',
-      url: `/api/sync/peers/${targetPeerId}/update`,
-      payload: body,
-      headers: {
-        'x-sync-auth': header,
-        'content-type': 'application/json',
-      },
+      url: '/api/sync/peers/some-other-id/update',
+      payload: {},
     });
 
-    expect(response.statusCode).toBe(404);
-    expect(response.json().error).toBe('PEER_UPDATE_NOT_LOCAL');
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toBe('PEER_UPDATE_PROXY_NO_KEY');
     expect(runScript).not.toHaveBeenCalled();
   });
 
@@ -308,15 +300,17 @@ describe('syncPeerUpdateRoutes', () => {
     expect(runScript).toHaveBeenCalledTimes(1);
   });
 
-  it('declares direct Fastify rate-limit and auth preHandler markers for CodeQL', () => {
+  it('declares direct Fastify rate-limit and auth markers for CodeQL', () => {
     const source = readFileSync(new URL('./sync-peer-update.ts', import.meta.url), 'utf8');
 
     expect(source).toMatch(/await app\.register\(rateLimit,\s*\{/);
     expect(source).toMatch(
-      /const authorizePeerUpdate = async \(request: FastifyRequest, reply: FastifyReply\) =>/,
+      /async function authorize\(\s*request:\s*FastifyRequest,\s*reply:\s*FastifyReply,/,
     );
     expect(source).toMatch(
-      /'\/:peerId\/update'[\s\S]*?config:\s*\{\s*rateLimit:\s*peerUpdateFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(peerUpdateFastifyRateLimit\),\s*authorizePeerUpdate\s*\]/,
+      /'\/:peerId\/update'[\s\S]*?config:\s*\{\s*rateLimit:\s*peerUpdateFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(peerUpdateFastifyRateLimit\)\s*\]/,
     );
+    // Auth is invoked inline for the self-update path only (proxy path skips it)
+    expect(source).toMatch(/const authorized = await authorize\(request, reply, db\)/);
   });
 });
