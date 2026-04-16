@@ -3,6 +3,17 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.5.6] — 2026-04-16
+
+fix proxy body hash + script path resolution
+
+### Changes
+
+- ea8443dc chore: bump version to 0.5.5
+- f3dad13f fix(mesh): peer-update.sh path resolution for compiled JS (#601)
+- f6c831b2 fix(mesh): pass object (not string) to createPeerSignedHeader in proxy (#600)
+
+
 ## [0.5.5] — 2026-04-16
 
 fix proxy body hash mismatch in peer update forwarding
