@@ -10,6 +10,7 @@ import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
 import type { SyncPeer, SyncPeerCursors, UpsertSyncPeerInput } from '@/lib/api';
+import type { MeshConfigPreflightResponse } from '@/lib/api/mesh-config';
 import { describeReverseRegistrationError } from '@/lib/mesh-errors';
 import {
   classifyDrift,
@@ -28,6 +29,7 @@ import {
   syncPeersQuery,
   useDeleteSyncPeer,
   usePingSyncPeer,
+  usePreflightMeshConfig,
   useProbeSyncUrl,
   useRegisterReverseSyncPeer,
   useUpdateSyncPeer,
@@ -286,14 +288,80 @@ type ProbeState =
       statusCode: number | null;
     };
 
+// ---------------------------------------------------------------------------
+// Preflight token status indicator
+// ---------------------------------------------------------------------------
+
+type PreflightState =
+  | { kind: 'idle' }
+  | { kind: 'pending' }
+  | { kind: 'done'; result: MeshConfigPreflightResponse };
+
+const PREFLIGHT_STATUS_STYLES: Record<
+  MeshConfigPreflightResponse['tokenStatus'],
+  { className: string; label: string }
+> = {
+  compatible: {
+    className: 'text-green-400',
+    label: 'Token compatible',
+  },
+  mismatch: {
+    className: 'text-yellow-400',
+    label: 'Token mismatch \u2014 check Settings \u2192 Mesh on both machines',
+  },
+  remote_disabled: {
+    className: 'text-yellow-400',
+    label: 'Remote has no token configured',
+  },
+  local_missing: {
+    className: 'text-red-400',
+    label: 'No local token \u2014 configure in Settings \u2192 Mesh',
+  },
+  error: {
+    className: 'text-red-400',
+    label: '', // filled from API message
+  },
+};
+
+export function PreflightStatusIndicator({
+  state,
+}: {
+  state: PreflightState;
+}): React.JSX.Element | null {
+  if (state.kind === 'idle') return null;
+
+  if (state.kind === 'pending') {
+    return (
+      <p data-testid="preflight-pending" className="text-[11px] text-muted-foreground">
+        Checking token compatibility...
+      </p>
+    );
+  }
+
+  const { tokenStatus, message } = state.result;
+  const style = PREFLIGHT_STATUS_STYLES[tokenStatus];
+  const label = tokenStatus === 'error' ? message || 'Preflight check failed' : style.label;
+
+  return (
+    <p
+      data-testid={`preflight-status-${tokenStatus}`}
+      className={cn('text-[11px]', style.className)}
+    >
+      {label}
+    </p>
+  );
+}
+
 function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX.Element | null {
   const toast = useToast();
   const upsertPeer = useUpsertSyncPeer();
   const probeMutation = useProbeSyncUrl();
+  const preflightMutation = usePreflightMeshConfig();
   const [state, setState] = useState<PeerFormState>(() => emptyPeerForm());
   const [error, setError] = useState<string | null>(null);
   const [probeState, setProbeState] = useState<ProbeState>({ kind: 'idle' });
   const [probeOverridden, setProbeOverridden] = useState(false);
+  const [preflightState, setPreflightState] = useState<PreflightState>({ kind: 'idle' });
 
   const isUpdate = Boolean(peer);
   const key = open ? `open:${peer?.machineId ?? 'new'}` : 'closed';
@@ -304,6 +372,7 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
     setError(null);
     setProbeState({ kind: 'idle' });
     setProbeOverridden(false);
+    setPreflightState({ kind: 'idle' });
   }
 
   if (!open) return null;
@@ -347,6 +416,7 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
           });
           // §33.7 — Auto-fill form fields from probe identity data. Only
           // fill empty fields so we don't clobber manual operator input.
+          const canonicalSyncUrl = result.syncUrl ?? trimmedSyncUrl;
           setState((prev) => ({
             ...prev,
             machineId: prev.machineId.trim() ? prev.machineId : (probedMachineId ?? ''),
@@ -356,8 +426,25 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
               ? prev.hostname
               : (deriveHostnameFromUrl(trimmedSyncUrl) ?? ''),
             // Use the canonical sync URL returned by the probe when available.
-            syncUrl: result.syncUrl ?? prev.syncUrl,
+            syncUrl: canonicalSyncUrl,
           }));
+          // §33.12 Phase 3.3 — Auto-run token preflight after successful probe.
+          setPreflightState({ kind: 'pending' });
+          preflightMutation.mutate(canonicalSyncUrl, {
+            onSuccess: (pfResult) => {
+              setPreflightState({ kind: 'done', result: pfResult });
+            },
+            onError: (pfErr) => {
+              setPreflightState({
+                kind: 'done',
+                result: {
+                  tokenStatus: 'error',
+                  errorCode: null,
+                  message: errorMessage(pfErr, 'Preflight check failed'),
+                },
+              });
+            },
+          });
         } else {
           setProbeState({
             kind: 'failure',
@@ -514,9 +601,10 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
                   value={state.syncUrl}
                   onChange={(e) => {
                     setState((p) => ({ ...p, syncUrl: e.target.value }));
-                    // Invalidate previous probe when the URL changes.
+                    // Invalidate previous probe and preflight when the URL changes.
                     setProbeState({ kind: 'idle' });
                     setProbeOverridden(false);
+                    setPreflightState({ kind: 'idle' });
                   }}
                   onFocus={() => {
                     // §33.7 — Pre-fill `http://` when the field is empty on
@@ -603,6 +691,12 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
                   {syncUrlLength}/{MAX_SYNC_URL_LENGTH}
                 </p>
               ) : null}
+              {/* §33.12 Phase 3.3 — Token preflight result shown after probe */}
+              {probeMatchesCurrentUrl && (
+                <div className="mt-1">
+                  <PreflightStatusIndicator state={preflightState} />
+                </div>
+              )}
               <p id="mesh-peer-sync-url-hint" className="mt-1 text-[10px] text-muted-foreground/70">
                 Tailscale already encrypts -- HTTPS is only needed for public endpoints
               </p>

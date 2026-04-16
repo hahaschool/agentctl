@@ -18,6 +18,7 @@ const {
   mockUseUpdateSyncPeer,
   mockUseRegisterReverseSyncPeer,
   mockUseProbeSyncUrl,
+  mockUsePreflightMeshConfig,
   mockToastSuccess,
   mockToastError,
 } = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ const {
   mockUseUpdateSyncPeer: vi.fn(),
   mockUseRegisterReverseSyncPeer: vi.fn(),
   mockUseProbeSyncUrl: vi.fn(),
+  mockUsePreflightMeshConfig: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
 }));
@@ -87,6 +89,7 @@ vi.mock('@/lib/queries', () => ({
   useUpdateSyncPeer: () => mockUseUpdateSyncPeer(),
   useRegisterReverseSyncPeer: () => mockUseRegisterReverseSyncPeer(),
   useProbeSyncUrl: () => mockUseProbeSyncUrl(),
+  usePreflightMeshConfig: () => mockUsePreflightMeshConfig(),
   useDiscoverSyncPeers: () => ({ mutate: vi.fn(), isPending: false }),
   meshConfigQuery: () => ({
     queryKey: ['mesh-config'],
@@ -98,7 +101,7 @@ vi.mock('@/lib/queries', () => ({
 // Component import — AFTER mocks
 // ---------------------------------------------------------------------------
 
-import { MeshPeersPage } from './MeshPeersPage';
+import { MeshPeersPage, PreflightStatusIndicator } from './MeshPeersPage';
 
 // ---------------------------------------------------------------------------
 // Test data factory
@@ -154,6 +157,106 @@ function renderPage() {
 // Tests
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// PreflightStatusIndicator — §33.12 Phase 3.3
+// ---------------------------------------------------------------------------
+
+describe('PreflightStatusIndicator', () => {
+  it('renders nothing when idle', () => {
+    const { container } = render(<PreflightStatusIndicator state={{ kind: 'idle' }} />);
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('renders pending text while checking', () => {
+    render(<PreflightStatusIndicator state={{ kind: 'pending' }} />);
+    expect(screen.getByTestId('preflight-pending')).toBeDefined();
+    expect(screen.getByText('Checking token compatibility...')).toBeDefined();
+  });
+
+  it('renders green text for compatible', () => {
+    render(
+      <PreflightStatusIndicator
+        state={{
+          kind: 'done',
+          result: { tokenStatus: 'compatible', errorCode: null, message: 'OK' },
+        }}
+      />,
+    );
+    const el = screen.getByTestId('preflight-status-compatible');
+    expect(el).toBeDefined();
+    expect(el.textContent).toBe('Token compatible');
+  });
+
+  it('renders yellow text for mismatch', () => {
+    render(
+      <PreflightStatusIndicator
+        state={{
+          kind: 'done',
+          result: { tokenStatus: 'mismatch', errorCode: null, message: 'Mismatch' },
+        }}
+      />,
+    );
+    const el = screen.getByTestId('preflight-status-mismatch');
+    expect(el).toBeDefined();
+    expect(el.textContent).toContain('Token mismatch');
+  });
+
+  it('renders yellow text for remote_disabled', () => {
+    render(
+      <PreflightStatusIndicator
+        state={{
+          kind: 'done',
+          result: { tokenStatus: 'remote_disabled', errorCode: null, message: '' },
+        }}
+      />,
+    );
+    const el = screen.getByTestId('preflight-status-remote_disabled');
+    expect(el).toBeDefined();
+    expect(el.textContent).toContain('Remote has no token configured');
+  });
+
+  it('renders red text for local_missing', () => {
+    render(
+      <PreflightStatusIndicator
+        state={{
+          kind: 'done',
+          result: { tokenStatus: 'local_missing', errorCode: null, message: '' },
+        }}
+      />,
+    );
+    const el = screen.getByTestId('preflight-status-local_missing');
+    expect(el).toBeDefined();
+    expect(el.textContent).toContain('No local token');
+  });
+
+  it('renders red text with API message for error', () => {
+    render(
+      <PreflightStatusIndicator
+        state={{
+          kind: 'done',
+          result: { tokenStatus: 'error', errorCode: 'FETCH_FAILED', message: 'Peer unreachable' },
+        }}
+      />,
+    );
+    const el = screen.getByTestId('preflight-status-error');
+    expect(el).toBeDefined();
+    expect(el.textContent).toBe('Peer unreachable');
+  });
+
+  it('renders fallback message for error with empty message', () => {
+    render(
+      <PreflightStatusIndicator
+        state={{
+          kind: 'done',
+          result: { tokenStatus: 'error', errorCode: null, message: '' },
+        }}
+      />,
+    );
+    const el = screen.getByTestId('preflight-status-error');
+    expect(el.textContent).toBe('Preflight check failed');
+  });
+});
+
 describe('MeshPeersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -193,6 +296,7 @@ describe('MeshPeersPage', () => {
     mockUseUpdateSyncPeer.mockReturnValue(makeMutationHook());
     mockUseRegisterReverseSyncPeer.mockReturnValue(makeMutationHook());
     mockUseProbeSyncUrl.mockReturnValue(makeMutationHook());
+    mockUsePreflightMeshConfig.mockReturnValue(makeMutationHook());
   });
 
   afterEach(() => {
@@ -1533,6 +1637,284 @@ describe('MeshPeersPage', () => {
         expect(screen.getByText('peer-old')).toBeDefined();
       });
       expect(screen.queryByTestId('mesh-version-update-banner')).toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Preflight token check — §33.12 Phase 3.3
+  // ---------------------------------------------------------------------------
+
+  describe('preflight token check', () => {
+    it('runs preflight after a successful probe and shows compatible status', async () => {
+      const probeMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: { reachable: boolean; statusCode?: number }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({ reachable: true, statusCode: 200 });
+        },
+      );
+      const preflightMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: {
+              tokenStatus: string;
+              errorCode: string | null;
+              message: string;
+            }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({
+            tokenStatus: 'compatible',
+            errorCode: null,
+            message: 'Token matches',
+          });
+        },
+      );
+      mockUseProbeSyncUrl.mockReturnValue(makeMutationHook({ mutate: probeMutate }));
+      mockUsePreflightMeshConfig.mockReturnValue(makeMutationHook({ mutate: preflightMutate }));
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+      });
+
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+      fireEvent.click(screen.getByTestId('add-mesh-peer'));
+
+      fireEvent.change(screen.getByLabelText('Sync URL'), {
+        target: { value: 'http://100.64.0.11:8080' },
+      });
+      fireEvent.click(screen.getByTestId('mesh-peer-probe'));
+
+      await waitFor(() => {
+        expect(preflightMutate).toHaveBeenCalledWith('http://100.64.0.11:8080', expect.any(Object));
+        expect(screen.getByTestId('preflight-status-compatible')).toBeDefined();
+        expect(screen.getByText('Token compatible')).toBeDefined();
+      });
+    });
+
+    it('shows mismatch warning when tokens differ', async () => {
+      const probeMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: { reachable: boolean; statusCode?: number }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({ reachable: true, statusCode: 200 });
+        },
+      );
+      const preflightMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: {
+              tokenStatus: string;
+              errorCode: string | null;
+              message: string;
+            }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({
+            tokenStatus: 'mismatch',
+            errorCode: null,
+            message: 'Tokens do not match',
+          });
+        },
+      );
+      mockUseProbeSyncUrl.mockReturnValue(makeMutationHook({ mutate: probeMutate }));
+      mockUsePreflightMeshConfig.mockReturnValue(makeMutationHook({ mutate: preflightMutate }));
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+      });
+
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+      fireEvent.click(screen.getByTestId('add-mesh-peer'));
+
+      fireEvent.change(screen.getByLabelText('Sync URL'), {
+        target: { value: 'http://100.64.0.11:8080' },
+      });
+      fireEvent.click(screen.getByTestId('mesh-peer-probe'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preflight-status-mismatch')).toBeDefined();
+      });
+    });
+
+    it('shows local_missing red warning when no local token', async () => {
+      const probeMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: { reachable: boolean; statusCode?: number }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({ reachable: true, statusCode: 200 });
+        },
+      );
+      const preflightMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: {
+              tokenStatus: string;
+              errorCode: string | null;
+              message: string;
+            }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({
+            tokenStatus: 'local_missing',
+            errorCode: null,
+            message: 'No local token configured',
+          });
+        },
+      );
+      mockUseProbeSyncUrl.mockReturnValue(makeMutationHook({ mutate: probeMutate }));
+      mockUsePreflightMeshConfig.mockReturnValue(makeMutationHook({ mutate: preflightMutate }));
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+      });
+
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+      fireEvent.click(screen.getByTestId('add-mesh-peer'));
+
+      fireEvent.change(screen.getByLabelText('Sync URL'), {
+        target: { value: 'http://100.64.0.11:8080' },
+      });
+      fireEvent.click(screen.getByTestId('mesh-peer-probe'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preflight-status-local_missing')).toBeDefined();
+      });
+    });
+
+    it('shows error status when preflight mutation fails', async () => {
+      const probeMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: { reachable: boolean; statusCode?: number }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({ reachable: true, statusCode: 200 });
+        },
+      );
+      const preflightMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onError?: (err: Error) => void;
+          },
+        ) => {
+          opts.onError?.(new Error('Network timeout'));
+        },
+      );
+      mockUseProbeSyncUrl.mockReturnValue(makeMutationHook({ mutate: probeMutate }));
+      mockUsePreflightMeshConfig.mockReturnValue(makeMutationHook({ mutate: preflightMutate }));
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+      });
+
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+      fireEvent.click(screen.getByTestId('add-mesh-peer'));
+
+      fireEvent.change(screen.getByLabelText('Sync URL'), {
+        target: { value: 'http://100.64.0.11:8080' },
+      });
+      fireEvent.click(screen.getByTestId('mesh-peer-probe'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preflight-status-error')).toBeDefined();
+        expect(screen.getByText('Network timeout')).toBeDefined();
+      });
+    });
+
+    it('does not show preflight indicator when probe has not been run', async () => {
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+      });
+
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+      fireEvent.click(screen.getByTestId('add-mesh-peer'));
+
+      fireEvent.change(screen.getByLabelText('Sync URL'), {
+        target: { value: 'http://100.64.0.11:8080' },
+      });
+
+      // No probe clicked — preflight should not appear
+      expect(screen.queryByTestId('preflight-status-compatible')).toBeNull();
+      expect(screen.queryByTestId('preflight-status-mismatch')).toBeNull();
+      expect(screen.queryByTestId('preflight-pending')).toBeNull();
+    });
+
+    it('resets preflight state when sync URL changes after a probe', async () => {
+      const probeMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: { reachable: boolean; statusCode?: number }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({ reachable: true, statusCode: 200 });
+        },
+      );
+      const preflightMutate = vi.fn(
+        (
+          _url: string,
+          opts: {
+            onSuccess?: (r: {
+              tokenStatus: string;
+              errorCode: string | null;
+              message: string;
+            }) => void;
+          },
+        ) => {
+          opts.onSuccess?.({
+            tokenStatus: 'compatible',
+            errorCode: null,
+            message: 'Token matches',
+          });
+        },
+      );
+      mockUseProbeSyncUrl.mockReturnValue(makeMutationHook({ mutate: probeMutate }));
+      mockUsePreflightMeshConfig.mockReturnValue(makeMutationHook({ mutate: preflightMutate }));
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({ peers: [] }),
+      });
+
+      renderPage();
+      await waitFor(() => expect(screen.getByTestId('add-mesh-peer')).toBeDefined());
+      fireEvent.click(screen.getByTestId('add-mesh-peer'));
+
+      fireEvent.change(screen.getByLabelText('Sync URL'), {
+        target: { value: 'http://100.64.0.11:8080' },
+      });
+      fireEvent.click(screen.getByTestId('mesh-peer-probe'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('preflight-status-compatible')).toBeDefined();
+      });
+
+      // Change the URL — preflight indicator should disappear
+      fireEvent.change(screen.getByLabelText('Sync URL'), {
+        target: { value: 'http://100.64.0.12:8080' },
+      });
+
+      expect(screen.queryByTestId('preflight-status-compatible')).toBeNull();
     });
   });
 });
