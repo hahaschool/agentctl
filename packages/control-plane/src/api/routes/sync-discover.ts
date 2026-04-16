@@ -261,6 +261,11 @@ function describeError(err: unknown): string {
   return String(err).slice(0, 200);
 }
 
+/**
+ * @deprecated Prefer `GET /api/sync/peers/discover` which probes each
+ * candidate, filters already-registered peers, and returns machineId /
+ * publicKey / version metadata. This legacy plugin will be removed in v0.7.
+ */
 export const syncDiscoverRoutes: FastifyPluginAsync<SyncDiscoverRoutesOptions> = async (
   app,
   opts,
@@ -313,6 +318,9 @@ export const syncDiscoverRoutes: FastifyPluginAsync<SyncDiscoverRoutesOptions> =
     // legacy fastify-rate-limit plugin for this rule.
     // codeql[js/missing-rate-limiting]
     async (_request: FastifyRequest, reply: FastifyReply) => {
+      reply.header('Deprecation', 'true');
+      reply.header('Link', '</api/sync/peers/discover>; rel="successor-version"');
+
       let output: string | null;
       try {
         output = await runTailscaleStatus();

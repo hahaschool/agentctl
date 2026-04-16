@@ -411,6 +411,12 @@ export const syncNodes = pgTable('sync_nodes', {
   lastSchemaAheadVersion: integer('last_schema_ahead_version'),
   lastSchemaAheadAt: timestamp('last_schema_ahead_at', { withTimezone: true }),
   schemaAheadCount: integer('schema_ahead_count').notNull().default(0),
+  // 33.8: reverse registration outcome tracking (migration 0026). These columns
+  // existed only in SQL until now — adding them to Drizzle so route code can
+  // stop using the raw SYNC_NODE_COLUMNS string for queries.
+  reverseRegistrationStatus: text('reverse_registration_status'),
+  reverseRegistrationError: text('reverse_registration_error'),
+  reverseRegistrationAt: timestamp('reverse_registration_at', { withTimezone: true }),
 });
 
 export const syncChangeLog = pgTable(
