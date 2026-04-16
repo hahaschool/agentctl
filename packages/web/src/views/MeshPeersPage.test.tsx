@@ -88,6 +88,10 @@ vi.mock('@/lib/queries', () => ({
   useRegisterReverseSyncPeer: () => mockUseRegisterReverseSyncPeer(),
   useProbeSyncUrl: () => mockUseProbeSyncUrl(),
   useDiscoverSyncPeers: () => ({ mutate: vi.fn(), isPending: false }),
+  meshConfigQuery: () => ({
+    queryKey: ['mesh-config'],
+    queryFn: () => Promise.resolve(null),
+  }),
 }));
 
 // ---------------------------------------------------------------------------
