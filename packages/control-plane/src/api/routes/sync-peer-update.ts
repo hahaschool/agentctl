@@ -156,12 +156,14 @@ async function proxyUpdateToRemotePeer(
   }
 
   const targetPath = `/api/sync/peers/${encodeURIComponent(peerId)}/update`;
-  const body = JSON.stringify({});
+  // Sign with the parsed object so the body hash matches what the remote
+  // Fastify handler sees after JSON parsing (stableStringify({}) = "{}").
+  const bodyObj = {};
   const authHeader = createPeerSignedHeader(
     selfMachineId,
     'POST',
     targetPath,
-    body,
+    bodyObj,
     signingSecretKey,
   );
 
@@ -174,7 +176,7 @@ async function proxyUpdateToRemotePeer(
         'Content-Type': 'application/json',
         'X-Sync-Auth': authHeader,
       },
-      body,
+      body: JSON.stringify(bodyObj),
       signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     });
 
