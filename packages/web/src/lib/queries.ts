@@ -1394,6 +1394,13 @@ export function importStatusQuery(isRunning: boolean) {
   });
 }
 
+export function usePreviewImport() {
+  return useMutation({
+    mutationFn: (body: { source: import('./api').ImportJob['source']; dbPath: string }) =>
+      api.previewImport(body),
+  });
+}
+
 export function useStartImport() {
   const qc = useQueryClient();
   return useMutation({

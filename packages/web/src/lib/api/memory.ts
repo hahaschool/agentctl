@@ -10,6 +10,7 @@ import type {
   FactSource,
   FeedbackSignal,
   ImportJob,
+  ImportPreview,
   MemoryEdge,
   MemoryFact,
   MemoryObservation,
@@ -388,6 +389,12 @@ export const memoryApi = {
     }),
 
   // Memory import
+  previewImport: (body: { source: ImportJob['source']; dbPath: string }) =>
+    request<{ ok: boolean; preview: ImportPreview; error?: string }>('/api/memory/import/preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   startMemoryImport: (body: { source: ImportJob['source']; dbPath: string }) =>
     request<{ ok: boolean; job: ImportJob }>('/api/memory/import', {
       method: 'POST',

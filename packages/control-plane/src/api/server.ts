@@ -570,8 +570,8 @@ export async function createServer({
     }
   }
 
-  // Register memory import routes (in-memory job tracking, no DB required).
-  await app.register(memoryImportRoutes, { prefix: '/api/memory' });
+  // Register memory import routes (real SQLite→PG import with dedup).
+  await app.register(memoryImportRoutes, { prefix: '/api/memory', pool: pgPool });
 
   // Register claude-mem routes for querying the local claude-mem SQLite database.
   await app.register(claudeMemRoutes, {
