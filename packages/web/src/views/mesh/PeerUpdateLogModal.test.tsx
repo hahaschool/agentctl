@@ -159,9 +159,7 @@ describe('PeerUpdateLogModal', () => {
       />,
     );
 
-    expect(
-      screen.getByText('Connection lost — update may have completed'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Connection lost — update may have completed')).toBeInTheDocument();
   });
 
   it('shows "Close" when done and "Close (update continues)" when running', () => {

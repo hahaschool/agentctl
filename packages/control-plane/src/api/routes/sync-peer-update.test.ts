@@ -7,10 +7,7 @@ import * as buildInfo from '../../build-info.js';
 import type { Database } from '../../db/index.js';
 import { createPeerSignedHeader } from '../../sync/peer-auth.js';
 import { PeerUpdateJobStore } from '../../sync/peer-update-jobs.js';
-import {
-  type RunScriptFn,
-  syncPeerUpdateRoutes,
-} from './sync-peer-update.js';
+import { type RunScriptFn, syncPeerUpdateRoutes } from './sync-peer-update.js';
 
 const SELF_MACHINE_ID = 'machine-local';
 const REMOTE_MACHINE_ID = 'machine-remote';
@@ -138,9 +135,14 @@ describe('syncPeerUpdateRoutes', () => {
 
     vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.4.0');
 
-    let resolveScript: ((v: { exitCode: number; stdoutTail: string; stderrTail: string }) => void) | null = null;
+    let resolveScript:
+      | ((v: { exitCode: number; stdoutTail: string; stderrTail: string }) => void)
+      | null = null;
     const runScript = vi.fn<RunScriptFn>().mockImplementation(
-      () => new Promise((resolve) => { resolveScript = resolve; }),
+      () =>
+        new Promise((resolve) => {
+          resolveScript = resolve;
+        }),
     );
 
     app = await buildApp({ db, runScript, jobStore });
@@ -289,11 +291,12 @@ describe('syncPeerUpdateRoutes', () => {
       expect(jobStore.getJob(jobId)?.status).toBe('success');
     });
 
-    const job = jobStore.getJob(jobId)!;
-    expect(job.logs).toHaveLength(3);
-    expect(job.logs[0]).toMatchObject({ stream: 'stdout', text: 'line 1' });
-    expect(job.logs[1]).toMatchObject({ stream: 'stdout', text: 'line 2' });
-    expect(job.logs[2]).toMatchObject({ stream: 'stderr', text: 'warning' });
+    const job = jobStore.getJob(jobId);
+    expect(job).toBeDefined();
+    expect(job?.logs).toHaveLength(3);
+    expect(job?.logs[0]).toMatchObject({ stream: 'stdout', text: 'line 1' });
+    expect(job?.logs[1]).toMatchObject({ stream: 'stdout', text: 'line 2' });
+    expect(job?.logs[2]).toMatchObject({ stream: 'stderr', text: 'warning' });
   });
 
   it('rate-limits peer update requests', async () => {

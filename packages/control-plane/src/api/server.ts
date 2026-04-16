@@ -55,6 +55,7 @@ import {
 } from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
+import { PeerUpdateJobStore } from '../sync/peer-update-jobs.js';
 import { accountRoutes } from './routes/accounts.js';
 import { agentConfigPreviewRoutes } from './routes/agent-config-preview.js';
 import { agentProfileRoutes } from './routes/agent-profiles.js';
@@ -114,7 +115,6 @@ import { syncRoutes } from './routes/sync.js';
 import { syncConflictsRoutes } from './routes/sync-conflicts.js';
 import { syncDiscoverRoutes } from './routes/sync-discover.js';
 import { syncPeerUpdateRoutes } from './routes/sync-peer-update.js';
-import { PeerUpdateJobStore } from '../sync/peer-update-jobs.js';
 import { syncPeersRoutes } from './routes/sync-peers.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
 import { taskRunRoutes } from './routes/task-runs.js';

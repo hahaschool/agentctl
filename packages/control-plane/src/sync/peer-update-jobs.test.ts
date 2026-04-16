@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import type { JobEvent } from './peer-update-jobs.js';
 import { PeerUpdateJobStore } from './peer-update-jobs.js';
