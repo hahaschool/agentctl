@@ -39,6 +39,7 @@ import { cn } from '@/lib/utils';
 import { DiscoverPeersDialog } from './mesh/DiscoverPeersDialog';
 import { MeshHealthSummary } from './mesh/MeshHealthSummary';
 import { MeshVersionBanner } from './mesh/MeshVersionBanner';
+import { SelfIdentityCard } from './mesh/SelfIdentityCard';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,6 +59,16 @@ function formatRelative(iso: string | null): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/** §33.12 Phase 4.3: Peer is stale when last_seen is > 7 days ago. */
+export function isPeerStale(lastSeen: string | null): boolean {
+  if (!lastSeen) return false;
+  const ts = new Date(lastSeen).getTime();
+  if (Number.isNaN(ts)) return false;
+  return Date.now() - ts > STALE_THRESHOLD_MS;
 }
 
 function formatInterval(ms: number): string {
@@ -1091,6 +1102,14 @@ export function MeshPeerRow({
         </td>
         <td className="px-4 py-3 align-top text-xs text-muted-foreground whitespace-nowrap">
           {formatRelative(peer.lastSeen)}
+          {isPeerStale(peer.lastSeen) && (
+            <span
+              data-testid={`peer-stale-badge-${peer.machineId}`}
+              className="ml-1.5 px-1.5 py-px rounded-sm bg-orange-500/15 text-orange-400 text-[10px] font-semibold uppercase"
+            >
+              Stale
+            </span>
+          )}
         </td>
         <td className="px-4 py-3 align-top text-right whitespace-nowrap">
           <div className="flex justify-end gap-2">
@@ -1278,6 +1297,7 @@ export function MeshPeersPage(): React.JSX.Element {
   const [driftBannerDismissed, setDriftBannerDismissed] = useState(false);
   // §33.8: a single peer row can be expanded at a time to reveal cursor drill-down.
   const [expandedPeerId, setExpandedPeerId] = useState<string | null>(null);
+  const [staleCleanupConfirm, setStaleCleanupConfirm] = useState(false);
   const toggleExpand = useCallback((machineId: string) => {
     setExpandedPeerId((prev) => (prev === machineId ? null : machineId));
   }, []);
@@ -1285,6 +1305,8 @@ export function MeshPeersPage(): React.JSX.Element {
   const peers = (peersData.data?.peers ?? []) as SyncPeerWithVersion[];
   const reachableCount = peers.filter((p) => p.syncStatus === 'reachable').length;
   const unreachableCount = peers.filter((p) => p.syncStatus === 'unreachable').length;
+  const stalePeers = peers.filter((p) => !p.isSelf && isPeerStale(p.lastSeen));
+  const staleCount = stalePeers.length;
   const versionGroups = groupPeerVersions(peers);
   const meshHasDrift = hasMeshDrift(peers, localVersion);
   const showDriftBanner = meshHasDrift && !driftBannerDismissed;
@@ -1402,6 +1424,25 @@ export function MeshPeersPage(): React.JSX.Element {
     [reverseRetryMutation, toast],
   );
 
+  const handleStaleCleanup = useCallback(() => {
+    if (stalePeers.length === 0) return;
+    let remaining = stalePeers.length;
+    for (const peer of stalePeers) {
+      deleteMutation.mutate(peer.machineId, {
+        onSuccess: () => {
+          remaining -= 1;
+          if (remaining === 0) {
+            toast.success(`Removed ${stalePeers.length} stale peer(s)`);
+            setStaleCleanupConfirm(false);
+          }
+        },
+        onError: (err) => {
+          toast.error(errorMessage(err, `Failed to remove ${peer.machineId}`));
+        },
+      });
+    }
+  }, [stalePeers, deleteMutation, toast]);
+
   return (
     <div className="relative p-4 md:p-6 max-w-[1400px] animate-page-enter">
       <FetchingBar isFetching={peersData.isFetching && !peersData.isLoading} />
@@ -1423,6 +1464,37 @@ export function MeshPeersPage(): React.JSX.Element {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {staleCount > 0 && !staleCleanupConfirm && (
+            <button
+              type="button"
+              onClick={() => setStaleCleanupConfirm(true)}
+              data-testid="stale-cleanup-btn"
+              className="px-3 py-1.5 rounded-md text-xs font-medium border border-orange-500/40 bg-orange-500/5 text-orange-300 hover:bg-orange-500/10"
+            >
+              Remove {staleCount} stale
+            </button>
+          )}
+          {staleCleanupConfirm && (
+            <span className="flex items-center gap-1.5">
+              <span className="text-xs text-orange-300">Remove {staleCount} stale peer(s)?</span>
+              <button
+                type="button"
+                onClick={handleStaleCleanup}
+                data-testid="stale-cleanup-confirm"
+                className="px-2 py-1 rounded-sm text-xs font-medium bg-orange-500/15 text-orange-300 hover:bg-orange-500/25"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setStaleCleanupConfirm(false)}
+                data-testid="stale-cleanup-cancel"
+                className="px-2 py-1 rounded-sm text-xs font-medium bg-muted text-muted-foreground hover:bg-accent/10"
+              >
+                No
+              </button>
+            </span>
+          )}
           <RefreshButton
             onClick={() => void peersData.refetch()}
             isFetching={peersData.isFetching && !peersData.isLoading}
@@ -1452,6 +1524,9 @@ export function MeshPeersPage(): React.JSX.Element {
         <span className="font-mono text-foreground">Ping</span> to probe a peer&apos;s{' '}
         <span className="font-mono">/health</span> endpoint and refresh its status.
       </p>
+
+      {/* §33.12 Phase 4.2: Self identity card */}
+      <SelfIdentityCard />
 
       {showDriftBanner && (
         <section
