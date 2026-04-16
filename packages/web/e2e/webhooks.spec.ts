@@ -253,7 +253,7 @@ test.describe('Webhooks page', () => {
 
     await page.goto('/webhooks');
 
-    await expect(page.getByText('No webhook subscriptions yet.')).toBeVisible();
+    await expect(page.getByText('No webhook subscriptions yet')).toBeVisible();
     await page.getByTestId('add-webhook').click();
 
     const dialog = page.getByTestId('webhook-form-dialog');
@@ -381,7 +381,7 @@ test.describe('Webhooks page', () => {
 
     expect(state.deleteCalls).toEqual(['wh-delete-me']);
     await expect(page.getByRole('alert').filter({ hasText: /deleted/i })).toBeVisible();
-    await expect(page.getByText('No webhook subscriptions yet.')).toBeVisible();
+    await expect(page.getByText('No webhook subscriptions yet')).toBeVisible();
   });
 
   test('Test button calls /test and toasts success vs. failure appropriately', async ({ page }) => {

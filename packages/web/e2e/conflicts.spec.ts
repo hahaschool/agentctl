@@ -195,7 +195,7 @@ test.describe('Conflicts page', () => {
   });
 
   test('shows empty state when no conflicts exist', async ({ page }) => {
-    await expect(page.getByText('No sync conflicts found.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('No sync conflicts found')).toBeVisible({ timeout: 15_000 });
   });
 
   test('filter dropdowns render', async ({ page }) => {
@@ -234,7 +234,7 @@ test.describe('Conflicts page', () => {
       });
 
     await expect(page.getByText('Conflict resolved: remote')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('No sync conflicts found.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('No sync conflicts found')).toBeVisible({ timeout: 15_000 });
     await expect(conflictsNav.getByText('1', { exact: true })).toHaveCount(0);
   });
 
@@ -278,7 +278,7 @@ test.describe('Conflicts page', () => {
       });
 
     await expect(page.getByText('Conflict resolved: merged')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('No sync conflicts found.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('No sync conflicts found')).toBeVisible({ timeout: 15_000 });
   });
 
   test('shows populated conflicts, supports filters, and opens selected details', async ({
@@ -325,7 +325,7 @@ test.describe('Conflicts page', () => {
       page.getByRole('button', { name: 'Restore', exact: true }).click(),
     ]);
 
-    await expect(page.getByText('No sync conflicts found.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('No sync conflicts found')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('All conflicts have been resolved.')).toBeVisible();
     await expect(page.getByText('1 pending')).toHaveCount(0);
     expect(resolutionRequests).toEqual([
@@ -368,7 +368,7 @@ test.describe('Conflicts page', () => {
       page.getByRole('button', { name: 'Apply Merge', exact: true }).click(),
     ]);
 
-    await expect(page.getByText('No sync conflicts found.')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('No sync conflicts found')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('All conflicts have been resolved.')).toBeVisible();
     expect(resolutionRequests).toEqual([
       {
