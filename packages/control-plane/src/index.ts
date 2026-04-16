@@ -339,18 +339,22 @@ async function main(): Promise<void> {
   let memorySearch: MemorySearch | undefined;
   let memoryStore: MemoryStore | undefined;
   let memoryInjector: MemoryInjector | undefined;
-  let pgPool: import('pg').Pool | undefined;
+
+  // Raw PG pool — available whenever db is configured, even without LITELLM_URL.
+  // Used by import routes that don't need embeddings.
+  const pgPool: import('pg').Pool | undefined = db
+    ? (db as Database & { $client: import('pg').Pool }).$client
+    : undefined;
 
   const canUsePostgresMemory = Boolean(db && LITELLM_URL);
 
   if (MEMORY_BACKEND === 'postgres' || (MEMORY_BACKEND === 'auto' && canUsePostgresMemory)) {
-    if (db && LITELLM_URL) {
+    if (db && LITELLM_URL && pgPool) {
       const embeddingClient = new EmbeddingClient({
         baseUrl: LITELLM_URL,
         model: 'text-embedding-3-small',
         logger: logger.child({ component: 'embedding-client' }),
       });
-      pgPool = (db as Database & { $client: import('pg').Pool }).$client;
 
       memoryStore = new MemoryStore({
         pool: pgPool,
