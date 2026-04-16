@@ -681,12 +681,12 @@ describe('MeshPeersPage', () => {
     mockSyncPeersQuery.mockReturnValue({
       queryKey: ['sync-peers'],
       queryFn: vi.fn().mockResolvedValue({
-        peers: [makePeer({ machineId: 'node-match', peerVersion: 'v0.4.0' } as Partial<SyncPeer>)],
+        peers: [makePeer({ machineId: 'node-match', peerVersion: 'v9.9.9' } as Partial<SyncPeer>)],
       }),
     });
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('v0.4.0')).toBeDefined();
+      expect(screen.getByText('v9.9.9')).toBeDefined();
       expect(screen.getByTestId('peer-version-match')).toBeDefined();
     });
   });
@@ -708,7 +708,7 @@ describe('MeshPeersPage', () => {
     mockSyncPeersQuery.mockReturnValue({
       queryKey: ['sync-peers'],
       queryFn: vi.fn().mockResolvedValue({
-        peers: [makePeer({ machineId: 'node-new', peerVersion: 'v0.5.0' } as Partial<SyncPeer>)],
+        peers: [makePeer({ machineId: 'node-new', peerVersion: 'v10.0.0' } as Partial<SyncPeer>)],
       }),
     });
     renderPage();
@@ -749,13 +749,13 @@ describe('MeshPeersPage', () => {
       queryKey: ['sync-peers'],
       queryFn: vi.fn().mockResolvedValue({
         peers: [
-          makePeer({ machineId: 'a', peerVersion: 'v0.4.0' } as Partial<SyncPeer>),
-          makePeer({ machineId: 'b', peerVersion: 'v0.4.0' } as Partial<SyncPeer>),
+          makePeer({ machineId: 'a', peerVersion: 'v9.9.9' } as Partial<SyncPeer>),
+          makePeer({ machineId: 'b', peerVersion: 'v9.9.9' } as Partial<SyncPeer>),
         ],
       }),
     });
     renderPage();
-    await waitFor(() => expect(screen.getAllByText('v0.4.0').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText('v9.9.9').length).toBeGreaterThan(0));
     expect(screen.queryByTestId('mesh-drift-banner')).toBeNull();
   });
 
@@ -934,7 +934,7 @@ describe('MeshPeersPage', () => {
   // ---------------------------------------------------------------------------
 
   describe('peer-ahead badge', () => {
-    // LOCAL_SCHEMA_VERSION is pinned at 26 in mesh-version.ts. Tests stay
+    // LOCAL_SCHEMA_VERSION is pinned at 27 in mesh-version.ts. Tests stay
     // resilient by constructing peers relative to a clearly-ahead value.
     const AHEAD_SCHEMA = 99;
     const BEHIND_SCHEMA = 1;
@@ -1090,7 +1090,7 @@ describe('MeshPeersPage', () => {
       const title = badge.getAttribute('title') ?? '';
       expect(title).toContain('3 envelopes');
       expect(title).toContain('schema v42');
-      expect(title).toContain('your local v26');
+      expect(title).toContain('your local v27');
       expect(title).toContain('Update this control plane');
       // A11y: <output> has implicit role="status" — explicit attribute is
       // redundant per WAI-ARIA. We assert the tag + aria-label carry intent.
