@@ -1,340 +1,506 @@
 # Mesh Peering UX & Reliability Overhaul — §33.12
 
 > Created: 2026-04-16
+> Revised: 2026-04-16 (v3 — post-review rewrite)
 > Status: Planned
 > Priority: P0
 > Depends on: §33.7 (peer UX), §33.8 (bidirectional registration)
 
 ## Motivation
 
-Adding a mesh peer today requires SSH to each machine to set env vars (`TAILSCALE_IP`, `SYNC_PEER_REGISTRATION_TOKEN`), rebuild (`pnpm build`), restart PM2, then debug from the web UI. This conflicts with the project vision of **remote fleet management from iPhone/iPad**.
+Adding a mesh peer today requires SSH to each machine to set env vars (`TAILSCALE_IP`, `SYNC_PEER_REGISTRATION_TOKEN`), rebuild, restart PM2. A 2026-04-16 live fleet exercise (laptop + macmini) took ~2 hours of debugging for what should be a 30-second flow.
 
-### 2026-04-16 live fleet exercise (laptop + macmini) — post-mortem
+### Post-mortem: what broke, what's fixed, what's still open
 
 | Step | Failure | Root Cause | Fix | Still open? |
 |------|---------|------------|-----|-------------|
-| Discover peers | 0 candidates | `tailscale` binary not in macOS PATH | PR #599 added macOS binary path candidates to `resolveTailscaleBin()` | **No** — code fix shipped |
-| Add peer | ONE-WAY, no error | macmini PM2 `env` block shadowed `SYNC_PEER_REGISTRATION_TOKEN` | PR #596 added token to PM2 explicit env | **No** — but root cause persists: PM2 `env` blocks override `process.env`, so every new env var needs manual PM2 config updates |
-| Reverse registration | `INVALID_SYNC_URL` | `selfSyncUrl` was `http://localhost:8080` — no Tailscale IP wired | PR #602 added `TAILSCALE_IP` env → selfSyncUrl | **Partially** — requires manually setting `TAILSCALE_IP` in `.env.mesh` on each machine |
-| Version display | Stale version banner | `LOCAL_APP_VERSION` hardcoded in web bundle | PR #603 added `useLocalVersion()` fetching from `/api/version-compat` | **No** — `version-bump.sh` also updates the constant now |
-| Macmini reverse reg | Failed silently | `TAILSCALE_IP=127.0.0.1` in `.env.mesh` (human config error) | Manual sed fix on the machine | **Yes** — auto-detection would eliminate this class of error entirely |
+| Discover peers | 0 candidates | `tailscale` binary not in macOS PATH | PR #599 | **No** |
+| Add peer | ONE-WAY, no error | PM2 `env` block shadowed `SYNC_PEER_REGISTRATION_TOKEN` | PR #596 | **Structural** — PM2 env blocks override `process.env`; every new env var needs PM2 config update |
+| Reverse registration | `INVALID_SYNC_URL` | `selfSyncUrl` was `http://localhost:8080` | PR #602 | **Partial** — requires manually setting `TAILSCALE_IP` env var per machine |
+| Version display | Stale version banner | `LOCAL_APP_VERSION` hardcoded in web bundle | PR #603 | **Yes** — `version-bump.sh` updates the constant but doesn't `git add` it (line 124 omits `mesh-version.ts`) |
+| Macmini reverse reg | Failed silently | `TAILSCALE_IP=127.0.0.1` in `.env.mesh` (typo) | Manual sed fix | **Yes** — auto-detection would eliminate this; but env var override currently has highest priority, so a bad env still wins |
 
-**Key insight:** 4 of 5 failures were code bugs already fixed by PRs #596/#599/#602/#603. The remaining gap is **configuration brittleness** — operators must SSH to set env vars, and any typo (like `127.0.0.1` instead of the real Tailscale IP) fails silently. This plan targets that structural gap.
+**Key insight:** The mechanical flow (add → reverse register → report result) works. The remaining gap is **configuration brittleness** — operators must SSH to set env vars, and any typo fails silently. The deeper structural issues are: the registration token lives in env vars (not editable from web UI), self-identity is frozen at startup (can't change without restart), and reverse registration errors lose their structured error codes before reaching the frontend.
 
 ## Current State (what already works)
 
-Before scoping new work, acknowledge what the existing implementation handles:
+| Capability | Status | Location |
+|-----------|--------|----------|
+| selfSyncUrl from TAILSCALE_IP env var | Done | `index.ts:489-491` |
+| Tailscale binary resolution (macOS + Linux) | Done | `peer-discovery.ts:104-133` |
+| Peer discovery via `tailscale status --json` | Done | `GET /api/sync/peers/discover` |
+| Health probe before adding peer (gates Save, auto-fills identity) | Done | `MeshPeersPage.tsx:318-365` |
+| Reverse registration on add (result included in response) | Done | `sync-peers.ts:1050-1064` |
+| Reverse registration status in UI (toasts + "One-way" badge + Retry) | Done | `MeshPeersPage.tsx:416-423` |
+| Error persistence (status + error + timestamp) | Done | migration 0026 columns (raw SQL, not in Drizzle schema) |
+| Token validation (timing-safe SHA-256) | Done | `sync-peers.ts:207-211` |
+| Ed25519 signature auth (60s timestamp window) | Done | `peer-registration.ts` |
+| Rate limiting on registration | Done | 10 req/60s on `/register` |
+| Version observability per peer | Done | `/health` + mesh-peers version drift UI |
+| Probe/discover endpoints with SSRF protection | Done | `GET /api/sync/peers/probe`, `GET /api/sync/peers/discover` |
 
-| Capability | Status | Where |
-|-----------|--------|-------|
-| selfSyncUrl from TAILSCALE_IP env var | Done | `index.ts:489-491` — `TAILSCALE_IP` env → `CONTROL_PLANE_URL` fallback |
-| Tailscale binary resolution | Done | `peer-discovery.ts:104-133` — `resolveTailscaleBin()` with macOS/Linux candidates |
-| Peer discovery via Tailscale | Done | `GET /api/sync/peers/discover` — shells out to `tailscale status --json` |
-| Health probe before adding peer | Done | `MeshPeersPage.tsx:318-365` — probe gates Save, auto-fills machineId/hostname/publicKey |
-| Reverse registration on add | Done | `sync-peers.ts:1050-1064` — `tryReverseRegistration()` runs after local insert, result included in response |
-| Reverse registration status in UI | Done | `MeshPeersPage.tsx:416-423` — success/failure toasts after add; "One-way" badge + Retry button on rows |
-| Error persistence | Done | `reverse_registration_status`, `reverse_registration_error` columns in `sync_nodes` (migration 0026) |
-| Token validation (timing-safe) | Done | `sync-peers.ts:207-211` — SHA-256 + `timingSafeEqual` |
-| Ed25519 signature auth | Done | `peer-registration.ts` — 60s timestamp window, nonce, signature verification |
-| Version observability | Done | `/health` returns `appVersion`/`gitSha`/`schemaVersion`; mesh-peers shows per-peer version drift |
-| Probe/discover endpoints | Done | `GET /api/sync/peers/probe?target=<url>`, `GET /api/sync/peers/discover` |
-| Rate limiting on registration | Done | 10 req/60s on `/register` endpoint |
+## Architectural Constraints (CRITICAL — must respect these)
 
-**What's missing** (this plan's scope):
+These constraints were discovered during review and govern every design decision below:
 
-1. **Auto-detection of Tailscale IP** — currently requires manual `TAILSCALE_IP` env var per machine
-2. **DB-stored mesh config** — token/IP override live in env vars, requiring SSH + PM2 restart to change
-3. **Settings UI for mesh config** — operators cannot configure mesh identity from the web UI
-4. **Pre-flight token compatibility check** — probe checks reachability but not whether both sides have matching tokens
-5. **Actionable error messages** — backend returns descriptive error codes, but the frontend shows generic messages or raw error strings
-6. **Automatic retry** — failed reverse registrations require manual "Retry" click per peer
+### C1: `settings` table is mesh-synced — CANNOT store local mesh config there
 
-## Design Principles
+The `settings` table has a sync capture trigger (migration `0021:177-179`) that writes every row change to `sync_change_log` via `to_jsonb(NEW)` (line 99). The table is classified as `mutable` in `shared/types/sync.ts:164`.
 
-1. **Zero SSH for normal peering operations** — all config via web UI after initial install
-2. **Auto-detect, manual override** — `tailscale ip -4` auto-detect by default, explicit override available in Settings
-3. **Synchronous feedback** — the add-peer response already includes reverse registration status; extend this to surface actionable context
-4. **Progressive disclosure** — summary badge → expandable detail → actionable fix suggestion
-5. **DB config with env-var fallback** — env vars remain as overrides for headless/scripted setups; DB is the primary config path for web UI users
+**Consequence:** Storing `mesh_registration_token` in `settings` would:
+1. Sync the token to every peer via the change log — violating the security boundary
+2. Cause key collisions when two nodes write `mesh_tailscale_ip_override` (each machine's IP is different)
+3. Leak the raw token into `sync_change_log.payload` JSON
+
+**Decision:** New `mesh_local_config` table, explicitly excluded from sync triggers.
+
+### C2: Self-identity and registration token are frozen at startup
+
+`selfIdentity` is constructed once at `server.ts:801-808` and passed as a static object to the route plugin. `reverseRegistrationToken` is read from env at `server.ts:817-820`. Both are closed over in route handlers.
+
+**Consequence:** "Changes take effect immediately without restart" is impossible with the current architecture.
+
+**Decision:** Introduce a `MeshConfigProvider` that route handlers call on each request to resolve the current identity and token from DB → env → auto-detect. This is the prerequisite for making Settings → Mesh work.
+
+### C3: Reverse registration errors lose their structured error code
+
+`performReverseRegistration()` at `peer-reverse-registration.ts:144-153` receives the remote's JSON error response but squashes it to `HTTP ${status} ${statusText} ${bodySnippet}`. The original `error` code (e.g., `PEER_REGISTRATION_TOKEN_INVALID`) is buried inside the body snippet string.
+
+**Consequence:** The frontend `mapReverseRegistrationError(errorCode, ...)` mapping proposed in v2 is unimplementable — there is no structured `errorCode` to map.
+
+**Decision:** Change the backend contract first: parse the remote's JSON error response, extract `error` and `message` fields, persist them separately as `reverse_registration_error_code` + `reverse_registration_error`. Then the frontend can map codes.
+
+### C4: `/health` is public and rate-limit exempt
+
+`server.ts:269-271` puts `/health` on the rate-limit allowList. Adding `registrationEnabled: boolean` to `/health` would let attackers enumerate which nodes accept peer registration without rate limiting.
+
+**Decision:** Token/registration status goes on the authenticated `GET /api/mesh/config` endpoint, not `/health`.
+
+### C5: `version-bump.sh` doesn't `git add` mesh-version.ts
+
+Line 124 stages `packages/*/package.json packages/web/src/components/Sidebar.tsx CHANGELOG.md` but omits `packages/web/src/lib/mesh-version.ts`. The sed replacement (lines 69-76) runs but the file is left unstaged. Current `LOCAL_APP_VERSION` is `v0.5.1` while packages are at `0.5.6`.
 
 ## Scope
 
+### Phase 0: Fix Existing Bugs (P0, prerequisite)
+
+These are real bugs discovered during review that should be fixed before new feature work.
+
+#### 0.1 Fix `version-bump.sh` git add omission
+
+Add `packages/web/src/lib/mesh-version.ts` to the `git add` command at line 124:
+
+```bash
+# Before:
+git add packages/*/package.json packages/web/src/components/Sidebar.tsx CHANGELOG.md
+# After:
+git add packages/*/package.json packages/web/src/components/Sidebar.tsx packages/web/src/lib/mesh-version.ts CHANGELOG.md
+```
+
+Also update `LOCAL_APP_VERSION` to `v0.5.6` to match current packages.
+
+#### 0.2 Add reverse_registration columns to Drizzle schema
+
+Migration 0026 added `reverse_registration_status`, `reverse_registration_error`, `reverse_registration_at` to `sync_nodes`, but they are NOT declared in `packages/control-plane/src/db/schema.ts`. Route code bypasses Drizzle's type-safe query builder with a raw `SYNC_NODE_COLUMNS` SQL string (`sync-peers.ts:145`).
+
+Risk: `drizzle-kit push` or `drizzle-kit generate` would see these columns as "extra" and could drop them.
+
+Fix: Add the three columns to the `syncNodes` table definition in `schema.ts`. Then migrate the `SYNC_NODE_COLUMNS` raw SQL to use Drizzle's column references where feasible (may be incremental — the raw SQL is deeply embedded).
+
+#### 0.3 Deprecate old discover endpoint
+
+Two discover endpoints exist:
+- `GET /api/sync/discover` (`sync-discover.ts`) — no tag filtering, no health probe
+- `GET /api/sync/peers/discover` (`sync-peers.ts`) — tag:mesh-node filtering, health probes
+
+The old endpoint is strictly weaker. Mark it `@deprecated` in the schema, log a warning on use, plan removal in the next minor version.
+
 ### Phase 1: Tailscale IP Auto-Detection (P0)
 
-**Goal:** Eliminate the manual `TAILSCALE_IP` env var requirement. This is the #1 cause of peering failures (wrong IP, forgotten env var, PM2 env shadowing).
+**Goal:** Eliminate the manual `TAILSCALE_IP` env var for most setups.
 
 #### 1.1 Auto-detect Tailscale IP at CP startup
 
-**Current:** `selfSyncUrl` uses `TAILSCALE_IP` env var if set, otherwise falls back to `CONTROL_PLANE_URL` (often `http://localhost:8080`, which is unreachable from peers).
+New function `detectTailscaleIp()` in `peer-discovery.ts`:
+- Runs `tailscale ip -4` via existing `resolveTailscaleBin()`
+- Caches result for process lifetime
+- **Validates the result:** reject loopback (`127.0.0.0/8`), link-local (`169.254.0.0/16`), all-zeros, non-IPv4. Only accept Tailscale CGNAT range (`100.64.0.0/10`) or explicitly-allowed IPs.
+- Timeout: 3 seconds — if Tailscale is down/not installed, fall through gracefully
 
-**Change:** Insert `tailscale ip -4` auto-detection between the env var and the localhost fallback.
+Resolution chain with **env var validation**:
+1. `TAILSCALE_IP` env var — **but validate it**: if it resolves to loopback/link-local/all-zeros, log a warning and skip it (fall through to auto-detect). This prevents the `TAILSCALE_IP=127.0.0.1` failure class.
+2. `tailscale ip -4` auto-detect (cached)
+3. `CONTROL_PLANE_URL` (last resort)
 
-New resolution chain:
-1. `TAILSCALE_IP` env var (explicit override — highest priority)
-2. `tailscale ip -4` via existing `resolveTailscaleBin()` from `peer-discovery.ts`
-3. `CONTROL_PLANE_URL` env var (last resort)
-
-Implementation:
-- New function `detectTailscaleIp()` in `peer-discovery.ts` — runs `tailscale ip -4`, caches result for process lifetime (Tailscale IP doesn't change unless re-auth)
-- Called once during `buildServerOptions()` in `index.ts`
-- Log at startup: `info: selfSyncUrl resolved to http://100.113.212.131:8080 (source: tailscale-cli)` or `(source: env-var)` or `(source: control-plane-url-fallback)`
-- **Timeout:** 3 seconds for `tailscale ip -4` — if Tailscale is down or not installed, fall through gracefully
+Log at startup: `info: selfSyncUrl resolved to http://100.113.212.131:8080 (source: tailscale-cli)` / `(source: env-var)` / `(source: control-plane-url-fallback)` / `warn: TAILSCALE_IP=127.0.0.1 is loopback, falling through to auto-detect`
 
 Edge cases:
-- **Tailscale not installed:** `resolveTailscaleBin()` returns `'tailscale'` (PATH fallback), `execSync` throws → catch → fall through to `CONTROL_PLANE_URL`
-- **Tailscale installed but not connected:** `tailscale ip -4` exits non-zero → catch → fall through
-- **Docker containers:** Tailscale CLI typically not available inside containers → fall through to `CONTROL_PLANE_URL` (Docker deployments should set `TAILSCALE_IP` explicitly in compose env)
+- **Docker:** Tailscale CLI unavailable → fall through to `CONTROL_PLANE_URL` (Docker deploys should set `TAILSCALE_IP` explicitly)
+- **Tailscale not connected:** `tailscale ip -4` exits non-zero → catch → fall through
+- **Multiple Tailscale accounts:** `tailscale ip -4` returns the first IPv4 — acceptable for single-user fleet
 
-#### 1.2 Expose selfSyncUrl on `/health`
+#### 1.2 Expose selfSyncUrl on `/health` (no token status)
 
-**Current:** `/health` returns `machineId`, `nodePublicKey`, `appVersion`, `gitSha`, `schemaVersion`. Does NOT return `selfSyncUrl`.
-
-**Change:** Add `selfSyncUrl` and `selfSyncUrlSource` to the `/health` response. Useful for remote debugging and probe auto-fill.
-
+Add to `/health` response:
 ```typescript
-// Added to health response:
-selfSyncUrl?: string;             // e.g. "http://100.113.212.131:8080"
-selfSyncUrlSource?: string;       // "env-var" | "tailscale-cli" | "control-plane-url"
+selfSyncUrl?: string;              // "http://100.113.212.131:8080"
+selfSyncUrlSource?: string;        // "env-var" | "tailscale-cli" | "control-plane-url"
 ```
 
-This feeds into the existing probe flow — when machine A probes machine B's `/health`, machine A can show the resolved sync URL in the probe results.
+**Explicitly NOT adding:** `registrationEnabled` or any token-related field. `/health` is public and rate-limit exempt (C4). Token status belongs behind auth.
 
-### Phase 2: DB-Stored Mesh Config + Settings UI (P0)
+### Phase 2: Local-Only Mesh Config + Dynamic Provider (P0)
 
-**Goal:** All mesh configuration editable from the web UI. No env file editing, no PM2 restarts.
+**Goal:** All mesh configuration editable from the web UI without restart.
 
-#### 2.1 Extend `settings` table with mesh config keys
+#### 2.1 New `mesh_local_config` table (local-only, NOT synced)
 
-**Current:** The `settings` table exists (migration 0000) and is used for `default_account_id` and `failover_policy` via `GET/PUT /api/settings/defaults`.
+New migration: `0028_mesh_local_config.sql`
 
-**Change:** Store mesh config as rows in the existing `settings` table with a `mesh_` key prefix. No new migration needed — the `settings` table already supports arbitrary key/value pairs.
+```sql
+CREATE TABLE IF NOT EXISTS mesh_local_config (
+  key   TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- CRITICAL: NO sync trigger. This table is local-only by design.
+-- Each machine stores its own identity config; it must NOT replicate.
+COMMENT ON TABLE mesh_local_config IS
+  'Local-only mesh identity config. Intentionally excluded from sync triggers.';
+```
+
+Add to Drizzle schema. Add to the **sync exclusion list** if one exists, or document in `MESH_COMPAT.md` that this table is intentionally not synced.
 
 Keys:
-| Key | Type | Default | Purpose |
-|-----|------|---------|---------|
-| `mesh_tailscale_ip_override` | string \| null | null (auto-detect) | Manual Tailscale IP override |
-| `mesh_sync_url_override` | string \| null | null (derived from IP+port) | Manual sync URL override |
-| `mesh_registration_token` | string \| null | null (falls back to env var) | Bootstrap token for peer registration |
+| Key | Type | Purpose |
+|-----|------|---------|
+| `tailscale_ip_override` | string \| null | Manual Tailscale IP override |
+| `sync_url_override` | string \| null | Manual sync URL override |
+| `registration_token` | string \| null | Bootstrap token for peer registration |
 
-**Why not a new `mesh_config` table?** The settings table already exists, has CRUD endpoints, and adding 3 keys doesn't warrant a new migration + schema + API surface. Keep it simple.
+**Token storage:** Stored as cleartext (same security posture as the current env var approach — it's a shared bootstrap secret, not a user credential). The table is local-only, never enters `sync_change_log`.
 
-**Security:** The registration token is stored as-is (same as the current env var approach — it's a shared bootstrap secret, not a user credential). The `/api/settings` endpoints are already behind authentication. If the operator wants encryption at rest, they configure PG-level encryption — consistent with how `CREDENTIAL_ENCRYPTION_KEY` and other secrets are handled.
+#### 2.2 `MeshConfigProvider` — dynamic config resolution
 
-**Startup config resolution order** (for each setting):
-1. DB value (if non-null) — takes priority, editable from UI
-2. Env var (if set) — override for headless/scripted deploys
-3. Auto-detect / hardcoded default
+New module: `packages/control-plane/src/mesh/mesh-config-provider.ts`
 
-**Change propagation:** Token and IP override changes take effect on the next request that reads them. No restart required because:
-- Token: `getRegistrationToken()` already reads from config on each request — extend it to check DB first
-- IP override: cached in memory but `PUT /api/mesh/config` invalidates the cache
+```typescript
+type MeshConfig = {
+  tailscaleIp: string | null;
+  tailscaleIpSource: 'db' | 'env' | 'auto-detect' | null;
+  syncUrl: string;
+  syncUrlSource: 'db' | 'env' | 'derived';
+  registrationToken: string | null;
+  registrationTokenSource: 'db' | 'env' | null;
+};
 
-#### 2.2 `GET/PUT /api/mesh/config` endpoints
+class MeshConfigProvider {
+  constructor(private db: Database, private autoDetectedIp: string | null) {}
 
-New endpoints (separate from generic `/api/settings` to keep mesh config cohesive):
-
-- `GET /api/mesh/config` — returns current mesh identity + config:
-  ```typescript
-  {
-    machineId: string;
-    hostname: string;
-    tailscaleIp: string | null;       // resolved value
-    tailscaleIpSource: "db" | "env" | "auto-detect" | null;
-    syncUrl: string;                   // resolved value
-    syncUrlSource: "db" | "env" | "derived";
-    registrationTokenConfigured: boolean;  // never expose the actual token
-    registrationTokenSource: "db" | "env" | null;
-    publicKey: string | null;          // Ed25519 public key (truncated in UI, full here)
+  async resolve(): Promise<MeshConfig> {
+    // 1. Read mesh_local_config from DB
+    // 2. Merge with env vars (DB wins when non-null)
+    // 3. Apply auto-detected IP when both DB and env are null
+    // 4. Derive syncUrl from IP + PORT when no explicit override
   }
-  ```
-- `PUT /api/mesh/config` — update mesh settings:
-  ```typescript
-  {
-    tailscaleIpOverride?: string | null;   // null clears → revert to auto-detect
-    syncUrlOverride?: string | null;       // null clears → revert to derived
-    registrationToken?: string | null;     // null clears → falls back to env var
+
+  async update(changes: Partial<MeshConfigInput>): Promise<MeshConfig> {
+    // Upsert to mesh_local_config, return resolved config
   }
-  ```
-  - Validates IP format, URL format (same SSRF checks as peer URLs)
-  - Returns the resolved config after update (same shape as GET)
+}
+```
 
-#### 2.3 Settings → Mesh section in web UI
+**Integration:** Replace static `opts.selfIdentity` and `opts.reverseRegistrationToken` in route handlers with calls to `meshConfigProvider.resolve()`. This is the most invasive change — `tryReverseRegistration()`, `authorizePeerRegistration()`, and the `selfIdentity` construction in `server.ts` all need to read from the provider instead of closed-over static values.
 
-New "Mesh" tab or section on `/settings` page:
+**Approach:** Pass `meshConfigProvider` as a route option. On each reverse registration or inbound registration request, call `resolve()` to get the current config. The auto-detected IP is computed once at startup and cached in the provider; DB/env values are read per-request (the DB read is a single-row lookup by key — negligible cost).
 
-- **Machine ID** — read-only (from `/api/mesh/config`)
-- **Tailscale IP** — shows resolved value + source badge ("auto-detected" / "env override" / "manual override"), with editable input for manual override
-- **Sync URL** — shows resolved value + source badge, with editable input for manual override
-- **Registration Token** — password-masked input. Shows "Configured (from DB)" / "Configured (from env var)" / "Not configured" status. "Generate random" button creates a 32-byte hex token. "Copy" button for pasting to the other machine's Settings.
-- **Public Key** — read-only, truncated display + copy-to-clipboard
+#### 2.3 `GET/PUT /api/mesh/config` endpoints
 
-"Save" calls `PUT /api/mesh/config`, shows success/error toast. No restart required.
+These endpoints are **authenticated** (same auth as `/api/settings`).
 
-#### 2.4 Token management UX
+`GET /api/mesh/config`:
+```typescript
+{
+  machineId: string;
+  hostname: string;
+  tailscaleIp: string | null;
+  tailscaleIpSource: "db" | "env" | "auto-detect" | null;
+  syncUrl: string;
+  syncUrlSource: "db" | "env" | "derived";
+  registrationTokenConfigured: boolean;   // NEVER expose the actual token value
+  registrationTokenSource: "db" | "env" | null;
+  publicKey: string | null;
+}
+```
 
-- **Generate** button creates `crypto.randomBytes(32).toString('hex')` client-side
-- **Copy-to-clipboard** for pasting into the other machine's Settings UI
-- Warning banner if token is empty: "Registration token not set — reverse registration will be skipped when adding peers"
-- Warning if token changes while active peers exist: "Changing the token will break reverse registration with existing peers unless they update their token too"
+`PUT /api/mesh/config`:
+```typescript
+{
+  tailscaleIpOverride?: string | null;    // null = clear, revert to auto-detect
+  syncUrlOverride?: string | null;        // null = clear, revert to derived
+  registrationToken?: string | null;      // null = clear, fall back to env var
+}
+```
 
-### Phase 3: Add Peer Flow Improvements (P0)
+Validation:
+- IP: must be valid IPv4, reject loopback/link-local/all-zeros (same validation as Phase 1.1)
+- URL: same SSRF checks as peer URLs (`validateSyncUrl`)
+- Token: non-empty string if provided; allow null to clear
 
-**Goal:** Surface actionable context when peering fails. The mechanical flow (add locally → reverse register → report result) already works; the gap is error clarity and pre-flight validation.
+**Rate limiting:** Apply the global rate limit (not on the `/health` allowlist).
 
-#### 3.1 Pre-flight token compatibility check
+#### 2.4 Settings → Mesh section in web UI
 
-**Current:** The probe checks reachability and extracts identity, but doesn't verify token compatibility. An operator can successfully probe a peer, click Add, and then get a reverse registration failure because tokens don't match.
+New "Mesh" section on `/settings` page:
 
-**Change:** Add a token status indicator to the probe results:
+- **Machine ID** + **Hostname** — read-only
+- **Tailscale IP** — resolved value + source badge ("auto-detected" / "env override" / "manual"), editable input for override
+- **Sync URL** — resolved value + source badge, editable input for override
+- **Registration Token** — **write-only secret UX**:
+  - Shows status: "Configured (DB)" / "Configured (env var)" / "Not configured"
+  - Input field for entering a new token (never pre-filled with existing value)
+  - "Generate" button: creates `globalThis.crypto.getRandomValues(new Uint8Array(32))` → hex string (NOT `crypto.randomBytes` which is Node.js-only)
+  - "Copy" button: only available immediately after Generate or manual input, while the value is still in local component state. Once saved and the dialog closes, the raw token is no longer accessible (write-only).
+  - Clear button to remove DB token (falls back to env var)
+- **Public Key** — read-only, truncated + copy button
+- Warning if token not configured: "Registration token not set — adding this node as a peer on another machine will require manual retry after configuring a matching token on both sides."
+- Warning on token change: "Changing the token only affects future reverse registration attempts. Existing peer sync connections use Ed25519 key auth, not the bootstrap token."
 
-- New field in probe response: `registrationTokenConfigured: boolean` — whether the remote peer has a registration token set (derived from presence of the `/api/sync/peers/register` endpoint accepting requests vs returning 503)
-- In the Add Peer dialog, after a successful probe, show:
-  ```
-  ✓ Remote is reachable (v0.5.6, schema 27)
-  ✓ Registration token configured on remote
-  ──────────────────────────────────
-  [Add Peer]
-  ```
-  Or:
-  ```
-  ✓ Remote is reachable (v0.5.6, schema 27)
-  ✗ Remote has no registration token — reverse registration will fail
-  ──────────────────────────────────
-  [Add Peer Anyway]  [Open Settings → Mesh]
-  ```
+"Save" calls `PUT /api/mesh/config`, shows resolved config after save. No restart required (C2 resolved by MeshConfigProvider).
 
-Implementation: The probe endpoint (`GET /api/sync/peers/probe`) already calls the remote's `/health`. Extend it to also attempt a lightweight check against the remote's registration endpoint (e.g., `HEAD /api/sync/peers/register` or derive from a new `/health` field `registrationEnabled: boolean`). The simpler approach is adding `registrationEnabled` to the `/health` response — one extra boolean, no extra HTTP request during probe.
+### Phase 3: Structured Error Contract + Frontend Mapping (P0)
 
-#### 3.2 Actionable error messages for reverse registration
+**Goal:** Reverse registration failures show actionable, specific fix instructions in the UI.
 
-**Current:** The backend returns descriptive error codes (`PEER_REGISTRATION_DISABLED`, `PEER_REGISTRATION_TOKEN_INVALID`, etc.) with explanatory messages. But the frontend shows either a generic toast ("reverse registration failed — retry from the peer row") or the raw backend error string.
+#### 3.1 Preserve structured error codes from reverse registration
 
-**Change:** Map error codes to actionable, operator-friendly messages in the frontend:
+**Backend change** in `peer-reverse-registration.ts`:
 
-| Backend Error Code | Current Frontend Display | Improved Frontend Display |
-|---|---|---|
-| `PEER_REGISTRATION_DISABLED` | Raw: "Peer registration requires SYNC_PEER_REGISTRATION_TOKEN" | "Remote peer has no registration token configured. Open **Settings → Mesh** on the remote machine to set one." |
-| `PEER_REGISTRATION_TOKEN_MISSING` | Raw: "X-Sync-Registration-Token header is required" | "This node has no registration token configured. Open **Settings → Mesh** to set one." |
-| `PEER_REGISTRATION_TOKEN_INVALID` | Raw: "Peer registration token is invalid" | "Token mismatch — the tokens on this node and the remote peer don't match. Check **Settings → Mesh** on both machines." |
-| `INVALID_SYNC_URL` | Raw: "syncUrl must be a valid URL..." | "This node's Sync URL (`<url>`) is not reachable from the remote peer. Check **Settings → Mesh → Tailscale IP**." |
-| Connection refused | "Probe failed" | "Could not connect to `<url>`. Is the remote control plane running? Check `pm2 list` on the remote machine." |
-| Timeout | "Probe failed" | "Remote peer at `<url>` did not respond within 5 seconds. Check Tailscale connectivity: `tailscale ping <ip>`." |
+Currently `describeHttpError()` returns `HTTP ${status} ${statusText} ${bodySnippet}` — the remote's structured `error` code is buried in the snippet.
 
-Implementation: A `mapReverseRegistrationError(errorCode: string, errorMessage: string, context: { syncUrl?: string }): string` helper in a new `packages/web/src/lib/mesh-errors.ts`, called from both the add-peer success handler and the retry handler.
+Change: When the remote returns JSON with an `error` field, extract and preserve it:
 
-#### 3.3 Automatic retry with backoff for failed reverse registrations
+```typescript
+type ReverseRegistrationResult = {
+  status: 'ok' | 'failed';
+  error?: string;           // human-readable (existing)
+  errorCode?: string;       // NEW: e.g. "PEER_REGISTRATION_TOKEN_INVALID"
+  httpStatus?: number;      // NEW: e.g. 403
+};
+```
 
-**Current:** Failed reverse registrations require manual "Retry" click per peer row. No automatic retry.
+Persist to DB: Add `reverse_registration_error_code` column to `sync_nodes` (migration 0029, and add to Drizzle schema). Update `SYNC_NODE_COLUMNS` raw SQL and `mapSyncPeerRow`.
 
-**Change:** After a failed reverse registration (either on initial add or on manual retry), schedule automatic background retries on the **backend**:
+Update `SyncPeer` shared type to include `reverseRegistrationErrorCode?: string`.
 
-- Schedule: 30s → 60s → 120s → stop (3 retries, exponential backoff)
-- Implementation: In-memory retry queue in the CP process (not BullMQ — this is lightweight, transient state that doesn't need persistence across restarts)
-- On success: update `reverse_registration_status` to `'ok'`, clear retry state
-- On final failure: update status to `'failed'`, persist last error
-- Peer row in UI shows retry state: "Retrying (2/3, next in 45s)" via polling the peer list (already polls every 30s)
+#### 3.2 Frontend error-code-to-actionable-message mapping
 
-**Why backend, not frontend?**
-- Retries should happen even if the browser is closed
-- Frontend polling already refreshes peer status every 30s, so it'll pick up the result naturally
-- CP process restart clears the in-memory queue — acceptable because the operator can always manually retry from the UI
+New module: `packages/web/src/lib/mesh-errors.ts`
 
-### Phase 4: Operational Improvements (P1)
+```typescript
+export function describeReverseRegistrationError(
+  errorCode: string | null | undefined,
+  errorMessage: string | null | undefined,
+  context: { syncUrl?: string },
+): { title: string; action: string } {
+  switch (errorCode) {
+    case 'PEER_REGISTRATION_DISABLED':
+      return {
+        title: 'Remote has no registration token',
+        action: 'Ask the remote operator to configure a token in Settings → Mesh.',
+      };
+    case 'PEER_REGISTRATION_TOKEN_INVALID':
+      return {
+        title: 'Token mismatch',
+        action: 'The tokens on this node and the remote don\'t match. Check Settings → Mesh on both machines.',
+      };
+    case 'PEER_REGISTRATION_TOKEN_MISSING':
+      return {
+        title: 'No token configured locally',
+        action: 'Set a registration token in Settings → Mesh before adding peers.',
+      };
+    case 'INVALID_SYNC_URL':
+      return {
+        title: `Sync URL not reachable from remote`,
+        action: `This node's Sync URL (${context.syncUrl ?? 'unknown'}) cannot be reached by the remote peer. Check Settings → Mesh → Tailscale IP.`,
+      };
+    case 'PEER_REGISTRATION_INVALID_SIGNATURE':
+      return {
+        title: 'Signature verification failed',
+        action: 'The Ed25519 signature was rejected. This may indicate a clock skew >60s between nodes. Check system time on both machines.',
+      };
+    default:
+      return {
+        title: 'Reverse registration failed',
+        action: errorMessage ?? 'Check logs for details.',
+      };
+  }
+}
+```
 
-#### 4.1 Self-identity card on `/mesh-peers`
+Use in: add-peer success handler (`MeshPeersPage.tsx:416-423`), retry handler (`MeshPeersPage.tsx:1362-1382`), and the `ReverseRegistrationBadge` tooltip.
 
-**Current:** The operator must navigate between `/health` (to see their own identity) and `/mesh-peers` (to manage peers). No consolidated view of "who am I in this mesh?"
+#### 3.3 Pre-flight token status in probe
 
-**Change:** New `SelfIdentityCard` component at the top of `/mesh-peers`:
+Extend the existing probe flow to surface token compatibility **without putting token info on `/health`**.
 
-- **Machine ID** + **Hostname** — identifies this node
-- **Tailscale IP** — resolved value + source badge (auto-detect / env / manual override)
-- **Sync URL** — the URL other peers use to reach this node
-- **Public Key** — truncated + copy button
-- **Registration Token** — "Configured" / "Not configured" (link to Settings → Mesh if not configured)
+Approach: After the probe succeeds (remote is reachable), the Add Peer dialog makes a second lightweight request to the local CP:
 
-Data source: `GET /api/mesh/config` (from Phase 2.2). **If Phase 2 hasn't shipped yet**, read from `/health` (which already exposes machineId, nodePublicKey, and soon selfSyncUrl from Phase 1.2).
+`GET /api/mesh/config/preflight?targetSyncUrl=<url>`
 
-#### 4.2 Stale peer cleanup
+This endpoint:
+1. Reads local config: does this node have a registration token?
+2. Attempts a **non-mutating token check** against the remote: sends a minimal `POST /api/sync/peers/register` with a deliberately incomplete body (missing required fields like `machineId`) but WITH the token header. If the remote returns `PEER_REGISTRATION_TOKEN_INVALID` (403), tokens don't match. If it returns `PEER_REGISTRATION_DISABLED` (503), remote has no token. If it returns `INVALID_MACHINE_ID` (400), the token was accepted — tokens match.
+
+**Why this works:** The remote's `authorizePeerRegistration` checks token before body validation. A 400 "missing machineId" means the token gate passed. This avoids needing a new endpoint on the remote side (all existing nodes already have the registration endpoint).
+
+**Rate limiting:** The preflight counts toward the remote's registration rate limit (10/60s). Document this. The preflight is optional — operator can skip it and add the peer directly.
+
+Display in Add Peer dialog after probe:
+```
+✓ Remote is reachable (v0.5.6, schema 27)
+✓ Registration tokens compatible
+───────────────────────────────
+[Add Peer]
+```
+
+Or:
+```
+✓ Remote is reachable (v0.5.6, schema 27)
+✗ Token mismatch — check Settings → Mesh on both machines
+───────────────────────────────
+[Add Peer Anyway]  [Settings → Mesh]
+```
+
+### Phase 4: Backend Retry + Operational Improvements (P1)
+
+#### 4.1 Automatic retry with backoff
+
+After failed reverse registration, schedule retries on the **backend**:
+
+- Schedule: 30s → 60s → 120s → stop (3 retries)
+- Implementation: In-memory retry map in the CP process keyed by `peerId`
+  - `Map<string, { attempt: number; nextAt: number; timer: ReturnType<typeof setTimeout> }>`
+  - Manual retry via UI clears any pending automatic retry for that peer (dedup)
+  - Process restart clears the map — acceptable because the operator can manually retry
+- On success: update `reverse_registration_status` to `'ok'`, remove from retry map
+- On final failure: persist last error, remove from retry map
+
+**Observability:** Add transient fields to the peer list response when the retry map has an entry:
+```typescript
+// Added to SyncPeer response when a retry is in-flight:
+retryAttempt?: number;       // 1, 2, or 3
+retryMaxAttempts?: number;   // always 3
+retryNextAt?: string;        // ISO timestamp of next attempt
+```
+
+These come from the in-memory map, not the DB. If the CP restarts, these fields disappear — the row still shows `reverse_registration_status: 'failed'` and the operator can manually retry.
+
+Frontend: The peer row shows "Retrying (2/3, next in 45s)" when `retryAttempt` is present. The existing 30s poll interval will naturally pick up status changes.
+
+#### 4.2 Self-identity card on `/mesh-peers`
+
+New `SelfIdentityCard` component at the top of `/mesh-peers`:
+
+- Machine ID + Hostname
+- Tailscale IP + source badge
+- Sync URL
+- Public Key (truncated + copy)
+- Registration Token status + link to Settings → Mesh
+
+Data source: `GET /api/mesh/config` (Phase 2.3).
+
+#### 4.3 Stale peer cleanup
 
 - Peers with `last_seen` older than 7 days get a "Stale" badge
-- Bulk cleanup action: "Remove N stale peers"
-- No auto-removal — manual confirmation required (operators may intentionally have offline peers)
-
-#### 4.3 Version-bump script: keep `LOCAL_APP_VERSION` in sync
-
-**Current state:** `version-bump.sh` already updates `LOCAL_APP_VERSION` via sed (lines 69-76). The `useLocalVersion()` hook fetches the live value at runtime and uses the constant only as a loading-state fallback. This is working correctly.
-
-**Remaining issue:** The constant is currently `v0.5.1` but the repo is on `v0.5.1` — it's only stale when the operator forgets to run `version-bump.sh`. No code change needed; this is operational discipline.
-
-**Decision:** No code change. Document in QUICKSTART.md that `version-bump.sh` is the canonical release path and it handles all version constants.
+- Bulk cleanup action: "Remove N stale peers" (confirmation required)
+- No auto-removal — manual only
 
 ## Implementation Order
 
 ```
-Phase 1 (no prereqs — can start immediately)
-├── 1.1 Auto-detect Tailscale IP        [S: 1-3h]   ← highest impact / lowest effort
-└── 1.2 selfSyncUrl on /health          [XS: <1h]
+Phase 0: Bug fixes (can start immediately, independent)
+├── 0.1 Fix version-bump.sh git add      [XS: <1h]
+├── 0.2 Drizzle schema alignment          [S: 1-3h]
+└── 0.3 Deprecate old discover endpoint   [XS: <1h]
 
-Phase 2 (no prereqs — can start in parallel with Phase 1)
-├── 2.1 Settings table mesh config keys  [S: 1-3h]
-├── 2.2 GET/PUT /api/mesh/config         [M: 3-8h]   ← depends on 2.1
-├── 2.3 Settings → Mesh UI              [M: 3-8h]   ← depends on 2.2
-└── 2.4 Token management UX             [S: 1-3h]   ← depends on 2.3
+Phase 1: Auto-detection (no prereqs)
+├── 1.1 detectTailscaleIp() + validation  [S: 1-3h]  ← highest impact / lowest effort
+└── 1.2 selfSyncUrl on /health            [XS: <1h]
 
-Phase 3 (depends on Phase 2 for token-from-DB; probe improvements can start earlier)
-├── 3.1 Pre-flight token compat check   [S: 1-3h]   ← depends on 2.2 (for registrationEnabled on /health)
-├── 3.2 Actionable error messages        [S: 1-3h]   ← no prereqs (frontend-only mapping)
-└── 3.3 Retry with backoff              [M: 3-8h]   ← no prereqs (backend in-memory queue)
+Phase 2: DB config + dynamic provider (no prereqs, can parallel with Phase 1)
+├── 2.1 mesh_local_config table           [S: 1-3h]
+├── 2.2 MeshConfigProvider                [M: 3-8h]  ← most invasive change (refactor static opts)
+├── 2.3 GET/PUT /api/mesh/config          [S: 1-3h]  ← depends on 2.1, 2.2
+└── 2.4 Settings → Mesh UI               [M: 3-8h]  ← depends on 2.3
 
-Phase 4 (P1 — after core flow is solid)
-├── 4.1 Self-identity card              [S: 1-3h]   ← depends on 1.2 or 2.2
-├── 4.2 Stale peer cleanup             [S: 1-3h]   ← no prereqs
-└── 4.3 Version-bump constant          [—: no change needed]
+Phase 3: Error contract + mapping (depends on Phase 2 for preflight)
+├── 3.1 Structured error codes in backend [M: 3-8h]  ← no prereqs, can start early
+├── 3.2 Frontend error mapping            [S: 1-3h]  ← depends on 3.1
+└── 3.3 Pre-flight token check            [M: 3-8h]  ← depends on 2.3
+
+Phase 4: Retry + operational (P1, after core is solid)
+├── 4.1 Backend retry with backoff        [M: 3-8h]  ← depends on 3.1 (for structured errors)
+├── 4.2 Self-identity card                [S: 1-3h]  ← depends on 2.3
+└── 4.3 Stale peer cleanup               [S: 1-3h]  ← no prereqs
 ```
 
-**Critical path:** 1.1 → deploy to fleet → validates auto-detection. In parallel: 2.1 → 2.2 → 2.3 → 3.1.
+**Critical path:** Phase 0 (immediate) → Phase 1.1 (deploy to fleet) → Phase 2.1-2.2 (provider refactor) → Phase 2.3-2.4 (Settings UI) → Phase 3.
 
-**Total estimated effort:** ~25-45 hours across all phases.
+**Parallelizable:** Phase 0 || Phase 1 || Phase 2.1-2.2 || Phase 3.1 can all run concurrently.
+
+**Total estimated effort:** ~35-55 hours across all phases.
 
 ## Testing Strategy
 
-Each phase must include tests before merge:
+| Item | Unit Tests | Integration Tests | E2E (Playwright) |
+|------|-----------|------------------|-------------------|
+| 0.1 version-bump.sh | Shell test: run script, verify mesh-version.ts staged | — | — |
+| 0.2 Drizzle schema | Compile check: Drizzle types include reverse_registration fields | — | — |
+| 0.3 Deprecate discover | Route test: old endpoint returns deprecation warning header | — | — |
+| 1.1 Auto-detect IP | `detectTailscaleIp()`: mocked exec (installed/not-installed/timeout/loopback-rejected) | — | — |
+| 1.2 /health selfSyncUrl | Health route: assert `selfSyncUrl` and `selfSyncUrlSource` in response | — | — |
+| 2.1 mesh_local_config | — | Verify table NOT in sync trigger list; `INSERT` does not create `sync_change_log` entry | — |
+| 2.2 MeshConfigProvider | `resolve()`: DB > env > auto-detect priority; `update()`: writes to mesh_local_config | Config change reflected in next `tryReverseRegistration()` without restart | — |
+| 2.3 /api/mesh/config | GET/PUT validation, auth required, rate limited, token never in GET response | — | — |
+| 2.4 Settings → Mesh | — | — | Render, edit IP, generate token (browser `crypto.getRandomValues`), save, verify source badges |
+| 3.1 Structured errors | `performReverseRegistration()`: errorCode/httpStatus extracted from remote JSON | Reverse reg with wrong token → `errorCode: 'PEER_REGISTRATION_TOKEN_INVALID'` persisted | — |
+| 3.2 Error mapping | `describeReverseRegistrationError()` for each known code | — | Add peer with bad token shows actionable message in UI |
+| 3.3 Preflight | Preflight endpoint: token match (400 from remote), mismatch (403), missing (503) | — | Probe + preflight shows token status in Add Peer dialog |
+| 4.1 Retry | Retry map: schedule/backoff/max-attempts/success-stops/manual-clears-auto/dedup | — | — |
+| 4.2 Identity card | — | — | `/mesh-peers` shows self-identity card with correct values |
+| 4.3 Stale cleanup | — | — | Stale badge renders for >7d peer, bulk cleanup |
 
-| Phase | Unit Tests | Integration Tests | E2E (Playwright) |
-|-------|-----------|------------------|-------------------|
-| 1.1 Auto-detect | `detectTailscaleIp()` with mocked `execSync` (installed/not-installed/timeout) | — | — |
-| 1.2 /health selfSyncUrl | Health route handler test asserting new fields | — | — |
-| 2.1-2.2 Config API | `GET/PUT /api/mesh/config` with DB assertions | Config resolution order (DB > env > auto-detect) | — |
-| 2.3-2.4 Settings UI | — | — | Settings → Mesh render, edit, save, generate token |
-| 3.1 Token compat | Probe response shape test with registrationEnabled | — | Add peer dialog shows token status after probe |
-| 3.2 Error messages | `mapReverseRegistrationError()` unit tests for each code | — | Add peer with bad token shows actionable message |
-| 3.3 Retry | Retry queue unit tests (schedule, backoff, max attempts, success stops retries) | — | — |
-| 4.1 Identity card | — | — | `/mesh-peers` shows self-identity card with correct values |
-| 4.2 Stale cleanup | — | — | Stale badge renders, bulk cleanup action |
+**Critical test: sync isolation** — Integration test must verify that writing to `mesh_local_config` does NOT produce a `sync_change_log` entry. This is the most important test in the entire plan.
 
 ## Migration & Upgrade Path
 
-**Existing env-var deployments (the current fleet) are unaffected:**
-
-1. Env vars continue to work as before. DB config is checked first, but if no DB values are set, the env var chain kicks in exactly as today.
-2. After upgrading, the operator can optionally move to DB config by visiting Settings → Mesh and saving values there. Once saved to DB, the env vars become optional overrides.
-3. If an operator sets a value in both DB and env var, **DB wins** (the UI-configured value takes priority). The Settings UI shows the source ("from DB" / "from env var") so there's no ambiguity.
-4. To revert to env-var-only config: clear the DB values via Settings → Mesh (set fields to empty), and the env vars take over again.
+1. **Existing env-var deployments (current fleet) are unaffected.** Env vars continue to work. The `MeshConfigProvider` checks DB first, then env, then auto-detect. If no DB values exist, behavior is identical to today.
+2. **Bad TAILSCALE_IP values are now warned.** Phase 1.1 validates env var values and falls through to auto-detect when they're loopback/link-local. Operators see a startup warning log.
+3. **Opt-in migration to DB config.** After upgrading, operators can visit Settings → Mesh and save values. Once in DB, the env vars become optional overrides (DB wins when non-null).
+4. **Reverting to env-only.** Clear DB values via Settings → Mesh (set to empty/null). Env vars take over.
+5. **Token transition.** Changing the token in Settings → Mesh only affects future reverse registration attempts. Existing sync channels use Ed25519 peer auth, not the bootstrap token. No disruption to active sync.
 
 ## Non-Goals
 
-- **mDNS / Bonjour discovery** — Tailscale already provides discovery; no second layer needed
-- **Certificate-based mutual auth** — Ed25519 signatures + Tailscale WireGuard are sufficient
-- **Multi-hop proxy** — all peers must be directly reachable via Tailscale
-- **Automatic token distribution** — the operator must explicitly share the token between machines (security boundary)
-- **Mesh health dashboard (replication lag, conflict rate charts)** — useful but large scope (L effort); better as its own §33.13 item
-- **Bidirectional connection test** — valuable but requires the remote to probe back to this node, which is a complex networking feature; defer to §33.13
+- **Mesh health dashboard (replication lag, conflict rate charts)** — useful but L-effort; track as §33.13
+- **Bidirectional connection test (remote probes back to this node)** — complex networking; track as §33.13
+- **mDNS / Bonjour discovery** — Tailscale already provides discovery
+- **Certificate-based mutual auth** — Ed25519 + Tailscale WireGuard sufficient
+- **Automatic token distribution** — operator must explicitly share the token (security boundary)
+- **Token encryption at rest in PostgreSQL** — same security posture as env vars; if the operator wants encryption at rest, configure PG-level TDE
+
+## Deferred Work (related but out of scope)
+
+- **Update stale §33.7-33.11 plan documents** — Review found 6+ features marked "undelivered" that are actually shipped. Separate docs-only PR.
+- **Two-node test fixture (shared)** — Both §33.8 and §33.11 need this. Design once, share.
+- **Old discover endpoint removal** — Phase 0.3 deprecates it; actual removal in a future minor version after confirming no consumers.
 
 ## Success Criteria
 
-1. A new operator can add a peer **entirely from the web UI** — no SSH, no env files, no PM2 restarts (assuming initial install is done)
-2. "Discover → Add → Bidirectional" takes **< 30 seconds** with clear success/failure feedback at every step
-3. Every reverse registration failure shows an **actionable error message** pointing to the specific fix (Settings → Mesh, check token, check Tailscale connectivity)
-4. Tailscale IP is **auto-detected** — the `TAILSCALE_IP` env var becomes an optional override only
-5. The operator can see their **node identity** (machine ID, sync URL, token status) from the web UI without SSH
+1. A new operator can add a peer **entirely from the web UI** — no SSH, no env files, no PM2 restarts (after initial install)
+2. `TAILSCALE_IP=127.0.0.1` in an env file **does not break peering** — auto-detection falls through with a warning
+3. Every reverse registration failure shows the **specific error code** and an **actionable fix instruction** pointing to Settings → Mesh or a specific diagnostic step
+4. Mesh config stored in `mesh_local_config` **never appears in `sync_change_log`** — verified by integration test
+5. The operator can see their node identity and change their registration token from the web UI, with changes taking effect **without CP restart**
