@@ -3,6 +3,22 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.7.0] — 2026-04-16
+
+Security findings management UI, empty state standardization, responsive graph dimensions, memory deletion confirmation dialog, DeploymentView and ConflictsPage test coverage
+
+### Changes
+
+- 1c798720 fix(web): standardize empty states across list views (#636)
+- 80f35fe6 test(web): add ConflictsPage unit tests (#640)
+- bdbafb97 test(web): add DeploymentView unit tests (#639)
+- 7b25b39f fix(memory): make memory browser work without LITELLM_URL (#641)
+- 97e814cd fix(cp): use shared DEFAULT_WORKER_PORT constant and fix response ordering (#638)
+- 9d91e2e9 docs: sync roadmap for PRs #631-#636 and mark §33.12 Phase 2 delivered (#637)
+- 03e116a0 feat(web): add security findings management UI (#635)
+- 7d3b0cef fix(web): responsive graph dimensions and accessibility improvements (#634)
+
+
 ## [0.6.1] — 2026-04-16
 
 Fix pgPool availability for memory import routes
