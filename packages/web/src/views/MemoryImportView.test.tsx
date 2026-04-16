@@ -2,14 +2,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockUseQuery, mockImportStatusQuery, mockStartMutate, mockCancelMutate, mockPreviewMutate } =
-  vi.hoisted(() => ({
-    mockUseQuery: vi.fn(),
-    mockImportStatusQuery: vi.fn(),
-    mockStartMutate: vi.fn(),
-    mockCancelMutate: vi.fn(),
-    mockPreviewMutate: vi.fn(),
-  }));
+const {
+  mockUseQuery,
+  mockImportStatusQuery,
+  mockStartMutate,
+  mockCancelMutate,
+  mockPreviewMutate,
+} = vi.hoisted(() => ({
+  mockUseQuery: vi.fn(),
+  mockImportStatusQuery: vi.fn(),
+  mockStartMutate: vi.fn(),
+  mockCancelMutate: vi.fn(),
+  mockPreviewMutate: vi.fn(),
+}));
 
 vi.mock('@tanstack/react-query', async () => {
   const actual =
