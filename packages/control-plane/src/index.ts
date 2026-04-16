@@ -486,7 +486,9 @@ async function main(): Promise<void> {
     machineId,
     syncPublicKey: dispatchSigningKeyPair?.publicKey,
     syncSigningSecretKey: dispatchSigningKeyPair?.secretKey,
-    selfSyncUrl: CONTROL_PLANE_URL,
+    selfSyncUrl: process.env.TAILSCALE_IP
+      ? `http://${process.env.TAILSCALE_IP}:${PORT}`
+      : CONTROL_PLANE_URL,
     selfHostname: (await import('node:os')).hostname(),
     selfTailscaleIp: process.env.TAILSCALE_IP ?? null,
     reverseRegistrationToken:
