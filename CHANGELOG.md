@@ -3,6 +3,15 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.5.3] — 2026-04-16
+
+peer update proxy — sign and forward to remote peers
+
+### Changes
+
+- a9f4eeec fix(mesh): peer update proxy — sign and forward to remote peers (33.11) (#598)
+
+
 ## [0.5.2] — 2026-04-16
 
 PM2 sync peer token passthrough + stale LOCAL_APP_VERSION fix
