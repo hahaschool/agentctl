@@ -136,6 +136,14 @@ export function Sidebar(): React.JSX.Element {
   const { status: wsStatus } = useWebSocket({
     onOpen: () => {
       if (wasConnectedRef.current) {
+        // Events may have been missed while disconnected — refresh
+        // all dashboard-visible data so stale state is replaced.
+        queryClient.invalidateQueries({ queryKey: ['agents'] });
+        queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        queryClient.invalidateQueries({ queryKey: ['runtime-sessions'] });
+        queryClient.invalidateQueries({ queryKey: ['machines'] });
+        queryClient.invalidateQueries({ queryKey: ['metrics'] });
+        queryClient.invalidateQueries({ queryKey: ['health'] });
         toast.success('Reconnected to control plane');
       }
       wasConnectedRef.current = true;
