@@ -72,30 +72,41 @@ export type SyncPeerCursors = {
 };
 
 /**
- * §33.7 — Tailscale peer discovery candidate. Returned by `GET /api/sync/discover`.
- * When the Tailscale CLI is not available (typical in CI / dev) the backend
- * returns an empty list with `source: "none"`.
+ * §33.7 — Enriched Tailscale peer discovery candidate. Returned by
+ * `GET /api/sync/peers/discover`. Each entry includes the result of probing
+ * the candidate's `/health` endpoint so the UI can show reachability and
+ * identity metadata inline.
  */
 export type DiscoverCandidate = {
   hostname: string;
   tailscaleIp: string;
-  candidateSyncUrl: string;
+  syncUrl: string;
+  reachable: boolean;
+  machineId: string | null;
+  nodePublicKey: string | null;
+  appVersion: string | null;
+  schemaVersion: number | null;
+  error: string | null;
 };
 
 export type DiscoverSyncPeersResponse = {
   peers: DiscoverCandidate[];
   source: 'tailscale' | 'none';
-  message?: string;
 };
 
 /**
- * §33.7 — Response from `POST /api/sync/probe`. A lightweight pre-flight
- * probe used by the add-peer dialog to validate a sync URL before persisting.
+ * §33.7 — Response from `GET /api/sync/peers/probe?target=...`. A lightweight
+ * pre-flight probe used by the add-peer dialog to validate a sync URL before
+ * persisting. SSRF-validated on the backend side.
  */
 export type ProbeSyncUrlResponse = {
   reachable: boolean;
+  syncUrl: string;
   statusCode?: number;
+  machineId?: string;
+  nodePublicKey?: string;
   appVersion?: string;
+  gitSha?: string;
   schemaVersion?: number;
   error?: string;
 };
@@ -232,16 +243,13 @@ export const syncApi = {
    * §33.7 — Return a list of candidate Tailscale peers the operator could add.
    * Read-only; no DB writes. Empty when the Tailscale CLI is not available.
    */
-  discoverSyncPeers: () => request<DiscoverSyncPeersResponse>('/api/sync/discover'),
+  discoverSyncPeers: () => request<DiscoverSyncPeersResponse>('/api/sync/peers/discover'),
 
   /**
-   * §33.7 — Probe a candidate sync URL's `/health` endpoint before persisting
-   * it via `upsertSyncPeer`. Returns a boolean + lightweight diagnostics so the
-   * add-peer dialog can gate its Save button.
+   * §33.7 — Probe a single candidate target (hostname, IP, or URL) and return
+   * `/health` identity + version metadata. Used by the add-peer dialog's Probe
+   * button to auto-fill `machineId`/`publicKey`/`syncUrl` before saving.
    */
-  probeSyncUrl: (syncUrl: string) =>
-    request<ProbeSyncUrlResponse>('/api/sync/probe', {
-      method: 'POST',
-      body: JSON.stringify({ syncUrl }),
-    }),
+  probeSyncUrl: (target: string) =>
+    request<ProbeSyncUrlResponse>(`/api/sync/peers/probe?target=${encodeURIComponent(target)}`),
 };
