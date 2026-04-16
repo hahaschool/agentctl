@@ -828,6 +828,7 @@ export async function createServer({
         prefix: '/api/sync/peers',
         db,
         selfMachineId: machineId,
+        signingSecretKey: syncSigningSecretKey ?? null,
       });
     }
 

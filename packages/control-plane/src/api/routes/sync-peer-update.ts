@@ -18,9 +18,12 @@ import { fileURLToPath } from 'node:url';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 
+import { sql } from 'drizzle-orm';
+
 import { getAppVersion } from '../../build-info.js';
 import type { Database } from '../../db/index.js';
-import { verifyPeerSignature } from '../../sync/peer-auth.js';
+import { extractRows } from '../../db/index.js';
+import { createPeerSignedHeader, verifyPeerSignature } from '../../sync/peer-auth.js';
 import { loadKnownPeers } from '../../sync/sync-auth.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
@@ -29,6 +32,7 @@ const SCRIPT_RELATIVE_PATH = '../../../../scripts/peer-update.sh';
 const DEFAULT_SCRIPT_PATH = path.resolve(CURRENT_FILE_DIR, SCRIPT_RELATIVE_PATH);
 const DEFAULT_PM2_ECOSYSTEM = 'agentctl-beta';
 const OUTPUT_TAIL_BYTES = 4_096;
+const PROXY_TIMEOUT_MS = 120_000;
 const PEER_UPDATE_RATE_LIMIT = {
   max: 10,
   timeWindow: 60_000,
@@ -42,7 +46,10 @@ export type PeerUpdateErrorCode =
   | 'PEER_UPDATE_NOT_LOCAL'
   | 'PEER_UPDATE_IN_PROGRESS'
   | 'PEER_UPDATE_SCRIPT_FAILED'
-  | 'PEER_UPDATE_HEALTH_TIMEOUT';
+  | 'PEER_UPDATE_HEALTH_TIMEOUT'
+  | 'PEER_UPDATE_PROXY_FAILED'
+  | 'PEER_UPDATE_PROXY_NO_URL'
+  | 'PEER_UPDATE_PROXY_NO_KEY';
 
 export type PeerUpdateError = {
   error: PeerUpdateErrorCode;
@@ -68,6 +75,10 @@ export type RunScriptFn = (opts: {
 export type SyncPeerUpdateRoutesOptions = {
   db: Database;
   selfMachineId: string;
+  /** Ed25519 secret key for signing forwarded update requests to remote peers. */
+  signingSecretKey?: string | null;
+  /** Injected fetch for tests. */
+  fetchImpl?: typeof fetch;
   runScript?: RunScriptFn;
   scriptPath?: string;
   pm2Ecosystem?: string;
@@ -96,6 +107,97 @@ function errorResponse(code: PeerUpdateErrorCode, message: string): PeerUpdateEr
 function tailBytes(value: string, maxBytes: number): string {
   if (value.length <= maxBytes) return value;
   return value.slice(value.length - maxBytes);
+}
+
+type SyncNodeRow = {
+  id: string;
+  sync_url: string | null;
+  is_self: boolean;
+};
+
+/**
+ * Proxy a `/:peerId/update` request to a remote peer by signing it with
+ * `createPeerSignedHeader` and forwarding to the peer's `syncUrl`.
+ * This is the path taken when the local web UI clicks "Update" on a
+ * remote peer row — the browser calls the local CP, which then signs
+ * and forwards to the remote CP.
+ */
+async function proxyUpdateToRemotePeer(
+  peerId: string,
+  db: Database,
+  selfMachineId: string,
+  signingSecretKey: string | null,
+  fetchImpl: typeof fetch,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<FastifyReply> {
+  if (!signingSecretKey) {
+    return reply.code(503).send(
+      errorResponse(
+        'PEER_UPDATE_PROXY_NO_KEY',
+        'Cannot forward update — signing key not configured on this node',
+      ),
+    );
+  }
+
+  const result = await db.execute(
+    sql`SELECT id, sync_url, is_self FROM sync_nodes WHERE id = ${peerId} AND NOT is_self LIMIT 1`,
+  );
+  const rows = extractRows<SyncNodeRow>(result);
+  const peer = rows[0];
+
+  if (!peer?.sync_url) {
+    return reply.code(404).send(
+      errorResponse(
+        'PEER_UPDATE_PROXY_NO_URL',
+        `Peer '${peerId}' not found or has no syncUrl configured`,
+      ),
+    );
+  }
+
+  const targetPath = `/api/sync/peers/${encodeURIComponent(peerId)}/update`;
+  const body = JSON.stringify({});
+  const authHeader = createPeerSignedHeader(
+    selfMachineId,
+    'POST',
+    targetPath,
+    body,
+    signingSecretKey,
+  );
+
+  const targetUrl = `${peer.sync_url.replace(/\/+$/, '')}${targetPath}`;
+
+  try {
+    const upstream = await fetchImpl(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Sync-Auth': authHeader,
+      },
+      body,
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+    });
+
+    const responseBody = await upstream.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(responseBody);
+    } catch {
+      parsed = { raw: responseBody };
+    }
+
+    return reply.code(upstream.status).send(parsed);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : String(err);
+    request.log.error({ err, peerId, targetUrl }, 'peer-update proxy failed');
+    return reply.code(502).send(
+      errorResponse(
+        'PEER_UPDATE_PROXY_FAILED',
+        `Failed to reach peer: ${message}`,
+      ),
+    );
+  }
 }
 
 /**
@@ -180,6 +282,8 @@ export const syncPeerUpdateRoutes: FastifyPluginAsync<SyncPeerUpdateRoutesOption
   const {
     db,
     selfMachineId,
+    signingSecretKey = null,
+    fetchImpl = globalThis.fetch,
     runScript = defaultRunScript,
     scriptPath = DEFAULT_SCRIPT_PATH,
     pm2Ecosystem = process.env.AGENTCTL_PM2_ECOSYSTEM ?? DEFAULT_PM2_ECOSYSTEM,
@@ -208,33 +312,36 @@ export const syncPeerUpdateRoutes: FastifyPluginAsync<SyncPeerUpdateRoutesOption
     errorResponseBuilder: peerUpdateRateLimitError,
   });
 
-  const authorizePeerUpdate = async (request: FastifyRequest, reply: FastifyReply) => {
-    const authorized = await authorize(request, reply, db);
-    if (!authorized) return reply;
-  };
-
   app.post<{ Params: { peerId: string } }>(
     '/:peerId/update',
     {
       schema: {
         tags: ['sync'],
-        summary: 'Trigger a self-update on the local mesh peer',
+        summary:
+          'Trigger a peer update — runs locally when peerId matches self, proxies to remote peer otherwise',
       },
       config: { rateLimit: peerUpdateFastifyRateLimit },
-      preHandler: [app.rateLimit(peerUpdateFastifyRateLimit), authorizePeerUpdate],
+      preHandler: [app.rateLimit(peerUpdateFastifyRateLimit)],
     },
     async (request, reply) => {
       const { peerId } = request.params;
+
+      // ── Remote peer: sign and forward ───────────────────────────────
       if (peerId !== selfMachineId) {
-        return reply
-          .code(404)
-          .send(
-            errorResponse(
-              'PEER_UPDATE_NOT_LOCAL',
-              `Peer id '${peerId}' does not match the local machine id`,
-            ),
-          );
+        return proxyUpdateToRemotePeer(
+          peerId,
+          db,
+          selfMachineId,
+          signingSecretKey,
+          fetchImpl,
+          request,
+          reply,
+        );
       }
+
+      // ── Local self-update: verify X-Sync-Auth first ─────────────────
+      const authorized = await authorize(request, reply, db);
+      if (!authorized) return reply;
 
       if (updateInFlight) {
         return reply
