@@ -105,7 +105,7 @@ export function TakeoverPanel({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-[#0a0a0a]"
+      className="fixed inset-0 z-50 flex flex-col bg-[var(--color-terminal-bg)]"
       role="dialog"
       aria-modal="true"
       aria-label="Interactive Takeover Terminal"

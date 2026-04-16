@@ -107,9 +107,9 @@ describe('InteractiveTerminal', () => {
     expect(container.firstChild).toBeDefined();
   });
 
-  it('has the terminal container with bg-[#0a0a0a] class', () => {
+  it('has the terminal container with theme-aware background class', () => {
     const { container } = render(<InteractiveTerminal machineId="m1" terminalId="t1" />);
-    const termDiv = container.querySelector('.bg-\\[\\#0a0a0a\\]');
+    const termDiv = container.querySelector('.bg-\\[var\\(--color-terminal-bg\\)\\]');
     expect(termDiv).toBeDefined();
     expect(termDiv).not.toBeNull();
   });
