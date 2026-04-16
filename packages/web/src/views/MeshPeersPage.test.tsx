@@ -87,6 +87,7 @@ vi.mock('@/lib/queries', () => ({
   useUpdateSyncPeer: () => mockUseUpdateSyncPeer(),
   useRegisterReverseSyncPeer: () => mockUseRegisterReverseSyncPeer(),
   useProbeSyncUrl: () => mockUseProbeSyncUrl(),
+  useDiscoverSyncPeers: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // ---------------------------------------------------------------------------

@@ -34,6 +34,7 @@ import {
 import { MAX_SYNC_URL_LENGTH, URL_LENGTH_COUNTER_THRESHOLD } from '@/lib/ui-constants';
 import { cn } from '@/lib/utils';
 
+import { DiscoverPeersDialog } from './mesh/DiscoverPeersDialog';
 import { MeshHealthSummary } from './mesh/MeshHealthSummary';
 import { MeshVersionBanner } from './mesh/MeshVersionBanner';
 
@@ -92,6 +93,19 @@ function isValidHttpUrl(value: string): boolean {
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
+}
+
+/**
+ * §33.7 — Extract the hostname portion from a URL so the add-peer dialog can
+ * auto-fill the Hostname field after a successful probe. Returns null when
+ * the URL is not parseable.
+ */
+function deriveHostnameFromUrl(url: string): string | null {
+  try {
+    return new URL(url).hostname || null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +261,9 @@ type ProbeState =
       syncUrl: string;
       appVersion: string | null;
       statusCode: number | null;
+      /** §33.7 — Identity fields returned by probe for auto-fill. */
+      machineId: string | null;
+      nodePublicKey: string | null;
     }
   | {
       kind: 'failure';
@@ -304,12 +321,29 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
     probeMutation.mutate(trimmedSyncUrl, {
       onSuccess: (result) => {
         if (result.reachable) {
+          const probedMachineId = result.machineId ?? null;
+          const probedPublicKey = result.nodePublicKey ?? null;
           setProbeState({
             kind: 'success',
             syncUrl: trimmedSyncUrl,
             appVersion: result.appVersion ?? null,
             statusCode: result.statusCode ?? null,
+            machineId: probedMachineId,
+            nodePublicKey: probedPublicKey,
           });
+          // §33.7 — Auto-fill form fields from probe identity data. Only
+          // fill empty fields so we don't clobber manual operator input.
+          setState((prev) => ({
+            ...prev,
+            machineId: prev.machineId.trim() ? prev.machineId : (probedMachineId ?? ''),
+            publicKey: prev.publicKey.trim() ? prev.publicKey : (probedPublicKey ?? ''),
+            // Derive hostname from the sync URL host when the field is empty.
+            hostname: prev.hostname.trim()
+              ? prev.hostname
+              : (deriveHostnameFromUrl(trimmedSyncUrl) ?? ''),
+            // Use the canonical sync URL returned by the probe when available.
+            syncUrl: result.syncUrl ?? prev.syncUrl,
+          }));
         } else {
           setProbeState({
             kind: 'failure',
@@ -465,13 +499,20 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
                     setProbeState({ kind: 'idle' });
                     setProbeOverridden(false);
                   }}
+                  onFocus={() => {
+                    // §33.7 — Pre-fill `http://` when the field is empty on
+                    // focus so the operator sees the expected scheme prefix.
+                    if (state.syncUrl.trim().length === 0) {
+                      setState((p) => ({ ...p, syncUrl: 'http://' }));
+                    }
+                  }}
                   aria-invalid={syncUrlTooLong || undefined}
                   aria-describedby={
                     syncUrlTooLong
                       ? 'mesh-peer-sync-url-error'
                       : showSyncUrlCounter
                         ? 'mesh-peer-sync-url-counter'
-                        : undefined
+                        : 'mesh-peer-sync-url-hint'
                   }
                   className={cn(
                     'flex-1 bg-muted border rounded-md text-xs px-2 py-1.5 font-mono text-foreground',
@@ -484,7 +525,7 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
                   onClick={handleProbe}
                   disabled={!canProbe}
                   data-testid="mesh-peer-probe"
-                  title="Probe the peer's /health endpoint"
+                  title="Probe the peer's /health endpoint and auto-fill identity fields"
                   className={cn(
                     'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors whitespace-nowrap',
                     'border-border bg-muted hover:bg-accent/10 text-foreground',
@@ -501,6 +542,7 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
                 >
                   Reachable{probeState.statusCode ? ` (HTTP ${probeState.statusCode})` : ''}
                   {probeState.appVersion ? ` — peer v${probeState.appVersion}` : ''}
+                  {probeState.machineId ? ' — fields auto-filled' : ''}
                 </p>
               )}
               {probeMatchesCurrentUrl && probeState.kind === 'failure' && (
@@ -542,6 +584,9 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
                   {syncUrlLength}/{MAX_SYNC_URL_LENGTH}
                 </p>
               ) : null}
+              <p id="mesh-peer-sync-url-hint" className="mt-1 text-[10px] text-muted-foreground/70">
+                Tailscale already encrypts -- HTTPS is only needed for public endpoints
+              </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
@@ -1204,6 +1249,7 @@ export function MeshPeersPage(): React.JSX.Element {
   const reverseRetryMutation = useRegisterReverseSyncPeer();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogPeer, setDialogPeer] = useState<SyncPeer | null>(null);
+  const [discoverOpen, setDiscoverOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<SyncPeer | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<SyncPeerWithVersion | null>(null);
 
@@ -1237,6 +1283,10 @@ export function MeshPeersPage(): React.JSX.Element {
   const closePeerDialog = useCallback(() => {
     setDialogOpen(false);
     setDialogPeer(null);
+  }, []);
+
+  const closeDiscoverDialog = useCallback(() => {
+    setDiscoverOpen(false);
   }, []);
 
   const handlePing = useCallback(
@@ -1357,6 +1407,14 @@ export function MeshPeersPage(): React.JSX.Element {
           />
           <button
             type="button"
+            onClick={() => setDiscoverOpen(true)}
+            data-testid="discover-mesh-peers"
+            className="px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-muted hover:bg-accent/10 text-foreground"
+          >
+            Discover peers
+          </button>
+          <button
+            type="button"
             onClick={openAddDialog}
             data-testid="add-mesh-peer"
             className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
@@ -1441,17 +1499,27 @@ export function MeshPeersPage(): React.JSX.Element {
         <div className="text-center py-16 text-muted-foreground text-sm">
           <p>No mesh peers registered.</p>
           <p className="mt-1 text-xs">
-            Add a known mesh node or let a machine register through{' '}
-            <span className="font-mono">POST /api/sync/peers</span>.
+            Discover Tailscale peers automatically, add one manually, or let a machine register
+            through <span className="font-mono">POST /api/sync/peers</span>.
           </p>
-          <button
-            type="button"
-            onClick={openAddDialog}
-            data-testid="empty-add-mesh-peer"
-            className="mt-4 px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
-          >
-            Add peer
-          </button>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDiscoverOpen(true)}
+              data-testid="empty-discover-mesh-peers"
+              className="px-3 py-1.5 rounded-md text-xs font-medium border border-border bg-muted hover:bg-accent/10 text-foreground"
+            >
+              Discover peers
+            </button>
+            <button
+              type="button"
+              onClick={openAddDialog}
+              data-testid="empty-add-mesh-peer"
+              className="px-3 py-1.5 rounded-md text-xs font-medium bg-[#3b82f6] text-white hover:bg-[#2563eb]"
+            >
+              Add manually
+            </button>
+          </div>
         </div>
       )}
 
@@ -1504,6 +1572,7 @@ export function MeshPeersPage(): React.JSX.Element {
       )}
 
       <PeerFormDialog open={dialogOpen} peer={dialogPeer} onClose={closePeerDialog} />
+      <DiscoverPeersDialog open={discoverOpen} onClose={closeDiscoverDialog} />
 
       {pendingDelete && (
         <div
