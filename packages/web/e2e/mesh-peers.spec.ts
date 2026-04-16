@@ -36,6 +36,10 @@ type SyncPeer = {
   reverseRegistrationAt?: string | null;
   lastPullAt?: string | null;
   lastAckAt?: string | null;
+  // 33.10 Schema-ahead envelope rejection tracking.
+  lastSchemaAheadVersion?: number | null;
+  lastSchemaAheadAt?: string | null;
+  schemaAheadCount?: number | null;
 };
 
 type PingResult = { ok: boolean; status: 'reachable' | 'unreachable'; peer: SyncPeer | null };
@@ -1159,5 +1163,142 @@ test.describe('Mesh Peers page', () => {
     await page.goto('/mesh-peers');
 
     await expect(page.getByTestId('mesh-version-update-banner')).toHaveCount(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // 33.10 — PeerSchemaAheadBadge (apply-side rejection tracking)
+  // -------------------------------------------------------------------------
+
+  test('renders PeerSchemaAheadBadge when peer has schema-ahead rejections', async ({
+    page,
+  }) => {
+    // Simulate a peer whose envelopes have been rejected because its schema
+    // version (42) exceeds the local schema (27) by more than +1.
+    const peers: SyncPeer[] = [
+      makePeer({
+        machineId: 'machine-rejected',
+        hostname: 'rejected.tail.ts.net',
+        tailscaleIp: '100.64.0.20',
+        syncUrl: 'http://100.64.0.20:8080',
+        role: 'replica',
+        syncStatus: 'reachable',
+        peerVersion: 'v0.6.0',
+        peerSchemaVersion: 42,
+        lastSchemaAheadVersion: 42,
+        lastSchemaAheadAt: new Date().toISOString(),
+        schemaAheadCount: 7,
+      }),
+      makePeer({
+        machineId: 'machine-clean',
+        hostname: 'clean.tail.ts.net',
+        tailscaleIp: '100.64.0.21',
+        syncUrl: 'http://100.64.0.21:8080',
+        role: 'replica',
+        syncStatus: 'reachable',
+        peerVersion: 'v0.5.0',
+        // No schema-ahead rejections — badge should NOT render.
+        schemaAheadCount: 0,
+      }),
+    ];
+    await mountApiMocks(page, {
+      peers,
+      pingResponses: new Map(),
+      pingCalls: [],
+    });
+
+    await page.goto('/mesh-peers');
+
+    const table = page.getByRole('table', { name: 'Mesh sync peers' });
+
+    // The rejected peer should show the red schema-ahead badge.
+    const rejectedRow = table
+      .getByRole('row')
+      .filter({ hasText: 'rejected.tail.ts.net' });
+    const badge = rejectedRow.getByTestId(
+      'peer-schema-ahead-badge-machine-rejected',
+    );
+    await expect(badge).toBeVisible();
+    // Badge text includes "Peer ahead" and the schema version label.
+    await expect(badge).toContainText('Peer ahead');
+    await expect(badge).toContainText('schema v42');
+
+    // The clean peer should NOT render the badge.
+    const cleanRow = table
+      .getByRole('row')
+      .filter({ hasText: 'clean.tail.ts.net' });
+    await expect(
+      cleanRow.getByTestId('peer-schema-ahead-badge-machine-clean'),
+    ).toHaveCount(0);
+  });
+
+  test('PeerSchemaAheadBadge does not render on self rows', async ({
+    page,
+  }) => {
+    const peers: SyncPeer[] = [
+      makePeer({
+        machineId: 'machine-self',
+        hostname: 'self.tail.ts.net',
+        isSelf: true,
+        syncStatus: 'reachable',
+        // Even with non-zero count, self rows must not show the badge.
+        lastSchemaAheadVersion: 42,
+        schemaAheadCount: 3,
+      }),
+    ];
+    await mountApiMocks(page, {
+      peers,
+      pingResponses: new Map(),
+      pingCalls: [],
+    });
+
+    await page.goto('/mesh-peers');
+
+    const table = page.getByRole('table', { name: 'Mesh sync peers' });
+    const selfRow = table
+      .getByRole('row')
+      .filter({ hasText: 'self.tail.ts.net' });
+    await expect(
+      selfRow.getByTestId('peer-schema-ahead-badge-machine-self'),
+    ).toHaveCount(0);
+  });
+
+  test('PeerSchemaAheadBadge tooltip includes rejection count and schema version', async ({
+    page,
+  }) => {
+    const peers: SyncPeer[] = [
+      makePeer({
+        machineId: 'machine-ahead-single',
+        hostname: 'ahead-single.tail.ts.net',
+        tailscaleIp: '100.64.0.30',
+        syncUrl: 'http://100.64.0.30:8080',
+        role: 'full',
+        syncStatus: 'reachable',
+        lastSchemaAheadVersion: 35,
+        schemaAheadCount: 1,
+      }),
+    ];
+    await mountApiMocks(page, {
+      peers,
+      pingResponses: new Map(),
+      pingCalls: [],
+    });
+
+    await page.goto('/mesh-peers');
+
+    const table = page.getByRole('table', { name: 'Mesh sync peers' });
+    const row = table
+      .getByRole('row')
+      .filter({ hasText: 'ahead-single.tail.ts.net' });
+    const badge = row.getByTestId(
+      'peer-schema-ahead-badge-machine-ahead-single',
+    );
+    await expect(badge).toBeVisible();
+
+    // Tooltip should contain the rejection count (singular) and schema label.
+    const title = await badge.getAttribute('title');
+    expect(title).toContain('1 envelope');
+    expect(title).not.toContain('1 envelopes');
+    expect(title).toContain('v35');
+    expect(title).toContain('MESH_COMPAT.md');
   });
 });
