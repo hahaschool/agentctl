@@ -55,6 +55,7 @@ import {
 } from '../runtime-management/runtime-config-store.js';
 import type { RepeatableJobManager } from '../scheduler/repeatable-jobs.js';
 import type { AgentTaskJobData, AgentTaskJobName } from '../scheduler/task-queue.js';
+import { PeerUpdateJobStore } from '../sync/peer-update-jobs.js';
 import { accountRoutes } from './routes/accounts.js';
 import { agentConfigPreviewRoutes } from './routes/agent-config-preview.js';
 import { agentProfileRoutes } from './routes/agent-profiles.js';
@@ -834,11 +835,13 @@ export async function createServer({
 
     // Mesh peer self-update route (§33.11 slice 1)
     if (machineId) {
+      const peerUpdateJobStore = new PeerUpdateJobStore();
       await app.register(syncPeerUpdateRoutes, {
         prefix: '/api/sync/peers',
         db,
         selfMachineId: machineId,
         signingSecretKey: syncSigningSecretKey ?? null,
+        jobStore: peerUpdateJobStore,
       });
     }
 

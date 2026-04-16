@@ -104,6 +104,17 @@ export type SyncNode = {
   reverseRegistrationError?: string | null;
   reverseRegistrationAt?: string | null;
   /**
+   * Structured error details for reverse registration (roadmap §33.12 Phase 3.1).
+   *
+   * `reverseRegistrationErrorCode` is a machine-readable code extracted from the
+   * peer's JSON response (e.g. `TOKEN_MISMATCH`, `SIGNATURE_INVALID`,
+   * `NETWORK_ERROR`). `reverseRegistrationHttpStatus` is the HTTP status when the
+   * peer responded with a non-OK status. Both are null on success or when the peer
+   * returned a non-JSON error body.
+   */
+  reverseRegistrationErrorCode?: string | null;
+  reverseRegistrationHttpStatus?: number | null;
+  /**
    * Mesh envelope schema-ahead rejection tracking (roadmap §33.10).
    *
    * When the apply-side compat gate (`MESH_ENVELOPE_SCHEMA_AHEAD`) rejects a

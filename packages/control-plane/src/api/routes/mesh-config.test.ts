@@ -1,6 +1,6 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { MeshConfigProvider } from '../../mesh/mesh-config-provider.js';
 import { meshConfigRoutes } from './mesh-config.js';
@@ -230,5 +230,173 @@ describe('PUT /api/mesh/config', () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toContain('INVALID_TOKEN');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/mesh/config/preflight — §33.12 Phase 3.3
+// ---------------------------------------------------------------------------
+
+describe('GET /api/mesh/config/preflight', () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    await app?.close();
+  });
+
+  function mockFetchResponse(status: number, body: Record<string, unknown>): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status })),
+    );
+  }
+
+  it('returns compatible when remote returns 400 with body validation error', async () => {
+    mockFetchResponse(400, { error: 'INVALID_MACHINE_ID', message: 'machineId is required' });
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('compatible');
+  });
+
+  it('returns mismatch when remote returns TOKEN_INVALID', async () => {
+    mockFetchResponse(403, { error: 'PEER_REGISTRATION_TOKEN_INVALID' });
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('mismatch');
+    expect(res.json().errorCode).toBe('PEER_REGISTRATION_TOKEN_INVALID');
+  });
+
+  it('returns remote_disabled when remote has no token', async () => {
+    mockFetchResponse(503, { error: 'PEER_REGISTRATION_DISABLED' });
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('remote_disabled');
+  });
+
+  it('returns local_missing when no local token configured', async () => {
+    const provider = createMockProvider({
+      resolve: vi.fn().mockResolvedValue({
+        tailscaleIp: null,
+        tailscaleIpSource: null,
+        syncUrl: 'http://localhost:8080',
+        syncUrlSource: 'derived',
+        registrationToken: null,
+        registrationTokenSource: null,
+      }),
+    });
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('local_missing');
+    expect(res.json().errorCode).toBe('PEER_REGISTRATION_TOKEN_MISSING');
+  });
+
+  it('returns error on network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')));
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('error');
+    expect(res.json().errorCode).toBe('NETWORK_ERROR');
+  });
+
+  it('rejects missing targetSyncUrl', async () => {
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight',
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects non-Tailscale hostname (SSRF guard)', async () => {
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://evil.example.com:8080',
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('INVALID_SYNC_URL');
+  });
+
+  it('allows localhost for development', async () => {
+    mockFetchResponse(400, { error: 'INVALID_MACHINE_ID', message: 'machineId is required' });
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://localhost:8080',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('compatible');
+  });
+
+  it('handles trailing slashes in targetSyncUrl safely', async () => {
+    mockFetchResponse(400, { error: 'INVALID_MACHINE_ID', message: 'machineId is required' });
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=http://100.64.0.10:8080///',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().tokenStatus).toBe('compatible');
+  });
+
+  it('rejects invalid targetSyncUrl', async () => {
+    const provider = createMockProvider();
+    app = await buildApp(provider);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/mesh/config/preflight?targetSyncUrl=not-a-url',
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('INVALID_SYNC_URL');
   });
 });

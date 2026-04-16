@@ -26,6 +26,7 @@ import {
   type ReverseRegistrationResult,
   type SelfIdentity,
 } from '../../sync/peer-reverse-registration.js';
+import type { ReverseRegistrationRetryScheduler } from '../../sync/reverse-registration-retry.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
 const DEFAULT_INTERVAL_MS = 30_000;
@@ -108,6 +109,12 @@ type SyncPeersRoutesOptions = {
    * `fetchTailscaleMeshPeers`. Tests pass a stub to avoid touching the CLI.
    */
   tailscalePeerSource?: (logger: Pick<Logger, 'debug'>) => Promise<TailscalePeer[]>;
+  /**
+   * §33.12 Phase 4.1 — Automatic retry scheduler for failed reverse
+   * registrations. When provided, the routes will schedule retries on failure
+   * and cancel pending retries on manual retry or peer deletion.
+   */
+  retryScheduler?: ReverseRegistrationRetryScheduler;
 };
 
 type SyncPeerRow = {
@@ -130,6 +137,8 @@ type SyncPeerRow = {
   reverse_registration_status: string | null;
   reverse_registration_error: string | null;
   reverse_registration_at: string | Date | null;
+  reverse_registration_error_code: string | null;
+  reverse_registration_http_status: number | null;
   last_schema_ahead_version: number | null;
   last_schema_ahead_at: string | Date | null;
   schema_ahead_count: number | null;
@@ -142,7 +151,7 @@ type SyncPeerRow = {
   last_ack_at?: string | Date | null;
 };
 
-const SYNC_NODE_COLUMNS = sql`id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version, reverse_registration_status, reverse_registration_error, reverse_registration_at, last_schema_ahead_version, last_schema_ahead_at, schema_ahead_count`;
+const SYNC_NODE_COLUMNS = sql`id, hostname, tailscale_ip, sync_url, role, sync_status, sync_interval_ms, is_self, public_key, last_ping_error, last_ping_status_code, last_seen, created_at, peer_version, peer_git_sha, peer_schema_version, reverse_registration_status, reverse_registration_error, reverse_registration_at, reverse_registration_error_code, reverse_registration_http_status, last_schema_ahead_version, last_schema_ahead_at, schema_ahead_count`;
 
 /**
  * Prefixed version of `SYNC_NODE_COLUMNS` used when the row is joined with
@@ -150,7 +159,7 @@ const SYNC_NODE_COLUMNS = sql`id, hostname, tailscale_ip, sync_url, role, sync_s
  * `mapSyncPeerRow` can operate on either shape. The JOIN contributes
  * `last_pull_at` and `last_ack_at` columns derived from `updated_at`.
  */
-const SYNC_NODE_JOIN_COLUMNS = sql`sn.id, sn.hostname, sn.tailscale_ip, sn.sync_url, sn.role, sn.sync_status, sn.sync_interval_ms, sn.is_self, sn.public_key, sn.last_ping_error, sn.last_ping_status_code, sn.last_seen, sn.created_at, sn.peer_version, sn.peer_git_sha, sn.peer_schema_version, sn.reverse_registration_status, sn.reverse_registration_error, sn.reverse_registration_at, sn.last_schema_ahead_version, sn.last_schema_ahead_at, sn.schema_ahead_count, spc.updated_at AS last_pull_at, spc.updated_at AS last_ack_at`;
+const SYNC_NODE_JOIN_COLUMNS = sql`sn.id, sn.hostname, sn.tailscale_ip, sn.sync_url, sn.role, sn.sync_status, sn.sync_interval_ms, sn.is_self, sn.public_key, sn.last_ping_error, sn.last_ping_status_code, sn.last_seen, sn.created_at, sn.peer_version, sn.peer_git_sha, sn.peer_schema_version, sn.reverse_registration_status, sn.reverse_registration_error, sn.reverse_registration_at, sn.reverse_registration_error_code, sn.reverse_registration_http_status, sn.last_schema_ahead_version, sn.last_schema_ahead_at, sn.schema_ahead_count, spc.updated_at AS last_pull_at, spc.updated_at AS last_ack_at`;
 
 type UpsertSyncPeerBody = {
   machineId?: string;
@@ -503,6 +512,9 @@ function mapSyncPeerRow(row: SyncPeerRow) {
     reverseRegistrationStatus: normalizeReverseRegistrationStatus(row.reverse_registration_status),
     reverseRegistrationError: row.reverse_registration_error ?? null,
     reverseRegistrationAt: toIsoString(row.reverse_registration_at),
+    // §33.12 Phase 3.1: structured error code + HTTP status for actionable frontend guidance.
+    reverseRegistrationErrorCode: row.reverse_registration_error_code ?? null,
+    reverseRegistrationHttpStatus: row.reverse_registration_http_status ?? null,
     // §33.10: schema-ahead envelope rejection tracking. When non-zero, the
     // apply-side compat gate has rejected one or more envelopes from this peer
     // because their `schemaVersion` exceeds the local CP by more than 1.
@@ -537,6 +549,8 @@ async function updateReverseRegistration(
     UPDATE sync_nodes
     SET reverse_registration_status = ${outcome.status},
         reverse_registration_error = ${outcome.error},
+        reverse_registration_error_code = ${outcome.errorCode},
+        reverse_registration_http_status = ${outcome.httpStatus},
         reverse_registration_at = now()
     WHERE id = ${machineId}
     RETURNING ${SYNC_NODE_COLUMNS}
@@ -1056,6 +1070,10 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
         if (reverse?.row) {
           refreshed = reverse.row;
         }
+        // §33.12 Phase 4.1: schedule automatic retries on failure
+        if (reverse && reverse.result.status === 'failed' && opts.retryScheduler) {
+          opts.retryScheduler.scheduleRetry(peer.id);
+        }
       }
 
       return reply.code(201).send({
@@ -1111,6 +1129,9 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
         });
       }
 
+      // §33.12 Phase 4.1: cancel any pending automatic retry before manual attempt
+      opts.retryScheduler?.cancel(machineId.trim());
+
       const attempt = await tryReverseRegistration(peer);
       const refreshed = attempt?.row ?? peer;
       if (!attempt || attempt.result.status === 'ok') {
@@ -1120,6 +1141,9 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           peer: mapSyncPeerRow(refreshed),
         });
       }
+
+      // §33.12 Phase 4.1: schedule automatic retries after manual retry also fails
+      opts.retryScheduler?.scheduleRetry(peer.id);
 
       // Failed outcome — return 502 so the UI can render a distinct error,
       // while still including the persisted row for the inline badge.
@@ -1198,6 +1222,9 @@ export const syncPeersRoutes: FastifyPluginAsync<SyncPeersRoutesOptions> = async
           message: 'A non-empty "machineId" path parameter is required',
         });
       }
+
+      // §33.12 Phase 4.1: cancel any pending automatic retry for deleted peer
+      opts.retryScheduler?.cancel(machineId.trim());
 
       const result = await db.execute(sql`
         DELETE FROM sync_nodes

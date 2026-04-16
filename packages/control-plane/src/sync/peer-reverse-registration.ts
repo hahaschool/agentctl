@@ -24,6 +24,10 @@ export type ReverseRegistrationStatus = 'ok' | 'failed';
 export type ReverseRegistrationResult = {
   status: ReverseRegistrationStatus;
   error: string | null;
+  /** Machine-readable error code extracted from the peer's JSON response body (e.g. 'TOKEN_MISMATCH'). */
+  errorCode: string | null;
+  /** HTTP status code when the peer responded with a non-OK status. */
+  httpStatus: number | null;
 };
 
 export type SelfIdentity = {
@@ -76,15 +80,38 @@ function describeFetchError(error: unknown): string {
   return `non-error: ${String(error)}`;
 }
 
-async function describeHttpError(response: Response): Promise<string> {
+type HttpErrorDetail = {
+  description: string;
+  errorCode: string | null;
+};
+
+async function describeHttpError(response: Response): Promise<HttpErrorDetail> {
   let body = '';
   try {
     body = await response.text();
   } catch {
     // ignore — body stream could be closed or non-text
   }
+
+  // Try to extract a machine-readable error code from a JSON response body.
+  // The peer's registration endpoint returns `{ error: "SOME_CODE", message: "..." }`.
+  let errorCode: string | null = null;
+  if (body) {
+    try {
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      if (typeof parsed.error === 'string' && parsed.error.length > 0) {
+        errorCode = parsed.error;
+      }
+    } catch {
+      // Not JSON — fall through to raw snippet
+    }
+  }
+
   const snippet = body ? ` ${body.slice(0, 200)}` : '';
-  return `HTTP ${response.status} ${response.statusText}${snippet}`;
+  return {
+    description: `HTTP ${response.status} ${response.statusText}${snippet}`,
+    errorCode,
+  };
 }
 
 function buildRegistrationUrl(targetSyncUrl: string): string {
@@ -142,14 +169,21 @@ export async function performReverseRegistration(
     });
 
     if (!response.ok) {
-      const reason = await describeHttpError(response);
+      const detail = await describeHttpError(response);
       opts.logger?.warn(
-        { machineId: self.machineId, peerSyncUrl: targetSyncUrl, status: response.status },
+        {
+          machineId: self.machineId,
+          peerSyncUrl: targetSyncUrl,
+          status: response.status,
+          errorCode: detail.errorCode,
+        },
         'reverse peer registration failed',
       );
       return {
         status: 'failed',
-        error: truncateReverseRegistrationError(reason),
+        error: truncateReverseRegistrationError(detail.description),
+        errorCode: detail.errorCode,
+        httpStatus: response.status,
       };
     }
 
@@ -157,7 +191,7 @@ export async function performReverseRegistration(
       { machineId: self.machineId, peerSyncUrl: targetSyncUrl },
       'reverse peer registration succeeded',
     );
-    return { status: 'ok', error: null };
+    return { status: 'ok', error: null, errorCode: null, httpStatus: null };
   } catch (error) {
     const reason = describeFetchError(error);
     opts.logger?.warn(
@@ -167,6 +201,8 @@ export async function performReverseRegistration(
     return {
       status: 'failed',
       error: truncateReverseRegistrationError(reason),
+      errorCode: 'NETWORK_ERROR',
+      httpStatus: null,
     };
   }
 }

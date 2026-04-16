@@ -40,6 +40,11 @@ export type SyncPeer = {
   reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
   reverseRegistrationError?: string | null;
   reverseRegistrationAt?: string | null;
+  // §33.12 Phase 3.1: structured error code + HTTP status for actionable
+  // frontend guidance. Both null on success or when the peer's response was
+  // not JSON.
+  reverseRegistrationErrorCode?: string | null;
+  reverseRegistrationHttpStatus?: number | null;
   // §33.10: schema-ahead envelope rejection tracking. When `schemaAheadCount`
   // is > 0, the apply-side compat gate has rejected one or more envelopes from
   // this peer because their `schemaVersion` exceeded the local CP by more than
@@ -144,18 +149,35 @@ export type PingSyncPeerResponse = {
 };
 
 /**
- * Response from `POST /api/sync/peers/:peerId/update` (roadmap §33.11 slice 1).
- * Only returned when `:peerId` matches the receiving node's local machine id —
- * otherwise the backend responds with a `PEER_UPDATE_NOT_LOCAL` 404 envelope.
+ * Response from `POST /api/sync/peers/:peerId/update` — now returns
+ * immediately with a jobId. The actual update runs asynchronously and
+ * logs are streamed via SSE on `GET /:peerId/update/:jobId/log`.
  */
 export type UpdateSyncPeerResponse = {
-  status: 'success' | 'failed';
+  jobId: string;
+  status: 'started';
+  previousVersion: string;
+  /** Present when proxied through local CP to a remote peer. */
+  remoteSyncUrl?: string;
+};
+
+export type PeerUpdateLogLine = {
+  stream: 'stdout' | 'stderr';
+  text: string;
+  ts: number;
+};
+
+export type PeerUpdateJobResult = {
+  exitCode: number;
   durationMs: number;
   previousVersion: string;
   newVersion: string;
-  exitCode: number;
-  stdoutTail: string;
-  stderrTail: string;
+};
+
+export type PeerUpdateStatusEvent = {
+  status: 'running' | 'success' | 'failed';
+  result?: PeerUpdateJobResult;
+  error?: string;
 };
 
 export type ReverseRegisterSyncPeerResponse = {
@@ -253,3 +275,56 @@ export const syncApi = {
   probeSyncUrl: (target: string) =>
     request<ProbeSyncUrlResponse>(`/api/sync/peers/probe?target=${encodeURIComponent(target)}`),
 };
+
+// ---------------------------------------------------------------------------
+// SSE helpers for peer update log streaming
+// ---------------------------------------------------------------------------
+
+export type PeerUpdateSSECallbacks = {
+  onLog: (line: PeerUpdateLogLine) => void;
+  onStatus: (status: PeerUpdateStatusEvent) => void;
+  onError: (error: string) => void;
+  /** Called when SSE disconnects (expected during pm2 reload). */
+  onDisconnect: () => void;
+};
+
+/**
+ * Connect to the update log SSE stream. Returns an abort function.
+ * The SSE connection will drop when pm2 reloads the remote process,
+ * which is the expected happy-path completion signal.
+ */
+export function connectUpdateLogStream(
+  machineId: string,
+  jobId: string,
+  callbacks: PeerUpdateSSECallbacks,
+): () => void {
+  const url = `/api/sync/peers/${encodeURIComponent(machineId)}/update/${encodeURIComponent(jobId)}/log`;
+  const es = new EventSource(url);
+
+  es.addEventListener('log', (e) => {
+    try {
+      callbacks.onLog(JSON.parse(e.data) as PeerUpdateLogLine);
+    } catch {
+      // ignore malformed events
+    }
+  });
+
+  es.addEventListener('status', (e) => {
+    try {
+      callbacks.onStatus(JSON.parse(e.data) as PeerUpdateStatusEvent);
+    } catch {
+      // ignore malformed events
+    }
+  });
+
+  es.onerror = () => {
+    // EventSource fires 'error' on disconnect — this is expected when pm2
+    // reload kills the remote process after a successful update.
+    es.close();
+    callbacks.onDisconnect();
+  };
+
+  return () => {
+    es.close();
+  };
+}

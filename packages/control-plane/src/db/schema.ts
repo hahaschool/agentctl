@@ -417,6 +417,11 @@ export const syncNodes = pgTable('sync_nodes', {
   reverseRegistrationStatus: text('reverse_registration_status'),
   reverseRegistrationError: text('reverse_registration_error'),
   reverseRegistrationAt: timestamp('reverse_registration_at', { withTimezone: true }),
+  // §33.12 Phase 3.1: structured error codes for reverse registration.
+  // Machine-readable error code (e.g. 'TOKEN_MISMATCH', 'SIGNATURE_INVALID')
+  // and HTTP status allow the frontend to map failures to actionable guidance.
+  reverseRegistrationErrorCode: text('reverse_registration_error_code'),
+  reverseRegistrationHttpStatus: integer('reverse_registration_http_status'),
 });
 
 // §33.12 Phase 2: Local-only mesh identity config. NOT synced — each machine
