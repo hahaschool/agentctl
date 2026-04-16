@@ -22,6 +22,12 @@ export type MeshConfigUpdateBody = {
   registrationToken?: string | null;
 };
 
+export type MeshConfigPreflightResponse = {
+  tokenStatus: 'compatible' | 'mismatch' | 'remote_disabled' | 'local_missing' | 'error';
+  errorCode: string | null;
+  message: string;
+};
+
 export const meshConfigApi = {
   getMeshConfig: () => request<MeshConfigResponse>('/api/mesh/config'),
 
@@ -30,4 +36,10 @@ export const meshConfigApi = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
+
+  /** §33.12 Phase 3.3 — Check token compatibility with a remote peer before adding it. */
+  preflightMeshConfig: (targetSyncUrl: string) =>
+    request<MeshConfigPreflightResponse>(
+      `/api/mesh/config/preflight?targetSyncUrl=${encodeURIComponent(targetSyncUrl)}`,
+    ),
 };
