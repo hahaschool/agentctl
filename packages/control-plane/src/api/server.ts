@@ -114,6 +114,7 @@ import { syncRoutes } from './routes/sync.js';
 import { syncConflictsRoutes } from './routes/sync-conflicts.js';
 import { syncDiscoverRoutes } from './routes/sync-discover.js';
 import { syncPeerUpdateRoutes } from './routes/sync-peer-update.js';
+import { PeerUpdateJobStore } from '../sync/peer-update-jobs.js';
 import { syncPeersRoutes } from './routes/sync-peers.js';
 import { taskGraphRoutes } from './routes/task-graphs.js';
 import { taskRunRoutes } from './routes/task-runs.js';
@@ -834,11 +835,13 @@ export async function createServer({
 
     // Mesh peer self-update route (§33.11 slice 1)
     if (machineId) {
+      const peerUpdateJobStore = new PeerUpdateJobStore();
       await app.register(syncPeerUpdateRoutes, {
         prefix: '/api/sync/peers',
         db,
         selfMachineId: machineId,
         signingSecretKey: syncSigningSecretKey ?? null,
+        jobStore: peerUpdateJobStore,
       });
     }
 

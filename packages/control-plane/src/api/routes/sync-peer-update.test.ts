@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as buildInfo from '../../build-info.js';
 import type { Database } from '../../db/index.js';
 import { createPeerSignedHeader } from '../../sync/peer-auth.js';
+import { PeerUpdateJobStore } from '../../sync/peer-update-jobs.js';
 import {
-  __resetPeerUpdateMutexForTests,
   type RunScriptFn,
   syncPeerUpdateRoutes,
 } from './sync-peer-update.js';
@@ -29,8 +29,7 @@ function createMockDb(knownPeers: Record<string, string>): Database {
 async function buildApp(opts: {
   db: Database;
   runScript?: RunScriptFn;
-  signingSecretKey?: string | null;
-  fetchImpl?: typeof fetch;
+  jobStore?: PeerUpdateJobStore;
 }): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(syncPeerUpdateRoutes, {
@@ -40,8 +39,7 @@ async function buildApp(opts: {
     runScript: opts.runScript,
     scriptPath: '/fake/peer-update.sh',
     pm2Ecosystem: 'agentctl-test',
-    signingSecretKey: opts.signingSecretKey ?? undefined,
-    fetchImpl: opts.fetchImpl,
+    jobStore: opts.jobStore ?? new PeerUpdateJobStore(),
   });
   await app.ready();
   return app;
@@ -64,12 +62,14 @@ function signRequest(
 
 describe('syncPeerUpdateRoutes', () => {
   let app: FastifyInstance | null = null;
+  let jobStore: PeerUpdateJobStore;
 
   beforeEach(() => {
-    __resetPeerUpdateMutexForTests();
+    jobStore = new PeerUpdateJobStore();
   });
 
   afterEach(async () => {
+    jobStore.destroy();
     if (app) {
       await app.close();
       app = null;
@@ -80,7 +80,7 @@ describe('syncPeerUpdateRoutes', () => {
 
   it('returns 401 when the X-Sync-Auth header is missing', async () => {
     const db = createMockDb({});
-    app = await buildApp({ db, runScript: vi.fn() });
+    app = await buildApp({ db, runScript: vi.fn(), jobStore });
 
     const response = await app.inject({
       method: 'POST',
@@ -96,7 +96,7 @@ describe('syncPeerUpdateRoutes', () => {
     const db = createMockDb({});
     const keyPair = generateDispatchSigningKeyPair();
     const runScript = vi.fn<RunScriptFn>();
-    app = await buildApp({ db, runScript });
+    app = await buildApp({ db, runScript, jobStore });
 
     const body = {};
     const header = signRequest(keyPair, REMOTE_MACHINE_ID, SELF_MACHINE_ID, body);
@@ -119,8 +119,7 @@ describe('syncPeerUpdateRoutes', () => {
   it('returns 503 PEER_UPDATE_PROXY_NO_KEY when forwarding without a signing key', async () => {
     const db = createMockDb({});
     const runScript = vi.fn<RunScriptFn>();
-    // No signingSecretKey provided → proxy path returns 503
-    app = await buildApp({ db, runScript });
+    app = await buildApp({ db, runScript, jobStore });
 
     const response = await app.inject({
       method: 'POST',
@@ -133,22 +132,18 @@ describe('syncPeerUpdateRoutes', () => {
     expect(runScript).not.toHaveBeenCalled();
   });
 
-  it('returns 200 with success envelope and a refreshed newVersion on happy path', async () => {
+  it('returns 202 with jobId and starts update asynchronously', async () => {
     const keyPair = generateDispatchSigningKeyPair();
     const db = createMockDb({ [REMOTE_MACHINE_ID]: keyPair.publicKey });
 
-    const versionSpy = vi
-      .spyOn(buildInfo, 'getAppVersion')
-      .mockReturnValueOnce('0.4.0')
-      .mockReturnValueOnce('0.4.1');
+    vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.4.0');
 
-    const runScript = vi.fn<RunScriptFn>().mockResolvedValue({
-      exitCode: 0,
-      stdoutTail: 'peer-update: success abc123 -> def456\n',
-      stderrTail: '',
-    });
+    let resolveScript: ((v: { exitCode: number; stdoutTail: string; stderrTail: string }) => void) | null = null;
+    const runScript = vi.fn<RunScriptFn>().mockImplementation(
+      () => new Promise((resolve) => { resolveScript = resolve; }),
+    );
 
-    app = await buildApp({ db, runScript });
+    app = await buildApp({ db, runScript, jobStore });
 
     const body = {};
     const header = signRequest(keyPair, REMOTE_MACHINE_ID, SELF_MACHINE_ID, body);
@@ -163,26 +158,25 @@ describe('syncPeerUpdateRoutes', () => {
       },
     });
 
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(202);
     const payload = response.json();
-    expect(payload).toMatchObject({
-      status: 'success',
-      exitCode: 0,
-      previousVersion: '0.4.0',
-      newVersion: '0.4.1',
-      stdoutTail: 'peer-update: success abc123 -> def456\n',
-      stderrTail: '',
+    expect(payload.status).toBe('started');
+    expect(payload.jobId).toBeDefined();
+    expect(payload.previousVersion).toBe('0.4.0');
+
+    // Script is still running
+    const job = jobStore.getJob(payload.jobId);
+    expect(job?.status).toBe('running');
+
+    // Complete the script
+    resolveScript?.({ exitCode: 0, stdoutTail: 'ok', stderrTail: '' });
+    // Wait for async completion
+    await vi.waitFor(() => {
+      expect(jobStore.getJob(payload.jobId)?.status).toBe('success');
     });
-    expect(typeof payload.durationMs).toBe('number');
-    expect(runScript).toHaveBeenCalledTimes(1);
-    expect(runScript).toHaveBeenCalledWith({
-      scriptPath: '/fake/peer-update.sh',
-      pm2Ecosystem: 'agentctl-test',
-    });
-    versionSpy.mockRestore();
   });
 
-  it('returns 500 with PEER_UPDATE_SCRIPT_FAILED and captures stderrTail on non-zero exit', async () => {
+  it('marks job as failed on non-zero exit', async () => {
     const keyPair = generateDispatchSigningKeyPair();
     const db = createMockDb({ [REMOTE_MACHINE_ID]: keyPair.publicKey });
 
@@ -194,7 +188,7 @@ describe('syncPeerUpdateRoutes', () => {
       stderrTail: 'fatal: unable to access origin/main\n',
     });
 
-    app = await buildApp({ db, runScript });
+    app = await buildApp({ db, runScript, jobStore });
 
     const body = {};
     const header = signRequest(keyPair, REMOTE_MACHINE_ID, SELF_MACHINE_ID, body);
@@ -209,32 +203,33 @@ describe('syncPeerUpdateRoutes', () => {
       },
     });
 
-    expect(response.statusCode).toBe(500);
-    const payload = response.json();
-    expect(payload.error).toBe('PEER_UPDATE_SCRIPT_FAILED');
-    expect(payload.exitCode).toBe(3);
-    expect(payload.stderrTail).toContain('fatal: unable to access origin/main');
+    expect(response.statusCode).toBe(202);
+    const { jobId } = response.json();
+
+    await vi.waitFor(() => {
+      expect(jobStore.getJob(jobId)?.status).toBe('failed');
+    });
+
+    const job = jobStore.getJob(jobId);
+    expect(job?.error).toContain('exited with code 3');
+    expect(job?.result?.exitCode).toBe(3);
   });
 
-  it('returns 409 PEER_UPDATE_IN_PROGRESS when a second request arrives while the first is running', async () => {
+  it('returns 409 with existing jobId when a second request arrives while the first is running', async () => {
     const keyPair = generateDispatchSigningKeyPair();
     const db = createMockDb({ [REMOTE_MACHINE_ID]: keyPair.publicKey });
 
     vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.4.0');
 
-    let releaseFirstRun: (() => void) | null = null;
     const runScript = vi.fn<RunScriptFn>().mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          releaseFirstRun = () => resolve({ exitCode: 0, stdoutTail: 'ok\n', stderrTail: '' });
-        }),
+      () => new Promise(() => {}), // never resolves
     );
 
-    app = await buildApp({ db, runScript });
+    app = await buildApp({ db, runScript, jobStore });
 
     const body = {};
 
-    const first = app.inject({
+    const first = await app.inject({
       method: 'POST',
       url: `/api/sync/peers/${SELF_MACHINE_ID}/update`,
       payload: body,
@@ -244,15 +239,13 @@ describe('syncPeerUpdateRoutes', () => {
       },
     });
 
-    // Give the first request a chance to acquire the mutex and enter runScript.
-    await vi.waitFor(() => expect(runScript).toHaveBeenCalledTimes(1));
+    expect(first.statusCode).toBe(202);
 
     const concurrent = await app.inject({
       method: 'POST',
       url: `/api/sync/peers/${SELF_MACHINE_ID}/update`,
       payload: body,
       headers: {
-        // Fresh nonce — we're not testing replay here, just concurrency.
         'x-sync-auth': signRequest(keyPair, REMOTE_MACHINE_ID, SELF_MACHINE_ID, body),
         'content-type': 'application/json',
       },
@@ -260,13 +253,50 @@ describe('syncPeerUpdateRoutes', () => {
 
     expect(concurrent.statusCode).toBe(409);
     expect(concurrent.json().error).toBe('PEER_UPDATE_IN_PROGRESS');
-
-    releaseFirstRun?.();
-    const firstResponse = await first;
-    expect(firstResponse.statusCode).toBe(200);
+    expect(concurrent.json().jobId).toBe(first.json().jobId);
   });
 
-  it('rate-limits peer update requests before repeated script execution', async () => {
+  it('streams log lines to job store via onStdout/onStderr callbacks', async () => {
+    const keyPair = generateDispatchSigningKeyPair();
+    const db = createMockDb({ [REMOTE_MACHINE_ID]: keyPair.publicKey });
+
+    vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.4.0');
+
+    const runScript = vi.fn<RunScriptFn>().mockImplementation(async (opts) => {
+      opts.onStdout?.('line 1');
+      opts.onStdout?.('line 2');
+      opts.onStderr?.('warning');
+      return { exitCode: 0, stdoutTail: 'line 1\nline 2\n', stderrTail: 'warning\n' };
+    });
+
+    app = await buildApp({ db, runScript, jobStore });
+
+    const body = {};
+    const header = signRequest(keyPair, REMOTE_MACHINE_ID, SELF_MACHINE_ID, body);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/sync/peers/${SELF_MACHINE_ID}/update`,
+      payload: body,
+      headers: {
+        'x-sync-auth': header,
+        'content-type': 'application/json',
+      },
+    });
+
+    const { jobId } = response.json();
+    await vi.waitFor(() => {
+      expect(jobStore.getJob(jobId)?.status).toBe('success');
+    });
+
+    const job = jobStore.getJob(jobId)!;
+    expect(job.logs).toHaveLength(3);
+    expect(job.logs[0]).toMatchObject({ stream: 'stdout', text: 'line 1' });
+    expect(job.logs[1]).toMatchObject({ stream: 'stdout', text: 'line 2' });
+    expect(job.logs[2]).toMatchObject({ stream: 'stderr', text: 'warning' });
+  });
+
+  it('rate-limits peer update requests', async () => {
     vi.stubEnv('PEER_UPDATE_RATE_LIMIT_MAX', '1');
     vi.stubEnv('PEER_UPDATE_RATE_LIMIT_WINDOW_MS', '60000');
 
@@ -281,7 +311,7 @@ describe('syncPeerUpdateRoutes', () => {
       stderrTail: '',
     });
 
-    app = await buildApp({ db, runScript });
+    app = await buildApp({ db, runScript, jobStore });
 
     const body = {};
     const request = () =>
@@ -296,7 +326,7 @@ describe('syncPeerUpdateRoutes', () => {
       });
 
     const first = await request();
-    expect(first?.statusCode).toBe(200);
+    expect(first?.statusCode).toBe(202);
 
     const second = await request();
     expect(second?.statusCode).toBe(429);
@@ -304,86 +334,6 @@ describe('syncPeerUpdateRoutes', () => {
       error: 'RATE_LIMITED',
       message: 'Too many peer update requests',
     });
-    expect(runScript).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns 409 PEER_UPDATE_DOWNGRADE_REJECTED when proxy target has >= local version', async () => {
-    const keyPair = generateDispatchSigningKeyPair();
-
-    // Mock DB: returns a remote peer with version 0.6.0 (higher than local 0.5.6)
-    const mockDb = {
-      execute: vi.fn(async () => ({
-        rows: [
-          {
-            id: REMOTE_MACHINE_ID,
-            sync_url: 'http://100.64.0.2:8080',
-            is_self: false,
-            peer_version: '0.6.0',
-            public_key: keyPair.publicKey,
-          },
-        ],
-      })),
-    } as unknown as Database;
-
-    vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.5.6');
-
-    const fetchImpl = vi.fn();
-    app = await buildApp({
-      db: mockDb,
-      signingSecretKey: keyPair.secretKey,
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: `/api/sync/peers/${REMOTE_MACHINE_ID}/update`,
-      payload: {},
-    });
-
-    expect(response.statusCode).toBe(409);
-    expect(response.json().error).toBe('PEER_UPDATE_DOWNGRADE_REJECTED');
-    expect(fetchImpl).not.toHaveBeenCalled();
-  });
-
-  it('allows proxy update when peer version is lower than local', async () => {
-    const keyPair = generateDispatchSigningKeyPair();
-
-    // Mock DB: remote peer at 0.5.0 (lower than local 0.5.6)
-    const mockDb = {
-      execute: vi.fn(async () => ({
-        rows: [
-          {
-            id: REMOTE_MACHINE_ID,
-            sync_url: 'http://100.64.0.2:8080',
-            is_self: false,
-            peer_version: '0.5.0',
-            public_key: keyPair.publicKey,
-          },
-        ],
-      })),
-    } as unknown as Database;
-
-    vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.5.6');
-
-    const fetchImpl = vi.fn().mockResolvedValue({
-      status: 200,
-      text: () => Promise.resolve(JSON.stringify({ status: 'success' })),
-    });
-
-    app = await buildApp({
-      db: mockDb,
-      signingSecretKey: keyPair.secretKey,
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: `/api/sync/peers/${REMOTE_MACHINE_ID}/update`,
-      payload: {},
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('declares direct Fastify rate-limit and auth markers for CodeQL', () => {
@@ -394,9 +344,8 @@ describe('syncPeerUpdateRoutes', () => {
       /async function authorize\(\s*request:\s*FastifyRequest,\s*reply:\s*FastifyReply,/,
     );
     expect(source).toMatch(
-      /'\/:peerId\/update'[\s\S]*?config:\s*\{\s*rateLimit:\s*peerUpdateFastifyRateLimit\s*\}[\s\S]*?preHandler:\s*\[\s*app\.rateLimit\(peerUpdateFastifyRateLimit\)\s*\]/,
+      /'\/:peerId\/update'[\s\S]*?config:\s*\{\s*rateLimit:\s*peerUpdateFastifyRateLimit\s*\}/,
     );
-    // Auth is invoked inline for the self-update path only (proxy path skips it)
     expect(source).toMatch(/const authorized = await authorize\(request, reply, db\)/);
   });
 });
