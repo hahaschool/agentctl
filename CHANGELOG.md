@@ -3,6 +3,15 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.5.4] — 2026-04-16
+
+resolve Tailscale CLI path for macOS app bundle
+
+### Changes
+
+- e39151e6 fix(mesh): resolve Tailscale CLI binary path for macOS app bundle (#599)
+
+
 ## [0.5.3] — 2026-04-16
 
 peer update proxy — sign and forward to remote peers
