@@ -196,7 +196,12 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           const elapsedMs = Date.now() - startMs;
 
           app.log.debug(
-            { machineId: machine.id, hostname: machine.hostname, elapsedMs, sessionCount: body.sessions.length },
+            {
+              machineId: machine.id,
+              hostname: machine.hostname,
+              elapsedMs,
+              sessionCount: body.sessions.length,
+            },
             'Discovered sessions from worker',
           );
 

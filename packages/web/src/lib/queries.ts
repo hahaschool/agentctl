@@ -450,9 +450,7 @@ export function discoverQuery() {
         result.machinesFailed === result.machinesQueried &&
         result.sessions.length === 0
       ) {
-        throw new Error(
-          `All ${String(result.machinesQueried)} machine(s) failed to respond`,
-        );
+        throw new Error(`All ${String(result.machinesQueried)} machine(s) failed to respond`);
       }
       return result;
     },
