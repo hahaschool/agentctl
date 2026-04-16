@@ -2,14 +2,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockUseQuery, mockImportStatusQuery, mockStartMutate, mockCancelMutate } = vi.hoisted(
-  () => ({
-    mockUseQuery: vi.fn(),
-    mockImportStatusQuery: vi.fn(),
-    mockStartMutate: vi.fn(),
-    mockCancelMutate: vi.fn(),
-  }),
-);
+const {
+  mockUseQuery,
+  mockImportStatusQuery,
+  mockStartMutate,
+  mockCancelMutate,
+  mockPreviewMutate,
+} = vi.hoisted(() => ({
+  mockUseQuery: vi.fn(),
+  mockImportStatusQuery: vi.fn(),
+  mockStartMutate: vi.fn(),
+  mockCancelMutate: vi.fn(),
+  mockPreviewMutate: vi.fn(),
+}));
 
 vi.mock('@tanstack/react-query', async () => {
   const actual =
@@ -30,9 +35,24 @@ vi.mock('@/lib/queries', () => ({
     mutate: mockCancelMutate,
     isPending: false,
   }),
+  usePreviewImport: () => ({
+    mutateAsync: mockPreviewMutate,
+    isPending: false,
+  }),
 }));
 
 import { MemoryImportView } from './MemoryImportView';
+
+const MOCK_PREVIEW = {
+  ok: true,
+  preview: {
+    totalObservations: 100,
+    byType: { decision: 40, bugfix: 30, feature: 30 },
+    alreadyImported: 10,
+    newToImport: 90,
+    sampleTitles: ['Sample observation 1', 'Sample observation 2'],
+  },
+};
 
 function renderView() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -49,6 +69,7 @@ describe('MemoryImportView', () => {
     mockImportStatusQuery.mockReturnValue({ queryKey: ['memory', 'import', 'status'] });
     mockUseQuery.mockReturnValue({ data: { job: null }, isLoading: false, isError: false });
     mockStartMutate.mockResolvedValue({ job: { id: 'job-1', status: 'running' } });
+    mockPreviewMutate.mockResolvedValue(MOCK_PREVIEW);
   });
 
   afterEach(() => {
@@ -71,22 +92,25 @@ describe('MemoryImportView', () => {
       expect(screen.getByTestId('source-jsonl-history')).toBeDefined();
     });
 
-    it('renders the db path input', () => {
+    it('renders the db path input with default path', () => {
       renderView();
-      expect(screen.getByTestId('db-path-input')).toBeDefined();
+      const input = screen.getByTestId('db-path-input') as HTMLInputElement;
+      expect(input).toBeDefined();
+      expect(input.value).toBe('~/.claude-mem/claude-mem.db');
     });
 
-    it('next button is disabled when path is empty', () => {
+    it('next button is disabled when path is cleared', () => {
       renderView();
+      const input = screen.getByTestId('db-path-input');
+      fireEvent.change(input, { target: { value: '' } });
       const next = screen.getByTestId('step1-next') as HTMLButtonElement;
       expect(next.disabled).toBe(true);
     });
 
     it('next button is enabled when path is filled', () => {
       renderView();
-      const input = screen.getByTestId('db-path-input');
-      fireEvent.change(input, { target: { value: '/tmp/claude-mem.db' } });
       const next = screen.getByTestId('step1-next') as HTMLButtonElement;
+      // Default path is populated, so button should be enabled
       expect(next.disabled).toBe(false);
     });
 
@@ -97,12 +121,23 @@ describe('MemoryImportView', () => {
       expect(jsonlBtn.className).toContain('border-blue-500');
     });
 
-    it('advances to step 2 when next is clicked with a path', () => {
+    it('advances to step 2 when preview succeeds', async () => {
       renderView();
       const input = screen.getByTestId('db-path-input');
       fireEvent.change(input, { target: { value: '/tmp/x.db' } });
       fireEvent.click(screen.getByTestId('step1-next'));
-      expect(screen.getByTestId('step2-start')).toBeDefined();
+      await waitFor(() => {
+        expect(screen.getByTestId('step2-start')).toBeDefined();
+      });
+    });
+
+    it('shows error when preview fails', async () => {
+      mockPreviewMutate.mockResolvedValue({ ok: false, error: 'File not found' });
+      renderView();
+      fireEvent.click(screen.getByTestId('step1-next'));
+      await waitFor(() => {
+        expect(screen.getByTestId('preview-error')).toBeDefined();
+      });
     });
   });
 
@@ -111,37 +146,41 @@ describe('MemoryImportView', () => {
   // ---------------------------------------------------------------------------
 
   describe('Step 2 — Preview Mapping', () => {
-    function goToStep2() {
+    async function goToStep2() {
       renderView();
       const input = screen.getByTestId('db-path-input');
       fireEvent.change(input, { target: { value: '/tmp/x.db' } });
       fireEvent.click(screen.getByTestId('step1-next'));
+      await waitFor(() => {
+        expect(screen.getByTestId('step2-back')).toBeDefined();
+      });
     }
 
-    it('renders the field mapping table', () => {
-      goToStep2();
-      expect(screen.getByText('Source field')).toBeDefined();
-      expect(screen.getByText('Memory field')).toBeDefined();
+    it('renders the type mapping table', async () => {
+      await goToStep2();
+      expect(screen.getByText('Source type')).toBeDefined();
+      expect(screen.getByText('Maps to')).toBeDefined();
     });
 
-    it('renders the compression toggle', () => {
-      goToStep2();
-      expect(screen.getByTestId('compression-toggle')).toBeDefined();
+    it('renders preview stats', async () => {
+      await goToStep2();
+      expect(screen.getByText('Total observations')).toBeDefined();
+      expect(screen.getByText('New to import')).toBeDefined();
     });
 
-    it('renders back button', () => {
-      goToStep2();
+    it('renders back button', async () => {
+      await goToStep2();
       expect(screen.getByTestId('step2-back')).toBeDefined();
     });
 
-    it('goes back to step 1 on back click', () => {
-      goToStep2();
+    it('goes back to step 1 on back click', async () => {
+      await goToStep2();
       fireEvent.click(screen.getByTestId('step2-back'));
       expect(screen.getByTestId('step1-next')).toBeDefined();
     });
 
     it('calls startImport when start is clicked', async () => {
-      goToStep2();
+      await goToStep2();
       fireEvent.click(screen.getByTestId('step2-start'));
       await waitFor(() => {
         expect(mockStartMutate).toHaveBeenCalledWith({ source: 'claude-mem', dbPath: '/tmp/x.db' });
@@ -149,7 +188,7 @@ describe('MemoryImportView', () => {
     });
 
     it('advances to step 3 after start succeeds', async () => {
-      goToStep2();
+      await goToStep2();
       fireEvent.click(screen.getByTestId('step2-start'));
       await waitFor(() => {
         expect(screen.getByTestId('progress-bar')).toBeDefined();
@@ -162,19 +201,19 @@ describe('MemoryImportView', () => {
   // ---------------------------------------------------------------------------
 
   describe('Step 3 — Progress', () => {
-    function goToStep3() {
+    async function goToStep3() {
       renderView();
       const input = screen.getByTestId('db-path-input');
       fireEvent.change(input, { target: { value: '/tmp/x.db' } });
       fireEvent.click(screen.getByTestId('step1-next'));
+      await waitFor(() => screen.getByTestId('step2-start'));
       fireEvent.click(screen.getByTestId('step2-start'));
+      await waitFor(() => screen.getByTestId('progress-bar'));
     }
 
     it('renders a progress bar', async () => {
-      goToStep3();
-      await waitFor(() => {
-        expect(screen.getByTestId('progress-bar')).toBeDefined();
-      });
+      await goToStep3();
+      expect(screen.getByTestId('progress-bar')).toBeDefined();
     });
 
     it('renders a cancel button while running', async () => {
@@ -185,11 +224,13 @@ describe('MemoryImportView', () => {
             status: 'running',
             progress: { current: 50, total: 100 },
             imported: 30,
+            skipped: 0,
+            errors: 0,
           },
         },
         isLoading: false,
       });
-      goToStep3();
+      await goToStep3();
       await waitFor(() => {
         expect(screen.getByTestId('cancel-import')).toBeDefined();
       });
@@ -203,11 +244,13 @@ describe('MemoryImportView', () => {
             status: 'running',
             progress: { current: 50, total: 100 },
             imported: 30,
+            skipped: 0,
+            errors: 0,
           },
         },
         isLoading: false,
       });
-      goToStep3();
+      await goToStep3();
       await waitFor(() => screen.getByTestId('cancel-import'));
       fireEvent.click(screen.getByTestId('cancel-import'));
       expect(mockCancelMutate).toHaveBeenCalledWith('job-1');
@@ -238,6 +281,7 @@ describe('MemoryImportView', () => {
       const input = screen.getByTestId('db-path-input');
       fireEvent.change(input, { target: { value: '/tmp/x.db' } });
       fireEvent.click(screen.getByTestId('step1-next'));
+      await waitFor(() => screen.getByTestId('step2-start'));
       fireEvent.click(screen.getByTestId('step2-start'));
 
       await waitFor(() => {
@@ -264,6 +308,7 @@ describe('MemoryImportView', () => {
       const input = screen.getByTestId('db-path-input');
       fireEvent.change(input, { target: { value: '/tmp/x.db' } });
       fireEvent.click(screen.getByTestId('step1-next'));
+      await waitFor(() => screen.getByTestId('step2-start'));
       fireEvent.click(screen.getByTestId('step2-start'));
 
       await waitFor(() => screen.getByTestId('import-summary'));
@@ -289,6 +334,7 @@ describe('MemoryImportView', () => {
       const input = screen.getByTestId('db-path-input');
       fireEvent.change(input, { target: { value: '/tmp/x.db' } });
       fireEvent.click(screen.getByTestId('step1-next'));
+      await waitFor(() => screen.getByTestId('step2-start'));
       fireEvent.click(screen.getByTestId('step2-start'));
 
       await waitFor(() => screen.getByTestId('import-summary'));

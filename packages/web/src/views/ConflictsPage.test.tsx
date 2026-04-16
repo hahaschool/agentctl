@@ -234,7 +234,7 @@ describe('ConflictsPage', () => {
   describe('empty state', () => {
     it('shows empty message when no conflicts exist', () => {
       renderWithData([]);
-      expect(screen.getByText('No sync conflicts found.')).toBeDefined();
+      expect(screen.getByText('No sync conflicts found')).toBeDefined();
     });
 
     it('shows "all resolved" hint when filtered to pending', () => {
