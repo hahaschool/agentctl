@@ -1,6 +1,80 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifySchemaDrift, LOCAL_SCHEMA_VERSION } from './mesh-version';
+import {
+  classifyDrift,
+  classifySchemaDrift,
+  compareSemver,
+  LOCAL_SCHEMA_VERSION,
+} from './mesh-version';
+
+// ---------------------------------------------------------------------------
+// compareSemver — version string comparison used by canUpdatePeer
+// ---------------------------------------------------------------------------
+
+describe('compareSemver', () => {
+  it('returns 0 for identical versions', () => {
+    expect(compareSemver('0.5.6', '0.5.6')).toBe(0);
+  });
+
+  it('returns 0 regardless of "v" prefix', () => {
+    expect(compareSemver('v0.5.6', '0.5.6')).toBe(0);
+    expect(compareSemver('0.5.6', 'v0.5.6')).toBe(0);
+    expect(compareSemver('v0.5.6', 'v0.5.6')).toBe(0);
+  });
+
+  it('returns -1 when a < b', () => {
+    expect(compareSemver('0.5.0', '0.5.6')).toBe(-1);
+    expect(compareSemver('0.4.9', '0.5.0')).toBe(-1);
+    expect(compareSemver('0.5.6', '1.0.0')).toBe(-1);
+  });
+
+  it('returns 1 when a > b', () => {
+    expect(compareSemver('0.5.6', '0.5.0')).toBe(1);
+    expect(compareSemver('1.0.0', '0.5.6')).toBe(1);
+    expect(compareSemver('0.6.0', '0.5.6')).toBe(1);
+  });
+
+  it('returns null for null/undefined inputs', () => {
+    expect(compareSemver(null, '0.5.6')).toBeNull();
+    expect(compareSemver('0.5.6', null)).toBeNull();
+    expect(compareSemver(null, null)).toBeNull();
+    expect(compareSemver(undefined, '0.5.6')).toBeNull();
+  });
+
+  it('returns null for unparseable versions', () => {
+    expect(compareSemver('abc', '0.5.6')).toBeNull();
+    expect(compareSemver('0.5.6', 'not-a-version')).toBeNull();
+  });
+
+  it('strips pre-release/build metadata', () => {
+    expect(compareSemver('0.5.6-beta.1', '0.5.6')).toBe(0);
+    expect(compareSemver('0.5.6+build123', '0.5.6')).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// classifyDrift — peer version drift classification
+// ---------------------------------------------------------------------------
+
+describe('classifyDrift', () => {
+  it('returns "match" when versions are equal', () => {
+    expect(classifyDrift('0.5.6', '0.5.6')).toBe('match');
+    expect(classifyDrift('v0.5.6', '0.5.6')).toBe('match');
+  });
+
+  it('returns "behind" when peer < local', () => {
+    expect(classifyDrift('0.5.0', '0.5.6')).toBe('behind');
+  });
+
+  it('returns "ahead" when peer > local', () => {
+    expect(classifyDrift('0.6.0', '0.5.6')).toBe('ahead');
+  });
+
+  it('returns "unknown" when peer version is null', () => {
+    expect(classifyDrift(null, '0.5.6')).toBe('unknown');
+    expect(classifyDrift(undefined, '0.5.6')).toBe('unknown');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // classifySchemaDrift — 33.10 peer-ahead per-row badge source of truth

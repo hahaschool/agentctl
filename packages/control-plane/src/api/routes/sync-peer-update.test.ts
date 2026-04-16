@@ -26,7 +26,12 @@ function createMockDb(knownPeers: Record<string, string>): Database {
   } as unknown as Database;
 }
 
-async function buildApp(opts: { db: Database; runScript?: RunScriptFn }): Promise<FastifyInstance> {
+async function buildApp(opts: {
+  db: Database;
+  runScript?: RunScriptFn;
+  signingSecretKey?: string | null;
+  fetchImpl?: typeof fetch;
+}): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(syncPeerUpdateRoutes, {
     prefix: '/api/sync/peers',
@@ -35,6 +40,8 @@ async function buildApp(opts: { db: Database; runScript?: RunScriptFn }): Promis
     runScript: opts.runScript,
     scriptPath: '/fake/peer-update.sh',
     pm2Ecosystem: 'agentctl-test',
+    signingSecretKey: opts.signingSecretKey ?? undefined,
+    fetchImpl: opts.fetchImpl,
   });
   await app.ready();
   return app;
@@ -298,6 +305,85 @@ describe('syncPeerUpdateRoutes', () => {
       message: 'Too many peer update requests',
     });
     expect(runScript).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 409 PEER_UPDATE_DOWNGRADE_REJECTED when proxy target has >= local version', async () => {
+    const keyPair = generateDispatchSigningKeyPair();
+
+    // Mock DB: returns a remote peer with version 0.6.0 (higher than local 0.5.6)
+    const mockDb = {
+      execute: vi.fn(async () => ({
+        rows: [
+          {
+            id: REMOTE_MACHINE_ID,
+            sync_url: 'http://100.64.0.2:8080',
+            is_self: false,
+            peer_version: '0.6.0',
+            public_key: keyPair.publicKey,
+          },
+        ],
+      })),
+    } as unknown as Database;
+
+    vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.5.6');
+
+    const fetchImpl = vi.fn();
+    app = await buildApp({
+      db: mockDb,
+      signingSecretKey: keyPair.secretKey,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/sync/peers/${REMOTE_MACHINE_ID}/update`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toBe('PEER_UPDATE_DOWNGRADE_REJECTED');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('allows proxy update when peer version is lower than local', async () => {
+    const keyPair = generateDispatchSigningKeyPair();
+
+    // Mock DB: remote peer at 0.5.0 (lower than local 0.5.6)
+    const mockDb = {
+      execute: vi.fn(async () => ({
+        rows: [
+          {
+            id: REMOTE_MACHINE_ID,
+            sync_url: 'http://100.64.0.2:8080',
+            is_self: false,
+            peer_version: '0.5.0',
+            public_key: keyPair.publicKey,
+          },
+        ],
+      })),
+    } as unknown as Database;
+
+    vi.spyOn(buildInfo, 'getAppVersion').mockReturnValue('0.5.6');
+
+    const fetchImpl = vi.fn().mockResolvedValue({
+      status: 200,
+      text: () => Promise.resolve(JSON.stringify({ status: 'success' })),
+    });
+
+    app = await buildApp({
+      db: mockDb,
+      signingSecretKey: keyPair.secretKey,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/sync/peers/${REMOTE_MACHINE_ID}/update`,
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('declares direct Fastify rate-limit and auth markers for CodeQL', () => {
