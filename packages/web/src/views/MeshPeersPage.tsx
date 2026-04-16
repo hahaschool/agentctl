@@ -10,6 +10,7 @@ import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
 import type { SyncPeer, SyncPeerCursors, UpsertSyncPeerInput } from '@/lib/api';
+import { describeReverseRegistrationError } from '@/lib/mesh-errors';
 import {
   classifyDrift,
   classifySchemaDrift,
@@ -418,8 +419,13 @@ function PeerFormDialog({ open, peer, onClose }: PeerFormDialogProps): React.JSX
         if (!isUpdate && reverse === 'ok') {
           toast.success(`Peer ${machineId} also registered this node in reverse`);
         } else if (!isUpdate && reverse === 'failed') {
+          const g = describeReverseRegistrationError(
+            res.peer?.reverseRegistrationErrorCode,
+            res.peer?.reverseRegistrationError,
+            { syncUrl: res.peer?.syncUrl ?? undefined },
+          );
           toast.error(
-            `Peer ${machineId} saved but reverse registration failed — retry from the peer row`,
+            `Peer ${machineId} saved but reverse registration failed: ${g.title}. ${g.action}`,
           );
         }
         onClose();
@@ -802,9 +808,12 @@ export function ReverseRegistrationBadge({
   if (peer.isSelf) return null;
   const status = peer.reverseRegistrationStatus;
   if (status !== 'failed') return null;
-  const tooltip = peer.reverseRegistrationError
-    ? `Reverse registration failed: ${peer.reverseRegistrationError}`
-    : 'Reverse registration failed';
+  const guidance = describeReverseRegistrationError(
+    peer.reverseRegistrationErrorCode,
+    peer.reverseRegistrationError,
+    { syncUrl: peer.syncUrl ?? undefined },
+  );
+  const tooltip = `${guidance.title}: ${guidance.action}`;
 
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -1377,11 +1386,12 @@ export function MeshPeersPage(): React.JSX.Element {
           if (res.ok) {
             toast.success(`Reverse registration for ${peer.machineId} succeeded`);
           } else {
-            toast.error(
-              res.message
-                ? `Reverse registration still failing: ${res.message}`
-                : `Reverse registration for ${peer.machineId} still failing`,
+            const g = describeReverseRegistrationError(
+              res.peer?.reverseRegistrationErrorCode,
+              res.message ?? res.peer?.reverseRegistrationError,
+              { syncUrl: peer.syncUrl ?? undefined },
             );
+            toast.error(`${g.title}: ${g.action}`);
           }
         },
         onError: (err) => {

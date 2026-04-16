@@ -40,6 +40,11 @@ export type SyncPeer = {
   reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
   reverseRegistrationError?: string | null;
   reverseRegistrationAt?: string | null;
+  // §33.12 Phase 3.1: structured error code + HTTP status for actionable
+  // frontend guidance. Both null on success or when the peer's response was
+  // not JSON.
+  reverseRegistrationErrorCode?: string | null;
+  reverseRegistrationHttpStatus?: number | null;
   // §33.10: schema-ahead envelope rejection tracking. When `schemaAheadCount`
   // is > 0, the apply-side compat gate has rejected one or more envelopes from
   // this peer because their `schemaVersion` exceeded the local CP by more than
