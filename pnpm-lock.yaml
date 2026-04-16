@@ -52,8 +52,8 @@ importers:
         specifier: ^11.0.0
         version: 11.2.0
       fastify:
-        specifier: ^5.8.3
-        version: 5.8.3
+        specifier: ^5.8.5
+        version: 5.8.5
       node-pty:
         specifier: ^1.1.0
         version: 1.1.0
@@ -66,7 +66,7 @@ importers:
     optionalDependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.51
-        version: 0.2.104(zod@4.3.6)
+        version: 0.2.109(zod@4.3.6)
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -117,8 +117,8 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.2)(pg@8.19.0)
       fastify:
-        specifier: ^5.8.3
-        version: 5.8.3
+        specifier: ^5.8.5
+        version: 5.8.5
       ioredis:
         specifier: ^5.4.0
         version: 5.9.3
@@ -349,8 +349,8 @@ packages:
       '@jridgewell/trace-mapping': 0.3.31
     dev: true
 
-  /@anthropic-ai/claude-agent-sdk@0.2.104(zod@4.3.6):
-    resolution: {integrity: sha512-lVm+nS79r6WWlDnv5AgRzTtAlbP8O6M6kkWmDZAWE3nt9agmngxls9frJFvH55uzws2+6l0yyup/JYspfijkzw==}
+  /@anthropic-ai/claude-agent-sdk@0.2.109(zod@4.3.6):
+    resolution: {integrity: sha512-u7qGFBB2gGcHgiqa2Vn9uF+2Vbr6u6XlGE0SDTfvc49GXwbTfuJ7bmacUoIN2EMXLm7PjkVJC4M8WjccT2MpHQ==}
     engines: {node: '>=18.0.0'}
     requiresBuild: true
     peerDependencies:
@@ -2765,8 +2765,8 @@ packages:
     dev: false
     optional: true
 
-  /@napi-rs/wasm-runtime@1.1.3(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2):
-    resolution: {integrity: sha512-xK9sGVbJWYb08+mTJt3/YV24WxvxpXcXtP6B172paPZ+Ts69Re9dAr7lKwJoeIx8OoeuimEiRZ7umkiUVClmmQ==}
+  /@napi-rs/wasm-runtime@1.1.4(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2):
+    resolution: {integrity: sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow==}
     requiresBuild: true
     peerDependencies:
       '@emnapi/core': ^1.7.1
@@ -4637,7 +4637,7 @@ packages:
     dependencies:
       '@emnapi/core': 1.9.2
       '@emnapi/runtime': 1.9.2
-      '@napi-rs/wasm-runtime': 1.1.3(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)
+      '@napi-rs/wasm-runtime': 1.1.4(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)
     dev: true
     optional: true
 
@@ -6943,8 +6943,8 @@ packages:
     resolution: {integrity: sha512-FAIDA8eovSt5qcDgcBvDuX/v0Cjz0ohGhENZ/wpc3y+oZCY2afZ9Baqql3g/lC+OHRnciQol4ww7tuthOb9idw==}
     dev: false
 
-  /fastify@5.8.3:
-    resolution: {integrity: sha512-XJXpRQ41+rsJ/GLeP9vyDC+fBXilcTlEXokMSexkdEkla4uf7ZQNaI5xl3el+kW5TZQulqYxLr659ey/KX7XmQ==}
+  /fastify@5.8.5:
+    resolution: {integrity: sha512-Yqptv59pQzPgQUSIm87hMqHJmdkb1+GPxdE6vW6FRyVE9G86mt7rOghitiU4JHRaTyDUk9pfeKmDeu70lAwM4Q==}
     dependencies:
       '@fastify/ajv-compiler': 4.0.5
       '@fastify/error': 4.2.0
