@@ -404,6 +404,12 @@ export const syncNodes = pgTable('sync_nodes', {
   peerVersion: text('peer_version'),
   peerGitSha: text('peer_git_sha'),
   peerSchemaVersion: integer('peer_schema_version'),
+  // 33.8: reverse registration tracking. When we auto-register ourselves on a
+  // remote peer, we persist the outcome so the UI can surface one-way peers and
+  // allow manual retry.  NULL = never attempted, 'pending'/'ok'/'failed'.
+  reverseRegistrationStatus: text('reverse_registration_status'),
+  reverseRegistrationError: text('reverse_registration_error'),
+  reverseRegistrationAt: timestamp('reverse_registration_at', { withTimezone: true }),
   // 33.10: envelope schema-ahead rejection tracking. When the apply-side
   // MESH_ENVELOPE_SCHEMA_AHEAD gate fires, we stamp the rejected envelope's
   // schemaVersion + timestamp here and bump the count so /mesh-peers can surface
