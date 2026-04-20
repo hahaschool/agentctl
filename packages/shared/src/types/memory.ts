@@ -46,18 +46,21 @@ export type MemoryDrawer = {
   updatedAt: string;
 };
 
-export type EntityType =
-  | 'code_artifact'
-  | 'decision'
-  | 'pattern'
-  | 'error'
-  | 'person'
-  | 'concept'
-  | 'preference'
-  | 'skill'
-  | 'experience'
-  | 'principle'
-  | 'question';
+export const MEMORY_ENTITY_TYPES = [
+  'code_artifact',
+  'decision',
+  'pattern',
+  'error',
+  'person',
+  'concept',
+  'preference',
+  'skill',
+  'experience',
+  'principle',
+  'question',
+] as const;
+
+export type EntityType = (typeof MEMORY_ENTITY_TYPES)[number];
 
 export type RelationType =
   | 'modifies'
@@ -120,6 +123,30 @@ export type MemorySearchResult = {
   fact: MemoryFact;
   score: number;
   source_path: 'vector' | 'bm25' | 'graph';
+};
+
+export type MemoryDedupRecommendation = 'skip' | 'merge' | 'store_new';
+
+export type MemoryDedupNearestMatch = {
+  id: string;
+  score: number | null;
+  content_preview: string;
+  source_path: string | null;
+};
+
+export type MemoryDedupCheckRequest = {
+  scope: MemoryScope;
+  entity_type?: EntityType;
+  content_preview: string;
+  embedding_precomputed?: readonly number[];
+};
+
+export type MemoryDedupCheckResponse = {
+  ok: true;
+  is_duplicate: boolean;
+  nearest_matches: MemoryDedupNearestMatch[];
+  recommendation: MemoryDedupRecommendation;
+  rationale: string;
 };
 
 export type InjectionTier = 'pinned' | 'on-demand' | 'triggered';

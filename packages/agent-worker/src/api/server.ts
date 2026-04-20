@@ -25,6 +25,7 @@ import { gitRoutes } from './routes/git.js';
 import { getActiveLoops, loopRoutes } from './routes/loop.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { mcpDiscoverRoutes } from './routes/mcp-discover.js';
+import { memoryDedupCheckRoutes } from './routes/memory-dedup-check.js';
 import { memoryFeedbackRoutes } from './routes/memory-feedback.js';
 import { memoryPromoteRoutes } from './routes/memory-promote.js';
 import { memoryRecallRoutes } from './routes/memory-recall.js';
@@ -316,6 +317,11 @@ export async function createWorkerServer({
       logger,
     });
     await app.register(memoryPromoteRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+    await app.register(memoryDedupCheckRoutes, {
       prefix: '/api/mcp',
       controlPlaneUrl,
       logger,
