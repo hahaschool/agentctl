@@ -40,14 +40,31 @@ slice. PR #701 locked the worker-side MemPalace drawer MCP contracts —
 `POST /api/mcp/memory-drawer-search` and `POST /api/mcp/memory-drawer-get`
 cover sanitized-query validation, `limit 1-100`, safe-identifier
 `drawer_id` guards, CP `404/501/204` → empty-index mapping, `DRAWER_NOT_FOUND`
-404s, 503 unreachable mapping, and null-argument 1s fast-rejects. PR #700
-broadened the focused web e2e CI lane from 21 → 23 specs / 72 → 79 tests
-with `memory-reports.spec.ts` + `memory-graph.spec.ts`. PR #697 repaired
+404s, 503 unreachable mapping, and null-argument 1s fast-rejects. PR #703
+closed the `session_summaries` → `memory_fact_sources` gap by extending
+`scripts/backfill-memory-drawers.ts` with `planSessionSummaryFactWrites` +
+`writeSessionSummaryFacts` helpers, threading `sessionSummary` through
+`processClaudeMemCandidate`, emitting one atomic fact per summary anchored
+at `session_summaries:<id>:parent`, and adding three counters plus four new
+`describe('claude-mem session_summaries fact mapping')` tests (22/22
+backfill tests green). PR #704 landed the CP drawer MCP backend index:
+new `packages/control-plane/src/api/routes/memory-drawers.ts` exposes
+`GET /api/memory/drawers/search?q&scope&limit` using `content_tsv_simple`
+tsvector (config `simple`) with optional pgvector cosine via Reciprocal
+Rank Fusion (k=60) gated on an `EmbeddingClient` option, and
+`GET /api/memory/drawers/:drawerId` with the same safe-identifier pattern
+used by the worker; empty-query-after-sanitization returns
+`200 { ok: true, results: [] }` to match the worker cold-start contract;
+plugin registered in `server.ts` but the `embeddingClient` option is
+intentionally not yet wired from `index.ts`, so drawer search runs
+keyword-only until the follow-up lands. PR #700 broadened the focused web
+e2e CI lane from 21 → 23 specs / 72 → 79 tests with
+`memory-reports.spec.ts` + `memory-graph.spec.ts`. PR #697 repaired
 the remote peer upgrade migrations + health-probe drift that bricked macmini
-in 2026-04; PR #698 corrected the PR #695 search-path docs and post-#696
-checkpoint. Live search wiring, private/full fixture coverage, CP drawer
-search index integration, injector budget modes, Surface A dry-run
-generator, and `session_summaries` → `memory_fact_sources` link writes remain.
+in 2026-04; PR #698/#702 refreshed the post-#695/#701 checkpoints. Live
+search wiring, private/full fixture coverage, CP drawer search
+`EmbeddingClient` wiring from `index.ts`, injector budget modes, Surface A
+dry-run generator, and drawer-aware fusion feature-flag rollout remain.
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
 
