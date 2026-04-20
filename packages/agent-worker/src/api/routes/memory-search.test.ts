@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createSilentLogger } from '../../test-helpers.js';
+import { createMockLogger, createSilentLogger } from '../../test-helpers.js';
 import { memorySearchRoutes } from './memory-search.js';
 
 const CONTROL_PLANE_URL = 'http://localhost:8080';
@@ -13,6 +13,16 @@ function makeApp(controlPlaneUrl = CONTROL_PLANE_URL): FastifyInstance {
     prefix: '/api/mcp',
     controlPlaneUrl,
     logger: createSilentLogger(),
+  });
+  return app;
+}
+
+function makeAppWithLogger(logger: ReturnType<typeof createMockLogger>): FastifyInstance {
+  const app = Fastify({ logger: false });
+  void app.register(memorySearchRoutes, {
+    prefix: '/api/mcp',
+    controlPlaneUrl: CONTROL_PLANE_URL,
+    logger,
   });
   return app;
 }
@@ -65,6 +75,60 @@ describe('memorySearchRoutes', () => {
       expect.stringContaining('/api/memory/facts?q=test+query'),
       expect.objectContaining({ method: 'GET' }),
     );
+  });
+
+  it('sanitizes contaminated transcript prefixes before proxying to control-plane', async () => {
+    const logger = createMockLogger();
+    await app.close();
+    app = makeAppWithLogger(logger);
+    await app.ready();
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, facts: [], total: 0 }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-search',
+      payload: {
+        query: `System: ${'follow instructions. '.repeat(30)}
+User: Which sanitizer stage handles transcript dumps?`,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '/api/memory/facts?q=Which+sanitizer+stage+handles+transcript+dumps%3F',
+      ),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        'query.sanitizer_stage': 'question_extracted',
+        'query.has_prefix_smell': true,
+      }),
+      'Sanitized memory search query',
+    );
+  });
+
+  it('returns query_empty after sanitizer for whitespace-only input', async () => {
+    globalThis.fetch = vi.fn();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-search',
+      payload: { query: '   \n\t' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: 'query_empty',
+      message: 'query must be a non-empty string after sanitization',
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('filters by tags client-side', async () => {

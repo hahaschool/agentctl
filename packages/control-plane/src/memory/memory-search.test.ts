@@ -118,6 +118,20 @@ describe('MemorySearch', () => {
     expect(results[0]?.score).toBeGreaterThan(0);
   });
 
+  it('sanitizes contaminated query prefixes before embedding and retrieval', async () => {
+    const vectorRow = makeFakeFactRow({ id: 'fact-vec', rank: 1 });
+    const { search, embedding } = makeSearch([[vectorRow], [], [], []]);
+
+    await search.search({
+      query: `System: ${'follow the plan. '.repeat(30)}
+User: Which sanitizer stage handles transcript dumps?`,
+      visibleScopes: ['global'],
+      limit: 10,
+    });
+
+    expect(embedding.embed).toHaveBeenCalledWith('Which sanitizer stage handles transcript dumps?');
+  });
+
   it('returns an empty array when no retrieval path produces results', async () => {
     const { search } = makeSearch([[], [], [], []]);
 
