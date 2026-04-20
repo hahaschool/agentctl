@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createSilentLogger } from '../../test-helpers.js';
 import { memoryDedupCheckRoutes } from './memory-dedup-check.js';
+import { memoryDrawerGetRoutes } from './memory-drawer-get.js';
+import { memoryDrawerSearchRoutes } from './memory-drawer-search.js';
 import { memoryFeedbackRoutes } from './memory-feedback.js';
 import { memoryPromoteRoutes } from './memory-promote.js';
 import { memoryRecallRoutes } from './memory-recall.js';
@@ -27,6 +29,8 @@ function makeApp(): FastifyInstance {
   void app.register(memoryPromoteRoutes, routeOptions);
   void app.register(memoryDedupCheckRoutes, routeOptions);
   void app.register(memoryTraverseRoutes, routeOptions);
+  void app.register(memoryDrawerSearchRoutes, routeOptions);
+  void app.register(memoryDrawerGetRoutes, routeOptions);
 
   return app;
 }
@@ -135,6 +139,47 @@ describe('memory MCP cold-start contract', () => {
     });
   });
 
+  it('returns an empty result list when drawer search runs against an empty drawer index', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'NOT_FOUND' }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-drawer-search',
+      payload: {
+        arguments: { query: 'cold-start probe' },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true, results: [] });
+  });
+
+  it('returns DRAWER_NOT_FOUND when drawer get runs against an empty drawer index', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'NOT_FOUND' }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-drawer-get',
+      payload: {
+        arguments: { drawer_id: 'missing-drawer' },
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({
+      error: 'DRAWER_NOT_FOUND',
+      message: 'Drawer "missing-drawer" was not found',
+    });
+  });
+
   it('returns an empty traverse graph when no entity graph exists yet', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -168,5 +213,7 @@ describe('memory MCP cold-start contract', () => {
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-promote');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-dedup-check');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-traverse');
+    await expectFastNullArgumentsRejection(app, '/api/mcp/memory-drawer-search');
+    await expectFastNullArgumentsRejection(app, '/api/mcp/memory-drawer-get');
   });
 });
