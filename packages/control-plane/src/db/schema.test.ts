@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import type { AgentStatus, AgentType, RunPhase, RunStatus, RunTrigger } from '@agentctl/shared';
 import { AGENT_STATUSES } from '@agentctl/shared';
 import { getTableColumns, getTableName } from 'drizzle-orm';
@@ -11,6 +12,7 @@ import {
   machineRuntimeState,
   machines,
   managedSessions,
+  memoryDrawerBackfillState,
   memoryDrawers,
   memoryEdges,
   memoryFacts,
@@ -111,10 +113,12 @@ describe('Schema module exports', () => {
     expect(memoryFacts).toBeDefined();
     expect(memoryEdges).toBeDefined();
     expect(memoryDrawers).toBeDefined();
+    expect(memoryDrawerBackfillState).toBeDefined();
     expect(getTableName(memoryScopes)).toBe('memory_scopes');
     expect(getTableName(memoryFacts)).toBe('memory_facts');
     expect(getTableName(memoryEdges)).toBe('memory_edges');
     expect(getTableName(memoryDrawers)).toBe('memory_drawers');
+    expect(getTableName(memoryDrawerBackfillState)).toBe('memory_drawer_backfill_state');
   });
 });
 
@@ -1570,6 +1574,50 @@ describe('memoryDrawers table columns', () => {
     expect(meta.sourceJson.hasDefault).toBe(true);
     expect(meta.syncVisibility.hasDefault).toBe(true);
     expect(meta.redactionStatus.hasDefault).toBe(true);
+  });
+});
+
+describe('memoryDrawerBackfillState table columns', () => {
+  const meta = getColumnMeta(memoryDrawerBackfillState);
+
+  it('has the resumable drawer backfill state contract columns', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'sourceType',
+      'sourceRoot',
+      'cursorJson',
+      'status',
+      'lastError',
+      'createdAt',
+      'updatedAt',
+    ]);
+  });
+
+  it('stores source-local cursor and lifecycle status as required fields', () => {
+    expect(meta.id.primary).toBe(true);
+    expect(meta.sourceType.notNull).toBe(true);
+    expect(meta.sourceRoot.notNull).toBe(true);
+    expect(meta.cursorJson.notNull).toBe(true);
+    expect(meta.cursorJson.hasDefault).toBe(true);
+    expect(meta.status.notNull).toBe(true);
+    expect(meta.lastError.notNull).toBe(false);
+    expect(meta.createdAt.hasDefault).toBe(true);
+    expect(meta.updatedAt.hasDefault).toBe(true);
+  });
+});
+
+describe('Drizzle memory drawer migration journal', () => {
+  it('tracks the backfill state migration after the drawer table migration', () => {
+    const journal = JSON.parse(
+      readFileSync(new URL('../../drizzle/meta/_journal.json', import.meta.url), 'utf8'),
+    ) as { entries: Array<{ tag: string }> };
+
+    const tags = journal.entries.map((entry) => entry.tag);
+    expect(tags).toContain('0030_add_memory_drawers');
+    expect(tags).toContain('0032_add_memory_drawer_backfill_state');
+    expect(tags.indexOf('0032_add_memory_drawer_backfill_state')).toBeGreaterThan(
+      tags.indexOf('0030_add_memory_drawers'),
+    );
   });
 });
 

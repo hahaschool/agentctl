@@ -7,6 +7,8 @@ export type {
   SearchMemoryRequest,
 } from './mem0-client.js';
 export { Mem0Client } from './mem0-client.js';
+export type { StartMemoryDrawerBackfillInput } from './memory-drawer-backfill-state-store.js';
+export { MemoryDrawerBackfillStateStore } from './memory-drawer-backfill-state-store.js';
 export {
   chunkMemoryDrawerContent,
   reconstructMemoryDrawerContent,
