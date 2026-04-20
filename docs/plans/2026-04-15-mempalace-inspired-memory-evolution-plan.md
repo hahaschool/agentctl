@@ -30,9 +30,24 @@ skip/merge/store_new scoring at plan thresholds (0.92/0.82), defensive
 gap by adding an additive `results: [{fact, score, source_path}]` array on
 the semantic-search branch of `GET /api/memory/facts`, so dedup candidates
 carry similarity scores into the worker route without breaking the existing
-`facts` envelope or the ILIKE/empty-`q` branches. Live search wiring,
-private/full fixture coverage, `claude-mem` → `memory_fact_sources` link
-writes, injector budget modes, and Surface A dry-run generator remain.
+`facts` envelope or the ILIKE/empty-`q` branches. PR #699 extended the
+`memory:backfill-drawers` CLI with a claude-mem atomic-fact mapping pass:
+`observations` rows now fan out into drawer + atomic `memory_facts` with
+deterministic `observations:<id>:parent`/`:fact:<idx>` source-span keys,
+offsets resolved via sanitized-text lookup with full-drawer fallback, and a
+new `--machine-id` flag; `session_summaries` remain drawer-only for this
+slice. PR #701 locked the worker-side MemPalace drawer MCP contracts —
+`POST /api/mcp/memory-drawer-search` and `POST /api/mcp/memory-drawer-get`
+cover sanitized-query validation, `limit 1-100`, safe-identifier
+`drawer_id` guards, CP `404/501/204` → empty-index mapping, `DRAWER_NOT_FOUND`
+404s, 503 unreachable mapping, and null-argument 1s fast-rejects. PR #700
+broadened the focused web e2e CI lane from 21 → 23 specs / 72 → 79 tests
+with `memory-reports.spec.ts` + `memory-graph.spec.ts`. PR #697 repaired
+the remote peer upgrade migrations + health-probe drift that bricked macmini
+in 2026-04; PR #698 corrected the PR #695 search-path docs and post-#696
+checkpoint. Live search wiring, private/full fixture coverage, CP drawer
+search index integration, injector budget modes, Surface A dry-run
+generator, and `session_summaries` → `memory_fact_sources` link writes remain.
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
 
@@ -1289,7 +1304,8 @@ Add env vars through the existing centralized config path used by control-plane/
    - PR #682 added persisted backfill state (`0032`), shared backfill contracts, and state-store tests.
    - PR #686 added the resumable JSONL drawer backfill CLI foundation.
    - PR #692 extended the CLI with a `--source-type claude-mem` drawer-write path for `observations` and `session_summaries`, with deterministic source refs and resumable table/id cursors.
-   - Remaining: `claude-mem` atomic-fact mapping into `memory_facts`, `memory_fact_sources` link writes, batching/backoff, and cost/storage estimates.
+   - PR #699 added the claude-mem atomic-fact mapping: `observations` now fan out into drawer + atomic `memory_facts` writes through a `MemoryStoreLike`/`AddFactLikeInput` seam with deterministic `observations:<id>:parent`/`:fact:<idx>` source-span keys, offsets resolved via sanitized-text lookup with full-drawer fallback, a new `--machine-id` flag, 4 helpers extracted for testability, and 7 new `describe('claude-mem fact mapping')` Vitest cases. `session_summaries` remain drawer-only for this slice.
+   - Remaining: `session_summaries` atomic-fact mapping, full `memory_fact_sources` link writes beyond span metadata, batching/backoff, and cost/storage estimates.
    - Produces first real drawer corpus for eval.
 
 4. **PR D: Checkpoint Capture**
@@ -1305,7 +1321,8 @@ Add env vars through the existing centralized config path used by control-plane/
    - PR #681 delivered the first `memory_dedup_check` route contract, including empty-DB `store_new` behavior and explicit scoring-unavailable responses when candidates exist.
    - PR #694 replaced the `501 DEDUP_SCORING_UNAVAILABLE` branch with full skip/merge/store_new scoring at plan thresholds (`0.92`/`0.82`), defensive `store_new` on missing/non-finite top score, and a populated `MemoryDedupCheckResponse.match_id`.
    - PR #695 added the CP score pass-through: `GET /api/memory/facts` now returns an additive `results: [{fact, score, source_path}]` array on the semantic-search branch alongside `facts`, preserving filter-then-paginate order across both arrays and leaving the ILIKE/empty-`q` branches untouched. This closes the end-to-end scoring gap so dedup candidates carry similarity scores through without the defensive `store_new` fallback.
-   - Remaining: drawer search behind feature flags, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
+   - PR #701 locked the worker-side MCP drawer parity contracts: `POST /api/mcp/memory-drawer-search` (sanitized query, `limit 1-100`, CP cold-start `404/501/204` → empty-index, 503 `MEMORY_DRAWER_SEARCH_UNREACHABLE`) and `POST /api/mcp/memory-drawer-get` (safe-identifier `drawer_id` guard blocking path traversal, control chars, leading dots, empty-after-trim, length > 128; `404 DRAWER_NOT_FOUND`; 503 on unreachable), with 1485/1485 worker tests green and shape-only behavior until CP drawer index integration lands.
+   - Remaining: CP drawer search + get index integration (vector + keyword fusion over `memory_drawers`), feature-flagged fact+drawer fusion, eval comparison, and no default enablement until metrics pass.
 
 7. **PR G: Diaries**
    - Adds diary-as-fact route and basic UI.
@@ -1376,7 +1393,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Injector supports fact-only, fact-plus-snippet, and full-drawer modes with per-tier caps.
 - [ ] Checkpoint capture cannot block an agent run, proven by simulated PG/embedding failure tests.
 - [ ] PreCompact checkpoint hook returns within 2.5 seconds under a stalled queue fixture.
-- [ ] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts.
+- [x] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts. *(drawer path in PR #692; `observations` atomic-fact mapping with deterministic source-span keys in PR #699; `session_summaries` atomic-fact mapping still deferred)*
 - [ ] Mesh sync behavior for drawers and temporal edge fields is explicit before any sync payload changes.
 - [ ] Phase 6 includes entity canonicalization or ships with an explicit UI warning and follow-up PR.
 - [x] `memory_traverse` enforces hop/node caps and returns an empty graph for missing entities. *(worker route hop validation and empty graph response landed in PR #685; control-plane iterative BFS with hop/node caps, relation/confidence/temporal filters, and 404-on-missing-entity landed in PR #689)*
