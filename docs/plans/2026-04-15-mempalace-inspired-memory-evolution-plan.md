@@ -326,9 +326,9 @@ Notes:
 - `is_diary` folds agent diaries into the existing fact table. Default search excludes diary rows unless requested.
 - `draft` allows non-durable notes without a separate diary table.
 
-### `0032_add_memory_drawer_audit_and_backfill_state.sql`
+### `0032_add_memory_drawer_backfill_state.sql`
 
-Support backfill recovery and audit correlation.
+Support backfill recovery. Audit correlation landed separately through the shared redacted `memory_write` audit path.
 
 ```sql
 CREATE TABLE memory_drawer_backfill_state (
@@ -740,10 +740,10 @@ Mobile constraint:
 split helpers, scoring utilities, sanitized sample fixture, and baseline CLI.
 PR #660 adds a deterministic mock PR bench with threshold
 enforcement and latency percentiles, and PR #667 locks first-run /
-`{ arguments: null }` contracts for the current worker memory MCP routes. The
-remaining Phase 0 work is live-search wiring, future `memory_dedup_check` /
-`memory_traverse` route contracts, private fixture growth, and release/weekly
-held-out automation.
+`{ arguments: null }` contracts for the current worker memory MCP routes. PR
+#681 adds the first `memory_dedup_check` route/cold-start contract. The
+remaining Phase 0 work is live-search wiring, the future `memory_traverse`
+route contract, private fixture growth, and release/weekly held-out automation.
 
 **Files:**
 
@@ -802,9 +802,10 @@ held-out automation.
    - ✅ Current worker route slice: `memory_recall` returns `{ facts: [], edges: [] }`.
    - ✅ Current worker route slice: `memory_report` / stats route returns zero counts, not nulls.
    - `memory_traverse` for a missing entity returns an empty graph, not `404`.
-   - `memory_dedup_check` on an empty DB recommends `store_new` with `nearest_matches: []`.
+   - ✅ `memory_dedup_check` on an empty DB recommends `store_new` with `nearest_matches: []`.
    - ✅ Current worker route slice: every existing memory MCP route rejects `{ arguments: null }` without hanging and returns a structured `400` within one second.
-   - Remaining: add matching cold-start/null-arguments coverage for `memory_dedup_check` and `memory_traverse` when those planned routes exist.
+   - ✅ `memory_dedup_check` rejects `{ arguments: null }` without hanging and returns a structured `400`.
+   - Remaining: add matching cold-start/null-arguments coverage for `memory_traverse` when that planned route exists.
 
 **Tests:**
 
@@ -818,7 +819,7 @@ held-out automation.
 - Contaminated-query eval fixture path exists for Phase 4.
 - Planted-needle bench enforces recall@5 threshold on mock embeddings.
 - Existing worker memory MCP routes return structured empty results for search, recall, and report.
-- Existing worker memory MCP routes reject null `arguments`; planned `memory_dedup_check` / `memory_traverse` get matching tests when implemented.
+- Existing worker memory MCP routes reject null `arguments`; `memory_dedup_check` has matching coverage, and planned `memory_traverse` gets matching tests when implemented.
 
 **Rollback:** No product behavior change.
 
@@ -826,7 +827,7 @@ held-out automation.
 
 **Goal:** Preserve sanitized raw evidence without replacing existing facts.
 
-**Status:** Partially delivered in PRs #671 and #679. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. Remaining Phase 1.5 scope is resumable JSONL/claude-mem backfill plus persisted backfill state; drawers still have no sync triggers and no default retrieval behavior.
+**Status:** Partially delivered in PRs #671, #679, and #682. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. PR #682 added persisted drawer backfill state (`0032_add_memory_drawer_backfill_state.sql`), shared `MemoryDrawerBackfill*` contracts, Drizzle schema/journal/schema tests, and `MemoryDrawerBackfillStateStore` coverage for start/resume, cursor update, and safe failed-state errors. Remaining Phase 1.5 scope is the actual resumable JSONL/claude-mem backfill scripts; drawers still have no sync triggers and no default retrieval behavior.
 
 **Files:**
 
@@ -882,9 +883,11 @@ held-out automation.
 
 **Goal:** Create enough drawer data for search evals and provenance without waiting months.
 
+**Status:** State persistence landed in PR #682: `memory_drawer_backfill_state`, Drizzle schema/journal/schema tests, shared backfill contracts, and store coverage for start/resume, cursor update, and safe failed-state errors. Remaining scope is the actual JSONL/claude-mem backfill worker/script path, batching, dry-run estimates, and source-local idempotency.
+
 **Files:**
 
-- Create: `packages/control-plane/drizzle/0032_add_memory_drawer_audit_and_backfill_state.sql`
+- Create: `packages/control-plane/drizzle/0032_add_memory_drawer_backfill_state.sql`
 - Create: `scripts/backfill-memory-drawers.ts`
 - Create: `scripts/backfill-memory-drawers.test.ts`
 - Modify: `scripts/import-claude-history.ts`
@@ -899,7 +902,7 @@ held-out automation.
    - `narrative` becomes drawer content.
    - `title` and atomic `facts` remain `memory_facts`.
    - `memory_fact_sources` links imported facts to narrative drawers when both exist.
-3. Add resumable state in `memory_drawer_backfill_state`.
+3. ✅ Add resumable state in `memory_drawer_backfill_state`.
 4. Batch embedding calls and rate-limit with exponential backoff.
 5. Make the script idempotent through `(source_type, source_id, chunk_index)`.
 6. Add dry-run mode with counts, estimated tokens, estimated cost, and estimated storage.
@@ -908,6 +911,7 @@ held-out automation.
 
 - Stream-parses large JSONL; does not `JSON.parse(readFileSync())`.
 - Resumes from checkpoint after simulated crash.
+- Backfill state store creates/resumes per-source checkpoints, updates cursors, and stores safe failure summaries without raw content.
 - Deduplicates source-local chunks.
 - Does not write private fixtures or raw secrets.
 - `claude-mem` narrative maps to drawer while facts map to facts.
@@ -1250,8 +1254,8 @@ Add env vars through the existing centralized config path used by control-plane/
 ## Suggested PR Slices
 
 1. **PR A: Eval Harness**
-   - Delivered across PR #655/#660/#667 for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, and current memory MCP cold-start/null-arguments contracts.
-   - Remaining: live search adapter, private fixture coverage, future `memory_dedup_check` / `memory_traverse` cold-start contracts when those routes ship, and release/weekly held-out automation.
+   - Delivered across PR #655/#660/#667/#681 for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, and first `memory_dedup_check` empty-DB/null-arguments route coverage.
+   - Remaining: live search adapter, private fixture coverage, future `memory_traverse` cold-start contract when that route ships, and release/weekly held-out automation.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
@@ -1260,7 +1264,8 @@ Add env vars through the existing centralized config path used by control-plane/
    - No retrieval behavior change.
 
 3. **PR C: Backfill**
-   - Adds resumable JSONL and `claude-mem` drawer backfill with batching.
+   - PR #682 added persisted backfill state (`0032`), shared backfill contracts, and state-store tests.
+   - Remaining: resumable JSONL and `claude-mem` drawer backfill with batching.
    - Produces first real drawer corpus for eval.
 
 4. **PR D: Checkpoint Capture**
@@ -1272,7 +1277,8 @@ Add env vars through the existing centralized config path used by control-plane/
 
 6. **PR F: Drawer-Aware Search**
    - PR #677 delivered the three-stage query sanitizer for existing memory search paths.
-   - Remaining: drawer search behind feature flags, `memory_dedup_check`, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
+   - PR #681 delivered the first `memory_dedup_check` route contract, including empty-DB `store_new` behavior and explicit scoring-unavailable responses when candidates exist.
+   - Remaining: drawer search behind feature flags, full `memory_dedup_check` skip/merge scoring, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
 
 7. **PR G: Diaries**
    - Adds diary-as-fact route and basic UI.
@@ -1332,11 +1338,12 @@ Add env vars through the existing centralized config path used by control-plane/
 - [x] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock ranking/scoring without DB or embedding dependencies.
 - [x] Cold-start tests prove current worker memory search, recall, and stats/report routes return structured empty results from an empty control-plane response.
 - [x] Every existing worker memory MCP route rejects `{ arguments: null }` within one second without hanging.
-- [ ] Cold-start/null-arguments coverage extends to `memory_dedup_check` and `memory_traverse` when those routes ship.
+- [x] Cold-start/null-arguments coverage extends to `memory_dedup_check`. *(PR #681)*
+- [ ] Cold-start/null-arguments coverage extends to `memory_traverse` when that route ships.
 - [ ] Phase 0 records a facts-only baseline number before drawer-aware search changes ranking.
 - [ ] Drawer-aware search is not default-enabled unless R@5 is at least the facts-only baseline and p95 stays within the accepted threshold.
 - [ ] Query sanitizer implements passthrough, question-extraction, and tail-sentence fallback stages, and contamination eval NDCG@10 drop stays under 5 points.
-- [ ] `memory_dedup_check` returns `skip`, `merge`, and `store_new` recommendations and defaults empty DB to `store_new`.
+- [ ] `memory_dedup_check` returns `skip`, `merge`, and `store_new` recommendations at threshold boundaries; empty DB already defaults to `store_new`. *(empty-DB contract in PR #681)*
 - [ ] Memory Browser can show why a result matched and where it came from.
 - [ ] Injector supports fact-only, fact-plus-snippet, and full-drawer modes with per-tier caps.
 - [ ] Checkpoint capture cannot block an agent run, proven by simulated PG/embedding failure tests.
