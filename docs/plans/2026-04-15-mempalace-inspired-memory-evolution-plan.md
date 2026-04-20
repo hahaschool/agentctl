@@ -35,7 +35,7 @@
 
 This v1.3 plan supersedes the original PR #584 draft. It incorporates the review blockers before implementation starts:
 
-- Migration numbers now start after the current latest migration, `0029_sync_nodes_reverse_registration_error_code.sql`. Use `0030`, `0031`, `0032`, and later numbers as listed below. If `main` advances before implementation, stop and update this plan instead of silently reusing occupied numbers.
+- Migration numbers `0030`, `0031`, and `0032` have landed on `main`; future migration work must start at `0033` or later after re-confirming the current head. Do not silently reuse occupied numbers.
 - `wing` / `room` were removed from the schema. Existing `memory_scopes.scope` is the only durable hierarchy. `topic` is an optional room-like label.
 - `content_sha256` is no longer unique. Use it for duplicate scanning only; `(source_type, source_id, chunk_index)` protects deterministic source-local idempotency.
 - Drawer content, hash, snippets, and fact-source offsets are sanitized before storage. `memory_fact_sources` stores offsets, not copied quoted content.
@@ -196,7 +196,7 @@ flowchart LR
 
 ## Data Model Contract
 
-As of this plan, the latest migration on `main` is `0027_sync_nodes_schema_ahead_rejection.sql`. The first implementation PR must use the numbers below exactly after re-confirming `main` has not advanced. If `main` has advanced, update this plan in a small docs PR before writing migrations.
+As of the 2026-04-21 checkpoint, `main` includes the MemPalace migrations through `0032_add_memory_drawer_backfill_state.sql`. The historical migration specs below are retained as implementation record; any new migration PR must start at `0033` or later after re-confirming `main` has not advanced.
 
 ### `0030_add_memory_drawers.sql`
 
@@ -1333,7 +1333,7 @@ Add env vars through the existing centralized config path used by control-plane/
 
 - [x] AgentCTL can store sanitized raw transcript chunks as `memory_drawers` with deterministic chunk order. *(PR #671)*
 - [x] Drawer sanitizer red-team tests cover key/token/URL/cookie/env/private-key leaks. *(PR #671)*
-- [x] Extracted facts link to supporting drawer offsets without copying quoted content. *(PR #688 foundation; PR #699 observations; PR #703 session summaries; PR #708 repairs retry/source-key edge cases)*
+- [ ] Extracted facts link to supporting drawer offsets without copying quoted content. *(Mostly delivered by PR #688 foundation, PR #699 observations, and PR #703 session summaries; open PR #708 still needs to land for retry/source-key edge-case repair.)*
 - [ ] Legacy facts without drawer provenance still search, render, inject, and sync.
 - [x] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, drawer-hit rate, and p95 search time for deterministic mock runs. *(PR #655)*
 - [x] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42 and guards full-set runs behind explicit release/full flags. *(PR #655)*
@@ -1351,7 +1351,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Injector supports fact-only, fact-plus-snippet, and full-drawer modes with per-tier caps.
 - [ ] Checkpoint capture cannot block an agent run, proven by simulated PG/embedding failure tests.
 - [ ] PreCompact checkpoint hook returns within 2.5 seconds under a stalled queue fixture.
-- [x] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts. *(drawer path in PR #692; observations atomic-fact mapping in PR #699; session-summary atomic-fact mapping in PR #703; PR #708 repairs compatibility/span edge cases)*
+- [ ] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts. *(Mostly delivered by PR #692 drawer path, PR #699 observations atomic-fact mapping, and PR #703 session-summary atomic-fact mapping; open PR #708 still needs to land for compatibility/span edge-case repair.)*
 - [ ] Mesh sync behavior for drawers and temporal edge fields is explicit before any sync payload changes.
 - [ ] Phase 6 includes entity canonicalization or ships with an explicit UI warning and follow-up PR.
 - [x] `memory_traverse` enforces hop/node caps and returns an empty graph for missing entities. *(worker route hop validation and empty graph response landed in PR #685; control-plane iterative BFS with hop/node caps, relation/confidence/temporal filters, and 404-on-missing-entity landed in PR #689)*

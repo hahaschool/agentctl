@@ -22,7 +22,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - **CI/CD**: 11 GitHub Actions workflows (build, test, deploy, promotion, cleanup, security, DAST, fleet)
 - **Security**: OWASP Agentic Top 10 compliance, CodeQL + Semgrep + Trivy + ZAP
 
-**7,320+ unit tests** across 113+ files + **220+ Playwright e2e checks**, with the backend-independent webhooks, webhook-deliveries, agent-profiles, agent-settings, audit, machines, approvals, notification-bell approvals, agents list, scheduler, settings, settings-push-devices, session-config, and memory-index slices now gated in CI (21 specs / 72 tests). The `/sessions/[id]` and `/memory/dashboard` route-smoke specs add thin browser coverage for detail/dashboard composition without widening the CI allowlist yet, and the live two-node mesh fixture now covers version drift, A-to-B machine visibility, peer-update dry-run, and schema-ahead rejection behind opt-in gates outside the default lane. The scheduler jobs page is reachable from the web sidebar and covered by focused mocked-query unit tests. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
+**7,320+ unit tests** across 113+ files + **220+ Playwright e2e checks**, with the backend-independent webhooks, webhook-deliveries, agent-profiles, agent-settings, audit, machines, approvals, notification-bell approvals, agents list, scheduler, settings, settings-push-devices, session-config, memory-index, memory-reports, and memory-graph slices now gated in CI (23 specs / 79 tests). The `/sessions/[id]` and `/memory/dashboard` route-smoke specs add thin browser coverage for detail/dashboard composition without widening the CI allowlist yet, and the live two-node mesh fixture now covers version drift, A-to-B machine visibility, peer-update dry-run, and schema-ahead rejection behind opt-in gates outside the default lane. The scheduler jobs page is reachable from the web sidebar and covered by focused mocked-query unit tests. All packages build and lint cleanly (TypeScript 0 errors, Biome 0 errors).
 
 ---
 
@@ -96,7 +96,7 @@ AgentCTL is a multi-machine AI agent orchestration platform with:
 - [x] GitHub API changed-files detection for monorepo-aware conditional builds
 - [x] pnpm store caching + TypeScript build cache
 - [x] Security scanning: npm bulk advisory dependency audit, `gitleaks`, Biome security lint
-- [x] Backend-independent web Playwright CI gating for `/webhooks`, `/agent-profiles`, `/audit`, `/machines`, `/agents` list, `/scheduler`, `/settings`, deployment, discover, conflicts, logs-security-findings, security-findings, session-detail, and memory-dashboard (14 specs in CI) using `WEB_PORT`-aware web scripts and a shared-package build preflight; runtime-sessions removed from CI due to WebSocket timing flakiness *(PRs #445, #505, #513, #516, #518, #533, #546, #608)*
+- [x] Backend-independent web Playwright CI gating for `/webhooks`, `/agent-profiles`, `/audit`, `/machines`, `/agents` list, `/scheduler`, `/settings`, deployment, discover, conflicts, logs-security-findings, security-findings, session-detail, memory-dashboard, session-config, memory-index, memory-reports, and memory-graph (23 specs / 79 tests in CI) using `WEB_PORT`-aware web scripts and a shared-package build preflight; runtime-sessions removed from CI due to WebSocket timing flakiness *(PRs #445, #505, #513, #516, #518, #533, #546, #608, #657, #662, #665, #700)*
 
 ### 1.2 Docker Build & Registry
 
