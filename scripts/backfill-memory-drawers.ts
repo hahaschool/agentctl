@@ -3,11 +3,26 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
-import type { MemoryDrawerBackfillState, MemoryScope } from '@agentctl/shared';
+import type {
+  MemoryDrawerBackfillSourceType,
+  MemoryDrawerBackfillState,
+  MemoryScope,
+} from '@agentctl/shared';
 import pg from 'pg';
 
 import { sanitizeMemoryDrawerContent } from '../packages/control-plane/src/memory/memory-drawer-sanitizer.js';
 import type { WriteMemoryDrawerSourceInput } from '../packages/control-plane/src/memory/memory-drawer-types.js';
+import type {
+  ClaudeMemDatabase,
+  ClaudeMemObservation,
+  ClaudeMemSessionSummary,
+} from './claude-mem-migration-lib.js';
+import {
+  assembleObservationContent,
+  loadBetterSqlite3,
+  parseStringArray,
+  resolveDbPath,
+} from './claude-mem-migration-lib.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -18,6 +33,7 @@ export type BackfillLogger = {
 };
 
 export type BackfillMemoryDrawersCliOptions = {
+  sourceType: MemoryDrawerBackfillSourceType;
   sourceRoot: string;
   databaseUrl?: string;
   dryRun: boolean;
@@ -33,7 +49,7 @@ export type DrawerStoreLike = {
 
 export type BackfillStateStoreLike = {
   startOrResume(input: {
-    sourceType: 'session-jsonl';
+    sourceType: MemoryDrawerBackfillSourceType;
     sourceRoot: string;
     cursorJson?: Record<string, unknown>;
   }): Promise<MemoryDrawerBackfillState>;
@@ -47,8 +63,10 @@ export type BackfillStateStoreLike = {
 };
 
 export type BackfillMemoryDrawersOptions = {
+  sourceType?: MemoryDrawerBackfillSourceType;
   sourceRoot: string;
   dryRun: boolean;
+  claudeMemDb?: ClaudeMemDatabase;
   drawerStore?: DrawerStoreLike;
   stateStore?: BackfillStateStoreLike;
   logger?: BackfillLogger;
@@ -58,6 +76,7 @@ export type BackfillMemoryDrawersOptions = {
 };
 
 export type BackfillMemoryDrawersResult = {
+  sourceType: MemoryDrawerBackfillSourceType;
   dryRun: boolean;
   sourceRoot: string;
   filesDiscovered: number;
@@ -69,14 +88,23 @@ export type BackfillMemoryDrawersResult = {
   written: number;
   skipped: number;
   parseErrors: number;
+  claudeMemObservationsSeen: number;
+  claudeMemSessionSummariesSeen: number;
   lastCursor: BackfillCursor | null;
 };
 
-type BackfillCursor = {
+type JsonlBackfillCursor = {
   filePath: string;
   line: number;
   byteOffset: number;
 };
+
+type ClaudeMemBackfillCursor = {
+  table: 'observations' | 'session_summaries';
+  id: number;
+};
+
+type BackfillCursor = JsonlBackfillCursor | ClaudeMemBackfillCursor;
 
 type ParsedCursor = {
   filePath: string | null;
@@ -86,6 +114,15 @@ type ParsedCursor = {
 type JsonlCandidate = {
   content: string;
   sourceJson: Record<string, unknown>;
+};
+
+type ClaudeMemDrawerCandidate = {
+  content: string;
+  sourceType: WriteMemoryDrawerSourceInput['sourceType'];
+  sourceId: string;
+  sourceUri: string;
+  sourceJson: Record<string, unknown>;
+  sessionId?: string | null;
 };
 
 type StreamLine = {
@@ -101,12 +138,13 @@ const DEFAULT_CURSOR_LINE = 1;
 function usage(): string {
   return `Usage: pnpm memory:backfill-drawers --source-root <path> [--dry-run|--execute] [options]
 
-Backfills MemoryDrawer rows from Claude Code JSONL text entries.
+Backfills MemoryDrawer rows from Claude Code JSONL text entries or claude-mem SQLite rows.
 Default mode is --dry-run. Use --execute with DATABASE_URL or --database-url to write drawers
 and persist resume cursors in memory_drawer_backfill_state.
 
 Options:
-  --source-root <path>     Root directory containing Claude Code .jsonl files.
+  --source-type <type>     session-jsonl or claude-mem. Default: session-jsonl.
+  --source-root <path>     JSONL root directory or claude-mem SQLite database path.
   --dry-run                Estimate candidates only. This is the default.
   --execute                Write drawer rows and update resumable backfill state.
   --database-url <url>     PostgreSQL URL for execute mode. Defaults to DATABASE_URL.
@@ -122,6 +160,7 @@ export function parseArgs(
   env: NodeJS.ProcessEnv = process.env,
 ): BackfillMemoryDrawersCliOptions {
   const options: BackfillMemoryDrawersCliOptions = {
+    sourceType: 'session-jsonl',
     sourceRoot: '',
     databaseUrl: env.DATABASE_URL,
     dryRun: true,
@@ -154,6 +193,14 @@ export function parseArgs(
       const value = argv[index + 1];
       if (!value) throw new Error('--database-url requires a URL');
       options.databaseUrl = value;
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--source-type') {
+      const value = argv[index + 1];
+      if (!value) throw new Error('--source-type requires a value');
+      options.sourceType = parseBackfillSourceType(value);
       index += 1;
       continue;
     }
@@ -211,6 +258,14 @@ export function parseArgs(
   return options;
 }
 
+function parseBackfillSourceType(value: string): MemoryDrawerBackfillSourceType {
+  if (value === 'session-jsonl' || value === 'claude-mem') {
+    return value;
+  }
+
+  throw new Error('--source-type must be session-jsonl or claude-mem');
+}
+
 function parsePositiveInteger(value: string, optionName: string): number {
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
@@ -264,18 +319,20 @@ export async function backfillMemoryDrawers(
   options: BackfillMemoryDrawersOptions,
 ): Promise<BackfillMemoryDrawersResult> {
   const sourceRoot = path.resolve(options.sourceRoot);
+  const sourceType = options.sourceType ?? 'session-jsonl';
   const dryRun = options.dryRun;
   const scope = options.scope ?? DEFAULT_SCOPE;
   const topic = options.topic ?? DEFAULT_TOPIC;
-  const files = findJsonlFiles(sourceRoot);
+  const files = sourceType === 'session-jsonl' ? findJsonlFiles(sourceRoot) : [];
   const state = dryRun
     ? null
     : await requireStateStore(options).startOrResume({
-        sourceType: 'session-jsonl',
+        sourceType,
         sourceRoot,
       });
   const cursor = parseCursor(state?.cursorJson);
   const result: BackfillMemoryDrawersResult = {
+    sourceType,
     dryRun,
     sourceRoot,
     filesDiscovered: files.length,
@@ -287,8 +344,21 @@ export async function backfillMemoryDrawers(
     written: 0,
     skipped: 0,
     parseErrors: 0,
+    claudeMemObservationsSeen: 0,
+    claudeMemSessionSummariesSeen: 0,
     lastCursor: null,
   };
+
+  if (sourceType === 'claude-mem') {
+    return backfillClaudeMemDrawers({
+      options,
+      dryRun,
+      scope,
+      topic,
+      state,
+      result,
+    });
+  }
 
   try {
     for (const filePath of files) {
@@ -378,6 +448,100 @@ export async function backfillMemoryDrawers(
   }
 }
 
+async function backfillClaudeMemDrawers(params: {
+  options: BackfillMemoryDrawersOptions;
+  dryRun: boolean;
+  scope: MemoryScope;
+  topic: string;
+  state: MemoryDrawerBackfillState | null;
+  result: BackfillMemoryDrawersResult;
+}): Promise<BackfillMemoryDrawersResult> {
+  const { options, dryRun, scope, topic, state, result } = params;
+  const db = requireClaudeMemDb(options);
+  const cursor = parseClaudeMemCursor(state?.cursorJson);
+
+  try {
+    const observations = readClaudeMemRows<ClaudeMemObservation>(
+      db,
+      'observations',
+      'ORDER BY created_at_epoch ASC, id ASC',
+    );
+
+    for (const observation of observations) {
+      if (shouldSkipClaudeMemRow('observations', observation.id, cursor)) {
+        continue;
+      }
+
+      result.claudeMemObservationsSeen += 1;
+      const nextCursor: ClaudeMemBackfillCursor = {
+        table: 'observations',
+        id: observation.id + 1,
+      };
+      result.lastCursor = nextCursor;
+
+      const candidate = buildClaudeMemObservationCandidate(observation);
+      const shouldStop = await processClaudeMemCandidate({
+        options,
+        state,
+        dryRun,
+        scope,
+        topic,
+        result,
+        candidate,
+        nextCursor,
+      });
+      if (shouldStop) {
+        return result;
+      }
+    }
+
+    const summaries = readClaudeMemRows<ClaudeMemSessionSummary>(
+      db,
+      'session_summaries',
+      'ORDER BY created_at ASC, id ASC',
+    );
+
+    for (const summary of summaries) {
+      if (shouldSkipClaudeMemRow('session_summaries', summary.id, cursor)) {
+        continue;
+      }
+
+      result.claudeMemSessionSummariesSeen += 1;
+      const nextCursor: ClaudeMemBackfillCursor = {
+        table: 'session_summaries',
+        id: summary.id + 1,
+      };
+      result.lastCursor = nextCursor;
+
+      const candidate = buildClaudeMemSessionSummaryCandidate(summary);
+      const shouldStop = await processClaudeMemCandidate({
+        options,
+        state,
+        dryRun,
+        scope,
+        topic,
+        result,
+        candidate,
+        nextCursor,
+      });
+      if (shouldStop) {
+        return result;
+      }
+    }
+
+    if (!dryRun && state) {
+      await options.stateStore?.markComplete(state.id);
+    }
+
+    return result;
+  } catch (error: unknown) {
+    if (!dryRun && state) {
+      await options.stateStore?.markFailed(state.id, error);
+    }
+    throw error;
+  }
+}
+
 function requireDrawerStore(options: BackfillMemoryDrawersOptions): DrawerStoreLike {
   if (!options.drawerStore) {
     throw new Error('drawerStore is required in execute mode');
@@ -390,6 +554,13 @@ function requireStateStore(options: BackfillMemoryDrawersOptions): BackfillState
     throw new Error('stateStore is required in execute mode');
   }
   return options.stateStore;
+}
+
+function requireClaudeMemDb(options: BackfillMemoryDrawersOptions): ClaudeMemDatabase {
+  if (!options.claudeMemDb) {
+    throw new Error('claudeMemDb is required for claude-mem backfills');
+  }
+  return options.claudeMemDb;
 }
 
 function parseCursor(cursorJson: Record<string, unknown> | undefined): ParsedCursor {
@@ -406,8 +577,42 @@ function parseCursor(cursorJson: Record<string, unknown> | undefined): ParsedCur
   return { filePath, line };
 }
 
+function parseClaudeMemCursor(
+  cursorJson: Record<string, unknown> | undefined,
+): ClaudeMemBackfillCursor {
+  const table = cursorJson?.table;
+  const id = cursorJson?.id;
+
+  if (
+    (table === 'observations' || table === 'session_summaries') &&
+    typeof id === 'number' &&
+    Number.isSafeInteger(id) &&
+    id > 0
+  ) {
+    return { table, id };
+  }
+
+  return { table: 'observations', id: 1 };
+}
+
 function shouldSkipFile(relativeFilePath: string, cursor: ParsedCursor): boolean {
   return Boolean(cursor.filePath && relativeFilePath < cursor.filePath);
+}
+
+function shouldSkipClaudeMemRow(
+  table: ClaudeMemBackfillCursor['table'],
+  id: number,
+  cursor: ClaudeMemBackfillCursor,
+): boolean {
+  if (cursor.table === 'session_summaries' && table === 'observations') {
+    return true;
+  }
+
+  if (cursor.table !== table) {
+    return false;
+  }
+
+  return id < cursor.id;
 }
 
 function normalizeRelativePath(sourceRoot: string, filePath: string): string {
@@ -443,6 +648,59 @@ async function updateCursorAfterLine(
     return;
   }
   await options.stateStore?.updateCursor(state.id, cursor);
+}
+
+async function processClaudeMemCandidate(params: {
+  options: BackfillMemoryDrawersOptions;
+  state: MemoryDrawerBackfillState | null;
+  dryRun: boolean;
+  scope: MemoryScope;
+  topic: string;
+  result: BackfillMemoryDrawersResult;
+  candidate: ClaudeMemDrawerCandidate | null;
+  nextCursor: ClaudeMemBackfillCursor;
+}): Promise<boolean> {
+  const { options, state, dryRun, scope, topic, result, candidate, nextCursor } = params;
+
+  if (!candidate) {
+    result.skipped += 1;
+    await updateCursorAfterLine(options, state, dryRun, nextCursor);
+    return false;
+  }
+
+  result.candidates += 1;
+  const sanitized = sanitizeMemoryDrawerContent(candidate.content);
+  result.redactionCount += sanitized.redactionCount;
+  if (sanitized.redactionStatus !== 'unreviewed') {
+    result.sanitizedCandidates += 1;
+  }
+
+  if (!dryRun) {
+    const drawerStore = requireDrawerStore(options);
+    await drawerStore.writeSource({
+      scope,
+      topic,
+      sessionId: candidate.sessionId,
+      sourceType: candidate.sourceType,
+      sourceId: candidate.sourceId,
+      sourceUri: candidate.sourceUri,
+      content: candidate.content,
+      sourceJson: candidate.sourceJson,
+      syncVisibility: 'local',
+    });
+    result.written += 1;
+  }
+
+  await updateCursorAfterLine(options, state, dryRun, nextCursor);
+
+  if (options.limit !== undefined && result.candidates >= options.limit) {
+    if (!dryRun && state) {
+      await options.stateStore?.markPaused?.(state.id);
+    }
+    return true;
+  }
+
+  return false;
 }
 
 function warnParseError(
@@ -507,6 +765,91 @@ function extractJsonlCandidate(
       parentMessageId,
     }),
   };
+}
+
+function buildClaudeMemObservationCandidate(
+  observation: ClaudeMemObservation,
+): ClaudeMemDrawerCandidate | null {
+  const content = assembleClaudeMemObservationDrawerContent(observation);
+  if (!content) {
+    return null;
+  }
+
+  const filesModified = parseStringArray(observation.files_modified);
+  const factsCount = parseStringArray(observation.facts).length;
+  const sourceId = `observations:${observation.id}`;
+
+  return {
+    content,
+    sourceType: 'claude-mem-observation',
+    sourceId,
+    sourceUri: `claude-mem://observations/${observation.id}`,
+    sourceJson: compactJson({
+      source: 'claude-mem',
+      sourceTable: 'observations',
+      sourceId: String(observation.id),
+      sourceKey: sourceId,
+      observationType: observation.type,
+      memorySessionId: observation.memory_session_id,
+      project: observation.project,
+      filesModified,
+      factsCount,
+      originalCreatedAt: observation.created_at,
+      createdAtEpoch: observation.created_at_epoch,
+    }),
+  };
+}
+
+function buildClaudeMemSessionSummaryCandidate(
+  summary: ClaudeMemSessionSummary,
+): ClaudeMemDrawerCandidate | null {
+  const content = summary.summary?.trim() ?? '';
+  if (!content) {
+    return null;
+  }
+
+  const sourceId = `session_summaries:${summary.id}`;
+  return {
+    content,
+    sourceType: 'claude-mem-session-summary',
+    sourceId,
+    sourceUri: `claude-mem://session_summaries/${summary.id}`,
+    sessionId: summary.session_id,
+    sourceJson: compactJson({
+      source: 'claude-mem',
+      sourceTable: 'session_summaries',
+      sourceId: String(summary.id),
+      sourceKey: sourceId,
+      sessionId: summary.session_id,
+      originalCreatedAt: summary.created_at,
+    }),
+  };
+}
+
+function assembleClaudeMemObservationDrawerContent(observation: ClaudeMemObservation): string {
+  const parts = [assembleObservationContent(observation)];
+  const facts = parseStringArray(observation.facts);
+
+  if (facts.length > 0) {
+    parts.push(['Facts:', ...facts.map((fact) => `- ${fact}`)].join('\n'));
+  }
+
+  return parts
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join('\n\n');
+}
+
+function readClaudeMemRows<T>(
+  db: ClaudeMemDatabase,
+  table: 'observations' | 'session_summaries',
+  orderClause: string,
+): T[] {
+  try {
+    return db.prepare(`SELECT * FROM ${table} ${orderClause}`).all() as T[];
+  } catch {
+    return [];
+  }
 }
 
 function entryTypeToRole(entryType: string | null): 'user' | 'assistant' | null {
@@ -617,10 +960,13 @@ function formatSummary(result: BackfillMemoryDrawersResult): string {
     '# Memory Drawer Backfill',
     '',
     `Mode: ${result.dryRun ? 'dry-run' : 'execute'}`,
+    `Source type: ${result.sourceType}`,
     `Source root: ${result.sourceRoot}`,
     `Files discovered: ${result.filesDiscovered}`,
     `Files seen: ${result.filesSeen}`,
     `Lines seen: ${result.linesSeen}`,
+    `claude-mem observations seen: ${result.claudeMemObservationsSeen}`,
+    `claude-mem session summaries seen: ${result.claudeMemSessionSummariesSeen}`,
     `Candidate entries: ${result.candidates}`,
     `Sanitized candidates: ${result.sanitizedCandidates}`,
     `Parse errors: ${result.parseErrors}`,
@@ -646,10 +992,16 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   const options = parseArgs(argv);
   const logger = createConsoleLogger();
   let pool: pg.Pool | null = null;
+  let claudeMemDb: ClaudeMemDatabase | null = null;
 
   try {
     let drawerStore: DrawerStoreLike | undefined;
     let stateStore: BackfillStateStoreLike | undefined;
+
+    if (options.sourceType === 'claude-mem') {
+      const sqlite = await loadBetterSqlite3();
+      claudeMemDb = new sqlite.default(resolveDbPath(options.sourceRoot), { readonly: true });
+    }
 
     if (!options.dryRun) {
       if (!options.databaseUrl) {
@@ -662,8 +1014,10 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     }
 
     const result = await backfillMemoryDrawers({
+      sourceType: options.sourceType,
       sourceRoot: options.sourceRoot,
       dryRun: options.dryRun,
+      claudeMemDb: claudeMemDb ?? undefined,
       drawerStore,
       stateStore,
       logger,
@@ -678,6 +1032,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     }
     console.log(formatSummary(result));
   } finally {
+    claudeMemDb?.close();
     await pool?.end();
   }
 }
