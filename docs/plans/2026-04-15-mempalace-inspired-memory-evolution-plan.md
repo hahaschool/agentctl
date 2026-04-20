@@ -826,6 +826,8 @@ held-out automation.
 
 **Goal:** Preserve sanitized raw evidence without replacing existing facts.
 
+**Status:** Partially delivered in PR #671. The merged slice added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. Remaining Phase 1/1.5 scope is audit entry wiring plus resumable JSONL/claude-mem backfill state; drawers still have no sync triggers and no default retrieval behavior.
+
 **Files:**
 
 - Create: `packages/control-plane/drizzle/0030_add_memory_drawers.sql`
@@ -1242,12 +1244,13 @@ Add env vars through the existing centralized config path used by control-plane/
 ## Suggested PR Slices
 
 1. **PR A: Eval Harness**
-   - Partially delivered in PR #655: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, and `pnpm memory:eval`.
-   - Remaining: live search adapter, cold-start MCP contract tests, private fixture coverage, and release/weekly held-out automation.
+   - Delivered across PR #655/#660/#667 for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, and current memory MCP cold-start/null-arguments contracts.
+   - Remaining: live search adapter, private fixture coverage, future `memory_dedup_check` / `memory_traverse` cold-start contracts when those routes ship, and release/weekly held-out automation.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
-   - Adds `0030`, chunker, sanitizer, drawer store, audit entry, and tests.
+   - Partially delivered in PR #671: `0030`, chunker, sanitizer, drawer store, shared redaction/validation, and tests.
+   - Remaining: memory write audit entry wiring.
    - No retrieval behavior change.
 
 3. **PR C: Backfill**
@@ -1312,8 +1315,8 @@ Add env vars through the existing centralized config path used by control-plane/
 
 ## Acceptance Criteria
 
-- [ ] AgentCTL can store sanitized raw transcript chunks as `memory_drawers` with deterministic chunk order.
-- [ ] Drawer sanitizer red-team tests cover key/token/URL/cookie/env/private-key leaks.
+- [x] AgentCTL can store sanitized raw transcript chunks as `memory_drawers` with deterministic chunk order. *(PR #671)*
+- [x] Drawer sanitizer red-team tests cover key/token/URL/cookie/env/private-key leaks. *(PR #671)*
 - [ ] Extracted facts link to supporting drawer offsets without copying quoted content.
 - [ ] Legacy facts without drawer provenance still search, render, inject, and sync.
 - [x] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, drawer-hit rate, and p95 search time for deterministic mock runs. *(PR #655)*
