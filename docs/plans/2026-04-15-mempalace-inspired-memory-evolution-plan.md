@@ -976,7 +976,7 @@ held-out automation.
 
 **Goal:** Link facts to evidence and prevent drawer snippets from exploding prompt tokens.
 
-**Status:** Schema groundwork landed in PR #684: `0031_add_memory_fact_sources_and_versions.sql`, Drizzle schema/journal/schema tests, `memory_fact_sources` offsets, and fact/edge `embedding_version` defaults. Remaining scope is fact-source write paths, read-time quote previews, legacy rendering/search behavior, injector budget modes, and the bounded Surface A dry-run bridge.
+**Status:** Schema groundwork landed in PR #684: `0031_add_memory_fact_sources_and_versions.sql`, Drizzle schema/journal/schema tests, `memory_fact_sources` offsets, and fact/edge `embedding_version` defaults. PR #688 added the write path: `MemoryStore.addFact` accepts an optional `sourceSpans` array and persists offset-only provenance to `memory_fact_sources`, `POST /api/memory/facts` validates and passes through `sourceSpans`, and unit tests cover valid/invalid drawer offsets for both the store and the route. Remaining scope is read-time quote previews, legacy rendering/search behavior, injector budget modes, merge-time provenance preservation, and the bounded Surface A dry-run bridge.
 
 **Files:**
 
@@ -1110,7 +1110,7 @@ held-out automation.
 
 **Goal:** Make "what was true then?" and "what changed?" first-class queries.
 
-**Status:** PR #685 delivered the worker-side `memory_traverse` contract and shared types: argument validation, default/hard max-hop caps, relation/min-confidence filters, null-argument 400s, and missing/no-data empty graph responses through the planned control-plane proxy. Remaining scope is the control-plane recursive traversal, temporal edge fields, timeline API, canonicalization/backfill, and `as_of` validity-window behavior.
+**Status:** PR #685 delivered the worker-side `memory_traverse` contract and shared types: argument validation, default/hard max-hop caps, relation/min-confidence filters, null-argument 400s, and missing/no-data empty graph responses through the planned control-plane proxy. PR #689 delivered the control-plane `POST /api/memory/traverse` route with iterative per-hop BFS, hop/node cap enforcement and `partial` flag, `relation_types` / `min_confidence` / `as_of` filters against endpoint facts, and 404 on missing start entities (15 Vitest cases). Remaining scope is dedicated temporal edge fields, the timeline API, entity canonicalization/backfill, and recursive-CTE-based `as_of` validity-window behavior at the edge level.
 
 **Files:**
 
@@ -1363,7 +1363,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts.
 - [ ] Mesh sync behavior for drawers and temporal edge fields is explicit before any sync payload changes.
 - [ ] Phase 6 includes entity canonicalization or ships with an explicit UI warning and follow-up PR.
-- [ ] `memory_traverse` enforces hop/node caps and returns an empty graph for missing entities. *(worker route hop validation and empty graph response landed in PR #685; control-plane node cap/traversal remains)*
+- [x] `memory_traverse` enforces hop/node caps and returns an empty graph for missing entities. *(worker route hop validation and empty graph response landed in PR #685; control-plane iterative BFS with hop/node caps, relation/confidence/temporal filters, and 404-on-missing-entity landed in PR #689)*
 - [ ] Mobile evidence display truncates to one 120-char snippet without layout overflow.
 
 ## First Implementation Choice
