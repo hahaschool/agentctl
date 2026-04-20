@@ -32,6 +32,7 @@ import { memoryRecallRoutes } from './routes/memory-recall.js';
 import { memoryReportRoutes } from './routes/memory-report.js';
 import { memorySearchRoutes } from './routes/memory-search.js';
 import { memoryStoreRoutes } from './routes/memory-store-route.js';
+import { memoryTraverseRoutes } from './routes/memory-traverse.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { permissionResponseRoutes } from './routes/permission-response.js';
 import { runtimeConfigRoutes } from './routes/runtime-config.js';
@@ -322,6 +323,11 @@ export async function createWorkerServer({
       logger,
     });
     await app.register(memoryDedupCheckRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+    await app.register(memoryTraverseRoutes, {
       prefix: '/api/mcp',
       controlPlaneUrl,
       logger,

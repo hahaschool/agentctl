@@ -270,11 +270,15 @@ export type {
   MemoryScopeType,
   MemorySearchResult,
   MemoryStats,
+  MemoryTraverseEdge,
+  MemoryTraverseNode,
+  MemoryTraverseRequest,
+  MemoryTraverseResponse,
   RelationType,
   TriggerContext,
   TriggerSpec,
 } from './memory.js';
-export { DEFAULT_INJECTION_BUDGET, MEMORY_ENTITY_TYPES } from './memory.js';
+export { DEFAULT_INJECTION_BUDGET, MEMORY_ENTITY_TYPES, MEMORY_RELATION_TYPES } from './memory.js';
 export type {
   AutoUpdateDryRunEvent,
   AutoUpdateLastRun,

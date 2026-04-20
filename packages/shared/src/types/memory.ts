@@ -77,17 +77,20 @@ export const MEMORY_ENTITY_TYPES = [
 
 export type EntityType = (typeof MEMORY_ENTITY_TYPES)[number];
 
-export type RelationType =
-  | 'modifies'
-  | 'depends_on'
-  | 'caused_by'
-  | 'resolves'
-  | 'supersedes'
-  | 'related_to'
-  | 'summarizes'
-  | 'derived_from'
-  | 'validates'
-  | 'contradicts';
+export const MEMORY_RELATION_TYPES = [
+  'modifies',
+  'depends_on',
+  'caused_by',
+  'resolves',
+  'supersedes',
+  'related_to',
+  'summarizes',
+  'derived_from',
+  'validates',
+  'contradicts',
+] as const;
+
+export type RelationType = (typeof MEMORY_RELATION_TYPES)[number];
 
 export type FactSource = {
   session_id: string | null;
@@ -132,6 +135,40 @@ export type MemoryEdge = {
   relation: RelationType;
   weight: number;
   created_at: string;
+};
+
+export type MemoryTraverseRequest = {
+  start_entity_canonical_id: string;
+  max_hops?: number;
+  relation_types?: readonly RelationType[];
+  min_confidence?: number;
+  as_of?: string;
+};
+
+export type MemoryTraverseNode = {
+  canonical_id: string;
+  entity_name: string | null;
+  hop_distance: number;
+  earliest_seen: string | null;
+};
+
+export type MemoryTraverseEdge = {
+  subject_id: string;
+  object_id: string;
+  relation: string;
+  confidence: number | null;
+  valid_from: string | null;
+  valid_until: string | null;
+};
+
+export type MemoryTraverseResponse = {
+  ok: true;
+  start_entity_canonical_id: string;
+  max_hops: number;
+  node_cap: number;
+  nodes: MemoryTraverseNode[];
+  edges: MemoryTraverseEdge[];
+  partial: boolean;
 };
 
 export type MemorySearchResult = {
