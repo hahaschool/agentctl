@@ -108,13 +108,28 @@ export const memoryDrawerRoutes: FastifyPluginAsync<MemoryDrawerRoutesOptions> =
         return reply.code(400).send(limitResult.body);
       }
       const limit = limitResult.value;
+      const candidateLimit = Math.max(CANDIDATE_LIMIT, limit);
 
       const startedAt = Date.now();
 
-      const [keywordMatches, vectorMatches] = await Promise.all([
-        keywordSearch(pool, sanitized.query, scope, CANDIDATE_LIMIT, logger),
-        vectorSearch(pool, sanitized.query, scope, CANDIDATE_LIMIT, embeddingClient, logger),
-      ]);
+      let keywordMatches: Awaited<ReturnType<typeof keywordSearch>>;
+      let vectorMatches: Awaited<ReturnType<typeof vectorSearch>>;
+      try {
+        [keywordMatches, vectorMatches] = await Promise.all([
+          keywordSearch(pool, sanitized.query, scope, candidateLimit, logger, {
+            degradeOnSqlError: false,
+          }),
+          vectorSearch(pool, sanitized.query, scope, candidateLimit, embeddingClient, logger, {
+            degradeOnSqlError: false,
+          }),
+        ]);
+      } catch (error) {
+        logger.warn({ err: error }, 'Memory drawer search failed');
+        return reply.code(500).send({
+          error: 'MEMORY_DRAWER_SEARCH_FAILED',
+          message: 'Memory drawer search failed',
+        });
+      }
 
       const fused = fuseRankedMatches(keywordMatches, vectorMatches, limit);
 
@@ -205,7 +220,17 @@ function normalizeLimit(raw: string | undefined): LimitResult {
   if (raw === undefined || raw === '') {
     return { ok: true, value: DEFAULT_LIMIT };
   }
-  const parsed = Number.parseInt(raw, 10);
+  const trimmed = raw.trim();
+  if (!/^\d+$/u.test(trimmed)) {
+    return {
+      ok: false,
+      body: {
+        error: 'INVALID_PARAMS',
+        message: `limit must be an integer between 1 and ${MAX_LIMIT}`,
+      },
+    };
+  }
+  const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isInteger(parsed) || parsed < 1) {
     return {
       ok: false,
@@ -242,7 +267,6 @@ function hasControlCharacter(value: string): boolean {
   return false;
 }
 
-// ---------------------------------------------------------------------------
 // Drawer by id
 // ---------------------------------------------------------------------------
 
@@ -252,8 +276,9 @@ async function loadDrawerById(pool: Pool, drawerId: string): Promise<MemoryDrawe
            content, content_sha256, embedding_model, embedding_version,
            token_count, source_json, sync_visibility, retention_expires_at,
            archived_at, redaction_status, created_at, updated_at
-      FROM memory_drawers
+     FROM memory_drawers
      WHERE id = $1
+       AND archived_at IS NULL
      LIMIT 1
   `;
   const { rows } = await pool.query<DrawerRow>(sql, [drawerId]);

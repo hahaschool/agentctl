@@ -107,6 +107,9 @@ function routeQueries(
       return { rows: routes.vector ?? [] };
     }
     if (sql.includes('WHERE id = $1')) {
+      if (sql.includes('archived_at IS NULL') && routes.getById?.archived_at) {
+        return { rows: [] };
+      }
       return { rows: routes.getById ? [routes.getById] : [] };
     }
     return { rows: [] };
@@ -183,20 +186,32 @@ describe('memory-drawers routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
-    it('returns 400 when limit is negative', async () => {
+    it.each([
+      '-3',
+      'abc',
+      '10abc',
+      '1.5',
+    ])('returns 400 when limit is malformed: %s', async (limit) => {
       const res = await app.inject({
         method: 'GET',
-        url: '/api/memory/drawers/search?q=hello&limit=-3',
+        url: `/api/memory/drawers/search?q=hello&limit=${encodeURIComponent(limit)}`,
       });
       expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'INVALID_PARAMS' });
     });
+  });
 
-    it('returns 400 when limit is not an integer', async () => {
+  // ── GET /search — error handling ─────────────────────────────────────────
+
+  describe('GET /search error handling', () => {
+    it('surfaces DB failures instead of reporting a false empty index', async () => {
+      pool.query.mockRejectedValueOnce(new Error('database unavailable'));
+
       const res = await app.inject({
         method: 'GET',
-        url: '/api/memory/drawers/search?q=hello&limit=abc',
+        url: '/api/memory/drawers/search?q=hello',
       });
-      expect(res.statusCode).toBe(400);
+      expect(res.statusCode).toBe(500);
     });
   });
 
@@ -343,6 +358,25 @@ describe('memory-drawers routes', () => {
       }
     });
 
+    it('uses requested limits above the default candidate window up to MAX_LIMIT', async () => {
+      routeQueries(pool, {
+        keyword: [makeSearchRow()],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/memory/drawers/search?q=hello&limit=75',
+      });
+      expect(res.statusCode).toBe(200);
+
+      const call = pool.query.mock.calls.find((c) => String(c[0]).includes('content_tsv_simple'));
+      expect(call).toBeDefined();
+      if (call) {
+        const limitArg = (call[1] as unknown[])[(call[1] as unknown[]).length - 1];
+        expect(limitArg).toBe(75);
+      }
+    });
+
     it('defaults to limit=10 when unspecified', async () => {
       // Seed 15 keyword rows — the route should only return 10 after fusion.
       const rows = Array.from({ length: 15 }, (_, i) =>
@@ -453,6 +487,22 @@ describe('memory-drawers routes', () => {
       });
       expect(res.statusCode).toBe(404);
       expect(res.json()).toMatchObject({ error: 'DRAWER_NOT_FOUND' });
+    });
+
+    it('returns 404 for archived drawers by id', async () => {
+      routeQueries(pool, {
+        getById: makeDrawerRow({ id: 'drawer-A', archived_at: new Date('2026-04-20T13:00:00Z') }),
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/memory/drawers/drawer-A',
+      });
+      expect(res.statusCode).toBe(404);
+
+      const call = pool.query.mock.calls.find((c) => String(c[0]).includes('WHERE id = $1'));
+      expect(call).toBeDefined();
+      expect(String(call?.[0])).toContain('archived_at IS NULL');
     });
 
     it('URL-decodes the :drawerId param before DB lookup', async () => {

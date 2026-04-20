@@ -13,8 +13,8 @@
 //   - vector path uses cosine distance over the pgvector `embedding` column
 //     when an embedding client is available. No client → keyword-only.
 //   - both candidate lists are fused via Reciprocal Rank Fusion (k=60).
-//   - any SQL / embedding failure on a single path degrades to empty for
-//     that path so the surrounding surface can still return the other one.
+//   - SQL failures degrade to empty by default for optional callers, while the
+//     dedicated drawer route can opt into surfacing them as 5xx.
 //
 // Keeping this helper side-effect-free (no Fastify, no HTTP concerns) means
 // any route that already has a `pg.Pool` + optional embedding client can opt
@@ -48,6 +48,7 @@ export type MemoryDrawerSearchDeps = {
   pool: Pool;
   logger: Logger;
   embeddingClient?: DrawerEmbeddingClient;
+  degradeOnSqlError?: boolean;
 };
 
 export const RRF_K = 60;
@@ -77,8 +78,12 @@ export async function searchMemoryDrawers(
   const scope = typeof input.scope === 'string' && input.scope.length > 0 ? input.scope : null;
 
   const [keyword, vector] = await Promise.all([
-    keywordSearch(deps.pool, query, scope, candidateLimit, deps.logger),
-    vectorSearch(deps.pool, query, scope, candidateLimit, deps.embeddingClient, deps.logger),
+    keywordSearch(deps.pool, query, scope, candidateLimit, deps.logger, {
+      degradeOnSqlError: deps.degradeOnSqlError,
+    }),
+    vectorSearch(deps.pool, query, scope, candidateLimit, deps.embeddingClient, deps.logger, {
+      degradeOnSqlError: deps.degradeOnSqlError,
+    }),
   ]);
 
   return fuseRankedMatches(keyword, vector, limit);
@@ -93,12 +98,17 @@ export type RankedDrawerMatch = {
   result: MemoryDrawerSearchResult;
 };
 
+type SearchFailureOptions = {
+  degradeOnSqlError?: boolean;
+};
+
 export async function keywordSearch(
   pool: Pool,
   query: string,
   scope: string | null,
   limit: number,
   logger: Logger,
+  options: SearchFailureOptions = {},
 ): Promise<RankedDrawerMatch[]> {
   const tokens = tokenizeForTsquery(query);
   if (tokens.length === 0) {
@@ -140,7 +150,10 @@ export async function keywordSearch(
       result: rowToDrawerResult(row, 'keyword', toFloat(row.score)),
     }));
   } catch (error) {
-    logger.warn({ err: error }, 'Drawer keyword search failed — returning empty path');
+    logger.warn({ err: error }, 'Drawer keyword search failed');
+    if (options.degradeOnSqlError === false) {
+      throw error;
+    }
     return [];
   }
 }
@@ -152,6 +165,7 @@ export async function vectorSearch(
   limit: number,
   embeddingClient: DrawerEmbeddingClient | undefined,
   logger: Logger,
+  options: SearchFailureOptions = {},
 ): Promise<RankedDrawerMatch[]> {
   if (!embeddingClient) {
     return [];
@@ -197,7 +211,10 @@ export async function vectorSearch(
       result: rowToDrawerResult(row, 'vector', toFloat(row.score)),
     }));
   } catch (error) {
-    logger.warn({ err: error }, 'Drawer vector search failed — returning empty path');
+    logger.warn({ err: error }, 'Drawer vector search failed');
+    if (options.degradeOnSqlError === false) {
+      throw error;
+    }
     return [];
   }
 }

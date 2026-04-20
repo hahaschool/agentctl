@@ -1,10 +1,12 @@
-import type {
-  EntityType,
-  FactSource,
-  FeedbackSignal,
-  MemoryDrawerSearchResult,
-  MemoryFact,
-  MemoryScope,
+import {
+  type EntityType,
+  type FactSource,
+  type FeedbackSignal,
+  type MemoryDrawerSearchResult,
+  type MemoryFact,
+  type MemoryScope,
+  querySanitizerLogFields,
+  sanitizeQuery,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
@@ -230,17 +232,29 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
           // (Phase 4: Drawer-Aware Search Fusion) — a unified ranking is a
           // follow-up. Any drawer-side failure degrades to the non-flagged
           // envelope; it must not break the fact response.
-          const drawerResults =
-            drawerFusionActive && pool && embeddingClient
-              ? await runDrawerFusion({
-                  pool,
-                  embeddingClient,
-                  logger: fusionLogger,
-                  query: q,
-                  scope,
-                  drawerLimit: parsedQuery.data.drawerLimit,
-                })
-              : undefined;
+          let drawerResults: MemoryDrawerSearchResult[] | undefined;
+          if (drawerFusionActive && pool && embeddingClient) {
+            const drawerLimit = resolveDrawerLimit(parsedQuery.data.drawerLimit);
+            if (!drawerLimit.ok) {
+              return reply.code(400).send(drawerLimit.body);
+            }
+            const sanitizedDrawerQuery = sanitizeQuery(q);
+            fusionLogger.debug(
+              querySanitizerLogFields(sanitizedDrawerQuery),
+              'Sanitized memory fact drawer fusion query',
+            );
+            drawerResults =
+              sanitizedDrawerQuery.stage === 'empty'
+                ? undefined
+                : await runDrawerFusion({
+                    pool,
+                    embeddingClient,
+                    logger: fusionLogger,
+                    query: sanitizedDrawerQuery.query,
+                    scope,
+                    drawerLimit: drawerLimit.value,
+                  });
+          }
 
           return {
             ok: true,
@@ -513,22 +527,18 @@ type RunDrawerFusionInput = {
   logger: Logger;
   query: string;
   scope?: string;
-  drawerLimit: string | undefined;
+  drawerLimit: number;
 };
 
 async function runDrawerFusion(
   input: RunDrawerFusionInput,
 ): Promise<MemoryDrawerSearchResult[] | undefined> {
-  const limit = resolveDrawerLimit(input.drawerLimit);
-  if (limit === null) {
-    return undefined;
-  }
   try {
     return await searchMemoryDrawers(
       {
         query: input.query,
         scope: input.scope ?? null,
-        limit,
+        limit: input.drawerLimit,
       },
       {
         pool: input.pool,
@@ -543,15 +553,35 @@ async function runDrawerFusion(
   }
 }
 
-function resolveDrawerLimit(raw: string | undefined): number | null {
+type DrawerLimitResult =
+  | { ok: true; value: number }
+  | { ok: false; body: { error: string; message: string } };
+
+function resolveDrawerLimit(raw: string | undefined): DrawerLimitResult {
   if (raw === undefined || raw === '') {
-    return DEFAULT_DRAWER_RESULT_LIMIT;
+    return { ok: true, value: DEFAULT_DRAWER_RESULT_LIMIT };
   }
-  const parsed = Number.parseInt(raw, 10);
+  const trimmed = raw.trim();
+  if (!/^\d+$/u.test(trimmed)) {
+    return {
+      ok: false,
+      body: {
+        error: 'INVALID_FACT_QUERY',
+        message: `drawerLimit must be an integer between 1 and ${MAX_DRAWER_RESULT_LIMIT}`,
+      },
+    };
+  }
+  const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    return null;
+    return {
+      ok: false,
+      body: {
+        error: 'INVALID_FACT_QUERY',
+        message: `drawerLimit must be an integer between 1 and ${MAX_DRAWER_RESULT_LIMIT}`,
+      },
+    };
   }
-  return Math.min(parsed, MAX_DRAWER_RESULT_LIMIT);
+  return { ok: true, value: Math.min(parsed, MAX_DRAWER_RESULT_LIMIT) };
 }
 
 function factMatchesFilters(
