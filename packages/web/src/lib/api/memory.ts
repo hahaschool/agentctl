@@ -14,6 +14,7 @@ import type {
   MemoryDrawer,
   MemoryDrawerSearchRequest,
   MemoryDrawerSearchResponse,
+  MemoryDrawerSearchResult,
   MemoryEdge,
   MemoryFact,
   MemoryObservation,
@@ -21,6 +22,7 @@ import type {
   MemoryScope,
   MemoryScopeRecord,
   MemoryScopeType,
+  MemorySearchResult,
   MemoryStats,
 } from '@agentctl/shared';
 
@@ -201,9 +203,19 @@ export const memoryApi = {
     if (params.offset !== undefined) qs.set('offset', String(params.offset));
     const suffix = qs.toString();
 
-    return request<{ ok: boolean; facts: MemoryFact[]; total: number }>(
-      suffix ? `/api/memory/facts?${suffix}` : '/api/memory/facts',
-    );
+    // Additive envelope (PR #695 / #712): CP may return `results` with
+    // `source_path` enrichment for the semantic branch, and `drawerResults`
+    // behind the MEMORY_DRAWER_FUSION flag. Both fields are optional — the
+    // ILIKE/empty-q branch omits them, and the frontend must render exactly as
+    // before when absent. See docs/plans/2026-04-15-mempalace-inspired-memory-
+    // evolution-plan.md Phase 7 Step 1/5.
+    return request<{
+      ok: boolean;
+      facts: MemoryFact[];
+      total: number;
+      results?: MemorySearchResult[];
+      drawerResults?: MemoryDrawerSearchResult[];
+    }>(suffix ? `/api/memory/facts?${suffix}` : '/api/memory/facts');
   },
 
   getMemoryFact: (id: string) =>

@@ -13,6 +13,7 @@ import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
 import { ConfidenceBar } from './ConfidenceBar';
 import { EntityTypeBadge } from './EntityTypeBadge';
+import { type FactMatchSourcePath, MatchSourceBadge } from './MatchSourceBadge';
 import { ScopeBadge } from './ScopeBadge';
 
 export function FactsList({
@@ -23,6 +24,7 @@ export function FactsList({
   onSelectFact,
   onToggleSelection,
   onDeleteSelected,
+  sourcePathByFactId,
   className,
 }: {
   facts: readonly MemoryFact[];
@@ -32,6 +34,10 @@ export function FactsList({
   onSelectFact: (fact: MemoryFact) => void;
   onToggleSelection: (factId: string, shiftKey: boolean) => void;
   onDeleteSelected: () => void;
+  // Optional map from factId → hybrid-search match-type. Rendered as a small
+  // pill on each row so users can see *why* a fact matched. Absent when the CP
+  // ILIKE/empty-q branch ran or when the caller doesn't have the enrichment.
+  sourcePathByFactId?: ReadonlyMap<string, FactMatchSourcePath>;
   className?: string;
 }): React.JSX.Element {
   if (isLoading) {
@@ -73,6 +79,7 @@ export function FactsList({
             fact={fact}
             isSelected={selectedFactId === fact.id}
             isChecked={selectedIds.has(fact.id)}
+            sourcePath={sourcePathByFactId?.get(fact.id)}
             onSelect={onSelectFact}
             onToggleCheck={onToggleSelection}
           />
@@ -160,12 +167,14 @@ function FactRow({
   fact,
   isSelected,
   isChecked,
+  sourcePath,
   onSelect,
   onToggleCheck,
 }: {
   fact: MemoryFact;
   isSelected: boolean;
   isChecked: boolean;
+  sourcePath?: FactMatchSourcePath;
   onSelect: (fact: MemoryFact) => void;
   onToggleCheck: (factId: string, shiftKey: boolean) => void;
 }): React.JSX.Element {
@@ -204,6 +213,7 @@ function FactRow({
         <div className="flex flex-wrap items-center gap-1.5">
           <EntityTypeBadge entityType={fact.entity_type} />
           <ScopeBadge scope={fact.scope} />
+          {sourcePath ? <MatchSourceBadge sourcePath={sourcePath} /> : null}
         </div>
         <p className="text-sm leading-5 line-clamp-2">{fact.content}</p>
         <div className="flex items-center gap-4">

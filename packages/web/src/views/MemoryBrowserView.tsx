@@ -13,6 +13,7 @@ import {
   type BrowserFilters,
 } from '@/components/memory/BrowserFilterSidebar';
 import { FactsList } from '@/components/memory/FactsList';
+import type { FactMatchSourcePath } from '@/components/memory/MatchSourceBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -163,6 +164,20 @@ export function MemoryBrowserView(): React.JSX.Element {
 
   const factsQueryResult = useQuery(memoryFactsQuery(queryParams));
   const facts = factsQueryResult.data?.facts ?? [];
+  // Build a lookup from the optional `results` enrichment so `FactsList` can
+  // render match-type badges. When the CP omits `results` (ILIKE / empty-q
+  // branch), the map stays undefined and rendering behaves exactly as before.
+  // See docs/plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md
+  // Phase 7 Step 1/5.
+  const sourcePathByFactId = useMemo<ReadonlyMap<string, FactMatchSourcePath> | undefined>(() => {
+    const results = factsQueryResult.data?.results;
+    if (!results || results.length === 0) return undefined;
+    const map = new Map<string, FactMatchSourcePath>();
+    for (const entry of results) {
+      map.set(entry.fact.id, entry.source_path);
+    }
+    return map;
+  }, [factsQueryResult.data?.results]);
   const hasActiveFilters =
     debouncedQ.trim().length > 0 ||
     filters.scope.length > 0 ||
@@ -350,6 +365,7 @@ export function MemoryBrowserView(): React.JSX.Element {
           onSelectFact={handleSelectFact}
           onToggleSelection={handleToggleSelection}
           onDeleteSelected={handleDeleteSelected}
+          sourcePathByFactId={sourcePathByFactId}
           className="flex-1 overflow-auto"
         />
       </div>

@@ -151,4 +151,27 @@ describe('FactsList', () => {
       expect(spy).toHaveBeenCalledWith('fact-2', 'outdated');
     });
   });
+
+  it('renders match-source badges only for facts present in sourcePathByFactId', () => {
+    // Only two of the three facts have enrichment — the third must render
+    // exactly as before (no badge).
+    const sourcePathByFactId = new Map<string, 'vector' | 'bm25' | 'graph'>([
+      ['fact-1', 'vector'],
+      ['fact-2', 'bm25'],
+    ]);
+
+    renderWithClient(<FactsList {...defaultProps} sourcePathByFactId={sourcePathByFactId} />);
+
+    const badges = screen.getAllByTestId('fact-match-source-badge');
+    expect(badges).toHaveLength(2);
+
+    const labels = badges.map((b) => b.getAttribute('data-source-path'));
+    expect(labels).toEqual(['vector', 'bm25']);
+  });
+
+  it('renders no match-source badges when sourcePathByFactId is omitted', () => {
+    renderWithClient(<FactsList {...defaultProps} />);
+
+    expect(screen.queryAllByTestId('fact-match-source-badge')).toHaveLength(0);
+  });
 });

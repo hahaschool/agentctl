@@ -1,4 +1,4 @@
-import type { MemoryFact } from '@agentctl/shared';
+import type { MemoryFact, MemorySearchResult } from '@agentctl/shared';
 import type React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -6,16 +6,23 @@ import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { ConfidenceBar } from './ConfidenceBar';
 import { EntityTypeBadge } from './EntityTypeBadge';
+import { type FactMatchSourcePath, MatchSourceBadge } from './MatchSourceBadge';
 import { ScopeBadge } from './ScopeBadge';
+
+// `MemorySearchResult['source_path']` is the canonical union for the "why this
+// matched" badge — keep this alias in sync with the control-plane envelope.
+export type FactCardSourcePath = MemorySearchResult['source_path'];
 
 export function FactCard({
   fact,
   selected = false,
+  sourcePath,
   onSelect,
   className,
 }: {
   fact: MemoryFact;
   selected?: boolean;
+  sourcePath?: FactMatchSourcePath;
   onSelect?: (fact: MemoryFact) => void;
   className?: string;
 }): React.JSX.Element {
@@ -36,6 +43,7 @@ export function FactCard({
           <div className="flex flex-wrap items-center gap-2">
             <EntityTypeBadge entityType={fact.entity_type} />
             <ScopeBadge scope={fact.scope} />
+            {sourcePath ? <MatchSourceBadge sourcePath={sourcePath} /> : null}
           </div>
           <CardTitle className="text-sm leading-6">{fact.content}</CardTitle>
         </CardHeader>

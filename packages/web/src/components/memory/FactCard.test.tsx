@@ -41,4 +41,22 @@ describe('FactCard', () => {
 
     expect(onSelect).toHaveBeenCalledWith(FACT);
   });
+
+  it('renders a match-source badge when sourcePath is provided', () => {
+    render(<FactCard fact={FACT} sourcePath="vector" />);
+
+    const badge = screen.getByTestId('fact-match-source-badge');
+    expect(badge).toBeDefined();
+    expect(badge.textContent).toBe('vector');
+    // CSS class uppercases the text visually; the DOM text stays lowercase so
+    // screen readers get a readable value.
+    expect(badge.className).toContain('uppercase');
+    expect(badge.getAttribute('data-source-path')).toBe('vector');
+  });
+
+  it('renders no match-source badge when sourcePath is absent', () => {
+    render(<FactCard fact={FACT} />);
+
+    expect(screen.queryByTestId('fact-match-source-badge')).toBeNull();
+  });
 });
