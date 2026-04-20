@@ -11,6 +11,41 @@ export type MemoryObservation = {
 
 export type MemoryScope = 'global' | `project:${string}` | `agent:${string}` | `session:${string}`;
 
+export type MemoryDrawerSourceType =
+  | 'session-jsonl'
+  | 'runtime-checkpoint'
+  | 'claude-mem-observation'
+  | 'claude-mem-session-summary'
+  | 'manual'
+  | 'document'
+  | 'diary';
+
+export type MemoryDrawerSyncVisibility = 'local' | 'project' | 'global';
+
+export type MemoryDrawerRedactionStatus = 'unreviewed' | 'sanitized' | 'quarantined' | 'approved';
+
+export type MemoryDrawer = {
+  id: string;
+  scope: MemoryScope;
+  topic: string;
+  sourceType: MemoryDrawerSourceType;
+  sourceId: string;
+  sourceUri: string | null;
+  chunkIndex: number;
+  content: string;
+  contentSha256: string;
+  embeddingModel: string;
+  embeddingVersion: number;
+  tokenCount: number;
+  sourceJson: Record<string, unknown>;
+  syncVisibility: MemoryDrawerSyncVisibility;
+  retentionExpiresAt: string | null;
+  archivedAt: string | null;
+  redactionStatus: MemoryDrawerRedactionStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type EntityType =
   | 'code_artifact'
   | 'decision'

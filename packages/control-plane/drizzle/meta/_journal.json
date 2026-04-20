@@ -218,6 +218,20 @@
       "when": 1713254400000,
       "tag": "0028_mesh_local_config",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1713340800000,
+      "tag": "0029_sync_nodes_reverse_registration_error_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1776686400000,
+      "tag": "0030_add_memory_drawers",
+      "breakpoints": true
     }
   ]
 }
