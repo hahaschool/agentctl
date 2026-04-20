@@ -4,14 +4,21 @@ import * as readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
 import type {
+  EntityType,
+  FactSource,
+  MemoryDrawer,
   MemoryDrawerBackfillSourceType,
   MemoryDrawerBackfillState,
+  MemoryFact,
   MemoryScope,
 } from '@agentctl/shared';
 import pg from 'pg';
 
 import { sanitizeMemoryDrawerContent } from '../packages/control-plane/src/memory/memory-drawer-sanitizer.js';
-import type { WriteMemoryDrawerSourceInput } from '../packages/control-plane/src/memory/memory-drawer-types.js';
+import type {
+  WriteMemoryDrawerSourceInput,
+  WriteMemoryDrawerSourceResult,
+} from '../packages/control-plane/src/memory/memory-drawer-types.js';
 import type {
   ClaudeMemDatabase,
   ClaudeMemObservation,
@@ -19,7 +26,10 @@ import type {
 } from './claude-mem-migration-lib.js';
 import {
   assembleObservationContent,
+  buildImportedSource,
+  computeObservationConfidence,
   loadBetterSqlite3,
+  mapObservationType,
   parseStringArray,
   resolveDbPath,
 } from './claude-mem-migration-lib.js';
@@ -41,10 +51,32 @@ export type BackfillMemoryDrawersCliOptions = {
   scope: MemoryScope;
   topic: string;
   limit?: number;
+  machineId?: string;
 };
 
 export type DrawerStoreLike = {
-  writeSource(input: WriteMemoryDrawerSourceInput): Promise<unknown>;
+  writeSource(input: WriteMemoryDrawerSourceInput): Promise<WriteMemoryDrawerSourceResult>;
+};
+
+export type AddFactSourceSpan = {
+  drawerId: string;
+  startOffset: number;
+  endOffset: number;
+  sourceJson?: Record<string, unknown>;
+};
+
+export type AddFactLikeInput = {
+  scope: MemoryScope;
+  content: string;
+  entity_type: EntityType;
+  source: FactSource;
+  confidence?: number;
+  sourceSpans?: AddFactSourceSpan[];
+};
+
+export type MemoryStoreLike = {
+  addFact(input: AddFactLikeInput): Promise<MemoryFact>;
+  findFactBySourceKey(sourceKey: string): Promise<{ id: string } | null>;
 };
 
 export type BackfillStateStoreLike = {
@@ -69,6 +101,8 @@ export type BackfillMemoryDrawersOptions = {
   claudeMemDb?: ClaudeMemDatabase;
   drawerStore?: DrawerStoreLike;
   stateStore?: BackfillStateStoreLike;
+  memoryStore?: MemoryStoreLike;
+  machineId?: string | null;
   logger?: BackfillLogger;
   scope?: MemoryScope;
   topic?: string;
@@ -90,6 +124,9 @@ export type BackfillMemoryDrawersResult = {
   parseErrors: number;
   claudeMemObservationsSeen: number;
   claudeMemSessionSummariesSeen: number;
+  factCandidates: number;
+  factsWritten: number;
+  factsSkipped: number;
   lastCursor: BackfillCursor | null;
 };
 
@@ -151,6 +188,7 @@ Options:
   --scope <scope>          Memory scope for written drawers. Default: global.
   --topic <topic>          Drawer topic. Default: claude-code-jsonl.
   --limit <count>          Stop after count candidate entries.
+  --machine-id <id>        Machine id tagged onto fact source metadata.
   --json                   Print JSON summary.
   --help                   Show this message.`;
 }
@@ -225,6 +263,14 @@ export function parseArgs(
       const value = argv[index + 1];
       if (!value) throw new Error('--limit requires a positive integer');
       options.limit = parsePositiveInteger(value, '--limit');
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--machine-id') {
+      const value = argv[index + 1];
+      if (!value) throw new Error('--machine-id requires a value');
+      options.machineId = value;
       index += 1;
       continue;
     }
@@ -346,6 +392,9 @@ export async function backfillMemoryDrawers(
     parseErrors: 0,
     claudeMemObservationsSeen: 0,
     claudeMemSessionSummariesSeen: 0,
+    factCandidates: 0,
+    factsWritten: 0,
+    factsSkipped: 0,
     lastCursor: null,
   };
 
@@ -488,6 +537,7 @@ async function backfillClaudeMemDrawers(params: {
         topic,
         result,
         candidate,
+        observation,
         nextCursor,
       });
       if (shouldStop) {
@@ -658,9 +708,11 @@ async function processClaudeMemCandidate(params: {
   topic: string;
   result: BackfillMemoryDrawersResult;
   candidate: ClaudeMemDrawerCandidate | null;
+  observation?: ClaudeMemObservation;
   nextCursor: ClaudeMemBackfillCursor;
 }): Promise<boolean> {
-  const { options, state, dryRun, scope, topic, result, candidate, nextCursor } = params;
+  const { options, state, dryRun, scope, topic, result, candidate, observation, nextCursor } =
+    params;
 
   if (!candidate) {
     result.skipped += 1;
@@ -675,9 +727,14 @@ async function processClaudeMemCandidate(params: {
     result.sanitizedCandidates += 1;
   }
 
+  if (observation) {
+    const factPlan = planObservationFactWrites(observation);
+    result.factCandidates += factPlan.length;
+  }
+
   if (!dryRun) {
     const drawerStore = requireDrawerStore(options);
-    await drawerStore.writeSource({
+    const writeResult = await drawerStore.writeSource({
       scope,
       topic,
       sessionId: candidate.sessionId,
@@ -689,6 +746,18 @@ async function processClaudeMemCandidate(params: {
       syncVisibility: 'local',
     });
     result.written += 1;
+
+    if (observation && options.memoryStore) {
+      await writeObservationFacts({
+        observation,
+        drawers: writeResult.drawers ?? [],
+        memoryStore: options.memoryStore,
+        scope,
+        machineId: options.machineId ?? null,
+        logger: options.logger,
+        result,
+      });
+    }
   }
 
   await updateCursorAfterLine(options, state, dryRun, nextCursor);
@@ -840,6 +909,170 @@ function assembleClaudeMemObservationDrawerContent(observation: ClaudeMemObserva
     .join('\n\n');
 }
 
+type ObservationFactPlan = {
+  kind: 'title' | 'fact';
+  index: number;
+  sourceKey: string;
+  rawText: string;
+};
+
+function planObservationFactWrites(observation: ClaudeMemObservation): ObservationFactPlan[] {
+  const plans: ObservationFactPlan[] = [];
+
+  const title = observation.title?.trim() ?? '';
+  if (title.length > 0) {
+    plans.push({
+      kind: 'title',
+      index: 0,
+      sourceKey: `observations:${observation.id}:parent`,
+      rawText: title,
+    });
+  }
+
+  const facts = parseStringArray(observation.facts);
+  for (const [index, fact] of facts.entries()) {
+    plans.push({
+      kind: 'fact',
+      index,
+      sourceKey: `observations:${observation.id}:fact:${index}`,
+      rawText: fact,
+    });
+  }
+
+  return plans;
+}
+
+async function writeObservationFacts(params: {
+  observation: ClaudeMemObservation;
+  drawers: MemoryDrawer[];
+  memoryStore: MemoryStoreLike;
+  scope: MemoryScope;
+  machineId: string | null;
+  logger: BackfillLogger | undefined;
+  result: BackfillMemoryDrawersResult;
+}): Promise<void> {
+  const { observation, drawers, memoryStore, scope, machineId, logger, result } = params;
+
+  if (drawers.length === 0) {
+    return;
+  }
+
+  const plans = planObservationFactWrites(observation);
+  if (plans.length === 0) {
+    return;
+  }
+
+  const confidence = computeObservationConfidence(observation);
+  const filesModified = parseStringArray(observation.files_modified);
+  const importedAt = new Date().toISOString();
+  const entityType = mapObservationType(observation.type);
+
+  for (const plan of plans) {
+    const existing = await memoryStore.findFactBySourceKey(plan.sourceKey);
+    if (existing) {
+      result.factsSkipped += 1;
+      continue;
+    }
+
+    const sanitizedFact = sanitizeMemoryDrawerContent(plan.rawText).content.trim();
+    if (sanitizedFact.length === 0) {
+      result.factsSkipped += 1;
+      continue;
+    }
+
+    const sourceSpans = computeFactSourceSpans(sanitizedFact, drawers);
+    const source = buildImportedSource({
+      sourceTable: 'observations',
+      sourceId: observation.id,
+      sourceKey: plan.sourceKey,
+      sessionId: observation.memory_session_id,
+      memorySessionId: observation.memory_session_id,
+      machineId,
+      importedAt,
+      filesModified,
+      originalCreatedAt: observation.created_at,
+    });
+
+    try {
+      await memoryStore.addFact({
+        scope,
+        content: sanitizedFact,
+        entity_type: entityType,
+        source,
+        confidence: plan.kind === 'title' ? confidence : Math.max(0.6, confidence - 0.05),
+        sourceSpans,
+      });
+      result.factsWritten += 1;
+    } catch (error: unknown) {
+      logger?.warn?.({
+        event: 'memory_fact_backfill_write_failed',
+        sourceKey: plan.sourceKey,
+        error: summarizeBackfillError(error),
+      });
+      throw error;
+    }
+  }
+}
+
+function computeFactSourceSpans(
+  sanitizedFact: string,
+  drawers: MemoryDrawer[],
+): AddFactSourceSpan[] {
+  const spans: AddFactSourceSpan[] = [];
+
+  for (const drawer of drawers) {
+    const chunkContent = drawer.content;
+    const needle = sanitizedFact;
+    const index = needle.length > 0 ? chunkContent.indexOf(needle) : -1;
+
+    if (index >= 0) {
+      spans.push({
+        drawerId: drawer.id,
+        startOffset: index,
+        endOffset: index + needle.length,
+        sourceJson: {
+          match: 'exact',
+          chunkIndex: drawer.chunkIndex,
+        },
+      });
+    }
+  }
+
+  if (spans.length > 0) {
+    return spans;
+  }
+
+  const fallbackDrawer = drawers[0];
+  if (!fallbackDrawer) {
+    return spans;
+  }
+
+  return [
+    {
+      drawerId: fallbackDrawer.id,
+      startOffset: 0,
+      endOffset: fallbackDrawer.content.length,
+      sourceJson: {
+        match: 'fallback_full_drawer',
+        chunkIndex: fallbackDrawer.chunkIndex,
+      },
+    },
+  ];
+}
+
+function summarizeBackfillError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[A-Za-z0-9_.:-]{1,128}$/.test(code)) {
+      return code;
+    }
+  }
+  if (error instanceof Error && /^[A-Za-z0-9_.:-]{1,128}$/.test(error.name)) {
+    return error.name;
+  }
+  return 'unknown_error';
+}
+
 function readClaudeMemRows<T>(
   db: ClaudeMemDatabase,
   table: 'observations' | 'session_summaries',
@@ -940,11 +1173,35 @@ async function createCliStores(
 ): Promise<{
   drawerStore: DrawerStoreLike;
   stateStore: BackfillStateStoreLike;
+  memoryStore: MemoryStoreLike;
 }> {
-  const [{ MemoryDrawerBackfillStateStore }, { MemoryDrawerStore }] = await Promise.all([
-    import('../packages/control-plane/src/memory/memory-drawer-backfill-state-store.js'),
-    import('../packages/control-plane/src/memory/memory-drawer-store.js'),
-  ]);
+  const [{ MemoryDrawerBackfillStateStore }, { MemoryDrawerStore }, { MemoryStore }] =
+    await Promise.all([
+      import('../packages/control-plane/src/memory/memory-drawer-backfill-state-store.js'),
+      import('../packages/control-plane/src/memory/memory-drawer-store.js'),
+      import('../packages/control-plane/src/memory/memory-store.js'),
+    ]);
+
+  const internalStore = new MemoryStore({
+    pool,
+    logger: createStoreLogger(logger) as never,
+  });
+
+  const memoryStore: MemoryStoreLike = {
+    addFact: (input) => internalStore.addFact(input),
+    async findFactBySourceKey(sourceKey: string) {
+      const result = await pool.query<{ id: string }>(
+        `SELECT id
+         FROM memory_facts
+         WHERE source_json->>'source' = 'claude-mem'
+           AND source_json->>'source_key' = $1
+         LIMIT 1`,
+        [sourceKey],
+      );
+      const row = result.rows[0];
+      return row ? { id: row.id } : null;
+    },
+  };
 
   return {
     stateStore: new MemoryDrawerBackfillStateStore({ pool }),
@@ -952,6 +1209,7 @@ async function createCliStores(
       pool,
       logger: createStoreLogger(logger) as never,
     }),
+    memoryStore,
   };
 }
 
@@ -970,7 +1228,10 @@ function formatSummary(result: BackfillMemoryDrawersResult): string {
     `Candidate entries: ${result.candidates}`,
     `Sanitized candidates: ${result.sanitizedCandidates}`,
     `Parse errors: ${result.parseErrors}`,
-    `Written: ${result.written}`,
+    `Drawers written: ${result.written}`,
+    `Fact candidates: ${result.factCandidates}`,
+    `Facts written: ${result.factsWritten}`,
+    `Facts skipped (idempotent/empty): ${result.factsSkipped}`,
     `Skipped: ${result.skipped}`,
   ].join('\n');
 }
@@ -997,6 +1258,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   try {
     let drawerStore: DrawerStoreLike | undefined;
     let stateStore: BackfillStateStoreLike | undefined;
+    let memoryStore: MemoryStoreLike | undefined;
 
     if (options.sourceType === 'claude-mem') {
       const sqlite = await loadBetterSqlite3();
@@ -1011,6 +1273,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       const stores = await createCliStores(pool, logger);
       stateStore = stores.stateStore;
       drawerStore = stores.drawerStore;
+      memoryStore = stores.memoryStore;
     }
 
     const result = await backfillMemoryDrawers({
@@ -1020,6 +1283,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       claudeMemDb: claudeMemDb ?? undefined,
       drawerStore,
       stateStore,
+      memoryStore,
+      machineId: options.machineId ?? null,
       logger,
       scope: options.scope,
       topic: options.topic,
