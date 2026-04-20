@@ -24,6 +24,7 @@
     "clean": "pnpm -r exec rm -rf dist",
     "agentctl": "tsx scripts/agentctl.ts",
     "coord": "tsx scripts/agent-coord.ts",
+    "memory:bench": "node --import tsx scripts/memory-bench.ts",
     "memory:eval": "node --import tsx scripts/memory-eval.ts",
     "agentctl:deploy": "npx tsx scripts/deploy.ts",
     "peer-update": "tsx scripts/peer-update.ts"
