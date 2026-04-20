@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
 
 import {
+  forceSchemaAheadEnvelopeRejectionAndReadPeer,
   getTwoNodeMeshFixtureConfig,
   pingPeerAndWaitForVersion,
   runPeerUpdateDryRunAndReadPlan,
+  skipReasonForTwoNodeMeshSchemaAhead,
   skipReasonForTwoNodeMeshDryRun,
   skipReasonForTwoNodeMeshFixture,
 } from './fixtures/two-node-mesh';
@@ -74,5 +76,31 @@ test.describe('two-node mesh fixture (live, opt-in)', () => {
         'Poll /health appVersion',
       ]),
     );
+  });
+
+  test('forces a schema-ahead envelope rejection and surfaces the 33.10 badge', async ({
+    page,
+    request,
+  }) => {
+    test.skip(
+      !fixture.enabled || !fixture.schemaAheadEnabled || !fixture.schemaAheadDatabaseUrl,
+      skipReasonForTwoNodeMeshSchemaAhead(fixture),
+    );
+    if (!fixture.enabled || !fixture.schemaAheadEnabled || !fixture.schemaAheadDatabaseUrl) {
+      throw new Error(skipReasonForTwoNodeMeshSchemaAhead(fixture));
+    }
+
+    const { after, envelopeSchemaVersion } =
+      await forceSchemaAheadEnvelopeRejectionAndReadPeer(request, fixture);
+
+    expect(after.lastSchemaAheadVersion).toBe(envelopeSchemaVersion);
+    expect(after.schemaAheadCount ?? 0).toBeGreaterThan(0);
+
+    await page.goto(fixture.primaryWebUrl('/mesh-peers'));
+
+    const row = page.getByRole('row').filter({ hasText: fixture.peerMachineId });
+    const badge = row.getByTestId(`peer-schema-ahead-badge-${fixture.peerMachineId}`);
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText(`schema v${envelopeSchemaVersion}`);
   });
 });

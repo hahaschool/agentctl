@@ -1,3 +1,7 @@
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
 import type { APIRequestContext } from '@playwright/test';
 
 type Env = Record<string, string | undefined>;
@@ -5,6 +9,10 @@ type Env = Record<string, string | undefined>;
 type LiveSyncPeer = {
   machineId: string;
   peerVersion?: string | null;
+  peerSchemaVersion?: number | null;
+  lastSchemaAheadVersion?: number | null;
+  lastSchemaAheadAt?: string | null;
+  schemaAheadCount?: number | null;
 };
 
 type AutoUpdateDryRunEvent =
@@ -56,6 +64,9 @@ type EnabledTwoNodeMeshFixtureConfig = {
   pollIntervalMs: number;
   dryRunEnabled: boolean;
   dryRunTimeoutMs: number;
+  schemaAheadEnabled: boolean;
+  schemaAheadDatabaseUrl: string | null;
+  schemaAheadTimeoutMs: number;
   primaryWebUrl: (path?: string) => string;
   primaryApiUrl: (path?: string) => string;
 };
@@ -66,11 +77,82 @@ export type TwoNodeMeshFixtureConfig =
 
 const ENABLE_ENV = 'AGENTCTL_MESH_TWO_NODE_E2E';
 const DRY_RUN_ENABLE_ENV = 'AGENTCTL_MESH_DRY_RUN_E2E';
+const SCHEMA_AHEAD_ENABLE_ENV = 'AGENTCTL_MESH_SCHEMA_AHEAD_E2E';
+const SCHEMA_AHEAD_DATABASE_URL_ENV = 'AGENTCTL_MESH_PRIMARY_DATABASE_URL';
 const REQUIRED_ENV = [
   'AGENTCTL_MESH_PRIMARY_WEB_URL',
   'AGENTCTL_MESH_PEER_MACHINE_ID',
   'AGENTCTL_MESH_EXPECTED_PEER_VERSION',
 ] as const;
+const execFileAsync = promisify(execFile);
+const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
+
+const SCHEMA_AHEAD_FIXTURE_RUNNER = `
+import { createDb } from './packages/control-plane/src/db/connection.ts';
+import { applyChange, recordSchemaAheadRejection } from './packages/control-plane/src/sync/apply-change.ts';
+
+const databaseUrl = process.env.AGENTCTL_SCHEMA_AHEAD_FIXTURE_DATABASE_URL;
+const peerMachineId = process.env.AGENTCTL_SCHEMA_AHEAD_FIXTURE_PEER_MACHINE_ID;
+const envelopeSchemaVersion = Number(process.env.AGENTCTL_SCHEMA_AHEAD_FIXTURE_ENVELOPE_SCHEMA_VERSION);
+
+if (!databaseUrl) {
+  throw new Error('AGENTCTL_SCHEMA_AHEAD_FIXTURE_DATABASE_URL is required');
+}
+if (!peerMachineId) {
+  throw new Error('AGENTCTL_SCHEMA_AHEAD_FIXTURE_PEER_MACHINE_ID is required');
+}
+if (!Number.isSafeInteger(envelopeSchemaVersion) || envelopeSchemaVersion < 0) {
+  throw new Error('AGENTCTL_SCHEMA_AHEAD_FIXTURE_ENVELOPE_SCHEMA_VERSION must be a safe non-negative integer');
+}
+
+const db = createDb(databaseUrl, {
+  sessionNodeId: 'schema-ahead-fixture',
+  max: 1,
+  min: 0,
+  idleTimeoutMillis: 1_000,
+  connectionTimeoutMillis: 5_000,
+});
+
+try {
+  const rowId = \`schema-ahead-fixture-\${Date.now()}\`;
+  const change = {
+    id: Date.now(),
+    nodeId: peerMachineId,
+    tableName: 'machines',
+    rowId,
+    operation: 'INSERT',
+    payload: {
+      id: rowId,
+      hostname: \`\${rowId}.fixture.invalid\`,
+      tailscale_ip: '100.64.0.250',
+      os: 'linux',
+      arch: 'x64',
+      status: 'online',
+    },
+    vclock: { [peerMachineId]: Date.now() },
+    createdAt: new Date(),
+    synced: false,
+    meta: {
+      schemaVersion: envelopeSchemaVersion,
+      protocolVersion: 1,
+      producerVersion: 'schema-ahead-fixture',
+    },
+  };
+
+  try {
+    await applyChange(change, db);
+    throw new Error('Expected MESH_ENVELOPE_SCHEMA_AHEAD but applyChange accepted the fixture envelope');
+  } catch (err) {
+    if (!err || typeof err !== 'object' || err.code !== 'MESH_ENVELOPE_SCHEMA_AHEAD') {
+      throw err;
+    }
+  }
+
+  await recordSchemaAheadRejection(db, peerMachineId, envelopeSchemaVersion);
+} finally {
+  await db.$client.end();
+}
+`;
 
 function normalizeBaseUrl(raw: string | undefined): string | null {
   const trimmed = raw?.trim();
@@ -142,6 +224,13 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
   );
   if (dryRunTimeout.invalid) invalidEnv.push('AGENTCTL_MESH_DRY_RUN_TIMEOUT_MS');
 
+  const schemaAheadTimeout = readOptionalPositiveInt(
+    env,
+    'AGENTCTL_MESH_SCHEMA_AHEAD_TIMEOUT_MS',
+    30_000,
+  );
+  if (schemaAheadTimeout.invalid) invalidEnv.push('AGENTCTL_MESH_SCHEMA_AHEAD_TIMEOUT_MS');
+
   if (missingEnv.length > 0 || invalidEnv.length > 0 || !primaryWebBase || !primaryApiBase) {
     return {
       enabled: false,
@@ -158,6 +247,9 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
     pollIntervalMs: interval.value,
     dryRunEnabled: env[DRY_RUN_ENABLE_ENV] === '1',
     dryRunTimeoutMs: dryRunTimeout.value,
+    schemaAheadEnabled: env[SCHEMA_AHEAD_ENABLE_ENV] === '1',
+    schemaAheadDatabaseUrl: env[SCHEMA_AHEAD_DATABASE_URL_ENV]?.trim() || null,
+    schemaAheadTimeoutMs: schemaAheadTimeout.value,
     primaryWebUrl: (path = '/') => joinUrl(primaryWebBase, path),
     primaryApiUrl: (path = '/') => joinUrl(primaryApiBase, path),
   };
@@ -188,6 +280,21 @@ export function skipReasonForTwoNodeMeshDryRun(config: TwoNodeMeshFixtureConfig)
   return 'two-node mesh dry-run assertion is enabled';
 }
 
+export function skipReasonForTwoNodeMeshSchemaAhead(
+  config: TwoNodeMeshFixtureConfig,
+): string {
+  if (!config.enabled) {
+    return skipReasonForTwoNodeMeshFixture(config);
+  }
+  if (!config.schemaAheadEnabled) {
+    return `Set ${SCHEMA_AHEAD_ENABLE_ENV}=1 to run the live schema-ahead rejection assertion.`;
+  }
+  if (!config.schemaAheadDatabaseUrl) {
+    return `Set ${SCHEMA_AHEAD_DATABASE_URL_ENV} to the primary node database URL for the schema-ahead rejection assertion.`;
+  }
+  return 'two-node mesh schema-ahead assertion is enabled';
+}
+
 async function readPeer(request: APIRequestContext, config: EnabledTwoNodeMeshFixtureConfig) {
   const response = await request.get(config.primaryApiUrl('/api/sync/peers'));
   if (!response.ok()) {
@@ -197,6 +304,24 @@ async function readPeer(request: APIRequestContext, config: EnabledTwoNodeMeshFi
   const body = (await response.json()) as { peers?: LiveSyncPeer[] };
   const peers = Array.isArray(body.peers) ? body.peers : [];
   return peers.find((peer) => peer.machineId === config.peerMachineId) ?? null;
+}
+
+async function readPrimarySchemaVersion(
+  request: APIRequestContext,
+  config: EnabledTwoNodeMeshFixtureConfig,
+): Promise<number> {
+  const response = await request.get(config.primaryApiUrl('/api/version-compat'));
+  if (!response.ok()) {
+    throw new Error(`GET /api/version-compat failed with HTTP ${response.status()}`);
+  }
+
+  const body = (await response.json()) as { schemaVersion?: unknown };
+  const schemaVersion = body.schemaVersion;
+  if (!Number.isSafeInteger(schemaVersion) || schemaVersion < 0) {
+    throw new Error('GET /api/version-compat did not return a safe schemaVersion');
+  }
+
+  return schemaVersion;
 }
 
 export async function pingPeerAndWaitForVersion(
@@ -278,4 +403,102 @@ export async function runPeerUpdateDryRunAndReadPlan(
   const result = parsePeerUpdateDryRunResult(output);
 
   return { events, output, result };
+}
+
+function formatFixtureCommandError(err: unknown, secret: string): string {
+  const raw =
+    err instanceof Error
+      ? [err.message, 'stderr' in err ? String(err.stderr ?? '') : ''].join('\n').trim()
+      : String(err);
+  return raw.replaceAll(secret, '[redacted database url]');
+}
+
+async function runSchemaAheadFixtureInjection(
+  config: EnabledTwoNodeMeshFixtureConfig,
+  envelopeSchemaVersion: number,
+): Promise<void> {
+  if (!config.schemaAheadDatabaseUrl) {
+    throw new Error(skipReasonForTwoNodeMeshSchemaAhead(config));
+  }
+
+  try {
+    await execFileAsync('pnpm', ['--filter', '@agentctl/shared', 'build'], {
+      cwd: REPO_ROOT,
+      timeout: config.schemaAheadTimeoutMs,
+      maxBuffer: 1_000_000,
+    });
+
+    await execFileAsync(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '--eval', SCHEMA_AHEAD_FIXTURE_RUNNER],
+      {
+        cwd: REPO_ROOT,
+        timeout: config.schemaAheadTimeoutMs,
+        maxBuffer: 1_000_000,
+        env: {
+          ...process.env,
+          AGENTCTL_SCHEMA_AHEAD_FIXTURE_DATABASE_URL: config.schemaAheadDatabaseUrl,
+          AGENTCTL_SCHEMA_AHEAD_FIXTURE_PEER_MACHINE_ID: config.peerMachineId,
+          AGENTCTL_SCHEMA_AHEAD_FIXTURE_ENVELOPE_SCHEMA_VERSION: String(
+            envelopeSchemaVersion,
+          ),
+        },
+      },
+    );
+  } catch (err) {
+    throw new Error(
+      `schema-ahead fixture injection failed: ${formatFixtureCommandError(
+        err,
+        config.schemaAheadDatabaseUrl,
+      )}`,
+    );
+  }
+}
+
+export async function forceSchemaAheadEnvelopeRejectionAndReadPeer(
+  request: APIRequestContext,
+  config: EnabledTwoNodeMeshFixtureConfig,
+): Promise<{
+  before: LiveSyncPeer;
+  after: LiveSyncPeer;
+  localSchemaVersion: number;
+  envelopeSchemaVersion: number;
+}> {
+  if (!config.schemaAheadEnabled || !config.schemaAheadDatabaseUrl) {
+    throw new Error(skipReasonForTwoNodeMeshSchemaAhead(config));
+  }
+
+  const before = await readPeer(request, config);
+  if (!before) {
+    throw new Error(`Peer ${config.peerMachineId} is not registered on the primary node`);
+  }
+
+  const beforeCount = before.schemaAheadCount ?? 0;
+  const localSchemaVersion = await readPrimarySchemaVersion(request, config);
+  const envelopeSchemaVersion = localSchemaVersion + 2;
+
+  await runSchemaAheadFixtureInjection(config, envelopeSchemaVersion);
+
+  const deadline = Date.now() + config.schemaAheadTimeoutMs;
+  let after = await readPeer(request, config);
+
+  while (Date.now() <= deadline) {
+    const count = after?.schemaAheadCount ?? 0;
+    if (
+      after?.lastSchemaAheadVersion === envelopeSchemaVersion &&
+      count > beforeCount
+    ) {
+      return { before, after, localSchemaVersion, envelopeSchemaVersion };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, config.pollIntervalMs));
+    after = await readPeer(request, config);
+  }
+
+  throw new Error(
+    `Timed out waiting for ${config.peerMachineId} schema-ahead rejection ` +
+      `lastSchemaAheadVersion=${envelopeSchemaVersion}; ` +
+      `last observed version=${after?.lastSchemaAheadVersion ?? 'missing peer'}, ` +
+      `count=${after?.schemaAheadCount ?? 0}`,
+  );
 }
