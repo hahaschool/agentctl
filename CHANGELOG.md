@@ -3,6 +3,34 @@
 All notable changes to AgentCTL are documented in this file.
 
 
+## [0.8.0] — 2026-04-20
+
+dashboard WS auto-refresh + toast notifications, memory drawer/fact-source foundations, fastify security pin, fleet dry-run docker scoping
+
+### Changes
+
+- a2cfdda8 feat: add memory fact source schema groundwork (#684)
+- cd5d9852 docs: sync roadmap after memory dedup and backfill state (#683)
+- a66c9bc1 feat: add memory drawer backfill state store (#682)
+- a976cae2 feat(memory): add dedup check route contract (#681)
+- cb5b17e4 docs: sync roadmap after memory audit and fleet guardrails (#680)
+- eb4f19b2 feat(memory): redact memory write audit entries (#679)
+- bfbca627 ci: scope fleet dry-run to docker topology (#678)
+- 1dfadaa3 feat(memory): sanitize memory search queries (#677)
+- 7c774bf6 docs: sync roadmap after mesh fixture merge (#676)
+- 92ab8c97 test: add mesh reverse registration fixture assertions (#675)
+- bfe9759c docs: sync roadmap after mesh visibility assertion
+- f106f4f7 test(web): add mesh machine visibility fixture assertion (#673)
+- b7273f5e docs: sync roadmap after PR 671 (#672)
+- e19dd7d5 feat: add memory drawer schema helpers (#671)
+- c1e1add6 docs: sync roadmap checkpoint after PR 669
+- 811bdf31 docs: sync roadmap after PR 668
+- f77f8074 test(web): add mesh schema-ahead fixture assertion
+- 48bc709f test: add memory cold-start MCP contracts
+- ea82fec9 docs: sync roadmap for PRs #664-#665
+- 2271bf72 test(web): add memory-index.spec.ts to e2e CI allowlist
+
+
 ## [0.7.0] — 2026-04-16
 
 Security findings management UI, empty state standardization, responsive graph dimensions, memory deletion confirmation dialog, DeploymentView and ConflictsPage test coverage
