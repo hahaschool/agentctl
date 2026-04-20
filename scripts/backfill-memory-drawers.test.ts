@@ -6,6 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BackfillLogger } from './backfill-memory-drawers.js';
 import { backfillMemoryDrawers, findJsonlFiles, parseArgs } from './backfill-memory-drawers.js';
+import type {
+  ClaudeMemDatabase,
+  ClaudeMemObservation,
+  ClaudeMemSessionSummary,
+} from './claude-mem-migration-lib.js';
 
 type MockDrawerStore = {
   writeSource: ReturnType<typeof vi.fn>;
@@ -97,6 +102,57 @@ function createStateStore(cursorJson: Record<string, unknown> = {}): MockStateSt
   };
 }
 
+function createClaudeMemObservation(
+  overrides: Partial<ClaudeMemObservation> = {},
+): ClaudeMemObservation {
+  return {
+    id: 42,
+    type: 'decision',
+    title: 'Prefer Biome for formatting',
+    subtitle: 'Keep formatting and linting unified',
+    facts: '["Biome replaces ESLint formatting", "Run focused Biome on touched files"]',
+    narrative: 'Repeated lint drift made a single formatter easier to enforce.',
+    files_modified: '["package.json", "scripts/backfill-memory-drawers.ts"]',
+    project: 'agentctl',
+    created_at: '2026-04-20T12:00:00.000Z',
+    created_at_epoch: 1776686400,
+    memory_session_id: 'memory-session-1',
+    ...overrides,
+  };
+}
+
+function createClaudeMemSessionSummary(
+  overrides: Partial<ClaudeMemSessionSummary> = {},
+): ClaudeMemSessionSummary {
+  return {
+    id: 7,
+    session_id: 'claude-session-1',
+    summary: 'The session chose a conservative drawer backfill slice.',
+    created_at: '2026-04-20T13:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function createClaudeMemDb(
+  observations: ClaudeMemObservation[] = [],
+  sessionSummaries: ClaudeMemSessionSummary[] = [],
+): ClaudeMemDatabase {
+  return {
+    prepare: vi.fn((sql: string) => ({
+      all: vi.fn(() => {
+        if (sql.includes('observations')) {
+          return observations;
+        }
+        if (sql.includes('session_summaries')) {
+          return sessionSummaries;
+        }
+        return [];
+      }),
+    })),
+    close: vi.fn(),
+  };
+}
+
 function createLogger(): BackfillLogger & { entries: string[] } {
   const entries: string[] = [];
   return {
@@ -149,6 +205,20 @@ describe('parseArgs', () => {
       limit: 25,
       json: true,
     });
+  });
+
+  it('parses claude-mem source selection without changing JSONL defaults', () => {
+    const options = parseArgs([
+      '--source-type',
+      'claude-mem',
+      '--source-root',
+      '/tmp/claude-mem.db',
+      '--dry-run',
+    ]);
+
+    expect(options.sourceType).toBe('claude-mem');
+    expect(options.sourceRoot).toBe(path.resolve('/tmp/claude-mem.db'));
+    expect(options.dryRun).toBe(true);
   });
 });
 
@@ -302,5 +372,127 @@ describe('backfillMemoryDrawers', () => {
     expect(result.parseErrors).toBe(1);
     expect(JSON.stringify(result)).not.toContain(rawSecret);
     expect(logger.entries.join('\n')).not.toContain(rawSecret);
+  });
+
+  it('counts claude-mem observation and session-summary candidates in dry-run without writes', async () => {
+    const drawerStore = createDrawerStore();
+    const stateStore = createStateStore();
+    const db = createClaudeMemDb([createClaudeMemObservation()], [createClaudeMemSessionSummary()]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: true,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+    });
+
+    expect(result).toMatchObject({
+      sourceType: 'claude-mem',
+      dryRun: true,
+      candidates: 2,
+      claudeMemObservationsSeen: 1,
+      claudeMemSessionSummariesSeen: 1,
+      written: 0,
+      skipped: 0,
+    });
+    expect(drawerStore.writeSource).not.toHaveBeenCalled();
+    expect(stateStore.startOrResume).not.toHaveBeenCalled();
+    expect(stateStore.updateCursor).not.toHaveBeenCalled();
+  });
+
+  it('maps claude-mem rows to deterministic drawer source refs in execute mode', async () => {
+    const drawerStore = createDrawerStore();
+    const stateStore = createStateStore();
+    const db = createClaudeMemDb([createClaudeMemObservation()], [createClaudeMemSessionSummary()]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      scope: 'project:agentctl',
+      topic: 'claude-mem',
+    });
+
+    expect(result.written).toBe(2);
+    expect(stateStore.startOrResume).toHaveBeenCalledWith({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+    });
+    expect(drawerStore.writeSource).toHaveBeenCalledTimes(2);
+    expect(drawerStore.writeSource.mock.calls[0]?.[0]).toMatchObject({
+      scope: 'project:agentctl',
+      topic: 'claude-mem',
+      sourceType: 'claude-mem-observation',
+      sourceId: 'observations:42',
+      sourceUri: 'claude-mem://observations/42',
+      syncVisibility: 'local',
+      content:
+        'Prefer Biome for formatting\n\nKeep formatting and linting unified\n\nContext: Repeated lint drift made a single formatter easier to enforce.\n\nFacts:\n- Biome replaces ESLint formatting\n- Run focused Biome on touched files',
+      sourceJson: {
+        source: 'claude-mem',
+        sourceTable: 'observations',
+        sourceId: '42',
+        sourceKey: 'observations:42',
+        observationType: 'decision',
+        memorySessionId: 'memory-session-1',
+        project: 'agentctl',
+        filesModified: ['package.json', 'scripts/backfill-memory-drawers.ts'],
+        factsCount: 2,
+        originalCreatedAt: '2026-04-20T12:00:00.000Z',
+      },
+    });
+    expect(drawerStore.writeSource.mock.calls[1]?.[0]).toMatchObject({
+      scope: 'project:agentctl',
+      topic: 'claude-mem',
+      sourceType: 'claude-mem-session-summary',
+      sourceId: 'session_summaries:7',
+      sourceUri: 'claude-mem://session_summaries/7',
+      content: 'The session chose a conservative drawer backfill slice.',
+      sourceJson: {
+        source: 'claude-mem',
+        sourceTable: 'session_summaries',
+        sourceId: '7',
+        sourceKey: 'session_summaries:7',
+        sessionId: 'claude-session-1',
+        originalCreatedAt: '2026-04-20T13:00:00.000Z',
+      },
+    });
+    expect(stateStore.updateCursor).toHaveBeenLastCalledWith('state-1', {
+      table: 'session_summaries',
+      id: 8,
+    });
+    expect(stateStore.markComplete).toHaveBeenCalledWith('state-1');
+  });
+
+  it('resumes claude-mem execution from the saved table cursor', async () => {
+    const drawerStore = createDrawerStore();
+    const stateStore = createStateStore({ table: 'observations', id: 42 });
+    const db = createClaudeMemDb(
+      [
+        createClaudeMemObservation({ id: 41, title: 'already handled' }),
+        createClaudeMemObservation({ id: 42, title: 'resume here' }),
+      ],
+      [createClaudeMemSessionSummary()],
+    );
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+    });
+
+    expect(result.written).toBe(2);
+    expect(drawerStore.writeSource.mock.calls.map(([input]) => input.sourceId)).toEqual([
+      'observations:42',
+      'session_summaries:7',
+    ]);
   });
 });
