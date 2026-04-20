@@ -26,7 +26,7 @@ fleet structure. PR #582 added the update-available banner. PR #654 added the
 opt-in live two-node fixture foundation and first version-drift assertion
 without changing default E2E or beta/dev/prod CD behavior. PR #659 added the
 separately gated peer-update dry-run fixture assertion over
-`/api/mesh/auto-update/dry-run`. PR #668 adds the separately gated
+`/api/mesh/auto-update/dry-run`. PR #668 added the separately gated
 schema-ahead assertion by forcing a `schemaVersion + 2` envelope through the
 primary node's apply-side compat gate and asserting the 33.10 badge on
 `/mesh-peers`.
