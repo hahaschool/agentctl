@@ -1,6 +1,6 @@
 # Mesh Bidirectional Registration Plan
 
-**Status:** In Progress — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, two-node replication proof, the opt-in live fixture foundation, and the PR #673 A-to-B machine visibility browser assertion landed; remaining browser assertions cover 33.8 add-peer/reverse-registration and one-way warning/retry flows
+**Status:** In Review — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, two-node replication proof, the opt-in live fixture foundation, and the PR #673 A-to-B machine visibility browser assertion landed; PR #675 adds the remaining 33.8 add-peer/reverse-registration and one-way warning/retry browser assertions
 **Roadmap:** 33.8 Mesh Bidirectional Registration + Cross-Node Visibility
 **Created:** 2026-04-15
 
@@ -55,12 +55,22 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
      provenance badge without adding live-node dependencies to the default E2E
      lane.
 
+8. Remaining 33.8 browser assertions *(PR #675)*.
+   - `AGENTCTL_MESH_ADD_PEER_REVERSE_E2E=1` drives the real `/mesh-peers`
+     add-peer form, probes the secondary node, verifies token preflight
+     compatibility, asserts `reverseRegistrationStatus=ok`, and confirms the
+     primary node appears in the secondary peer registry.
+   - `AGENTCTL_MESH_ONE_WAY_RETRY_E2E=1` route-shims browser peer-list and
+     retry responses so the UI shows the one-way warning and retry failure
+     posture without mutating the live peer database.
+
 ## Scope
 
 1. Prove end-to-end cross-node visibility.
    - Integration proof is delivered in PR #589.
    - PR #654 created the opt-in fixture foundation.
-   - Remaining: extend it with 33.8 browser assertions for add-peer/reverse-registration and the one-way warning/retry failure path.
+   - PR #673 added the A-to-B machine visibility browser assertion.
+   - PR #675 adds the add-peer/reverse-registration and one-way warning/retry browser assertions.
 
 2. Add mesh health summary. *(Delivered in PR #576.)*
    - Summarize bidirectional, one-way, and stale peer counts in the
@@ -85,5 +95,6 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
   `AGENTCTL_MESH_SECONDARY_WEB_URL`,
   `AGENTCTL_MESH_SYNCED_MACHINE_HOSTNAME`, and
   `AGENTCTL_MESH_SYNCED_MACHINE_ORIGIN_LABEL` are set.
-- Remaining focused browser coverage: Playwright two-node assertions for
-  add-peer/reverse-registration and one-way retry failure paths.
+- The PR #675 add-peer/reverse-registration and one-way retry fixture assertions remain default-skipped unless
+  `AGENTCTL_MESH_ADD_PEER_REVERSE_E2E=1` or
+  `AGENTCTL_MESH_ONE_WAY_RETRY_E2E=1` are set.

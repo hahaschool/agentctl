@@ -39,6 +39,28 @@ The fourth slice is separately gated and verifies the schema-ahead rejection pat
 4. Reload `/mesh-peers` and assert that the 33.10 schema-ahead badge appears on
    the configured peer row.
 
+The fifth slice is separately gated and verifies the add-peer reverse
+registration happy path:
+
+1. Read both nodes' live mesh config through `GET /api/mesh/config`.
+2. Open the primary node's `/mesh-peers` page and add the secondary node through
+   the real browser form.
+3. Probe the secondary sync URL, assert token preflight compatibility, then save.
+4. Assert that `POST /api/sync/peers` reports `reverseRegistrationStatus=ok`.
+5. Poll the secondary node until the primary node appears in its peer registry,
+   then assert the reverse row in the secondary browser UI.
+
+The sixth slice is separately gated and verifies the one-way warning/retry
+browser posture without mutating the live peer registry:
+
+1. Confirm that the configured peer exists through the live primary API.
+2. Route-shim only browser `GET /api/sync/peers` responses so that peer renders
+   with `reverseRegistrationStatus=failed`.
+3. Route-shim the browser retry request to return the same 502 failure shape as
+   the backend route.
+4. Assert the `One-way` badge, Retry button, failure toast, and that the warning
+   remains visible after retry.
+
 ## Prerequisites
 
 - Two AgentCTL nodes are already running and peered.
@@ -58,6 +80,15 @@ The fourth slice is separately gated and verifies the schema-ahead rejection pat
 - For the schema-ahead assertion, provide the primary node database URL through
   `AGENTCTL_MESH_PRIMARY_DATABASE_URL`. The fixture uses it only when
   `AGENTCTL_MESH_SCHEMA_AHEAD_E2E=1` is also set.
+- For the add-peer reverse-registration assertion, provide the secondary node
+  web URL and, when it differs from the web URL, the secondary node API URL. The
+  fixture reads peer identity from `GET /api/mesh/config`, so no duplicate
+  machine-id, hostname, sync URL, or public-key env is required. The configured
+  `AGENTCTL_MESH_PEER_MACHINE_ID` must match the secondary node's `machineId`.
+- For the one-way warning/retry assertion, no broken deployment is required.
+  The fixture uses Playwright browser routes to force the existing configured
+  peer into the failed reverse-registration state while leaving direct API
+  reads and the live database untouched.
 
 ## Run
 
@@ -104,6 +135,25 @@ AGENTCTL_MESH_SCHEMA_AHEAD_E2E=1
 AGENTCTL_MESH_PRIMARY_DATABASE_URL=postgresql://...
 ```
 
+The add-peer reverse-registration assertion is disabled by default. Add these
+flags to run it:
+
+```bash
+AGENTCTL_MESH_ADD_PEER_REVERSE_E2E=1
+AGENTCTL_MESH_SECONDARY_WEB_URL=http://localhost:5174
+AGENTCTL_MESH_SECONDARY_API_URL=http://localhost:8081
+```
+
+`AGENTCTL_MESH_SECONDARY_API_URL` is optional when the secondary web URL proxies
+`/api/*` to its control plane.
+
+The one-way warning/retry assertion is disabled by default. Add this flag to run
+the browser route-shim assertion:
+
+```bash
+AGENTCTL_MESH_ONE_WAY_RETRY_E2E=1
+```
+
 Optional polling controls:
 
 ```bash
@@ -112,6 +162,8 @@ AGENTCTL_MESH_POLL_INTERVAL_MS=1000
 AGENTCTL_MESH_DRY_RUN_TIMEOUT_MS=60000
 AGENTCTL_MESH_SCHEMA_AHEAD_TIMEOUT_MS=30000
 AGENTCTL_MESH_MACHINE_VISIBILITY_TIMEOUT_MS=30000
+AGENTCTL_MESH_ADD_PEER_REVERSE_TIMEOUT_MS=30000
+AGENTCTL_MESH_ONE_WAY_RETRY_TIMEOUT_MS=30000
 ```
 
 Without `AGENTCTL_MESH_TWO_NODE_E2E=1`, the spec is skipped. Use
@@ -120,8 +172,8 @@ outside Playwright's local dev server.
 
 ## Follow-Up Coverage
 
-Remaining 33.8 browser assertions are add-peer/reverse-registration and the
-one-way warning/retry failure path.
+The 33.8 browser assertions now cover peer ping/version drift, A-to-B machine
+visibility, add-peer reverse registration, and one-way warning/retry behavior.
 
 The remaining 33.11 rollout item is outside this Playwright fixture: exercise
 `deploy-fleet.yml` first in dry-run, then in canary mode against a non-critical

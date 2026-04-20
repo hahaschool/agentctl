@@ -8,11 +8,25 @@ type Env = Record<string, string | undefined>;
 
 type LiveSyncPeer = {
   machineId: string;
+  hostname?: string | null;
+  syncUrl?: string | null;
   peerVersion?: string | null;
   peerSchemaVersion?: number | null;
+  reverseRegistrationStatus?: 'pending' | 'ok' | 'failed' | null;
+  reverseRegistrationError?: string | null;
+  reverseRegistrationErrorCode?: string | null;
+  reverseRegistrationHttpStatus?: number | null;
   lastSchemaAheadVersion?: number | null;
   lastSchemaAheadAt?: string | null;
   schemaAheadCount?: number | null;
+};
+
+export type LiveMeshConfig = {
+  machineId: string;
+  hostname: string;
+  tailscaleIp: string | null;
+  syncUrl: string;
+  publicKey: string | null;
 };
 
 type AutoUpdateDryRunEvent =
@@ -74,6 +88,15 @@ type EnabledTwoNodeMeshFixtureConfig = {
   machineVisibilityMachineHostname: string;
   machineVisibilityOriginLabel: string;
   machineVisibilityTimeoutMs: number;
+  addPeerReverseEnabled: boolean;
+  addPeerReverseMissingEnv: string[];
+  addPeerReverseInvalidEnv: string[];
+  addPeerReverseSecondaryWebUrl: ((path?: string) => string) | null;
+  addPeerReverseSecondaryApiUrl: ((path?: string) => string) | null;
+  addPeerReverseTimeoutMs: number;
+  oneWayRetryEnabled: boolean;
+  oneWayRetryInvalidEnv: string[];
+  oneWayRetryTimeoutMs: number;
   primaryWebUrl: (path?: string) => string;
   primaryApiUrl: (path?: string) => string;
 };
@@ -90,6 +113,9 @@ const MACHINE_VISIBILITY_ENABLE_ENV = 'AGENTCTL_MESH_MACHINE_VISIBILITY_E2E';
 const MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV = 'AGENTCTL_MESH_SECONDARY_WEB_URL';
 const MACHINE_VISIBILITY_MACHINE_HOSTNAME_ENV = 'AGENTCTL_MESH_SYNCED_MACHINE_HOSTNAME';
 const MACHINE_VISIBILITY_ORIGIN_LABEL_ENV = 'AGENTCTL_MESH_SYNCED_MACHINE_ORIGIN_LABEL';
+const ADD_PEER_REVERSE_ENABLE_ENV = 'AGENTCTL_MESH_ADD_PEER_REVERSE_E2E';
+const ADD_PEER_REVERSE_SECONDARY_API_URL_ENV = 'AGENTCTL_MESH_SECONDARY_API_URL';
+const ONE_WAY_RETRY_ENABLE_ENV = 'AGENTCTL_MESH_ONE_WAY_RETRY_E2E';
 const REQUIRED_ENV = [
   'AGENTCTL_MESH_PRIMARY_WEB_URL',
   'AGENTCTL_MESH_PEER_MACHINE_ID',
@@ -264,6 +290,28 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
     'AGENTCTL_MESH_MACHINE_VISIBILITY_TIMEOUT_MS',
     30_000,
   );
+  const addPeerReverseEnabled = env[ADD_PEER_REVERSE_ENABLE_ENV] === '1';
+  const addPeerReverseMissingEnv: string[] = [];
+  const addPeerReverseInvalidEnv: string[] = [];
+  const addPeerReverseSecondaryWebRaw =
+    env[MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV]?.trim() ?? '';
+  const addPeerReverseSecondaryWebBase = normalizeBaseUrl(addPeerReverseSecondaryWebRaw);
+  const addPeerReverseSecondaryApiRaw =
+    env[ADD_PEER_REVERSE_SECONDARY_API_URL_ENV]?.trim() ||
+    env[MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV]?.trim();
+  const addPeerReverseSecondaryApiBase = normalizeBaseUrl(addPeerReverseSecondaryApiRaw);
+  const addPeerReverseTimeout = readOptionalPositiveInt(
+    env,
+    'AGENTCTL_MESH_ADD_PEER_REVERSE_TIMEOUT_MS',
+    30_000,
+  );
+  const oneWayRetryEnabled = env[ONE_WAY_RETRY_ENABLE_ENV] === '1';
+  const oneWayRetryInvalidEnv: string[] = [];
+  const oneWayRetryTimeout = readOptionalPositiveInt(
+    env,
+    'AGENTCTL_MESH_ONE_WAY_RETRY_TIMEOUT_MS',
+    30_000,
+  );
 
   if (machineVisibilityEnabled) {
     if (!secondaryWebUrlRaw) {
@@ -279,6 +327,28 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
     }
     if (machineVisibilityTimeout.invalid) {
       machineVisibilityInvalidEnv.push('AGENTCTL_MESH_MACHINE_VISIBILITY_TIMEOUT_MS');
+    }
+  }
+
+  if (addPeerReverseEnabled) {
+    if (!addPeerReverseSecondaryWebRaw) {
+      addPeerReverseMissingEnv.push(MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV);
+    } else if (!addPeerReverseSecondaryWebBase) {
+      addPeerReverseInvalidEnv.push(MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV);
+    }
+    if (!addPeerReverseSecondaryApiRaw) {
+      addPeerReverseMissingEnv.push(ADD_PEER_REVERSE_SECONDARY_API_URL_ENV);
+    } else if (!addPeerReverseSecondaryApiBase) {
+      addPeerReverseInvalidEnv.push(ADD_PEER_REVERSE_SECONDARY_API_URL_ENV);
+    }
+    if (addPeerReverseTimeout.invalid) {
+      addPeerReverseInvalidEnv.push('AGENTCTL_MESH_ADD_PEER_REVERSE_TIMEOUT_MS');
+    }
+  }
+
+  if (oneWayRetryEnabled) {
+    if (oneWayRetryTimeout.invalid) {
+      oneWayRetryInvalidEnv.push('AGENTCTL_MESH_ONE_WAY_RETRY_TIMEOUT_MS');
     }
   }
 
@@ -302,6 +372,19 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
     machineVisibilityMachineHostname,
     machineVisibilityOriginLabel,
     machineVisibilityTimeoutMs: machineVisibilityTimeout.value,
+    addPeerReverseEnabled,
+    addPeerReverseMissingEnv,
+    addPeerReverseInvalidEnv,
+    addPeerReverseSecondaryWebUrl: addPeerReverseSecondaryWebBase
+      ? (path = '/') => joinUrl(addPeerReverseSecondaryWebBase, path)
+      : null,
+    addPeerReverseSecondaryApiUrl: addPeerReverseSecondaryApiBase
+      ? (path = '/') => joinUrl(addPeerReverseSecondaryApiBase, path)
+      : null,
+    addPeerReverseTimeoutMs: addPeerReverseTimeout.value,
+    oneWayRetryEnabled,
+    oneWayRetryInvalidEnv,
+    oneWayRetryTimeoutMs: oneWayRetryTimeout.value,
     primaryWebUrl: (path = '/') => joinUrl(primaryWebBase, path),
     primaryApiUrl: (path = '/') => joinUrl(primaryApiBase, path),
   };
@@ -369,15 +452,159 @@ export function skipReasonForTwoNodeMeshMachineVisibility(
   return 'two-node mesh A-to-B machine visibility assertion is enabled';
 }
 
-async function readPeer(request: APIRequestContext, config: EnabledTwoNodeMeshFixtureConfig) {
-  const response = await request.get(config.primaryApiUrl('/api/sync/peers'));
+export function skipReasonForTwoNodeMeshAddPeerReverse(
+  config: TwoNodeMeshFixtureConfig,
+): string {
+  if (!config.enabled) {
+    return skipReasonForTwoNodeMeshFixture(config);
+  }
+  if (!config.addPeerReverseEnabled) {
+    return `Set ${ADD_PEER_REVERSE_ENABLE_ENV}=1 to run the live add-peer reverse-registration assertion.`;
+  }
+
+  const parts: string[] = [];
+  if (config.addPeerReverseMissingEnv.length > 0) {
+    parts.push(`Missing: ${config.addPeerReverseMissingEnv.join(', ')}.`);
+  }
+  if (config.addPeerReverseInvalidEnv.length > 0) {
+    parts.push(`Invalid: ${config.addPeerReverseInvalidEnv.join(', ')}.`);
+  }
+  if (parts.length > 0) return parts.join(' ');
+
+  return 'two-node mesh add-peer reverse-registration assertion is enabled';
+}
+
+export function skipReasonForTwoNodeMeshOneWayRetry(
+  config: TwoNodeMeshFixtureConfig,
+): string {
+  if (!config.enabled) {
+    return skipReasonForTwoNodeMeshFixture(config);
+  }
+  if (!config.oneWayRetryEnabled) {
+    return `Set ${ONE_WAY_RETRY_ENABLE_ENV}=1 to run the live one-way warning/retry assertion.`;
+  }
+
+  const parts: string[] = [];
+  if (config.oneWayRetryInvalidEnv.length > 0) {
+    parts.push(`Invalid: ${config.oneWayRetryInvalidEnv.join(', ')}.`);
+  }
+  if (parts.length > 0) return parts.join(' ');
+
+  return 'two-node mesh one-way warning/retry assertion is enabled';
+}
+
+export async function readMeshConfig(
+  request: APIRequestContext,
+  meshUrl: (path?: string) => string,
+): Promise<LiveMeshConfig> {
+  const response = await request.get(meshUrl('/api/mesh/config'));
+  if (!response.ok()) {
+    throw new Error(`GET /api/mesh/config failed with HTTP ${response.status()}`);
+  }
+
+  const body = (await response.json()) as Partial<LiveMeshConfig>;
+  if (!body.machineId || !body.hostname || !body.syncUrl) {
+    throw new Error('GET /api/mesh/config did not return machineId, hostname, and syncUrl');
+  }
+
+  return {
+    machineId: body.machineId,
+    hostname: body.hostname,
+    tailscaleIp: body.tailscaleIp ?? null,
+    syncUrl: body.syncUrl,
+    publicKey: body.publicKey ?? null,
+  };
+}
+
+async function readPeerFromApiUrl(
+  request: APIRequestContext,
+  peersUrl: (path?: string) => string,
+  machineId: string,
+): Promise<LiveSyncPeer | null> {
+  const response = await request.get(peersUrl('/api/sync/peers'));
   if (!response.ok()) {
     throw new Error(`GET /api/sync/peers failed with HTTP ${response.status()}`);
   }
 
   const body = (await response.json()) as { peers?: LiveSyncPeer[] };
   const peers = Array.isArray(body.peers) ? body.peers : [];
-  return peers.find((peer) => peer.machineId === config.peerMachineId) ?? null;
+  return peers.find((peer) => peer.machineId === machineId) ?? null;
+}
+
+async function readPeer(request: APIRequestContext, config: EnabledTwoNodeMeshFixtureConfig) {
+  return readPeerFromApiUrl(request, config.primaryApiUrl, config.peerMachineId);
+}
+
+export async function readConfiguredPeer(
+  request: APIRequestContext,
+  config: EnabledTwoNodeMeshFixtureConfig,
+): Promise<LiveSyncPeer | null> {
+  return readPeer(request, config);
+}
+
+async function waitForPeer(
+  request: APIRequestContext,
+  peersUrl: (path?: string) => string,
+  machineId: string,
+  timeoutMs: number,
+  intervalMs: number,
+  predicate: (peer: LiveSyncPeer) => boolean,
+  description: string,
+): Promise<LiveSyncPeer> {
+  const deadline = Date.now() + timeoutMs;
+  let lastPeer = await readPeerFromApiUrl(request, peersUrl, machineId);
+
+  while (Date.now() <= deadline) {
+    if (lastPeer && predicate(lastPeer)) {
+      return lastPeer;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    lastPeer = await readPeerFromApiUrl(request, peersUrl, machineId);
+  }
+
+  throw new Error(
+    `Timed out waiting for ${machineId} ${description}; ` +
+      `last observed ${lastPeer ? JSON.stringify(lastPeer) : 'missing peer'}`,
+  );
+}
+
+export async function waitForPrimaryPeerReverseStatus(
+  request: APIRequestContext,
+  config: EnabledTwoNodeMeshFixtureConfig,
+  machineId: string,
+  status: 'ok' | 'failed',
+  timeoutMs: number,
+): Promise<LiveSyncPeer> {
+  return waitForPeer(
+    request,
+    config.primaryApiUrl,
+    machineId,
+    timeoutMs,
+    config.pollIntervalMs,
+    (peer) => peer.reverseRegistrationStatus === status,
+    `reverseRegistrationStatus=${status}`,
+  );
+}
+
+export async function waitForAddPeerReverseOnSecondaryNode(
+  request: APIRequestContext,
+  config: EnabledTwoNodeMeshFixtureConfig,
+  primaryMachineId: string,
+): Promise<LiveSyncPeer> {
+  if (!config.addPeerReverseSecondaryApiUrl) {
+    throw new Error(skipReasonForTwoNodeMeshAddPeerReverse(config));
+  }
+
+  return waitForPeer(
+    request,
+    config.addPeerReverseSecondaryApiUrl,
+    primaryMachineId,
+    config.addPeerReverseTimeoutMs,
+    config.pollIntervalMs,
+    (peer) => Boolean(peer.machineId),
+    'to appear on the secondary node after reverse registration',
+  );
 }
 
 async function readPrimarySchemaVersion(
