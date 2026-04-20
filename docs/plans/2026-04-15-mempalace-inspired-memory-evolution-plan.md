@@ -12,9 +12,13 @@ memory:eval`, and focused tests. PR #660 adds deterministic
 mock recall@5 threshold enforcement, env-configurable bench sizing, p50/p95/p99
 latency reporting, and `pnpm memory:bench` without live DB or embedding
 dependencies. PR #667 locks first-run and `{ arguments: null }` MCP contracts
-for the current search/recall/report routes. Live search wiring, future
-`memory_dedup_check` / `memory_traverse` route contracts, and private/full
-fixture coverage remain.
+for the current search/recall/report routes. PR #681 adds the first
+`memory_dedup_check` route contract, PR #684 adds `memory_fact_sources` /
+`embedding_version` schema groundwork, PR #685 adds the first
+`memory_traverse` worker contract, and PR #686 adds the JSONL drawer backfill
+CLI foundation. Live search wiring, private/full fixture coverage,
+`claude-mem` narrative/fact mapping, fact-source write paths, and control-plane
+recursive traversal remain.
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
 
@@ -741,9 +745,10 @@ split helpers, scoring utilities, sanitized sample fixture, and baseline CLI.
 PR #660 adds a deterministic mock PR bench with threshold
 enforcement and latency percentiles, and PR #667 locks first-run /
 `{ arguments: null }` contracts for the current worker memory MCP routes. PR
-#681 adds the first `memory_dedup_check` route/cold-start contract. The
-remaining Phase 0 work is live-search wiring, the future `memory_traverse`
-route contract, private fixture growth, and release/weekly held-out automation.
+#681 adds the first `memory_dedup_check` route/cold-start contract. PR #685
+adds the first `memory_traverse` worker route/cold-start contract. The remaining
+Phase 0 work is live-search wiring, private fixture growth, and release/weekly
+held-out automation.
 
 **Files:**
 
@@ -801,11 +806,11 @@ route contract, private fixture growth, and release/weekly held-out automation.
    - ✅ Current worker route slice: `memory_search` returns `{ results: [], total: 0 }` while preserving `facts`.
    - ✅ Current worker route slice: `memory_recall` returns `{ facts: [], edges: [] }`.
    - ✅ Current worker route slice: `memory_report` / stats route returns zero counts, not nulls.
-   - `memory_traverse` for a missing entity returns an empty graph, not `404`.
+   - ✅ `memory_traverse` for a missing entity returns an empty graph, not `404`.
    - ✅ `memory_dedup_check` on an empty DB recommends `store_new` with `nearest_matches: []`.
    - ✅ Current worker route slice: every existing memory MCP route rejects `{ arguments: null }` without hanging and returns a structured `400` within one second.
    - ✅ `memory_dedup_check` rejects `{ arguments: null }` without hanging and returns a structured `400`.
-   - Remaining: add matching cold-start/null-arguments coverage for `memory_traverse` when that planned route exists.
+   - ✅ `memory_traverse` rejects `{ arguments: null }` without hanging and returns a structured `400`.
 
 **Tests:**
 
@@ -819,7 +824,7 @@ route contract, private fixture growth, and release/weekly held-out automation.
 - Contaminated-query eval fixture path exists for Phase 4.
 - Planted-needle bench enforces recall@5 threshold on mock embeddings.
 - Existing worker memory MCP routes return structured empty results for search, recall, and report.
-- Existing worker memory MCP routes reject null `arguments`; `memory_dedup_check` has matching coverage, and planned `memory_traverse` gets matching tests when implemented.
+- Existing worker memory MCP routes reject null `arguments`; `memory_dedup_check` and `memory_traverse` have matching worker-route coverage.
 
 **Rollback:** No product behavior change.
 
@@ -827,7 +832,7 @@ route contract, private fixture growth, and release/weekly held-out automation.
 
 **Goal:** Preserve sanitized raw evidence without replacing existing facts.
 
-**Status:** Partially delivered in PRs #671, #679, and #682. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. PR #682 added persisted drawer backfill state (`0032_add_memory_drawer_backfill_state.sql`), shared `MemoryDrawerBackfill*` contracts, Drizzle schema/journal/schema tests, and `MemoryDrawerBackfillStateStore` coverage for start/resume, cursor update, and safe failed-state errors. Remaining Phase 1.5 scope is the actual resumable JSONL/claude-mem backfill scripts; drawers still have no sync triggers and no default retrieval behavior.
+**Status:** Partially delivered in PRs #671, #679, #682, and #686. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. PR #682 added persisted drawer backfill state (`0032_add_memory_drawer_backfill_state.sql`), shared `MemoryDrawerBackfill*` contracts, Drizzle schema/journal/schema tests, and `MemoryDrawerBackfillStateStore` coverage for start/resume, cursor update, and safe failed-state errors. PR #686 added the JSONL drawer backfill CLI foundation. Remaining Phase 1.5 scope is `claude-mem` narrative/fact mapping, fact-source links, batching/backoff, and cost/storage estimates; drawers still have no sync triggers and no default retrieval behavior.
 
 **Files:**
 
@@ -883,7 +888,7 @@ route contract, private fixture growth, and release/weekly held-out automation.
 
 **Goal:** Create enough drawer data for search evals and provenance without waiting months.
 
-**Status:** State persistence landed in PR #682: `memory_drawer_backfill_state`, Drizzle schema/journal/schema tests, shared backfill contracts, and store coverage for start/resume, cursor update, and safe failed-state errors. Remaining scope is the actual JSONL/claude-mem backfill worker/script path, batching, dry-run estimates, and source-local idempotency.
+**Status:** State persistence landed in PR #682: `memory_drawer_backfill_state`, Drizzle schema/journal/schema tests, shared backfill contracts, and store coverage for start/resume, cursor update, and safe failed-state errors. PR #686 added the JSONL drawer backfill CLI foundation with dry-run default, recursive JSONL discovery, streaming line parsing, cursor resume, execute mode through `MemoryDrawerStore`, safe parse-error metadata, and text/JSON summaries. Remaining scope is `claude-mem` narrative/fact mapping, `memory_fact_sources` writes, batching/backoff, cost/storage estimates, and broader source-local idempotency coverage.
 
 **Files:**
 
@@ -897,23 +902,23 @@ route contract, private fixture growth, and release/weekly held-out automation.
 
 **Work:**
 
-1. Backfill from Claude Code JSONL under `~/.claude/projects/**`.
+1. ✅ Backfill from Claude Code JSONL under `~/.claude/projects/**`.
 2. Backfill `claude-mem` observations:
    - `narrative` becomes drawer content.
    - `title` and atomic `facts` remain `memory_facts`.
    - `memory_fact_sources` links imported facts to narrative drawers when both exist.
 3. ✅ Add resumable state in `memory_drawer_backfill_state`.
 4. Batch embedding calls and rate-limit with exponential backoff.
-5. Make the script idempotent through `(source_type, source_id, chunk_index)`.
-6. Add dry-run mode with counts, estimated tokens, estimated cost, and estimated storage.
+5. Partially delivered: JSONL CLI writes through `(source_type, source_id, chunk_index)` and resumes by cursor; extend idempotency coverage to `claude-mem` imports and fact-source links.
+6. Partially delivered: dry-run mode reports discovered files/lines/chunks and parse errors; add estimated tokens, estimated cost, and estimated storage.
 
 **Tests:**
 
-- Stream-parses large JSONL; does not `JSON.parse(readFileSync())`.
-- Resumes from checkpoint after simulated crash.
+- Stream-parses large JSONL; does not `JSON.parse(readFileSync())`. *(PR #686)*
+- Resumes from checkpoint after simulated crash. *(PR #686)*
 - Backfill state store creates/resumes per-source checkpoints, updates cursors, and stores safe failure summaries without raw content.
 - Deduplicates source-local chunks.
-- Does not write private fixtures or raw secrets.
+- Does not write private fixtures or raw secrets. *(PR #686)*
 - `claude-mem` narrative maps to drawer while facts map to facts.
 
 **Rollback:** Pause the backfill state and run `pnpm memory:drawers:vacuum --source <id>` for failed source batches.
@@ -971,6 +976,8 @@ route contract, private fixture growth, and release/weekly held-out automation.
 
 **Goal:** Link facts to evidence and prevent drawer snippets from exploding prompt tokens.
 
+**Status:** Schema groundwork landed in PR #684: `0031_add_memory_fact_sources_and_versions.sql`, Drizzle schema/journal/schema tests, `memory_fact_sources` offsets, and fact/edge `embedding_version` defaults. Remaining scope is fact-source write paths, read-time quote previews, legacy rendering/search behavior, injector budget modes, and the bounded Surface A dry-run bridge.
+
 **Files:**
 
 - Create: `packages/control-plane/drizzle/0031_add_memory_fact_sources_and_versions.sql`
@@ -987,7 +994,7 @@ route contract, private fixture growth, and release/weekly held-out automation.
 
 **Work:**
 
-1. Add `memory_fact_sources`, `embedding_version`, `is_diary`, and `draft`.
+1. Partially delivered: add `memory_fact_sources` and `embedding_version`; `is_diary` and `draft` remain future diary/review-state work.
 2. Extend fact creation with optional drawer offsets, not copied quotes.
 3. Read quote previews from sanitized drawer content at API read time.
 4. Merge provenance during knowledge synthesis dedup; do not lose evidence when facts merge.
@@ -1103,6 +1110,8 @@ route contract, private fixture growth, and release/weekly held-out automation.
 
 **Goal:** Make "what was true then?" and "what changed?" first-class queries.
 
+**Status:** PR #685 delivered the worker-side `memory_traverse` contract and shared types: argument validation, default/hard max-hop caps, relation/min-confidence filters, null-argument 400s, and missing/no-data empty graph responses through the planned control-plane proxy. Remaining scope is the control-plane recursive traversal, temporal edge fields, timeline API, canonicalization/backfill, and `as_of` validity-window behavior.
+
 **Files:**
 
 - Create: `packages/control-plane/drizzle/0033_add_memory_edge_temporal_fields.sql`
@@ -1112,7 +1121,7 @@ route contract, private fixture growth, and release/weekly held-out automation.
 - Create: `packages/control-plane/src/memory/entity-extraction-benchmark.ts`
 - Create: `packages/control-plane/src/api/routes/memory-timeline.ts`
 - Create: `packages/agent-worker/src/api/routes/memory-timeline.ts`
-- Create: `packages/agent-worker/src/api/routes/memory-traverse.ts`
+- Create: `packages/agent-worker/src/api/routes/memory-traverse.ts` *(worker contract delivered in PR #685; control-plane traversal remains)*
 - Modify: `packages/web/src/app/memory/graph/page.tsx`
 - Modify: `packages/web/src/components/memory/GraphTableView.tsx`
 - Modify: `packages/web/src/components/memory/GraphNodeDetail.tsx`
@@ -1254,8 +1263,8 @@ Add env vars through the existing centralized config path used by control-plane/
 ## Suggested PR Slices
 
 1. **PR A: Eval Harness**
-   - Delivered across PR #655/#660/#667/#681 for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, and first `memory_dedup_check` empty-DB/null-arguments route coverage.
-   - Remaining: live search adapter, private fixture coverage, future `memory_traverse` cold-start contract when that route ships, and release/weekly held-out automation.
+   - Delivered across PR #655/#660/#667/#681/#685 for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, first `memory_dedup_check` empty-DB/null-arguments route coverage, and first `memory_traverse` worker cold-start/null-arguments coverage.
+   - Remaining: live search adapter, private fixture coverage, and release/weekly held-out automation.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
@@ -1265,7 +1274,8 @@ Add env vars through the existing centralized config path used by control-plane/
 
 3. **PR C: Backfill**
    - PR #682 added persisted backfill state (`0032`), shared backfill contracts, and state-store tests.
-   - Remaining: resumable JSONL and `claude-mem` drawer backfill with batching.
+   - PR #686 added the resumable JSONL drawer backfill CLI foundation.
+   - Remaining: `claude-mem` drawer/fact mapping, `memory_fact_sources` writes, batching/backoff, and cost/storage estimates.
    - Produces first real drawer corpus for eval.
 
 4. **PR D: Checkpoint Capture**
@@ -1273,7 +1283,8 @@ Add env vars through the existing centralized config path used by control-plane/
    - Keeps failures nonblocking.
 
 5. **PR E: Provenance + Injection Budget**
-   - Adds `0031`, fact-source links, injector budget modes, and Surface A dry-run generator.
+   - PR #684 added `0031`, fact-source schema links, and embedding-version defaults.
+   - Remaining: fact-source write paths, injector budget modes, and Surface A dry-run generator.
 
 6. **PR F: Drawer-Aware Search**
    - PR #677 delivered the three-stage query sanitizer for existing memory search paths.
@@ -1284,7 +1295,8 @@ Add env vars through the existing centralized config path used by control-plane/
    - Adds diary-as-fact route and basic UI.
 
 8. **PR H: Temporal Timeline**
-   - Adds edge temporal fields and `memory_traverse` only after mesh sync gate.
+   - PR #685 added the first worker `memory_traverse` contract.
+   - Remaining: edge temporal fields, control-plane recursive traversal, canonicalization, timeline routes, and `as_of` validity-window behavior only after mesh sync gate.
 
 9. **PR I: UI/Observability Polish**
    - Completes dashboard metrics, evidence views, mobile truncation, and Playwright coverage.
@@ -1339,7 +1351,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [x] Cold-start tests prove current worker memory search, recall, and stats/report routes return structured empty results from an empty control-plane response.
 - [x] Every existing worker memory MCP route rejects `{ arguments: null }` within one second without hanging.
 - [x] Cold-start/null-arguments coverage extends to `memory_dedup_check`. *(PR #681)*
-- [ ] Cold-start/null-arguments coverage extends to `memory_traverse` when that route ships.
+- [x] Cold-start/null-arguments coverage extends to the worker `memory_traverse` contract. *(PR #685)*
 - [ ] Phase 0 records a facts-only baseline number before drawer-aware search changes ranking.
 - [ ] Drawer-aware search is not default-enabled unless R@5 is at least the facts-only baseline and p95 stays within the accepted threshold.
 - [ ] Query sanitizer implements passthrough, question-extraction, and tail-sentence fallback stages, and contamination eval NDCG@10 drop stays under 5 points.
@@ -1351,7 +1363,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts.
 - [ ] Mesh sync behavior for drawers and temporal edge fields is explicit before any sync payload changes.
 - [ ] Phase 6 includes entity canonicalization or ships with an explicit UI warning and follow-up PR.
-- [ ] `memory_traverse` enforces hop/node caps and returns an empty graph for missing entities.
+- [ ] `memory_traverse` enforces hop/node caps and returns an empty graph for missing entities. *(worker route hop validation and empty graph response landed in PR #685; control-plane node cap/traversal remains)*
 - [ ] Mobile evidence display truncates to one 120-char snippet without layout overflow.
 
 ## First Implementation Choice
