@@ -15,6 +15,7 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createServer } from '../server.js';
 import type { DrawerEmbeddingClient } from './memory-drawers.js';
 import { memoryDrawerRoutes } from './memory-drawers.js';
 import { createMockLogger } from './test-helpers.js';
@@ -467,6 +468,85 @@ describe('memory-drawers routes', () => {
       expect(call).toBeDefined();
       if (call) {
         expect(call[1]).toEqual(['drawer.A:1']);
+      }
+    });
+  });
+
+  // ── createServer-level wiring (#704 follow-up) ──────────────────────────
+  //
+  // The plugin-level tests above prove `memoryDrawerRoutes` uses the
+  // embeddingClient when it's forwarded via `opts`. These tests prove the
+  // `createServer({ embeddingClient, pgPool })` contract now forwards the
+  // option all the way down to the registered plugin — so production drawer
+  // search will actually exercise the vector path when LITELLM_URL is set.
+
+  describe('createServer forwards embeddingClient to memoryDrawerRoutes', () => {
+    it('invokes embeddingClient.embed() via GET /api/memory/drawers/search when wired through createServer', async () => {
+      const serverPool: PoolMock = createMockPool();
+      routeQueries(serverPool, {
+        keyword: [makeSearchRow({ id: 'drawer-A', rank: 1 })],
+        vector: [makeSearchRow({ id: 'drawer-A', rank: 1 })],
+      });
+
+      const embed = vi.fn().mockResolvedValue([0.1, 0.2, 0.3]);
+      const embeddingClient: DrawerEmbeddingClient = { embed };
+
+      const server = await createServer({
+        logger: createMockLogger(),
+        pgPool: serverPool as never,
+        embeddingClient,
+      });
+      await server.ready();
+
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/memory/drawers/search?q=hello',
+        });
+        expect(res.statusCode).toBe(200);
+
+        // Embedding client was consumed — proves createServer forwards the
+        // option into memoryDrawerRoutes registration.
+        expect(embed).toHaveBeenCalledTimes(1);
+        expect(embed).toHaveBeenCalledWith('hello');
+
+        // And the vector SQL path ran with the returned vector.
+        const vectorCall = serverPool.query.mock.calls.find((c) =>
+          String(c[0]).includes('embedding <=>'),
+        );
+        expect(vectorCall).toBeDefined();
+      } finally {
+        await server.close();
+      }
+    });
+
+    it('falls back to keyword-only when createServer is called without embeddingClient', async () => {
+      const serverPool: PoolMock = createMockPool();
+      routeQueries(serverPool, {
+        keyword: [makeSearchRow({ id: 'drawer-A', rank: 1 })],
+      });
+
+      const server = await createServer({
+        logger: createMockLogger(),
+        pgPool: serverPool as never,
+        // No embeddingClient — drawer search must still work.
+      });
+      await server.ready();
+
+      try {
+        const res = await server.inject({
+          method: 'GET',
+          url: '/api/memory/drawers/search?q=hello',
+        });
+        expect(res.statusCode).toBe(200);
+
+        // No vector SQL path should have run.
+        const vectorCall = serverPool.query.mock.calls.find((c) =>
+          String(c[0]).includes('embedding <=>'),
+        );
+        expect(vectorCall).toBeUndefined();
+      } finally {
+        await server.close();
       }
     });
   });

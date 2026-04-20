@@ -339,6 +339,11 @@ async function main(): Promise<void> {
   let memorySearch: MemorySearch | undefined;
   let memoryStore: MemoryStore | undefined;
   let memoryInjector: MemoryInjector | undefined;
+  // Hoisted so it can flow into createServer → memoryDrawerRoutes for
+  // keyword + vector fusion search. Assigned only when LITELLM_URL is set
+  // below; consumers must tolerate `undefined` (drawer search falls back to
+  // keyword-only).
+  let embeddingClient: EmbeddingClient | undefined;
 
   // Raw PG pool — available whenever db is configured, even without LITELLM_URL.
   // Used by import routes that don't need embeddings.
@@ -352,7 +357,6 @@ async function main(): Promise<void> {
     if (db && pgPool) {
       // Embedding client is optional — when LITELLM_URL is absent, fact CRUD
       // still works but without vector embeddings (semantic search disabled).
-      let embeddingClient: EmbeddingClient | undefined;
       if (LITELLM_URL) {
         embeddingClient = new EmbeddingClient({
           baseUrl: LITELLM_URL,
@@ -546,6 +550,7 @@ async function main(): Promise<void> {
     mem0Client,
     memorySearch,
     memoryStore,
+    embeddingClient,
     memoryInjector: memoryInjector ?? null,
     pgPool,
     workerPort: REMOTE_WORKER_PORT,
