@@ -5,6 +5,7 @@
 // GET /api/memory/facts?q=...&scope=...&limit=...
 // ---------------------------------------------------------------------------
 
+import { querySanitizerLogFields, sanitizeQuery } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
@@ -39,10 +40,19 @@ export async function memorySearchRoutes(
       const body = extracted.body;
       const query = body?.query;
 
-      if (!query || typeof query !== 'string' || query.trim().length === 0) {
+      if (typeof query !== 'string') {
         return reply.code(400).send({
           error: 'INVALID_PARAMS',
           message: 'query must be a non-empty string',
+        });
+      }
+
+      const sanitizedQuery = sanitizeQuery(query);
+      logger.debug(querySanitizerLogFields(sanitizedQuery), 'Sanitized memory search query');
+      if (sanitizedQuery.stage === 'empty') {
+        return reply.code(400).send({
+          error: 'query_empty',
+          message: 'query must be a non-empty string after sanitization',
         });
       }
 
@@ -54,7 +64,7 @@ export async function memorySearchRoutes(
         });
       }
 
-      const params = new URLSearchParams({ q: query.trim() });
+      const params = new URLSearchParams({ q: sanitizedQuery.query });
       if (body.scope) {
         params.set('scope', body.scope);
       }
@@ -71,7 +81,10 @@ export async function memorySearchRoutes(
           headers: { 'Content-Type': 'application/json' },
         });
       } catch (error: unknown) {
-        logger.error({ err: error, query }, 'Failed to reach control-plane for memory search');
+        logger.error(
+          { err: error, ...querySanitizerLogFields(sanitizedQuery) },
+          'Failed to reach control-plane for memory search',
+        );
         return reply.code(503).send({
           error: 'MEMORY_SEARCH_UNREACHABLE',
           message: 'Control-plane unreachable while performing memory search',
@@ -81,7 +94,11 @@ export async function memorySearchRoutes(
       if (!response.ok) {
         const responseBody = await response.json().catch(() => ({}));
         logger.warn(
-          { query, status: response.status, body: responseBody },
+          {
+            ...querySanitizerLogFields(sanitizedQuery),
+            status: response.status,
+            body: responseBody,
+          },
           'Control-plane returned error for memory search',
         );
         return reply.code(response.status).send(responseBody);

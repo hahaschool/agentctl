@@ -6,7 +6,7 @@ import type {
   MemoryScope,
   MemorySearchResult,
 } from '@agentctl/shared';
-import { DEFAULT_INJECTION_BUDGET } from '@agentctl/shared';
+import { DEFAULT_INJECTION_BUDGET, querySanitizerLogFields, sanitizeQuery } from '@agentctl/shared';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 
@@ -101,21 +101,26 @@ export class MemorySearch {
   async search(input: SearchInput): Promise<MemorySearchResult[]> {
     const limit = input.limit ?? DEFAULT_LIMIT;
     const visibleScopes = input.visibleScopes;
+    const sanitizedQuery = sanitizeQuery(input.query);
+    this.logger.debug(querySanitizerLogFields(sanitizedQuery), 'Sanitized memory search query');
+    if (sanitizedQuery.stage === 'empty') {
+      return [];
+    }
 
     const vectorResults = await this.vectorSearch(
-      input.query,
+      sanitizedQuery.query,
       visibleScopes,
       DEFAULT_CANDIDATE_LIMIT,
       input.entityType,
     );
     const bm25Results = await this.bm25Search(
-      input.query,
+      sanitizedQuery.query,
       visibleScopes,
       DEFAULT_CANDIDATE_LIMIT,
       input.entityType,
     );
     const graphResults = await this.graphSearch(
-      input.query,
+      sanitizedQuery.query,
       visibleScopes,
       DEFAULT_CANDIDATE_LIMIT,
     );
