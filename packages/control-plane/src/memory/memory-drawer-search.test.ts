@@ -11,6 +11,7 @@ import {
   type DrawerEmbeddingClient,
   fuseRankedMatches,
   keywordSearch,
+  MemoryDrawerSearchDbError,
   searchMemoryDrawers,
   vectorSearch,
 } from './memory-drawer-search.js';
@@ -237,5 +238,135 @@ describe('keywordSearch + vectorSearch return [] on pool failure', () => {
       logger,
     );
     expect(vector).toEqual([]);
+  });
+});
+
+describe('degradeOnSqlError: false surfaces DB failures to the caller', () => {
+  it('rethrows MemoryDrawerSearchDbError from keywordSearch on SQL failure', async () => {
+    const pool: PoolMock = {
+      query: vi.fn().mockRejectedValue(new Error('db down')),
+    };
+    const logger = createMockLogger();
+
+    await expect(
+      keywordSearch(pool as never, 'hello', null, 10, logger, { degradeOnSqlError: false }),
+    ).rejects.toBeInstanceOf(MemoryDrawerSearchDbError);
+  });
+
+  it('rethrows MemoryDrawerSearchDbError from vectorSearch on SQL failure', async () => {
+    const pool: PoolMock = {
+      query: vi.fn().mockRejectedValue(new Error('db down')),
+    };
+    const logger = createMockLogger();
+
+    await expect(
+      vectorSearch(
+        pool as never,
+        'hello',
+        null,
+        10,
+        { embed: vi.fn().mockResolvedValue([0.1]) },
+        logger,
+        { degradeOnSqlError: false },
+      ),
+    ).rejects.toBeInstanceOf(MemoryDrawerSearchDbError);
+  });
+
+  it('tags the rethrown error with the originating path in its context', async () => {
+    const pool: PoolMock = {
+      query: vi.fn().mockRejectedValue(new Error('db down')),
+    };
+    const logger = createMockLogger();
+
+    try {
+      await keywordSearch(pool as never, 'hello', null, 10, logger, {
+        degradeOnSqlError: false,
+      });
+      throw new Error('expected keywordSearch to throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(MemoryDrawerSearchDbError);
+      if (err instanceof MemoryDrawerSearchDbError) {
+        expect(err.code).toBe('MEMORY_DRAWER_SEARCH_DB_ERROR');
+        expect(err.context.path).toBe('keyword');
+      }
+    }
+  });
+
+  it('searchMemoryDrawers bubbles the typed DB error when degradeOnSqlError is false', async () => {
+    const pool = createMockPool();
+    // Every SQL call rejects — both keyword and vector paths should throw
+    // and at least one rejection must propagate out of Promise.all.
+    pool.query.mockRejectedValue(new Error('database unavailable'));
+
+    await expect(
+      searchMemoryDrawers(
+        { query: 'hello', limit: 10 },
+        {
+          pool: pool as never,
+          embeddingClient: { embed: vi.fn().mockResolvedValue([0.1, 0.2]) },
+          logger: createMockLogger(),
+          degradeOnSqlError: false,
+        },
+      ),
+    ).rejects.toBeInstanceOf(MemoryDrawerSearchDbError);
+  });
+});
+
+describe('per-path candidate fetch window scales with requested limit', () => {
+  it('passes requested limit as the per-path candidate ceiling when limit > CANDIDATE_LIMIT', async () => {
+    const pool = createMockPool();
+    routeQueries(pool, {
+      keyword: [makeSearchRow({ id: 'drawer-A', rank: 1 })],
+    });
+
+    await searchMemoryDrawers(
+      { query: 'hello', limit: 75 },
+      { pool: pool as never, logger: createMockLogger() },
+    );
+
+    const keywordCall = pool.query.mock.calls.find((c) =>
+      String(c[0]).includes('content_tsv_simple'),
+    );
+    expect(keywordCall).toBeDefined();
+    if (keywordCall) {
+      // Last bound param is the SQL LIMIT placeholder. For limit=75 the
+      // per-path candidate window must be 75 (not capped at CANDIDATE_LIMIT=50).
+      const params = keywordCall[1] as unknown[];
+      expect(params[params.length - 1]).toBe(75);
+    }
+  });
+
+  it('end-to-end limit=75 surfaces up to 75 fused results', async () => {
+    const pool = createMockPool();
+    const rows = Array.from({ length: 75 }, (_, i) =>
+      makeSearchRow({ id: `drawer-${i}`, rank: i + 1 }),
+    );
+    routeQueries(pool, { keyword: rows });
+
+    const results = await searchMemoryDrawers(
+      { query: 'hello', limit: 75 },
+      { pool: pool as never, logger: createMockLogger() },
+    );
+    expect(results).toHaveLength(75);
+  });
+
+  it('does not shrink per-path window below the default CANDIDATE_LIMIT when requested limit is small', async () => {
+    const pool = createMockPool();
+    routeQueries(pool, { keyword: [makeSearchRow()] });
+
+    await searchMemoryDrawers(
+      { query: 'hello', limit: 5 },
+      { pool: pool as never, logger: createMockLogger() },
+    );
+
+    const keywordCall = pool.query.mock.calls.find((c) =>
+      String(c[0]).includes('content_tsv_simple'),
+    );
+    expect(keywordCall).toBeDefined();
+    if (keywordCall) {
+      const params = keywordCall[1] as unknown[];
+      // max(CANDIDATE_LIMIT=50, requested=5) = 50
+      expect(params[params.length - 1]).toBe(50);
+    }
   });
 });

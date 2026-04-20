@@ -107,6 +107,12 @@ function routeQueries(
       return { rows: routes.vector ?? [] };
     }
     if (sql.includes('WHERE id = $1')) {
+      // Simulate the archived-at filter in the drawer-by-id SQL: rows with a
+      // non-null `archived_at` must not be returned when the query includes
+      // `archived_at IS NULL` (matches the production contract).
+      if (sql.includes('archived_at IS NULL') && routes.getById?.archived_at) {
+        return { rows: [] };
+      }
       return { rows: routes.getById ? [routes.getById] : [] };
     }
     return { rows: [] };
@@ -183,20 +189,40 @@ describe('memory-drawers routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
-    it('returns 400 when limit is negative', async () => {
+    it.each([
+      '-3',
+      'abc',
+      '10abc',
+      '1.5',
+      '+5',
+      '0x10',
+    ])('returns 400 when limit is malformed: %s', async (limit) => {
       const res = await app.inject({
         method: 'GET',
-        url: '/api/memory/drawers/search?q=hello&limit=-3',
+        url: `/api/memory/drawers/search?q=hello&limit=${encodeURIComponent(limit)}`,
       });
       expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'INVALID_PARAMS' });
     });
+  });
 
-    it('returns 400 when limit is not an integer', async () => {
+  // ── GET /search — error handling ─────────────────────────────────────────
+
+  describe('GET /search error handling', () => {
+    it('surfaces total DB failures as 5xx instead of a false empty index', async () => {
+      // Both keyword and vector paths hit the pool; rejecting every call
+      // simulates a Postgres outage.
+      pool.query.mockRejectedValue(new Error('database unavailable'));
+
       const res = await app.inject({
         method: 'GET',
-        url: '/api/memory/drawers/search?q=hello&limit=abc',
+        url: '/api/memory/drawers/search?q=hello',
       });
-      expect(res.statusCode).toBe(400);
+
+      expect(res.statusCode).toBe(500);
+      expect(res.json()).toMatchObject({
+        error: 'MEMORY_DRAWER_SEARCH_DB_ERROR',
+      });
     });
   });
 
@@ -336,10 +362,32 @@ describe('memory-drawers routes', () => {
       const call = pool.query.mock.calls.find((c) => String(c[0]).includes('content_tsv_simple'));
       expect(call).toBeDefined();
       if (call) {
-        // The route clamps to 100 but then uses CANDIDATE_LIMIT (50) for the
-        // per-path fetch; assert the SQL placeholder received <= 100 either way.
+        // Requested limit clamps to MAX_LIMIT=100. Per-path candidate fetch
+        // = max(CANDIDATE_LIMIT, clamped limit) = max(50, 100) = 100.
         const limitArg = (call[1] as unknown[])[(call[1] as unknown[]).length - 1];
         expect(Number(limitArg)).toBeLessThanOrEqual(100);
+      }
+    });
+
+    it('raises per-path fetch window to the requested limit up to MAX_LIMIT', async () => {
+      routeQueries(pool, {
+        keyword: [makeSearchRow()],
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/memory/drawers/search?q=hello&limit=75',
+      });
+      expect(res.statusCode).toBe(200);
+
+      const call = pool.query.mock.calls.find((c) => String(c[0]).includes('content_tsv_simple'));
+      expect(call).toBeDefined();
+      if (call) {
+        // Per-path candidate fetch = max(CANDIDATE_LIMIT=50, requested=75) = 75.
+        // Without this change, the keyword path would only fetch 50 rows and
+        // silently cap results below the user's `limit=75`.
+        const limitArg = (call[1] as unknown[])[(call[1] as unknown[]).length - 1];
+        expect(Number(limitArg)).toBe(75);
       }
     });
 
@@ -453,6 +501,29 @@ describe('memory-drawers routes', () => {
       });
       expect(res.statusCode).toBe(404);
       expect(res.json()).toMatchObject({ error: 'DRAWER_NOT_FOUND' });
+    });
+
+    it('returns 404 when the drawer row is archived (archived_at IS NOT NULL)', async () => {
+      // Simulates a soft-deleted drawer. The route SQL includes
+      // `archived_at IS NULL` so the pool returns no row.
+      routeQueries(pool, {
+        getById: makeDrawerRow({
+          id: 'drawer-A',
+          archived_at: new Date('2026-04-20T13:00:00Z'),
+        }),
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/memory/drawers/drawer-A',
+      });
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toMatchObject({ error: 'DRAWER_NOT_FOUND' });
+
+      // Verify the route SQL actually carries the archived-at filter.
+      const call = pool.query.mock.calls.find((c) => String(c[0]).includes('WHERE id = $1'));
+      expect(call).toBeDefined();
+      expect(String(call?.[0])).toContain('archived_at IS NULL');
     });
 
     it('URL-decodes the :drawerId param before DB lookup', async () => {
