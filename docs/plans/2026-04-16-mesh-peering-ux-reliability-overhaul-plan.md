@@ -1,8 +1,8 @@
 # Mesh Peering UX & Reliability Overhaul — §33.12
 
 > Created: 2026-04-16
-> Revised: 2026-04-16 (v3 — post-review rewrite)
-> Status: Planned
+> Revised: 2026-04-20 (v4 — implementation record after PRs #610/#617/#619/#622/#623/#627/#628)
+> Status: Delivered
 > Priority: P0
 > Depends on: §33.7 (peer UX), §33.8 (bidirectional registration)
 
@@ -15,12 +15,24 @@ Adding a mesh peer today requires SSH to each machine to set env vars (`TAILSCAL
 | Step | Failure | Root Cause | Fix | Still open? |
 |------|---------|------------|-----|-------------|
 | Discover peers | 0 candidates | `tailscale` binary not in macOS PATH | PR #599 | **No** |
-| Add peer | ONE-WAY, no error | PM2 `env` block shadowed `SYNC_PEER_REGISTRATION_TOKEN` | PR #596 | **Structural** — PM2 env blocks override `process.env`; every new env var needs PM2 config update |
-| Reverse registration | `INVALID_SYNC_URL` | `selfSyncUrl` was `http://localhost:8080` | PR #602 | **Partial** — requires manually setting `TAILSCALE_IP` env var per machine |
-| Version display | Stale version banner | `LOCAL_APP_VERSION` hardcoded in web bundle | PR #603 | **Yes** — `version-bump.sh` updates the constant but doesn't `git add` it (line 124 omits `mesh-version.ts`) |
-| Macmini reverse reg | Failed silently | `TAILSCALE_IP=127.0.0.1` in `.env.mesh` (typo) | Manual sed fix | **Yes** — auto-detection would eliminate this; but env var override currently has highest priority, so a bad env still wins |
+| Add peer | ONE-WAY, no error | PM2 `env` block shadowed `SYNC_PEER_REGISTRATION_TOKEN` | PR #596 + PRs #619/#622 | **No** — PM2 passthrough landed and local mesh config reduces new env-var dependence |
+| Reverse registration | `INVALID_SYNC_URL` | `selfSyncUrl` was `http://localhost:8080` | PR #617 | **No** — self URL now resolves through env, Tailscale auto-detect, then fallback with source reporting |
+| Version display | Stale version banner | `LOCAL_APP_VERSION` hardcoded in web bundle | PR #610 | **No** — `version-bump.sh` now includes `mesh-version.ts` |
+| Macmini reverse reg | Failed silently | `TAILSCALE_IP=127.0.0.1` in `.env.mesh` (typo) | PRs #617/#619/#623 | **No** — auto-detection, web-editable config, structured errors, and retry UI now cover this failure mode |
 
-**Key insight:** The mechanical flow (add → reverse register → report result) works. The remaining gap is **configuration brittleness** — operators must SSH to set env vars, and any typo fails silently. The deeper structural issues are: the registration token lives in env vars (not editable from web UI), self-identity is frozen at startup (can't change without restart), and reverse registration errors lose their structured error codes before reaching the frontend.
+**Key insight at plan creation:** The mechanical flow (add → reverse register → report result) worked, but configuration brittleness made it fragile. The delivered PR set moves registration token and identity management into local mesh config, adds restart-free config reads, and preserves structured reverse-registration errors for frontend guidance.
+
+## Implementation Record
+
+This plan is delivered on `main` through PRs #610, #617, #619, #622, #623, #627, and #628.
+
+- Phase 0 landed in PR #610: version bump safety, Drizzle schema drift repair, and old discover route deprecation.
+- Phase 1 landed in PR #617: restart-safe `selfSyncUrl` resolution with Tailscale IP auto-detection and `/health` source reporting.
+- Phase 2 landed in PRs #619/#622: local-only `mesh_local_config`, `MeshConfigProvider`, authenticated mesh config routes, Settings -> Mesh UI, and identity settings.
+- Phase 3 landed in PRs #623/#627/#628: structured mesh error codes, preflight token checks, shared SSRF/ReDoS guards, and add-peer preflight UX.
+- Phase 4 landed in PR #623: reverse-registration retry scheduler, self-identity card, stale peer cleanup, async peer update, SSE logs, and `PeerUpdateLogModal`.
+
+The remaining mesh browser/two-node fixture work is tracked under §33.8 and §33.11, not this plan.
 
 ## Current State (what already works)
 

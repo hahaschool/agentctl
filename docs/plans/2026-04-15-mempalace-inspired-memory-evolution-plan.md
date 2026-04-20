@@ -33,7 +33,7 @@
 
 This v1.3 plan supersedes the original PR #584 draft. It incorporates the review blockers before implementation starts:
 
-- Migration numbers now start after the current latest migration, `0027_sync_nodes_schema_ahead_rejection.sql`. Use `0028`, `0029`, `0030`, and later numbers as listed below. If `main` advances before implementation, stop and update this plan instead of silently reusing occupied numbers.
+- Migration numbers now start after the current latest migration, `0029_sync_nodes_reverse_registration_error_code.sql`. Use `0030`, `0031`, `0032`, and later numbers as listed below. If `main` advances before implementation, stop and update this plan instead of silently reusing occupied numbers.
 - `wing` / `room` were removed from the schema. Existing `memory_scopes.scope` is the only durable hierarchy. `topic` is an optional room-like label.
 - `content_sha256` is no longer unique. Use it for duplicate scanning only; `(source_type, source_id, chunk_index)` protects deterministic source-local idempotency.
 - Drawer content, hash, snippets, and fact-source offsets are sanitized before storage. `memory_fact_sources` stores offsets, not copied quoted content.
@@ -73,6 +73,8 @@ AgentCTL sources reviewed:
 - `packages/control-plane/drizzle/0021_mesh_change_log.sql`
 - `packages/control-plane/drizzle/0025_sync_nodes_peer_version.sql`
 - `packages/control-plane/drizzle/0027_sync_nodes_schema_ahead_rejection.sql`
+- `packages/control-plane/drizzle/0028_mesh_local_config.sql`
+- `packages/control-plane/drizzle/0029_sync_nodes_reverse_registration_error_code.sql`
 - `packages/control-plane/src/memory/memory-store.ts`
 - `packages/control-plane/src/memory/memory-search.ts`
 - `packages/control-plane/src/memory/memory-injector.ts`
@@ -194,7 +196,7 @@ flowchart LR
 
 As of this plan, the latest migration on `main` is `0027_sync_nodes_schema_ahead_rejection.sql`. The first implementation PR must use the numbers below exactly after re-confirming `main` has not advanced. If `main` has advanced, update this plan in a small docs PR before writing migrations.
 
-### `0028_add_memory_drawers.sql`
+### `0030_add_memory_drawers.sql`
 
 Raw source chunks, analogous to MemPalace drawers.
 
@@ -271,7 +273,7 @@ Notes:
 - `sync_visibility` is metadata only until mesh behavior is explicitly enabled.
 - `content_tsv_simple` is chosen for mixed English/CJK data. Do not use cluster-default `websearch_to_tsquery`; pass the config explicitly.
 
-### `0029_add_memory_fact_sources_and_versions.sql`
+### `0031_add_memory_fact_sources_and_versions.sql`
 
 Many-to-many provenance from extracted facts to sanitized raw chunks.
 
@@ -312,7 +314,7 @@ Notes:
 - `is_diary` folds agent diaries into the existing fact table. Default search excludes diary rows unless requested.
 - `draft` allows non-durable notes without a separate diary table.
 
-### `0030_add_memory_drawer_audit_and_backfill_state.sql`
+### `0032_add_memory_drawer_audit_and_backfill_state.sql`
 
 Support backfill recovery and audit correlation.
 
@@ -331,7 +333,7 @@ CREATE TABLE memory_drawer_backfill_state (
 
 Memory write audit entries should be emitted through `AuditLogger` as a new `kind: 'memory_write'` variant with `sessionId`, `agentId`, `machineId` where applicable, `drawerId`, `sourceType`, `scope`, `chunkIndex`, `contentHash`, `redactionStatus`, and `success`. Do not log raw content.
 
-### `0031_add_memory_edge_temporal_fields.sql`
+### `0033_add_memory_edge_temporal_fields.sql`
 
 Only create this migration after the mesh sync contract is reviewed.
 
@@ -802,7 +804,7 @@ Mobile constraint:
 
 **Files:**
 
-- Create: `packages/control-plane/drizzle/0028_add_memory_drawers.sql`
+- Create: `packages/control-plane/drizzle/0030_add_memory_drawers.sql`
 - Modify: `packages/control-plane/drizzle/meta/_journal.json`
 - Modify: `packages/control-plane/src/db/schema.ts`
 - Modify: `packages/control-plane/src/db/schema.test.ts`
@@ -823,7 +825,7 @@ Mobile constraint:
 
 **Work:**
 
-1. Add `memory_drawers` exactly as specified in `0028_add_memory_drawers.sql`.
+1. Add `memory_drawers` exactly as specified in `0030_add_memory_drawers.sql`.
 2. Add the shared embedding constants and explicit drawer types.
 3. Implement the chunker with the constants in [Chunking Specification](#chunking-specification).
 4. Implement raw-transcript sanitizer and quarantine logic.
@@ -851,7 +853,7 @@ Mobile constraint:
 
 **Files:**
 
-- Create: `packages/control-plane/drizzle/0030_add_memory_drawer_audit_and_backfill_state.sql`
+- Create: `packages/control-plane/drizzle/0032_add_memory_drawer_audit_and_backfill_state.sql`
 - Create: `scripts/backfill-memory-drawers.ts`
 - Create: `scripts/backfill-memory-drawers.test.ts`
 - Modify: `scripts/import-claude-history.ts`
@@ -936,7 +938,7 @@ Mobile constraint:
 
 **Files:**
 
-- Create: `packages/control-plane/drizzle/0029_add_memory_fact_sources_and_versions.sql`
+- Create: `packages/control-plane/drizzle/0031_add_memory_fact_sources_and_versions.sql`
 - Modify: `packages/control-plane/src/db/schema.ts`
 - Modify: `packages/control-plane/src/memory/memory-store.ts`
 - Modify: `packages/control-plane/src/memory/memory-injector.ts`
@@ -1067,7 +1069,7 @@ Mobile constraint:
 
 **Files:**
 
-- Create: `packages/control-plane/drizzle/0031_add_memory_edge_temporal_fields.sql`
+- Create: `packages/control-plane/drizzle/0033_add_memory_edge_temporal_fields.sql`
 - Modify: `packages/control-plane/drizzle/0021_mesh_change_log.sql` only if sync payload projection is required.
 - Modify: `packages/shared/src/types/sync.ts` if edge payload schema changes.
 - Create: `packages/control-plane/src/memory/entity-timeline.ts`
@@ -1081,7 +1083,7 @@ Mobile constraint:
 
 **Work:**
 
-1. Complete mesh sync gate from `0031` before altering `memory_edges`.
+1. Complete mesh sync gate from `0033` before altering `memory_edges`.
 2. Benchmark entity extraction options on 1,000 sampled facts/drawers:
    - regex + dictionaries for PRs/issues/files/machines/agents.
    - optional NER or LLM path for people/concepts only if the benchmark justifies it.
@@ -1220,7 +1222,7 @@ Add env vars through the existing centralized config path used by control-plane/
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
-   - Adds `0028`, chunker, sanitizer, drawer store, audit entry, and tests.
+   - Adds `0030`, chunker, sanitizer, drawer store, audit entry, and tests.
    - No retrieval behavior change.
 
 3. **PR C: Backfill**
@@ -1232,7 +1234,7 @@ Add env vars through the existing centralized config path used by control-plane/
    - Keeps failures nonblocking.
 
 5. **PR E: Provenance + Injection Budget**
-   - Adds `0029`, fact-source links, injector budget modes, and Surface A dry-run generator.
+   - Adds `0031`, fact-source links, injector budget modes, and Surface A dry-run generator.
 
 6. **PR F: Drawer-Aware Search**
    - Adds drawer search behind feature flags, three-stage query sanitizer, `memory_dedup_check`, MCP drawer parity, eval comparison, and no default enablement until metrics pass.

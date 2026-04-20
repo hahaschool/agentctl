@@ -1,6 +1,6 @@
 # Mesh Bidirectional Registration Plan
 
-**Status:** In Progress — reverse-registration endpoint, machine provenance, auto reverse-registration, and one-way retry UI landed; two-node replication proof remains
+**Status:** In Progress — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, and two-node replication proof landed; Playwright two-node fixture remains
 **Roadmap:** 33.8 Mesh Bidirectional Registration + Cross-Node Visibility
 **Created:** 2026-04-15
 
@@ -33,13 +33,20 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
    - `/mesh-peers` shows a one-way badge for failed rows and exposes a Retry
      action backed by `POST /api/sync/peers/:peerId/register-reverse`.
 
+4. Mesh health summary and live-fleet env passthrough *(PRs #576/#596)*.
+   - `/mesh-peers` surfaces bidirectional, one-way, and stale peer counts.
+   - PM2 env passthrough now preserves `SYNC_PEER_REGISTRATION_TOKEN`, closing the live one-way peering failure mode.
+
+5. Two-node replication integration proof *(PR #589)*.
+   - The control-plane integration suite proves A -> B and B -> A registration, UPDATE propagation, stale rejection, and apply guards.
+
 ## Scope
 
 1. Prove end-to-end cross-node visibility.
-   - Add an integration or Playwright-backed two-node fixture that registers A with B, upserts a machine on A, runs at least one sync tick, and asserts the machine appears on B with provenance.
-   - Add a failure-path case where the handshake is unavailable and the UI shows the one-way warning/retry state.
+   - Integration proof is delivered in PR #589.
+   - Remaining: add a Playwright-backed two-node fixture that exercises the browser path against real nodes, including the one-way warning/retry failure path.
 
-2. Add mesh health summary.
+2. Add mesh health summary. *(Delivered in PR #576.)*
    - Summarize bidirectional, one-way, and stale peer counts in the
      `/mesh-peers` header.
    - Row detail can reuse `sync_peer_cursors` once 33.7's remaining
@@ -55,5 +62,5 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 
 - Control-plane route tests for valid/invalid `register-peer` signatures, reverse-row upsert behavior, old-peer fallback, retry outcomes, and rate limits landed across PRs #552/#564.
 - Store/migration tests for machine provenance and reverse-registration columns landed across PRs #554/#564.
-- Sync-loop integration coverage proving node B pulls machine rows from node A after bidirectional registration.
-- Focused `/mesh-peers` and `/machines` browser coverage for one-way retry, origin badges, and the remaining two-node failure path.
+- Sync-loop integration coverage proving node B pulls machine rows from node A after bidirectional registration landed in PR #589.
+- Remaining focused browser coverage: Playwright two-node fixture for one-way retry and the real browser failure path.
