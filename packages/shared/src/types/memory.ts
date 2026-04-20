@@ -199,6 +199,7 @@ export type MemoryDedupCheckResponse = {
   nearest_matches: MemoryDedupNearestMatch[];
   recommendation: MemoryDedupRecommendation;
   rationale: string;
+  match_id: string | null;
 };
 
 export type InjectionTier = 'pinned' | 'on-demand' | 'triggered';
