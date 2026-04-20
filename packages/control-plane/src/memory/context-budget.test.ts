@@ -552,4 +552,174 @@ describe('buildContextBudget', () => {
       expect(result.tierBreakdown['on-demand']).toBe(1);
     });
   });
+
+  describe('tierTokenCaps', () => {
+    it('behaves unchanged when tierTokenCaps is undefined', () => {
+      // 3 pinned + 2 on-demand + 1 triggered, all fit well within global maxTokens.
+      const pinned1 = makeFact({
+        id: 'pinned-1',
+        content: 'X'.repeat(80), // 20 tokens
+        pinned: true,
+      });
+      const pinned2 = makeFact({
+        id: 'pinned-2',
+        content: 'X'.repeat(80),
+        pinned: true,
+      });
+      const pinned3 = makeFact({
+        id: 'pinned-3',
+        content: 'X'.repeat(80),
+        pinned: true,
+      });
+      const onDemand1 = makeFact({ id: 'on-demand-1', content: 'X'.repeat(80) });
+      const onDemand2 = makeFact({ id: 'on-demand-2', content: 'X'.repeat(80) });
+      const triggered = makeFact({
+        id: 'triggered-1',
+        content: 'X'.repeat(80),
+        trigger_spec: { keyword: 'deploy' },
+      });
+
+      const budget: InjectionBudget = {
+        ...DEFAULT_INJECTION_BUDGET,
+        maxTokens: 1000,
+        maxFacts: 50,
+      };
+
+      const result = buildContextBudget({
+        allFacts: [pinned1, pinned2, pinned3, onDemand1, onDemand2, triggered],
+        searchResults: [makeSearchResult(onDemand1, 0.9), makeSearchResult(onDemand2, 0.8)],
+        triggerContext: { keywords: ['deploy'] },
+        budget,
+      });
+
+      expect(result.facts).toHaveLength(6);
+      expect(result.tierBreakdown).toEqual({ pinned: 3, 'on-demand': 2, triggered: 1 });
+    });
+
+    it('caps the pinned tier when tierTokenCaps.pinned is set', () => {
+      // Each fact is 80 chars = 20 tokens. Pinned cap of 30 → only 1 fits.
+      const pinned1 = makeFact({
+        id: 'pinned-1',
+        content: 'X'.repeat(80),
+        pinned: true,
+      });
+      const pinned2 = makeFact({
+        id: 'pinned-2',
+        content: 'X'.repeat(80),
+        pinned: true,
+      });
+      const pinned3 = makeFact({
+        id: 'pinned-3',
+        content: 'X'.repeat(80),
+        pinned: true,
+      });
+
+      const budget: InjectionBudget = {
+        ...DEFAULT_INJECTION_BUDGET,
+        maxTokens: 1000,
+        maxFacts: 50,
+        tierTokenCaps: { pinned: 30 },
+      };
+
+      const result = buildContextBudget({
+        allFacts: [pinned1, pinned2, pinned3],
+        searchResults: [],
+        budget,
+      });
+
+      expect(result.facts).toHaveLength(1);
+      expect(result.facts[0]?.id).toBe('pinned-1');
+      expect(result.tierBreakdown.pinned).toBe(1);
+      expect(result.tokenCount).toBe(20);
+    });
+
+    it('keeps per-tier caps independent across tiers', () => {
+      // Pinned capped at 20 tokens (1 pinned fact fits), but on-demand
+      // has no cap and can fill the remaining global budget.
+      const pinned1 = makeFact({
+        id: 'pinned-1',
+        content: 'X'.repeat(80), // 20 tokens
+        pinned: true,
+      });
+      const pinned2 = makeFact({
+        id: 'pinned-2',
+        content: 'X'.repeat(80),
+        pinned: true,
+      });
+      const onDemand1 = makeFact({ id: 'on-demand-1', content: 'X'.repeat(80) });
+      const onDemand2 = makeFact({ id: 'on-demand-2', content: 'X'.repeat(80) });
+
+      const budget: InjectionBudget = {
+        ...DEFAULT_INJECTION_BUDGET,
+        maxTokens: 1000,
+        maxFacts: 50,
+        tierTokenCaps: { pinned: 20 },
+      };
+
+      const result = buildContextBudget({
+        allFacts: [pinned1, pinned2, onDemand1, onDemand2],
+        searchResults: [makeSearchResult(onDemand1, 0.9), makeSearchResult(onDemand2, 0.8)],
+        budget,
+      });
+
+      expect(result.tierBreakdown.pinned).toBe(1);
+      expect(result.tierBreakdown['on-demand']).toBe(2);
+      expect(result.facts.map((f) => f.id)).toEqual(['pinned-1', 'on-demand-1', 'on-demand-2']);
+    });
+
+    it('rejects all facts for a tier when its cap is 0', () => {
+      const triggered1 = makeFact({
+        id: 'triggered-1',
+        content: 'X'.repeat(40), // 10 tokens
+        trigger_spec: { keyword: 'deploy' },
+      });
+      const triggered2 = makeFact({
+        id: 'triggered-2',
+        content: 'X'.repeat(40),
+        trigger_spec: { keyword: 'deploy' },
+      });
+
+      const budget: InjectionBudget = {
+        ...DEFAULT_INJECTION_BUDGET,
+        maxTokens: 1000,
+        maxFacts: 50,
+        tierTokenCaps: { triggered: 0 },
+      };
+
+      const result = buildContextBudget({
+        allFacts: [triggered1, triggered2],
+        searchResults: [],
+        triggerContext: { keywords: ['deploy'] },
+        budget,
+      });
+
+      expect(result.facts).toHaveLength(0);
+      expect(result.tierBreakdown.triggered).toBe(0);
+    });
+
+    it('still enforces global maxTokens when the per-tier cap is larger', () => {
+      // Pinned facts are 20 tokens each. tierTokenCaps.pinned = 1000 (loose),
+      // but global maxTokens = 40 → only 2 pinned facts fit.
+      const pinnedFacts = Array.from({ length: 5 }, (_, i) =>
+        makeFact({ id: `pinned-${i}`, content: 'X'.repeat(80), pinned: true }),
+      );
+
+      const budget: InjectionBudget = {
+        ...DEFAULT_INJECTION_BUDGET,
+        maxTokens: 40,
+        maxFacts: 50,
+        tierTokenCaps: { pinned: 1000 },
+      };
+
+      const result = buildContextBudget({
+        allFacts: pinnedFacts,
+        searchResults: [],
+        budget,
+      });
+
+      expect(result.facts).toHaveLength(2);
+      expect(result.tokenCount).toBe(40);
+      expect(result.tierBreakdown.pinned).toBe(2);
+    });
+  });
 });

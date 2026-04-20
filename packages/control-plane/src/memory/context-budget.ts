@@ -66,6 +66,7 @@ type BudgetState = {
   readonly facts: MemoryFact[];
   readonly tokenCount: number;
   readonly tierCounts: Record<InjectionTier, number>;
+  readonly tierTokenCounts: Record<InjectionTier, number>;
 };
 
 function createEmptyState(): BudgetState {
@@ -73,6 +74,7 @@ function createEmptyState(): BudgetState {
     facts: [],
     tokenCount: 0,
     tierCounts: { pinned: 0, 'on-demand': 0, triggered: 0 },
+    tierTokenCounts: { pinned: 0, 'on-demand': 0, triggered: 0 },
   };
 }
 
@@ -91,6 +93,11 @@ function tryAddFact(
     return state;
   }
 
+  const perTierCap = budget.tierTokenCaps?.[tier];
+  if (perTierCap !== undefined && state.tierTokenCounts[tier] + factTokens > perTierCap) {
+    return state;
+  }
+
   // Avoid duplicates — a fact may appear in multiple tiers
   if (state.facts.some((existing) => existing.id === fact.id)) {
     return state;
@@ -102,6 +109,10 @@ function tryAddFact(
     tierCounts: {
       ...state.tierCounts,
       [tier]: state.tierCounts[tier] + 1,
+    },
+    tierTokenCounts: {
+      ...state.tierTokenCounts,
+      [tier]: state.tierTokenCounts[tier] + factTokens,
     },
   };
 }
