@@ -125,9 +125,9 @@ sanitizeQuery() before embedding.
 ### Proposed addition
 
 ```
-New MCP worker route: packages/agent-worker/src/api/routes/memory-dedup.ts
+New MCP worker route: packages/agent-worker/src/api/routes/memory-dedup-check.ts
 
-POST /mcp/memory/dedup-check
+POST /api/mcp/memory-dedup-check
 Request:  { scope, entity_type?, content_preview, embedding_precomputed? }
 Response: {
   is_duplicate: boolean,

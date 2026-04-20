@@ -740,10 +740,10 @@ Mobile constraint:
 split helpers, scoring utilities, sanitized sample fixture, and baseline CLI.
 PR #660 adds a deterministic mock PR bench with threshold
 enforcement and latency percentiles, and PR #667 locks first-run /
-`{ arguments: null }` contracts for the current worker memory MCP routes. The
-remaining Phase 0 work is live-search wiring, future `memory_dedup_check` /
-`memory_traverse` route contracts, private fixture growth, and release/weekly
-held-out automation.
+`{ arguments: null }` contracts for the current worker memory MCP routes. PR
+#681 adds the first `memory_dedup_check` route/cold-start contract. The
+remaining Phase 0 work is live-search wiring, the future `memory_traverse`
+route contract, private fixture growth, and release/weekly held-out automation.
 
 **Files:**
 
@@ -827,7 +827,7 @@ held-out automation.
 
 **Goal:** Preserve sanitized raw evidence without replacing existing facts.
 
-**Status:** Partially delivered in PRs #671, #679, and #682. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. PR #682 added persisted drawer backfill state (`0032_add_memory_drawer_backfill_state.sql`), shared `MemoryDrawerBackfill*` contracts, Drizzle schema/journal/schema tests, and `MemoryDrawerBackfillStateStore` coverage. Remaining Phase 1.5 scope is the actual resumable JSONL/claude-mem backfill scripts; drawers still have no sync triggers and no default retrieval behavior.
+**Status:** Partially delivered in PRs #671, #679, and #682. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. PR #682 added persisted drawer backfill state (`0032_add_memory_drawer_backfill_state.sql`), shared `MemoryDrawerBackfill*` contracts, Drizzle schema/journal/schema tests, and `MemoryDrawerBackfillStateStore` coverage for start/resume, cursor update, and safe failed-state errors. Remaining Phase 1.5 scope is the actual resumable JSONL/claude-mem backfill scripts; drawers still have no sync triggers and no default retrieval behavior.
 
 **Files:**
 
@@ -883,7 +883,7 @@ held-out automation.
 
 **Goal:** Create enough drawer data for search evals and provenance without waiting months.
 
-**Status:** State persistence landed in PR #682: `memory_drawer_backfill_state`, Drizzle schema/journal/schema tests, shared backfill contracts, and store coverage for create/list/update status/cursor behavior. Remaining scope is the actual JSONL/claude-mem backfill worker/script path, batching, dry-run estimates, and source-local idempotency.
+**Status:** State persistence landed in PR #682: `memory_drawer_backfill_state`, Drizzle schema/journal/schema tests, shared backfill contracts, and store coverage for start/resume, cursor update, and safe failed-state errors. Remaining scope is the actual JSONL/claude-mem backfill worker/script path, batching, dry-run estimates, and source-local idempotency.
 
 **Files:**
 
@@ -911,7 +911,7 @@ held-out automation.
 
 - Stream-parses large JSONL; does not `JSON.parse(readFileSync())`.
 - Resumes from checkpoint after simulated crash.
-- Backfill state store creates per-source checkpoints, filters by status/source type, updates cursors/status, and preserves errors until explicit success.
+- Backfill state store creates/resumes per-source checkpoints, updates cursors, and stores safe failure summaries without raw content.
 - Deduplicates source-local chunks.
 - Does not write private fixtures or raw secrets.
 - `claude-mem` narrative maps to drawer while facts map to facts.
