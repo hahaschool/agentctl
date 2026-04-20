@@ -16,9 +16,23 @@ for the current search/recall/report routes. PR #681 adds the first
 `memory_dedup_check` route contract, PR #684 adds `memory_fact_sources` /
 `embedding_version` schema groundwork, PR #685 adds the first
 `memory_traverse` worker contract, and PR #686 adds the JSONL drawer backfill
-CLI foundation. Live search wiring, private/full fixture coverage,
-`claude-mem` narrative/fact mapping, fact-source write paths, and control-plane
-recursive traversal remain.
+CLI foundation. PR #688 added the fact-source write path through `MemoryStore.addFact` +
+`POST /api/memory/facts` `sourceSpans`. PR #689 landed the control-plane
+`POST /api/memory/traverse` iterative BFS route with hop/node caps,
+relation/confidence/temporal filters, and 404 on missing start entities.
+PR #692 extended the drawer backfill CLI with a `--source-type claude-mem`
+code path covering `observations` and `session_summaries` with deterministic
+source refs and resumable cursors (drawer-only; no `memory_fact_sources` writes
+yet). PR #694 replaced the worker `memory_dedup_check` `501` branch with full
+skip/merge/store_new scoring at plan thresholds (0.92/0.82), defensive
+`store_new` on missing/non-finite top score, and a populated
+`MemoryDedupCheckResponse.match_id`. PR #695 closed the end-to-end scoring
+gap by adding an additive `results: [{fact, score, source_path}]` array on
+the semantic-search branch of `POST /api/memory/facts`, so dedup candidates
+carry similarity scores into the worker route without breaking the existing
+`facts` envelope or the ILIKE/empty-`q` branches. Live search wiring,
+private/full fixture coverage, `claude-mem` → `memory_fact_sources` link
+writes, injector budget modes, and Surface A dry-run generator remain.
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
 
@@ -888,7 +902,7 @@ held-out automation.
 
 **Goal:** Create enough drawer data for search evals and provenance without waiting months.
 
-**Status:** State persistence landed in PR #682: `memory_drawer_backfill_state`, Drizzle schema/journal/schema tests, shared backfill contracts, and store coverage for start/resume, cursor update, and safe failed-state errors. PR #686 added the JSONL drawer backfill CLI foundation with dry-run default, recursive JSONL discovery, streaming line parsing, cursor resume, execute mode through `MemoryDrawerStore`, safe parse-error metadata, and text/JSON summaries. Remaining scope is `claude-mem` narrative/fact mapping, `memory_fact_sources` writes, batching/backoff, cost/storage estimates, and broader source-local idempotency coverage.
+**Status:** State persistence landed in PR #682: `memory_drawer_backfill_state`, Drizzle schema/journal/schema tests, shared backfill contracts, and store coverage for start/resume, cursor update, and safe failed-state errors. PR #686 added the JSONL drawer backfill CLI foundation with dry-run default, recursive JSONL discovery, streaming line parsing, cursor resume, execute mode through `MemoryDrawerStore`, safe parse-error metadata, and text/JSON summaries. PR #692 extended the CLI with a `--source-type claude-mem` code path that maps `observations` and `session_summaries` into deterministic drawer source refs (`observations:<id>`, `session_summaries:<id>`), adds dry-run counts, keeps resumable table/id cursors, and leaves the default `session-jsonl` path untouched. Remaining scope is `memory_fact_sources` link writes (drawer ↔ extracted fact), batching/backoff, cost/storage estimates, and broader source-local idempotency coverage for the claude-mem path.
 
 **Files:**
 
@@ -903,9 +917,8 @@ held-out automation.
 **Work:**
 
 1. ✅ Backfill from Claude Code JSONL under `~/.claude/projects/**`.
-2. Backfill `claude-mem` observations:
-   - `narrative` becomes drawer content.
-   - `title` and atomic `facts` remain `memory_facts`.
+2. Partially delivered: PR #692 added the `--source-type claude-mem` path for drawer writes — `observations` and `session_summaries` map to deterministic drawer source refs (`observations:<id>`, `session_summaries:<id>`) with dry-run counts and resumable table/id cursors. Remaining for this item:
+   - `title` and atomic `facts` still need to map into `memory_facts`.
    - `memory_fact_sources` links imported facts to narrative drawers when both exist.
 3. ✅ Add resumable state in `memory_drawer_backfill_state`.
 4. Batch embedding calls and rate-limit with exponential backoff.
@@ -1275,7 +1288,8 @@ Add env vars through the existing centralized config path used by control-plane/
 3. **PR C: Backfill**
    - PR #682 added persisted backfill state (`0032`), shared backfill contracts, and state-store tests.
    - PR #686 added the resumable JSONL drawer backfill CLI foundation.
-   - Remaining: `claude-mem` drawer/fact mapping, `memory_fact_sources` writes, batching/backoff, and cost/storage estimates.
+   - PR #692 extended the CLI with a `--source-type claude-mem` drawer-write path for `observations` and `session_summaries`, with deterministic source refs and resumable table/id cursors.
+   - Remaining: `claude-mem` atomic-fact mapping into `memory_facts`, `memory_fact_sources` link writes, batching/backoff, and cost/storage estimates.
    - Produces first real drawer corpus for eval.
 
 4. **PR D: Checkpoint Capture**
@@ -1289,7 +1303,9 @@ Add env vars through the existing centralized config path used by control-plane/
 6. **PR F: Drawer-Aware Search**
    - PR #677 delivered the three-stage query sanitizer for existing memory search paths.
    - PR #681 delivered the first `memory_dedup_check` route contract, including empty-DB `store_new` behavior and explicit scoring-unavailable responses when candidates exist.
-   - Remaining: drawer search behind feature flags, full `memory_dedup_check` skip/merge scoring, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
+   - PR #694 replaced the `501 DEDUP_SCORING_UNAVAILABLE` branch with full skip/merge/store_new scoring at plan thresholds (`0.92`/`0.82`), defensive `store_new` on missing/non-finite top score, and a populated `MemoryDedupCheckResponse.match_id`.
+   - PR #695 added the CP score pass-through: `POST /api/memory/facts` now returns an additive `results: [{fact, score, source_path}]` array on the semantic-search branch alongside `facts`, preserving filter-then-paginate order across both arrays and leaving the ILIKE/empty-`q` branches untouched. This closes the end-to-end scoring gap so dedup candidates carry similarity scores through without the defensive `store_new` fallback.
+   - Remaining: drawer search behind feature flags, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
 
 7. **PR G: Diaries**
    - Adds diary-as-fact route and basic UI.
@@ -1355,7 +1371,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Phase 0 records a facts-only baseline number before drawer-aware search changes ranking.
 - [ ] Drawer-aware search is not default-enabled unless R@5 is at least the facts-only baseline and p95 stays within the accepted threshold.
 - [ ] Query sanitizer implements passthrough, question-extraction, and tail-sentence fallback stages, and contamination eval NDCG@10 drop stays under 5 points.
-- [ ] `memory_dedup_check` returns `skip`, `merge`, and `store_new` recommendations at threshold boundaries; empty DB already defaults to `store_new`. *(empty-DB contract in PR #681)*
+- [x] `memory_dedup_check` returns `skip`, `merge`, and `store_new` recommendations at threshold boundaries; empty DB already defaults to `store_new`. *(empty-DB contract in PR #681; full skip/merge/store_new scoring at plan thresholds 0.92/0.82 with populated `match_id` and 8 boundary/ordering Vitest cases in PR #694; end-to-end CP score pass-through via `results[]` on `/api/memory/facts` landed in PR #695)*
 - [ ] Memory Browser can show why a result matched and where it came from.
 - [ ] Injector supports fact-only, fact-plus-snippet, and full-drawer modes with per-tier caps.
 - [ ] Checkpoint capture cannot block an agent run, proven by simulated PG/embedding failure tests.
