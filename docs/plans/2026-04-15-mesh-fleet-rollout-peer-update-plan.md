@@ -1,6 +1,6 @@
 # Mesh Fleet Rollout + Peer Update Plan
 
-**Status:** In progress — PM2 CLI, opt-in schedulers, settings UI, provenance, rollback, fleet structure, and update-available banner landed; end-to-end canary dry-run and Playwright two-node fixture remain
+**Status:** In progress — PM2 CLI, opt-in schedulers, settings UI, provenance, rollback, fleet structure, update-available banner, and the first opt-in live two-node fixture slice landed; end-to-end canary dry-run plus schema-ahead/dry-run fixture assertions remain
 **Roadmap:** 33.11 Fleet Rollout & Peer Auto-Update
 **Created:** 2026-04-15
 
@@ -22,7 +22,9 @@ mutex protection, structured responses, and the `/mesh-peers` Update action.
 PRs #571/#572/#577/#580 completed the PM2 operator path with the
 `agentctl peer update` CLI, opt-in schedulers, settings UI, and rollback state.
 PRs #575/#579/#593 added Docker build provenance, migration gates, and the
-fleet structure. PR #582 added the update-available banner.
+fleet structure. PR #582 added the update-available banner. PR #654 added the
+opt-in live two-node fixture foundation and first version-drift assertion
+without changing default E2E or beta/dev/prod CD behavior.
 
 ## Scope
 
@@ -57,6 +59,13 @@ fleet structure. PR #582 added the update-available banner.
    - PM2 rollback returns to a previously verified tag and reloads PM2.
    - Persist local update history for audit and rollback eligibility.
 
+6. Add live two-node fixture coverage.
+   - PR #654 delivered the opt-in fixture foundation and first assertion:
+     after one live peer ping, the `/mesh-peers` row and update-available
+     banner show the configured peer version.
+   - Remaining: schema-ahead rejection banner and `agentctl peer update
+     --dry-run` planned-step reporting without mutating state.
+
 ## Non-Goals
 
 - No default-on unattended updates.
@@ -71,6 +80,8 @@ fleet structure. PR #582 added the update-available banner.
 - CLI dry-run tests for the PM2 update flow landed across PRs #571/#580.
 - Unit tests for release/tag/provenance checks and rollback state handling landed across PRs #571/#575/#580.
 - Focused UI coverage for settings state and peer update affordances landed in PR #577.
-- Remaining two-node fixture after 33.9/33.10: drift appears, compatibility gate
+- PR #654 opt-in live fixture verifies the first drift path: peer ping updates
+  the row and update-available banner with the expected peer version.
+- Remaining two-node fixture assertions after 33.9/33.10: compatibility gate
   rejects unsafe envelopes, and dry-run update reports planned steps without
   mutating state.

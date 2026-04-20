@@ -1,6 +1,6 @@
 # Mesh Bidirectional Registration Plan
 
-**Status:** In Progress — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, and two-node replication proof landed; Playwright two-node fixture remains
+**Status:** In Progress — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, two-node replication proof, and the opt-in live fixture foundation landed; remaining browser assertions cover 33.8 add-peer/reverse-registration, machine visibility, and one-way warning/retry flows
 **Roadmap:** 33.8 Mesh Bidirectional Registration + Cross-Node Visibility
 **Created:** 2026-04-15
 
@@ -40,11 +40,19 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 5. Two-node replication integration proof *(PR #589)*.
    - The control-plane integration suite proves A -> B and B -> A registration, UPDATE propagation, stale rejection, and apply guards.
 
+6. Opt-in live Playwright fixture foundation *(PR #654)*.
+   - `mesh-two-node.fixture.spec.ts` is skipped unless explicit live-node
+     environment variables are present.
+   - Shared fixture helpers cover primary web/API URLs, peer machine id,
+     expected peer version, polling, and `AGENTCTL_PLAYWRIGHT_NO_WEBSERVER=1`
+     for externally running nodes.
+
 ## Scope
 
 1. Prove end-to-end cross-node visibility.
    - Integration proof is delivered in PR #589.
-   - Remaining: add a Playwright-backed two-node fixture that exercises the browser path against real nodes, including the one-way warning/retry failure path.
+   - PR #654 created the opt-in fixture foundation.
+   - Remaining: extend it with 33.8 browser assertions for add-peer/reverse-registration, machine visibility, and the one-way warning/retry failure path.
 
 2. Add mesh health summary. *(Delivered in PR #576.)*
    - Summarize bidirectional, one-way, and stale peer counts in the
@@ -63,4 +71,5 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 - Control-plane route tests for valid/invalid `register-peer` signatures, reverse-row upsert behavior, old-peer fallback, retry outcomes, and rate limits landed across PRs #552/#564.
 - Store/migration tests for machine provenance and reverse-registration columns landed across PRs #554/#564.
 - Sync-loop integration coverage proving node B pulls machine rows from node A after bidirectional registration landed in PR #589.
-- Remaining focused browser coverage: Playwright two-node fixture for one-way retry and the real browser failure path.
+- PR #654 fixture foundation verification: skipped by default without explicit env, documented live-node prerequisites, and no default E2E or beta/dev/prod CD behavior changes.
+- Remaining focused browser coverage: Playwright two-node assertions for one-way retry and the real browser failure path.
