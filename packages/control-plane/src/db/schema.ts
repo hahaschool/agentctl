@@ -333,6 +333,24 @@ export const memoryDrawers = pgTable(
   ],
 );
 
+export const memoryDrawerBackfillState = pgTable(
+  'memory_drawer_backfill_state',
+  {
+    id: text('id').primaryKey(),
+    sourceType: text('source_type').notNull(),
+    sourceRoot: text('source_root').notNull(),
+    cursorJson: jsonb('cursor_json').notNull().default({}),
+    status: text('status').notNull(),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('memory_drawer_backfill_source_unique').on(table.sourceType, table.sourceRoot),
+    index('idx_memory_drawer_backfill_state_status').on(table.status),
+  ],
+);
+
 export const memoryFacts = pgTable(
   'memory_facts',
   {

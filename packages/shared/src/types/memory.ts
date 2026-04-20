@@ -46,6 +46,21 @@ export type MemoryDrawer = {
   updatedAt: string;
 };
 
+export type MemoryDrawerBackfillSourceType = 'session-jsonl' | 'claude-mem';
+
+export type MemoryDrawerBackfillStatus = 'running' | 'paused' | 'complete' | 'failed';
+
+export type MemoryDrawerBackfillState = {
+  id: string;
+  sourceType: MemoryDrawerBackfillSourceType;
+  sourceRoot: string;
+  cursorJson: Record<string, unknown>;
+  status: MemoryDrawerBackfillStatus;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export const MEMORY_ENTITY_TYPES = [
   'code_artifact',
   'decision',
