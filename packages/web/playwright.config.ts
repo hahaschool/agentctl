@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const WEB_PORT = Number(process.env.WEB_PORT ?? 5173);
+const SKIP_WEB_SERVER = process.env.AGENTCTL_PLAYWRIGHT_NO_WEBSERVER === '1';
 
 export default defineConfig({
   testDir: './e2e',
@@ -17,9 +18,11 @@ export default defineConfig({
       use: { browserName: 'chromium' },
     },
   ],
-  webServer: {
-    command: 'pnpm dev',
-    port: WEB_PORT,
-    reuseExistingServer: true,
-  },
+  webServer: SKIP_WEB_SERVER
+    ? undefined
+    : {
+        command: 'pnpm dev',
+        port: WEB_PORT,
+        reuseExistingServer: true,
+      },
 });
