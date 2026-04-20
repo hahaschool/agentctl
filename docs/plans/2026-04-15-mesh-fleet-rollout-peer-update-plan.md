@@ -1,6 +1,6 @@
 # Mesh Fleet Rollout + Peer Update Plan
 
-**Status:** In progress — PM2 CLI, opt-in schedulers, settings UI, provenance, rollback, fleet structure, update-available banner, and the first two opt-in live two-node fixture slices landed; end-to-end canary dry-run plus schema-ahead fixture assertion remain
+**Status:** In progress — PM2 CLI, opt-in schedulers, settings UI, provenance, rollback, fleet structure, update-available banner, and all three opt-in live two-node fixture slices landed; end-to-end canary dry-run remains
 **Roadmap:** 33.11 Fleet Rollout & Peer Auto-Update
 **Created:** 2026-04-15
 
@@ -26,7 +26,10 @@ fleet structure. PR #582 added the update-available banner. PR #654 added the
 opt-in live two-node fixture foundation and first version-drift assertion
 without changing default E2E or beta/dev/prod CD behavior. PR #659 added the
 separately gated peer-update dry-run fixture assertion over
-`/api/mesh/auto-update/dry-run`.
+`/api/mesh/auto-update/dry-run`. PR #668 adds the separately gated
+schema-ahead assertion by forcing a `schemaVersion + 2` envelope through the
+primary node's apply-side compat gate and asserting the 33.10 badge on
+`/mesh-peers`.
 
 ## Scope
 
@@ -68,7 +71,10 @@ separately gated peer-update dry-run fixture assertion over
    - PR #659 delivered the separately gated `agentctl peer update --dry-run`
      assertion: the fixture streams the SSE route, parses the JSON result, and
      verifies reported planned steps are marked `dryRun`.
-   - Remaining: schema-ahead rejection banner.
+   - PR #668 delivered the separately gated schema-ahead assertion: the fixture
+     injects a synthetic `schemaVersion + 2` envelope into the primary node's
+     apply gate, records the same rejection marker as the sync loop, and checks
+     the 33.10 badge on `/mesh-peers`.
 
 ## Non-Goals
 
@@ -89,5 +95,5 @@ separately gated peer-update dry-run fixture assertion over
 - PR #659 opt-in dry-run fixture verifies the SSE stream reports
   `pnpm agentctl peer update --dry-run`, exits 0, and marks planned steps as
   dry-run steps.
-- Remaining two-node fixture assertions after 33.9/33.10: compatibility gate
-  rejects unsafe envelopes.
+- PR #668's opt-in schema-ahead fixture verifies the compatibility gate rejects
+  unsafe envelopes and surfaces the persisted 33.10 badge.

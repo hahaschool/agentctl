@@ -20,6 +20,16 @@ The second slice is separately gated and verifies the peer-update dry-run path:
 3. Parse the emitted JSON result and assert that the run succeeded, every
    planned step is marked `dryRun`, and the expected update steps are reported.
 
+The third slice is separately gated and verifies the schema-ahead rejection path:
+
+1. Read the primary node's `schemaVersion` from `GET /api/version-compat`.
+2. Inject a synthetic mesh envelope with `schemaVersion + 2` through the
+   primary node's real `applyChange()` compat gate.
+3. Persist the same `MESH_ENVELOPE_SCHEMA_AHEAD` rejection marker that the sync
+   loop writes for a real peer pull.
+4. Reload `/mesh-peers` and assert that the 33.10 schema-ahead badge appears on
+   the configured peer row.
+
 ## Prerequisites
 
 - Two AgentCTL nodes are already running and peered.
@@ -31,6 +41,9 @@ The second slice is separately gated and verifies the peer-update dry-run path:
   `/api/mesh/auto-update/dry-run` and be able to run `pnpm agentctl peer update
   --dry-run` from its configured repository root. The command must complete with
   exit code 0.
+- For the schema-ahead assertion, provide the primary node database URL through
+  `AGENTCTL_MESH_PRIMARY_DATABASE_URL`. The fixture uses it only when
+  `AGENTCTL_MESH_SCHEMA_AHEAD_E2E=1` is also set.
 
 ## Run
 
@@ -59,12 +72,21 @@ is enabled. Add this flag to run it:
 AGENTCTL_MESH_DRY_RUN_E2E=1
 ```
 
+The schema-ahead assertion is also disabled by default. Add these flags to run
+it:
+
+```bash
+AGENTCTL_MESH_SCHEMA_AHEAD_E2E=1
+AGENTCTL_MESH_PRIMARY_DATABASE_URL=postgresql://...
+```
+
 Optional polling controls:
 
 ```bash
 AGENTCTL_MESH_POLL_TIMEOUT_MS=30000
 AGENTCTL_MESH_POLL_INTERVAL_MS=1000
 AGENTCTL_MESH_DRY_RUN_TIMEOUT_MS=60000
+AGENTCTL_MESH_SCHEMA_AHEAD_TIMEOUT_MS=30000
 ```
 
 Without `AGENTCTL_MESH_TWO_NODE_E2E=1`, the spec is skipped. Use
@@ -73,6 +95,6 @@ outside Playwright's local dev server.
 
 ## Follow-Up Coverage
 
-The remaining roadmap assertions should extend the same fixture:
-
-- Force a `schemaVersion + 2` envelope and assert the 33.10 schema-ahead banner.
+The remaining 33.11 rollout item is outside this Playwright fixture: exercise
+`deploy-fleet.yml` first in dry-run, then in canary mode against a non-critical
+target.
