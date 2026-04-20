@@ -1,6 +1,6 @@
 # Mesh Schema + Protocol Compat Plan
 
-**Status:** Partial — backend envelope stamping, apply gate, compat docs, and unit coverage landed in PR #557
+**Status:** Delivered — PRs #557/#567/#573/#594 completed envelope stamping, apply gates, operator surfacing, compat docs, two-node proof, and Playwright coverage
 **Roadmap:** 33.10 Mesh Schema + Protocol Compat Policy
 **Created:** 2026-04-15
 
@@ -27,7 +27,7 @@ cursor positioned for retry after the lagging node upgrades.
      compatibility error.
    - Continue accepting older envelopes until a documented sunset point.
 
-3. Surface operator feedback.
+3. Surface operator feedback. *(Delivered in PRs #567/#573/#594.)*
    - Record the peer and reason when apply rejects on compatibility.
    - Show a `/mesh-peers` row warning such as "Peer ahead — update this node".
    - Link to manual upgrade instructions until 33.11 peer-update UI exists.
@@ -45,7 +45,7 @@ cursor positioned for retry after the lagging node upgrades.
 
 ## Verification
 
-- Unit tests for same, +1, +2, and -1 schema-version apply behavior.
-- Unit tests for supported and unsupported protocol versions.
-- Integration coverage simulating a rolling upgrade across two peers.
-- `/mesh-peers` UI coverage for schema-ahead warnings.
+- Unit tests for same, +1, +2, and -1 schema-version apply behavior landed in PR #557.
+- Unit tests for supported and unsupported protocol versions landed in PR #557.
+- Two-node integration coverage simulating schema compatibility scenarios landed in PR #594.
+- `/mesh-peers` UI coverage for schema-ahead warnings landed in PR #594.
