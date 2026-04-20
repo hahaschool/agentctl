@@ -11,7 +11,9 @@ rate/p95, by-category/by-tag summaries, sanitized sample fixture, `pnpm
 memory:eval`, and focused tests. PR #660 adds deterministic
 mock recall@5 threshold enforcement, env-configurable bench sizing, p50/p95/p99
 latency reporting, and `pnpm memory:bench` without live DB or embedding
-dependencies. Live search wiring, cold-start MCP contracts, and private/full
+dependencies. PR #667 locks first-run and `{ arguments: null }` MCP contracts
+for the current search/recall/report routes. Live search wiring, future
+`memory_dedup_check` / `memory_traverse` route contracts, and private/full
 fixture coverage remain.
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
@@ -737,9 +739,11 @@ Mobile constraint:
 **Status:** In progress. PR #655 delivered the fixture schema, deterministic
 split helpers, scoring utilities, sanitized sample fixture, and baseline CLI.
 PR #660 adds a deterministic mock PR bench with threshold
-enforcement and latency percentiles. The remaining Phase 0 work is live-search
-wiring, cold-start/null-argument contracts, private fixture growth, and
-release/weekly held-out automation.
+enforcement and latency percentiles, and PR #667 locks first-run /
+`{ arguments: null }` contracts for the current worker memory MCP routes. The
+remaining Phase 0 work is live-search wiring, future `memory_dedup_check` /
+`memory_traverse` route contracts, private fixture growth, and release/weekly
+held-out automation.
 
 **Files:**
 
