@@ -123,7 +123,7 @@ Modes:
 
 Options:
   --fixture <path>       Override the eval fixture path (defaults to the sanitized public sample).
-  --write <path>         When present in baseline mode, write the snapshot to this path in addition to stdout.
+  --write <path>         When present in baseline mode, write the snapshot to this path; stdout is emitted only with --json.
   --json                 Emit JSON only (no human-readable summary line on stderr).
   --help, -h             Show this message.
 

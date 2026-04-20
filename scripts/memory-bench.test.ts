@@ -141,8 +141,9 @@ describe('percentileDuration()', () => {
 
 describe('hashFixture()', () => {
   it('is deterministic for the same bytes', () => {
-    const tmp = path.join(os.tmpdir(), `fixture-${Date.now()}.json`);
-    fs.writeFileSync(tmp, '{"hello":"world"}\n');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-bench-fixture-'));
+    const tmp = path.join(tmpDir, 'fixture.json');
+    fs.writeFileSync(tmp, '{"hello":"world"}\n', { flag: 'wx' });
     try {
       const a = hashFixture(tmp);
       const b = hashFixture(tmp);
@@ -150,7 +151,7 @@ describe('hashFixture()', () => {
       expect(a.startsWith('sha256:')).toBe(true);
       expect(a.length).toBe('sha256:'.length + 64);
     } finally {
-      fs.unlinkSync(tmp);
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });
