@@ -165,6 +165,7 @@ jobs:
           echo "Running fleet-bootstrap.ts..."
           pnpm tsx scripts/fleet-bootstrap.ts \
             --inventory infra/machines.yml \
+            --topology docker \
             --concurrency "$CONCURRENCY" \
             $ROLE_FLAG \
             $DRY_RUN_FLAG \
@@ -308,21 +309,22 @@ jobs:
           sudo chmod +x /usr/local/bin/yq
 
           # Extract machines matching the target role
+          TOPOLOGY="docker"
           TARGET_ROLE="${{ inputs.target_role }}"
           if [ "$TARGET_ROLE" = "all" ]; then
-            MACHINES=$(yq -o=json '.machines' infra/machines.yml)
+            MACHINES=$(TOPOLOGY="$TOPOLOGY" yq -o=json '.machines | map(select(.labels.topology == env(TOPOLOGY)))' infra/machines.yml)
           elif [ "$TARGET_ROLE" = "worker" ]; then
-            MACHINES=$(yq -o=json '.machines | map(select(.role == "agent-worker"))' infra/machines.yml)
+            MACHINES=$(TOPOLOGY="$TOPOLOGY" yq -o=json '.machines | map(select(.labels.topology == env(TOPOLOGY) and .role == "agent-worker"))' infra/machines.yml)
           else
-            MACHINES=$(yq -o=json '.machines | map(select(.role == "control-plane"))' infra/machines.yml)
+            MACHINES=$(TOPOLOGY="$TOPOLOGY" yq -o=json '.machines | map(select(.labels.topology == env(TOPOLOGY) and .role == "control-plane"))' infra/machines.yml)
           fi
 
           TOTAL=$(echo "$MACHINES" | jq 'length')
           if [ "$TOTAL" -eq 0 ]; then
-            echo "::error::No machines found matching role '$TARGET_ROLE'"
+            echo "::error::No machines found matching role '$TARGET_ROLE' in topology '$TOPOLOGY'"
             exit 1
           fi
-          echo "Found $TOTAL machine(s) matching role '$TARGET_ROLE'"
+          echo "Found $TOTAL machine(s) matching role '$TARGET_ROLE' in topology '$TOPOLOGY'"
 
           # Validate all Tailscale IPs are in CGNAT range (100.64.0.0 - 100.127.255.255)
           INVALID_IPS=$(echo "$MACHINES" | jq -r '.[].tailscale_ip' | while read -r ip; do
@@ -395,6 +397,7 @@ jobs:
           echo "| Field | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Image tag | \`${{ inputs.image_tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Topology | \`$TOPOLOGY\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Target role | \`${{ inputs.target_role }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Strategy | \`$STRATEGY\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Total machines | $TOTAL |" >> "$GITHUB_STEP_SUMMARY"

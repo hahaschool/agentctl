@@ -97,3 +97,7 @@ primary node's apply-side compat gate and asserting the 33.10 badge on
   dry-run steps.
 - PR #668's opt-in schema-ahead fixture verifies the compatibility gate rejects
   unsafe envelopes and surfaces the persisted 33.10 badge.
+- Deploy-fleet dry-run/canary preparation now has a static topology guard and
+  runbook: the workflow and bootstrap helper target only
+  `labels.topology: docker`, with focused tests covering the guard. The live
+  GitHub Actions dry-run and canary invocation still remain operator actions.
