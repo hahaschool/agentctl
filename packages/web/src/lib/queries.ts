@@ -1,3 +1,4 @@
+import type { MemoryDrawerSearchRequest } from '@agentctl/shared';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type {
@@ -175,6 +176,9 @@ export const queryKeys = {
         : (['memory', 'consolidation'] as const),
     scopes: ['memory', 'scopes'] as const,
     importStatus: ['memory', 'import', 'status'] as const,
+    drawersSearch: (params: MemoryDrawerSearchRequest) =>
+      ['memory', 'drawers', 'search', params] as const,
+    drawer: (id: string) => ['memory', 'drawers', 'id', id] as const,
   },
 };
 
@@ -1278,6 +1282,34 @@ export function useGenerateMemoryReport() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.memory.reports() });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// MemPalace drawer search — §4.16 PR F
+//
+// Keeps the drawer search debounced at the component boundary and relies on
+// react-query to cache by `queryKey: ['memory', 'drawers', 'search', params]`.
+// ---------------------------------------------------------------------------
+
+export function memoryDrawersSearchQuery(
+  params: MemoryDrawerSearchRequest,
+  options?: { enabled?: boolean },
+) {
+  return queryOptions({
+    queryKey: queryKeys.memory.drawersSearch(params),
+    queryFn: () => api.memoryDrawers.search(params),
+    staleTime: 30_000,
+    enabled: options?.enabled ?? params.query.trim().length > 0,
+  });
+}
+
+export function memoryDrawerQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.memory.drawer(id),
+    queryFn: () => api.memoryDrawers.get(id),
+    staleTime: 60_000,
+    enabled: id.length > 0,
   });
 }
 

@@ -11,6 +11,9 @@ import type {
   FeedbackSignal,
   ImportJob,
   ImportPreview,
+  MemoryDrawer,
+  MemoryDrawerSearchRequest,
+  MemoryDrawerSearchResponse,
   MemoryEdge,
   MemoryFact,
   MemoryObservation,
@@ -407,4 +410,26 @@ export const memoryApi = {
     request<{ ok: boolean; job: ImportJob }>(`/api/memory/import/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+};
+
+// ---------------------------------------------------------------------------
+// MemPalace drawer layer — §4.16 Memory Evolution Plan, PR F.
+//
+// Thin wrapper around `GET /api/memory/drawers/search` and `/:drawerId` so the
+// web UI can render sanitized verbatim snippets with evidence links. Request
+// and response shapes come from `@agentctl/shared` — do not redefine them.
+// ---------------------------------------------------------------------------
+
+export const memoryDrawersApi = {
+  search: (params: MemoryDrawerSearchRequest) => {
+    const qs = new URLSearchParams({ q: params.query });
+    if (params.scope) qs.set('scope', params.scope);
+    if (params.limit !== undefined) qs.set('limit', String(params.limit));
+    return request<MemoryDrawerSearchResponse>(`/api/memory/drawers/search?${qs.toString()}`);
+  },
+
+  get: (drawerId: string) =>
+    request<{ ok: true; drawer: MemoryDrawer }>(
+      `/api/memory/drawers/${encodeURIComponent(drawerId)}`,
+    ),
 };

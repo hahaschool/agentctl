@@ -30,6 +30,11 @@ const MEMORY_NAV_ITEMS = [
     description: 'Lint stale facts and coverage gaps',
   },
   { href: '/memory/reports', label: 'Reports', description: 'Generated summaries and exports' },
+  {
+    href: '/memory/drawers',
+    label: 'Drawers',
+    description: 'Search verbatim MemPalace drawers',
+  },
   { href: '/memory/import', label: 'Import', description: 'Bring in external memory sources' },
   { href: '/memory/scopes', label: 'Scopes', description: 'Inspect scope boundaries' },
 ] as const;
