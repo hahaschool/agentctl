@@ -54,6 +54,51 @@ The Tailscale iOS app maintains a VPN tunnel. It uses battery. For the mobile cl
 ### Docker containers need sidecar pattern for Tailscale
 `--network=host` doesn't work well. Use the sidecar pattern: run `tailscale/tailscale` container alongside the agent container with `network_mode: service:tailscale`.
 
+### Tailscale `active` state lags by minutes after a node dies
+`tailscale status` can still show a peer as `active; offers exit node; relay "..."` with stale tx/rx counters long after the node is asleep, crashed, or power-cycled. Do not use TS status alone to conclude "the machine is alive" — always cross-check with `tailscale ping`, ICMP, and an application-layer probe (TCP / HTTP). If all three fail while TS says active, the coord server just hasn't observed the loss yet.
+
+---
+
+## Fleet Upgrades
+
+### Remote peer upgrade bricked macmini, 2026-04
+**Incident:** Operator clicked "Update" on the macmini peer in the mesh-peers page. The peer was on v0.5.6; local CP was on v0.8.0. After the remote upgrade the peer stopped responding: `tailscale ping`, ICMP, TCP:22, and TCP:8080 all timed out. The node stayed offline until physical intervention. UI still showed the peer as `active` via TS coord for days.
+
+**Root cause chain:**
+1. `scripts/peer-update.sh` (invoked by `POST /api/sync/peers/:id/update`) ran: `git fetch` → `git reset --hard origin/main` → `pnpm install` → `pnpm build` → `pm2 reload agentctl-beta`.
+2. It did **NOT** run `pnpm drizzle-kit migrate`, unlike the canonical `scripts/env-promote.sh` promotion path which does (step 4 of env-promote).
+3. The beta PM2 config sets `SKIP_MIGRATIONS=true`, so the new CP also did not migrate on startup.
+4. Crossing v0.5.6 → v0.8.0 added migrations 0028–0032 (mesh_local_config, sync_nodes.last_schema_ahead_*, memory_drawers, etc.). The new CP's first query hit a missing column, PM2 tried to restart, crash-looped, went to `errored`.
+5. The script had no post-reload health probe, so it returned exit 0 and reported success.
+6. Separately, the Mac Mini went to sleep (macOS default), which killed ICMP/SSH too. That is what made it look "completely dead" rather than just "CP down".
+
+**The two bugs (both root causes):**
+- **B1:** Remote upgrade path (`peer-update.sh`) did not run DB migrations. The sanctioned local deploy path (`env-promote.sh`) does. The two paths drifted.
+- **B2:** The script had no health check after `pm2 reload`. A failing PM2 reload (or a crashing new CP) silently returned "success".
+
+**Fix shipped (this commit):**
+1. `peer-update.sh` now runs `pnpm drizzle-kit migrate` before `pm2 reload` (AGENTCTL_SKIP_MIGRATIONS=1 escape hatch).
+2. Polls `AGENTCTL_PEER_HEALTH_URL` (default `http://127.0.0.1:8080/health`) for up to `AGENTCTL_PEER_HEALTH_TIMEOUT_SEC` seconds (default 90).
+3. On probe timeout, runs a complete rollback: `git reset` + `pnpm install` + `pnpm build` + `pm2 reload` — not just `git reset` like before.
+4. Optional `AGENTCTL_PEER_MAX_VERSION_SKEW` guard refuses to auto-upgrade a peer that is more than N minor versions behind (the upgrade surface area grows non-linearly).
+5. `scripts/peer-update-sh.test.ts` guards the invariants so a future refactor can't silently drop these steps.
+
+**Physical recovery playbook (what to do when a peer is already bricked):**
+1. At the machine: wake it / power-cycle it. Confirm macOS is logged in and Tailscale status in the menu bar is green.
+2. Local SSH or terminal: `cd /path/to/agentctl && git log --oneline -3` to see which SHA it is on.
+3. `pm2 list` — expect `agentctl-cp-beta` in `errored` or stopped.
+4. `pm2 logs agentctl-cp-beta --lines 50` — look for Postgres "column ... does not exist" to confirm the migration skew hypothesis.
+5. `DATABASE_URL="$BETA_DB_URL" pnpm --filter @agentctl/control-plane exec drizzle-kit migrate`
+6. `pm2 reload agentctl-beta && curl http://127.0.0.1:8080/health` — should return 200.
+7. If git SHA is already on new main, you're done. If not, run `./scripts/peer-update.sh` manually (now safe).
+
+**General lessons:**
+- **Deploy paths must not drift.** If `env-promote.sh` and `peer-update.sh` both bring code online, they must run the same superset of steps (or one must delegate to the other). Enforce via a content-level test.
+- **`pm2 reload` is not a health check.** It sends SIGUSR2 and returns. Always poll the app's own health endpoint with a deadline before declaring success.
+- **Rollback must be complete.** `git reset --hard PREVIOUS_SHA` leaves `node_modules` and `dist/` from the new version. A partial rollback is often worse than no rollback — it leaves the node in a state neither the old nor the new process can start from.
+- **Large version skew is risk-amplifying.** A peer 7 patch versions behind survives auto-update; a peer 2+ minors behind crosses many migrations and config changes. Default to warn/refuse on large skews.
+- **`SKIP_MIGRATIONS=true` in PM2 is a sharp tool.** It is safe only when an external deploy path runs migrations first. Every path that reloads PM2 without running migrations is a latent brick.
+
 ---
 
 ## Scheduling

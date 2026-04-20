@@ -7,9 +7,12 @@
 // The browser then connects to an SSE endpoint (proxied through CP-A) to
 // stream live stdout/stderr from the update script.
 //
-// The script ends with `pm2 reload` which kills the CP process, so the SSE
-// stream will always drop at completion. The frontend detects the disconnect
-// and polls the peer's /health to confirm the new version.
+// The script pipeline is: fetch → reset → install → build → drizzle-kit
+// migrate → pm2 reload → poll /health. `pm2 reload` kills the CP process, so
+// the SSE stream always drops at reload; the script then races the new CP
+// against a bounded health probe and runs a full rollback (git + deps + build
+// + pm2) if the probe fails. See docs/LESSONS_LEARNED.md
+// "Remote peer upgrade bricked macmini" for the RCA behind these steps.
 // ---------------------------------------------------------------------------
 
 import { spawn } from 'node:child_process';
