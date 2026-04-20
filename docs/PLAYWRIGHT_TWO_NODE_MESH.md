@@ -13,6 +13,13 @@ The first slice verifies the 33.11 version-drift path:
 4. Reload `/mesh-peers` and assert that the row and update-available banner show
    the expected version.
 
+The second slice is separately gated and verifies the peer-update dry-run path:
+
+1. Call the primary node's `POST /api/mesh/auto-update/dry-run` SSE endpoint.
+2. Assert that the streamed command is `pnpm agentctl peer update --dry-run`.
+3. Parse the emitted JSON result and assert that the run succeeded, every
+   planned step is marked `dryRun`, and the expected update steps are reported.
+
 ## Prerequisites
 
 - Two AgentCTL nodes are already running and peered.
@@ -20,6 +27,10 @@ The first slice verifies the 33.11 version-drift path:
 - The peer row already exists in the primary node's mesh peer registry.
 - The peer has already been moved to the expected app version, for example by
   installing a newly pushed tag before running the fixture.
+- For the dry-run assertion, the primary node's control plane must expose
+  `/api/mesh/auto-update/dry-run` and be able to run `pnpm agentctl peer update
+  --dry-run` from its configured repository root. The command must complete with
+  exit code 0.
 
 ## Run
 
@@ -41,11 +52,19 @@ pnpm --filter @agentctl/web exec playwright test \
 `AGENTCTL_MESH_PRIMARY_API_URL` is optional. When omitted, the fixture calls the
 primary web URL's `/api/*` paths and relies on the web proxy.
 
+The dry-run assertion is disabled by default even when the live two-node fixture
+is enabled. Add this flag to run it:
+
+```bash
+AGENTCTL_MESH_DRY_RUN_E2E=1
+```
+
 Optional polling controls:
 
 ```bash
 AGENTCTL_MESH_POLL_TIMEOUT_MS=30000
 AGENTCTL_MESH_POLL_INTERVAL_MS=1000
+AGENTCTL_MESH_DRY_RUN_TIMEOUT_MS=60000
 ```
 
 Without `AGENTCTL_MESH_TWO_NODE_E2E=1`, the spec is skipped. Use
@@ -57,5 +76,3 @@ outside Playwright's local dev server.
 The remaining roadmap assertions should extend the same fixture:
 
 - Force a `schemaVersion + 2` envelope and assert the 33.10 schema-ahead banner.
-- Run `agentctl peer update --dry-run` against the peer and assert planned steps
-  without changing state.

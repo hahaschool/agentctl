@@ -7,6 +7,41 @@ type LiveSyncPeer = {
   peerVersion?: string | null;
 };
 
+type AutoUpdateDryRunEvent =
+  | {
+      readonly type: 'start';
+      readonly startedAt: string;
+      readonly command: string;
+    }
+  | {
+      readonly type: 'stdout';
+      readonly chunk: string;
+    }
+  | {
+      readonly type: 'stderr';
+      readonly chunk: string;
+    }
+  | {
+      readonly type: 'done';
+      readonly exitCode: number;
+      readonly durationMs: number;
+    }
+  | {
+      readonly type: 'error';
+      readonly message: string;
+    };
+
+type PeerUpdateDryRunResult = {
+  success?: boolean;
+  dryRun?: boolean;
+  steps?: Array<{
+    name?: string;
+    ok?: boolean;
+    dryRun?: boolean;
+    message?: string;
+  }>;
+};
+
 type DisabledTwoNodeMeshFixtureConfig = {
   enabled: false;
   missingEnv: string[];
@@ -19,6 +54,8 @@ type EnabledTwoNodeMeshFixtureConfig = {
   expectedPeerVersion: string;
   pollTimeoutMs: number;
   pollIntervalMs: number;
+  dryRunEnabled: boolean;
+  dryRunTimeoutMs: number;
   primaryWebUrl: (path?: string) => string;
   primaryApiUrl: (path?: string) => string;
 };
@@ -28,6 +65,7 @@ export type TwoNodeMeshFixtureConfig =
   | EnabledTwoNodeMeshFixtureConfig;
 
 const ENABLE_ENV = 'AGENTCTL_MESH_TWO_NODE_E2E';
+const DRY_RUN_ENABLE_ENV = 'AGENTCTL_MESH_DRY_RUN_E2E';
 const REQUIRED_ENV = [
   'AGENTCTL_MESH_PRIMARY_WEB_URL',
   'AGENTCTL_MESH_PEER_MACHINE_ID',
@@ -97,6 +135,13 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
   const interval = readOptionalPositiveInt(env, 'AGENTCTL_MESH_POLL_INTERVAL_MS', 1_000);
   if (interval.invalid) invalidEnv.push('AGENTCTL_MESH_POLL_INTERVAL_MS');
 
+  const dryRunTimeout = readOptionalPositiveInt(
+    env,
+    'AGENTCTL_MESH_DRY_RUN_TIMEOUT_MS',
+    60_000,
+  );
+  if (dryRunTimeout.invalid) invalidEnv.push('AGENTCTL_MESH_DRY_RUN_TIMEOUT_MS');
+
   if (missingEnv.length > 0 || invalidEnv.length > 0 || !primaryWebBase || !primaryApiBase) {
     return {
       enabled: false,
@@ -111,6 +156,8 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
     expectedPeerVersion: env.AGENTCTL_MESH_EXPECTED_PEER_VERSION?.trim() ?? '',
     pollTimeoutMs: timeout.value,
     pollIntervalMs: interval.value,
+    dryRunEnabled: env[DRY_RUN_ENABLE_ENV] === '1',
+    dryRunTimeoutMs: dryRunTimeout.value,
     primaryWebUrl: (path = '/') => joinUrl(primaryWebBase, path),
     primaryApiUrl: (path = '/') => joinUrl(primaryApiBase, path),
   };
@@ -129,6 +176,16 @@ export function skipReasonForTwoNodeMeshFixture(config: TwoNodeMeshFixtureConfig
     parts.push(`Invalid: ${config.invalidEnv.join(', ')}.`);
   }
   return parts.join(' ');
+}
+
+export function skipReasonForTwoNodeMeshDryRun(config: TwoNodeMeshFixtureConfig): string {
+  if (!config.enabled) {
+    return skipReasonForTwoNodeMeshFixture(config);
+  }
+  if (!config.dryRunEnabled) {
+    return `Set ${DRY_RUN_ENABLE_ENV}=1 to run the live peer-update dry-run assertion.`;
+  }
+  return 'two-node mesh dry-run assertion is enabled';
 }
 
 async function readPeer(request: APIRequestContext, config: EnabledTwoNodeMeshFixtureConfig) {
@@ -171,4 +228,54 @@ export async function pingPeerAndWaitForVersion(
     `Timed out waiting for ${config.peerMachineId} peerVersion=${config.expectedPeerVersion}; ` +
       `last observed ${lastPeer?.peerVersion ?? 'missing peer'}`,
   );
+}
+
+function parseSseEvents(raw: string): AutoUpdateDryRunEvent[] {
+  return raw
+    .split('\n\n')
+    .map((block) => block.trim())
+    .filter((block) => block.startsWith('data:'))
+    .map((block) => JSON.parse(block.slice('data:'.length).trim()) as AutoUpdateDryRunEvent);
+}
+
+function parsePeerUpdateDryRunResult(output: string): PeerUpdateDryRunResult {
+  const lines = output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const candidate = [...lines]
+    .reverse()
+    .find((line) => line.startsWith('{') && line.endsWith('}'));
+
+  if (!candidate) {
+    throw new Error('peer update dry-run did not emit a JSON result line');
+  }
+
+  return JSON.parse(candidate) as PeerUpdateDryRunResult;
+}
+
+export async function runPeerUpdateDryRunAndReadPlan(
+  request: APIRequestContext,
+  config: EnabledTwoNodeMeshFixtureConfig,
+): Promise<{
+  events: AutoUpdateDryRunEvent[];
+  output: string;
+  result: PeerUpdateDryRunResult;
+}> {
+  const response = await request.post(config.primaryApiUrl('/api/mesh/auto-update/dry-run'), {
+    headers: { Accept: 'text/event-stream' },
+    timeout: config.dryRunTimeoutMs,
+  });
+  if (!response.ok()) {
+    throw new Error(`POST /api/mesh/auto-update/dry-run failed with HTTP ${response.status()}`);
+  }
+
+  const events = parseSseEvents(await response.text());
+  const output = events
+    .filter((event) => event.type === 'stdout' || event.type === 'stderr')
+    .map((event) => event.chunk)
+    .join('');
+  const result = parsePeerUpdateDryRunResult(output);
+
+  return { events, output, result };
 }
