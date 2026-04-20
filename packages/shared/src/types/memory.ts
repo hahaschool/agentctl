@@ -202,6 +202,55 @@ export type MemoryDedupCheckResponse = {
   match_id: string | null;
 };
 
+// ---------------------------------------------------------------------------
+// MCP: memory_drawer_search
+//
+// First-slice contract: lock request schema and empty-DB behaviour. Actual
+// drawer index lookup is deferred to a later control-plane PR; see Phase 4
+// Step 6 of docs/plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md.
+// ---------------------------------------------------------------------------
+
+export type MemoryDrawerSearchRequest = {
+  query: string;
+  scope?: string;
+  limit?: number;
+};
+
+export type MemoryDrawerSearchResultMatchType = 'vector' | 'keyword' | 'grep';
+
+export type MemoryDrawerSearchResult = {
+  id: string;
+  scope: string;
+  topic: string;
+  source_type: MemoryDrawerSourceType;
+  source_id: string;
+  chunk_index: number;
+  content_preview: string;
+  score: number | null;
+  match_type: MemoryDrawerSearchResultMatchType | null;
+};
+
+export type MemoryDrawerSearchResponse = {
+  ok: true;
+  results: MemoryDrawerSearchResult[];
+};
+
+// ---------------------------------------------------------------------------
+// MCP: memory_drawer_get
+//
+// First-slice contract: lock request schema, missing-drawer contract, and
+// drawer_id validation. Control-plane drawer fetch endpoint lands later.
+// ---------------------------------------------------------------------------
+
+export type MemoryDrawerGetRequest = {
+  drawer_id: string;
+};
+
+export type MemoryDrawerGetResponse = {
+  ok: true;
+  drawer: MemoryDrawer;
+};
+
 export type InjectionTier = 'pinned' | 'on-demand' | 'triggered';
 
 export type InjectionBudget = {
