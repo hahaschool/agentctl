@@ -217,10 +217,13 @@ set -a
 source "$ENV_FILE"
 set +a
 
-# Run migrations on the tier's database
+# Run migrations on the tier's database. `pnpm drizzle-kit migrate` (v0.31.9)
+# silently no-ops on pending SQL, so we use the SHA-256 aware applier instead.
+# See scripts/drizzle-migrate-apply.ts for details.
 echo "Running migrations..."
-cd "${REPO_ROOT}/packages/control-plane"
-DATABASE_URL="$DATABASE_URL" pnpm drizzle-kit migrate 2>&1 || {
+cd "$REPO_ROOT"
+DATABASE_URL="$DATABASE_URL" pnpm tsx "${REPO_ROOT}/scripts/drizzle-migrate-apply.ts" \
+  --migrations-dir "${REPO_ROOT}/packages/control-plane/drizzle" 2>&1 || {
   echo "Warning: migrations failed. Services will start anyway."
 }
 

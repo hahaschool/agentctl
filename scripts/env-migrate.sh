@@ -3,6 +3,11 @@
 # Usage: ./scripts/env-migrate.sh <tier>
 # Example: ./scripts/env-migrate.sh dev-1
 #          ./scripts/env-migrate.sh beta  (requires confirmation)
+#
+# Applies pending Drizzle migrations via psql and records SHA-256 hashes in
+# drizzle.__drizzle_migrations. Does NOT use `pnpm drizzle-kit migrate` because
+# drizzle-kit v0.31.9's migrate subcommand is a silent no-op on pending SQL.
+# See scripts/drizzle-migrate-apply.ts for the replacement.
 
 set -euo pipefail
 
@@ -39,10 +44,16 @@ if [[ -z "$DATABASE_URL" ]]; then
   exit 1
 fi
 
-echo "Running migrations for tier: ${TIER}"
-echo "Database: ${DATABASE_URL}"
+# Redact password for logging
+REDACTED_URL="$(printf '%s' "$DATABASE_URL" | sed -E 's#//([^:/?#]+):([^@]+)@#//\1:****@#')"
 
-cd "${REPO_ROOT}/packages/control-plane"
-DATABASE_URL="$DATABASE_URL" pnpm drizzle-kit migrate
+echo "Running migrations for tier: ${TIER}"
+echo "Database: ${REDACTED_URL}"
+
+# Delegate to the SHA-256 aware applier. drizzle-kit migrate is intentionally
+# not used — see header comment and PR for full explanation.
+DATABASE_URL="$DATABASE_URL" \
+  pnpm tsx "${REPO_ROOT}/scripts/drizzle-migrate-apply.ts" \
+    --migrations-dir "${REPO_ROOT}/packages/control-plane/drizzle"
 
 echo "✅ Migrations complete for tier: ${TIER}"

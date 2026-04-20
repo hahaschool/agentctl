@@ -278,13 +278,17 @@ fi
 
 FS_COUNT=$(echo "$FS_MIGRATIONS" | wc -l | tr -d ' ')
 
-# Query the Drizzle migrations table in the source (dev) DB to see what's applied
-# Drizzle stores applied migrations in __drizzle_migrations table
+# Query the Drizzle migrations table. drizzle-orm v0.45 stores applied migrations
+# as (id SERIAL, hash TEXT, created_at BIGINT) in the "drizzle" schema — there is
+# NO "tag" column, so the previous `SELECT tag FROM __drizzle_migrations` query
+# silently returned 0 rows and the parity check always reported 0/0. We query
+# the hash column in the correct schema and cross-reference count against the
+# filesystem journal entries (filesystem count is the source of truth).
 FROM_APPLIED=$(psql "$FROM_DB_URL" -t -A -c \
-  "SELECT tag FROM __drizzle_migrations ORDER BY created_at;" 2>/dev/null || echo "")
+  "SELECT hash FROM drizzle.__drizzle_migrations ORDER BY created_at;" 2>/dev/null || echo "")
 
 BETA_APPLIED=$(psql "$BETA_DB_URL" -t -A -c \
-  "SELECT tag FROM __drizzle_migrations ORDER BY created_at;" 2>/dev/null || echo "")
+  "SELECT hash FROM drizzle.__drizzle_migrations ORDER BY created_at;" 2>/dev/null || echo "")
 
 FROM_COUNT=0
 BETA_COUNT=0
@@ -330,8 +334,13 @@ if [[ "$SKIP_MIGRATION" == true ]]; then
   log "Step 4/5: Skipping migrations (already at parity)."
 else
   log "Step 4/5: Running DB migrations on beta..."
-  cd "${REPO_ROOT}/packages/control-plane"
-  if ! DATABASE_URL="$BETA_DB_URL" pnpm drizzle-kit migrate 2>&1; then
+  # Use scripts/drizzle-migrate-apply.ts — drizzle-kit v0.31.9's migrate
+  # subcommand is a silent no-op on pending SQL. The new applier computes
+  # sha256 hashes matching drizzle-orm v0.45 (migrator.js line 23) and writes
+  # them to drizzle.__drizzle_migrations so subsequent runs stay idempotent.
+  cd "$REPO_ROOT"
+  if ! DATABASE_URL="$BETA_DB_URL" pnpm tsx "${REPO_ROOT}/scripts/drizzle-migrate-apply.ts" \
+    --migrations-dir "${REPO_ROOT}/packages/control-plane/drizzle" 2>&1; then
     log_err "Migration failed on beta DB. No services were restarted."
     log_err "Beta is still running the previous version."
     trap - ERR
