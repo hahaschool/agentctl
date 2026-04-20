@@ -241,6 +241,8 @@ describe('parseArgs', () => {
       'mempalace',
       '--limit',
       '25',
+      '--embedding-usd-per-1m-tokens',
+      '0.01',
       '--json',
     ]);
 
@@ -251,6 +253,7 @@ describe('parseArgs', () => {
       scope: 'project:agentctl',
       topic: 'mempalace',
       limit: 25,
+      embeddingUsdPer1MTokens: 0.01,
       json: true,
     });
   });
@@ -392,6 +395,10 @@ describe('backfillMemoryDrawers', () => {
 
     expect(result.candidates).toBe(1);
     expect(result.written).toBe(0);
+    expect(result.estimatedDrawerChunks).toBe(1);
+    expect(result.estimatedEmbeddingTokens).toBe(3);
+    expect(result.estimatedEmbeddingCostUsd).toBe(0.00000006);
+    expect(result.estimatedStorageBytes).toBe(6668);
     expect(drawerStore.writeSource).not.toHaveBeenCalled();
     expect(stateStore.startOrResume).not.toHaveBeenCalled();
     expect(stateStore.updateCursor).not.toHaveBeenCalled();
@@ -418,6 +425,9 @@ describe('backfillMemoryDrawers', () => {
     expect(result.candidates).toBe(1);
     expect(result.sanitizedCandidates).toBe(1);
     expect(result.parseErrors).toBe(1);
+    expect(result.estimatedDrawerChunks).toBe(1);
+    expect(result.estimatedEmbeddingTokens).toBeGreaterThan(0);
+    expect(result.estimatedStorageBytes).toBeGreaterThan(0);
     expect(JSON.stringify(result)).not.toContain(rawSecret);
     expect(logger.entries.join('\n')).not.toContain(rawSecret);
   });
@@ -445,6 +455,9 @@ describe('backfillMemoryDrawers', () => {
       written: 0,
       skipped: 0,
     });
+    expect(result.estimatedDrawerChunks).toBe(2);
+    expect(result.estimatedEmbeddingTokens).toBeGreaterThan(0);
+    expect(result.estimatedStorageBytes).toBeGreaterThan(2 * 6 * 1024);
     expect(drawerStore.writeSource).not.toHaveBeenCalled();
     expect(stateStore.startOrResume).not.toHaveBeenCalled();
     expect(stateStore.updateCursor).not.toHaveBeenCalled();
