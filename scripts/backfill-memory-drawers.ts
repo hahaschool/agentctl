@@ -599,8 +599,8 @@ async function createCliStores(
   stateStore: BackfillStateStoreLike;
 }> {
   const [{ MemoryDrawerBackfillStateStore }, { MemoryDrawerStore }] = await Promise.all([
-    import('../packages/control-plane/dist/memory/memory-drawer-backfill-state-store.js'),
-    import('../packages/control-plane/dist/memory/memory-drawer-store.js'),
+    import('../packages/control-plane/src/memory/memory-drawer-backfill-state-store.js'),
+    import('../packages/control-plane/src/memory/memory-drawer-store.js'),
   ]);
 
   return {
