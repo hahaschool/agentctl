@@ -264,6 +264,12 @@ export type InjectionBudget = {
   };
   tiers: readonly InjectionTier[];
   pinnedCap: number;
+  /**
+   * Optional per-tier token ceilings. When set, a tier's total injected-fact
+   * tokens cannot exceed its entry. Absent entries mean no per-tier limit for
+   * that tier. The global `maxTokens` always applies on top.
+   */
+  tierTokenCaps?: Partial<Record<InjectionTier, number>>;
 };
 
 export const DEFAULT_INJECTION_BUDGET: InjectionBudget = {
