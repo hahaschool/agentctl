@@ -3,6 +3,9 @@ import { performance } from 'node:perf_hooks';
 
 export const EVAL_SPLIT_SEED = 42;
 export const DEV_SPLIT_RATIO = 0.1;
+export const DEFAULT_MEMORY_BENCH_NEEDLE_COUNT = 100;
+export const DEFAULT_MEMORY_BENCH_NOISE_COUNT = 2_000;
+export const DEFAULT_MEMORY_BENCH_MIN_RECALL = 0.85;
 export const DEFAULT_FAILURE_MODE_TAGS = [
   'vocabulary-gap',
   'temporal-ambiguity',
@@ -112,6 +115,37 @@ export type MemoryEvalSplitOptions = {
 
 export type MemoryEvalFullSetOptions = {
   allowFullSet?: boolean;
+};
+
+export type MemoryPlantedNeedleBenchEnv = Record<string, string | undefined>;
+
+export type MemoryPlantedNeedleBenchConfig = {
+  needleCount: number;
+  noiseCount: number;
+  minRecallAt5: number;
+  seed: number;
+};
+
+export type MemoryPlantedNeedleBenchOptions = Partial<MemoryPlantedNeedleBenchConfig> & {
+  env?: MemoryPlantedNeedleBenchEnv;
+};
+
+export type MemoryPlantedNeedleMockRankerOptions = {
+  needleRank?: number;
+  noiseCount?: number;
+  seed?: number;
+};
+
+export type MemoryPlantedNeedleBenchLatency = {
+  p50DurationMs: number;
+  p95DurationMs: number;
+  p99DurationMs: number;
+};
+
+export type MemoryPlantedNeedleBenchRun = MemoryEvalRun & {
+  config: MemoryPlantedNeedleBenchConfig;
+  latency: MemoryPlantedNeedleBenchLatency;
+  passed: boolean;
 };
 
 type ExpectedEvidence = {
@@ -394,6 +428,165 @@ export function createDeterministicMockRanker(
 
     return [...relevantCandidates, ...distractors];
   };
+}
+
+export function resolveMemoryPlantedNeedleBenchConfig(
+  options: MemoryPlantedNeedleBenchOptions = {},
+): MemoryPlantedNeedleBenchConfig {
+  const env = options.env ?? process.env;
+  return {
+    needleCount:
+      options.needleCount === undefined
+        ? readPositiveIntegerEnv(
+            env,
+            'MEMORY_BENCH_NEEDLE_COUNT',
+            DEFAULT_MEMORY_BENCH_NEEDLE_COUNT,
+          )
+        : requirePositiveInteger(options.needleCount, 'needleCount'),
+    noiseCount:
+      options.noiseCount === undefined
+        ? readPositiveIntegerEnv(env, 'MEMORY_BENCH_NOISE_COUNT', DEFAULT_MEMORY_BENCH_NOISE_COUNT)
+        : requirePositiveInteger(options.noiseCount, 'noiseCount'),
+    minRecallAt5:
+      options.minRecallAt5 === undefined
+        ? readRecallThresholdEnv(env, 'MEMORY_BENCH_MIN_RECALL', DEFAULT_MEMORY_BENCH_MIN_RECALL)
+        : requireRecallThreshold(options.minRecallAt5, 'minRecallAt5'),
+    seed: options.seed ?? EVAL_SPLIT_SEED,
+  };
+}
+
+export function createMemoryPlantedNeedleRows(
+  options: { needleCount?: number; seed?: number } = {},
+): MemoryEvalFixtureRow[] {
+  const needleCount = requirePositiveInteger(
+    options.needleCount ?? DEFAULT_MEMORY_BENCH_NEEDLE_COUNT,
+    'needleCount',
+  );
+  const seed = options.seed ?? EVAL_SPLIT_SEED;
+
+  return Array.from({ length: needleCount }, (_, index): MemoryEvalFixtureRow => {
+    const indexLabel = String(index).padStart(3, '0');
+    const needleId = `NEEDLE_${seed}_${indexLabel}`;
+    const payload = `synthetic operator memory payload ${indexLabel} seed ${seed}`;
+
+    return {
+      id: `planted-needle-${indexLabel}`,
+      query: `Recall ${payload}`,
+      category: 'AgentCTL-planted-needle',
+      expectedFacts: [{ id: needleId, relevance: 3 }],
+      expectedDrawerSources: [],
+      redactedAnswerHints: [`${needleId}: ${payload}`],
+      tags: ['noisy-distractor-rejection'],
+      public: true,
+    };
+  });
+}
+
+export function createMemoryPlantedNeedleMockRanker(
+  options: MemoryPlantedNeedleMockRankerOptions = {},
+): MemoryEvalRanker {
+  const noiseCount = requirePositiveInteger(
+    options.noiseCount ?? DEFAULT_MEMORY_BENCH_NOISE_COUNT,
+    'noiseCount',
+  );
+  const needleRank = requirePositiveInteger(options.needleRank ?? 1, 'needleRank');
+  const seed = options.seed ?? EVAL_SPLIT_SEED;
+
+  return (row) => {
+    const [needle] = row.expectedFacts;
+    if (!needle) return [];
+
+    const noiseBeforeNeedle = Math.min(noiseCount, needleRank - 1);
+    const before = Array.from({ length: noiseBeforeNeedle }, (_, index) =>
+      createPlantedNeedleNoiseCandidate(row, seed, index, 2 - index * 0.001),
+    );
+    const after = Array.from({ length: noiseCount - noiseBeforeNeedle }, (_, index) =>
+      createPlantedNeedleNoiseCandidate(row, seed, noiseBeforeNeedle + index, 0.1 - index * 0.001),
+    );
+    const needleCandidate: MemoryEvalCandidate = {
+      id: `bench:${row.id}:${needle.id}`,
+      factId: needle.id,
+      score: 1,
+    };
+
+    return [...before, needleCandidate, ...after];
+  };
+}
+
+export async function runMemoryPlantedNeedleBench(
+  options: MemoryPlantedNeedleBenchOptions = {},
+  ranker?: MemoryEvalRanker,
+): Promise<MemoryPlantedNeedleBenchRun> {
+  const config = resolveMemoryPlantedNeedleBenchConfig(options);
+  const rows = createMemoryPlantedNeedleRows({
+    needleCount: config.needleCount,
+    seed: config.seed,
+  });
+  const evalRun = await runMemoryEval(rows, ranker ?? createMemoryPlantedNeedleMockRanker(config));
+  const latency = summarizeBenchLatency(evalRun.rowResults);
+  const passed = evalRun.summary.aggregate.recallAt5 >= config.minRecallAt5;
+
+  return {
+    ...evalRun,
+    config,
+    latency,
+    passed,
+  };
+}
+
+export function assertMemoryPlantedNeedleBenchPassed(run: MemoryPlantedNeedleBenchRun): void {
+  if (run.passed) return;
+
+  throw new Error(
+    `Planted-needle recall@5 ${formatMetric(
+      run.summary.aggregate.recallAt5,
+    )} is below required minimum ${formatMetric(run.config.minRecallAt5)}`,
+  );
+}
+
+function createPlantedNeedleNoiseCandidate(
+  row: MemoryEvalFixtureRow,
+  seed: number,
+  index: number,
+  score: number,
+): MemoryEvalCandidate {
+  return {
+    id: `bench:${row.id}:noise:${index}`,
+    factId: `noise:${stableHash(`${seed}:${row.id}:noise:${index}`).toString(36)}`,
+    score,
+  };
+}
+
+function summarizeBenchLatency(
+  rowResults: readonly MemoryEvalRowResult[],
+): MemoryPlantedNeedleBenchLatency {
+  return {
+    p50DurationMs: percentileDuration(rowResults, 0.5),
+    p95DurationMs: percentileDuration(rowResults, 0.95),
+    p99DurationMs: percentileDuration(rowResults, 0.99),
+  };
+}
+
+function readPositiveIntegerEnv(
+  env: MemoryPlantedNeedleBenchEnv,
+  name: string,
+  defaultValue: number,
+): number {
+  const raw = env[name];
+  if (raw === undefined || raw.trim() === '') return defaultValue;
+  const parsed = Number(raw);
+  return requirePositiveInteger(parsed, name);
+}
+
+function readRecallThresholdEnv(
+  env: MemoryPlantedNeedleBenchEnv,
+  name: string,
+  defaultValue: number,
+): number {
+  const raw = env[name];
+  if (raw === undefined || raw.trim() === '') return defaultValue;
+  const parsed = Number(raw);
+  return requireRecallThreshold(parsed, name);
 }
 
 function parseMemoryEvalFixture(raw: unknown): MemoryEvalFixtureFile {
@@ -762,6 +955,22 @@ function requireNonNegativeInteger(value: unknown, path: string): number {
   const numberValue = requireNumber(value, path);
   if (!Number.isInteger(numberValue) || numberValue < 0) {
     throw new Error(`${path} must be a non-negative integer`);
+  }
+  return numberValue;
+}
+
+function requirePositiveInteger(value: unknown, path: string): number {
+  const numberValue = requireNumber(value, path);
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
+    throw new Error(`${path} must be a positive integer`);
+  }
+  return numberValue;
+}
+
+function requireRecallThreshold(value: unknown, path: string): number {
+  const numberValue = requireNumber(value, path);
+  if (numberValue < 0 || numberValue > 1) {
+    throw new Error(`${path} must be between 0 and 1`);
   }
   return numberValue;
 }

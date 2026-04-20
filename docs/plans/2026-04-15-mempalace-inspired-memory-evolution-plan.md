@@ -8,8 +8,11 @@
 deterministic eval foundation: fixture schema/sanitization, seed-42 split
 helpers, mock scoring utilities for R@5/R@10/MRR/NDCG@10/grounding/drawer-hit
 rate/p95, by-category/by-tag summaries, sanitized sample fixture, `pnpm
-memory:eval`, and focused tests. Live search wiring, planted-needle bench,
-cold-start MCP contracts, and private/full fixture coverage remain.
+memory:eval`, and focused tests. The planted-needle slice adds deterministic
+mock recall@5 threshold enforcement, env-configurable bench sizing, p50/p95/p99
+latency reporting, and `pnpm memory:bench` without live DB or embedding
+dependencies. Live search wiring, cold-start MCP contracts, and private/full
+fixture coverage remain.
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
 
@@ -733,19 +736,21 @@ Mobile constraint:
 
 **Status:** In progress. PR #655 delivered the fixture schema, deterministic
 split helpers, scoring utilities, sanitized sample fixture, and baseline CLI.
-The remaining Phase 0 work is live-search wiring, planted-needle regression,
-cold-start/null-argument contracts, private fixture growth, and release/weekly
-held-out automation.
+The planted-needle slice adds a deterministic mock PR bench with threshold
+enforcement and latency percentiles. The remaining Phase 0 work is live-search
+wiring, cold-start/null-argument contracts, private fixture growth, and
+release/weekly held-out automation.
 
 **Files:**
 
 - Create: `packages/control-plane/src/memory/memory-eval.ts`
 - Create: `packages/control-plane/src/memory/memory-eval.test.ts`
 - Create: `packages/control-plane/src/memory/memory-eval.fixture.test.ts`
-- Create: `packages/control-plane/src/memory/eval/planted-needle.bench.ts`
+- Add: planted-needle bench helpers in `packages/control-plane/src/memory/memory-eval.ts`
 - Create: `packages/agent-worker/src/api/routes/__tests__/memory-cold-start.test.ts`
 - Create: `docs/fixtures/memory-eval/agentctl-memory-eval.sample.json`
 - Add: `scripts/memory-eval.ts`
+- Add: `scripts/memory-bench.ts`
 - Modify: `package.json`
 
 **Work:**
@@ -781,12 +786,13 @@ held-out automation.
 11. CI uses deterministic mock embeddings to verify retrieval logic. Nightly or local eval uses real embeddings against dev-1/dev-2 configuration.
 12. Baseline numbers must be written into this plan or a follow-up eval report before Phase 4 defaults can change.
 13. Add planted-needle PR regression bench:
-   - Insert `MEMORY_BENCH_NEEDLE_COUNT` synthetic facts or drawers with `NEEDLE_<uuid>:` prefixes; default count is 100.
-   - Insert `MEMORY_BENCH_NOISE_COUNT` templated noise facts; default count is 2,000.
-   - Query each needle without the `NEEDLE_` prefix.
-   - Block the PR if recall@5 falls below `MEMORY_BENCH_MIN_RECALL`; default is `0.85`.
-   - Report p50, p95, and p99 search latency.
-   - Run larger N={100,1000,5000} curves on release tags, not on every PR.
+   - ✅ Generate `MEMORY_BENCH_NEEDLE_COUNT` synthetic public fixture rows with `NEEDLE_` expected fact ids; default count is 100.
+   - ✅ Generate `MEMORY_BENCH_NOISE_COUNT` deterministic mock distractors; default count is 2,000.
+   - ✅ Query each needle without the `NEEDLE_` prefix in the synthetic row query.
+   - ✅ Block the PR if recall@5 falls below `MEMORY_BENCH_MIN_RECALL`; default is `0.85`.
+   - ✅ Report p50, p95, and p99 search latency.
+   - Remaining: wire the same bench shape to live search once the drawer/search path exists.
+   - Remaining: run larger N={100,1000,5000} curves on release tags, not on every PR.
 14. Add empty-DB contract matrix before any new route ships:
    - `memory_search` returns `{ results: [], total: 0 }`.
    - `memory_recall` returns `{ facts: [], edges: [] }`.
@@ -1308,7 +1314,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [x] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, drawer-hit rate, and p95 search time for deterministic mock runs. *(PR #655)*
 - [x] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42 and guards full-set runs behind explicit release/full flags. *(PR #655)*
 - [ ] Eval report prints per-category metrics and includes at least five examples for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
-- [ ] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock embeddings.
+- [x] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock ranking/scoring without DB or embedding dependencies.
 - [ ] Cold-start tests prove memory search, recall, stats/report, dedup-check, and traverse return structured empty results from an empty DB.
 - [ ] Every memory MCP route rejects `{ arguments: null }` within one second without hanging.
 - [ ] Phase 0 records a facts-only baseline number before drawer-aware search changes ranking.

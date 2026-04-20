@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   assertFailureModeCoverage,
+  assertMemoryPlantedNeedleBenchPassed,
   assertSanitizedMemoryEvalFixture,
+  createMemoryPlantedNeedleMockRanker,
+  createMemoryPlantedNeedleRows,
   EVAL_SPLIT_SEED,
   formatMemoryEvalMarkdown,
   getDevSet,
@@ -10,6 +13,8 @@ import {
   getHeldOutSet,
   type MemoryEvalCandidate,
   type MemoryEvalFixtureRow,
+  resolveMemoryPlantedNeedleBenchConfig,
+  runMemoryPlantedNeedleBench,
   scoreMemoryEvalRow,
   summarizeMemoryEval,
   toDrawerSourceKey,
@@ -237,5 +242,100 @@ describe('memory eval fixture hygiene and split helpers', () => {
         minimumPerTag: 2,
       }),
     ).toThrow(/noisy-distractor-rejection/);
+  });
+});
+
+describe('memory planted-needle bench', () => {
+  it('resolves bench defaults from explicit env values without mutating process.env', () => {
+    const config = resolveMemoryPlantedNeedleBenchConfig({
+      env: {
+        MEMORY_BENCH_NEEDLE_COUNT: '3',
+        MEMORY_BENCH_NOISE_COUNT: '7',
+        MEMORY_BENCH_MIN_RECALL: '0.9',
+      },
+    });
+
+    expect(config).toEqual({
+      minRecallAt5: 0.9,
+      needleCount: 3,
+      noiseCount: 7,
+      seed: EVAL_SPLIT_SEED,
+    });
+    expect(() =>
+      resolveMemoryPlantedNeedleBenchConfig({
+        env: { MEMORY_BENCH_NEEDLE_COUNT: '0' },
+      }),
+    ).toThrow(/MEMORY_BENCH_NEEDLE_COUNT.*positive integer/);
+    expect(() =>
+      resolveMemoryPlantedNeedleBenchConfig({
+        env: { MEMORY_BENCH_MIN_RECALL: '1.1' },
+      }),
+    ).toThrow(/MEMORY_BENCH_MIN_RECALL.*between 0 and 1/);
+  });
+
+  it('creates deterministic public rows with needle ids kept out of queries', () => {
+    const firstRows = createMemoryPlantedNeedleRows({ needleCount: 3, seed: 7 });
+    const secondRows = createMemoryPlantedNeedleRows({ needleCount: 3, seed: 7 });
+
+    expect(firstRows).toEqual(secondRows);
+    expect(firstRows).toHaveLength(3);
+    expect(firstRows.map((row) => row.id)).toEqual([
+      'planted-needle-000',
+      'planted-needle-001',
+      'planted-needle-002',
+    ]);
+    expect(firstRows.every((row) => row.public)).toBe(true);
+    expect(firstRows.every((row) => row.tags.includes('noisy-distractor-rejection'))).toBe(true);
+    expect(firstRows.every((row) => !row.query.includes('NEEDLE_'))).toBe(true);
+    expect(firstRows.map((row) => row.expectedFacts[0]?.id)).toMatchInlineSnapshot(`
+      [
+        "NEEDLE_7_000",
+        "NEEDLE_7_001",
+        "NEEDLE_7_002",
+      ]
+    `);
+  });
+
+  it('runs the deterministic mock bench and reports latency percentiles', async () => {
+    const firstRun = await runMemoryPlantedNeedleBench({
+      minRecallAt5: 1,
+      needleCount: 4,
+      noiseCount: 12,
+      seed: 11,
+    });
+    const secondRun = await runMemoryPlantedNeedleBench({
+      minRecallAt5: 1,
+      needleCount: 4,
+      noiseCount: 12,
+      seed: 11,
+    });
+
+    expect(firstRun.passed).toBe(true);
+    expect(firstRun.summary.totalRows).toBe(4);
+    expect(firstRun.summary.aggregate.recallAt5).toBe(1);
+    expect(firstRun.latency.p50DurationMs).toBeGreaterThanOrEqual(0);
+    expect(firstRun.latency.p95DurationMs).toBeGreaterThanOrEqual(firstRun.latency.p50DurationMs);
+    expect(firstRun.latency.p99DurationMs).toBeGreaterThanOrEqual(firstRun.latency.p95DurationMs);
+    expect(firstRun.rowResults.map((row) => row.rankedResultKeys)).toEqual(
+      secondRun.rowResults.map((row) => row.rankedResultKeys),
+    );
+  });
+
+  it('enforces the recall threshold when the mock ranker buries needles below rank five', async () => {
+    const run = await runMemoryPlantedNeedleBench(
+      {
+        minRecallAt5: 0.85,
+        needleCount: 3,
+        noiseCount: 8,
+        seed: 13,
+      },
+      createMemoryPlantedNeedleMockRanker({ needleRank: 6, noiseCount: 8, seed: 13 }),
+    );
+
+    expect(run.passed).toBe(false);
+    expect(run.summary.aggregate.recallAt5).toBe(0);
+    expect(() => assertMemoryPlantedNeedleBenchPassed(run)).toThrow(
+      /Planted-needle recall@5 0\.000 is below required minimum 0\.850/,
+    );
   });
 });
