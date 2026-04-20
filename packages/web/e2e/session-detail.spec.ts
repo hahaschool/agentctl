@@ -196,10 +196,9 @@ test.describe('Session detail route smoke', () => {
 
     await page.goto(`/sessions/${SESSION_ID}`);
 
-    await expect(page.getByRole('link', { name: 'Sessions' })).toHaveAttribute(
-      'href',
-      '/sessions',
-    );
+    await expect(
+      page.getByRole('link', { name: 'Sessions', exact: true }),
+    ).toHaveAttribute('href', '/sessions');
     await expect(page.getByLabel('ended: Session ended')).toBeVisible();
     await expect(page.getByText('Session Detail Auditor')).toBeVisible();
     await expect(page.getByText(ASSISTANT_MESSAGE)).toBeVisible({ timeout: 15_000 });
