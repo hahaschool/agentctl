@@ -82,6 +82,7 @@ import { mcpToolsRoutes } from './routes/mcp-tools.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryConsolidationRoutes } from './routes/memory-consolidation.js';
 import { memoryDecayRoutes } from './routes/memory-decay.js';
+import { memoryDrawerRoutes } from './routes/memory-drawers.js';
 import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
 import { memoryFactRoutes } from './routes/memory-facts.js';
 import { memoryImportRoutes } from './routes/memory-import.js';
@@ -568,6 +569,12 @@ export async function createServer({
 
     await app.register(memoryTraverseRoutes, {
       prefix: '/api/memory/traverse',
+      pool: pgPool,
+      logger,
+    });
+
+    await app.register(memoryDrawerRoutes, {
+      prefix: '/api/memory/drawers',
       pool: pgPool,
       logger,
     });
