@@ -4,6 +4,13 @@
 
 **Goal:** Upgrade AgentCTL memory from extracted fact recall into source-grounded, measurable, privacy-safe recall with verbatim evidence, bounded injection, temporal provenance, and recovery paths.
 
+**Status sync (2026-04-20):** Phase 0 is in progress. PR #655 delivered the
+deterministic eval foundation: fixture schema/sanitization, seed-42 split
+helpers, mock scoring utilities for R@5/R@10/MRR/NDCG@10/grounding/drawer-hit
+rate/p95, by-category/by-tag summaries, sanitized sample fixture, `pnpm
+memory:eval`, and focused tests. Live search wiring, planted-needle bench,
+cold-start MCP contracts, and private/full fixture coverage remain.
+
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
 
 **Tech Stack:** PostgreSQL + pgvector + tsvector, Fastify, existing `MemoryStore` / `MemorySearch` / `MemoryInjector`, worker MCP routes, Next.js memory UI, Vitest, fast-check, Playwright, existing audit logger, optional LiteLLM rerank behind a feature flag.
@@ -724,6 +731,12 @@ Mobile constraint:
 
 **Goal:** Make retrieval quality measurable before ranking changes.
 
+**Status:** In progress. PR #655 delivered the fixture schema, deterministic
+split helpers, scoring utilities, sanitized sample fixture, and baseline CLI.
+The remaining Phase 0 work is live-search wiring, planted-needle regression,
+cold-start/null-argument contracts, private fixture growth, and release/weekly
+held-out automation.
+
 **Files:**
 
 - Create: `packages/control-plane/src/memory/memory-eval.ts`
@@ -1218,7 +1231,8 @@ Add env vars through the existing centralized config path used by control-plane/
 ## Suggested PR Slices
 
 1. **PR A: Eval Harness**
-   - Adds fixture schema, mock embedding eval, sanitized sample fixture, planted-needle bench, cold-start MCP contract tests, and baseline command.
+   - Partially delivered in PR #655: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, and `pnpm memory:eval`.
+   - Remaining: live search adapter, planted-needle bench, cold-start MCP contract tests, private fixture coverage, and release/weekly held-out automation.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
@@ -1291,8 +1305,8 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Drawer sanitizer red-team tests cover key/token/URL/cookie/env/private-key leaks.
 - [ ] Extracted facts link to supporting drawer offsets without copying quoted content.
 - [ ] Legacy facts without drawer provenance still search, render, inject, and sync.
-- [ ] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, and p95 search time.
-- [ ] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42; ranker tuning runs on dev only.
+- [x] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, drawer-hit rate, and p95 search time for deterministic mock runs. *(PR #655)*
+- [x] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42 and guards full-set runs behind explicit release/full flags. *(PR #655)*
 - [ ] Eval report prints per-category metrics and includes at least five examples for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
 - [ ] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock embeddings.
 - [ ] Cold-start tests prove memory search, recall, stats/report, dedup-check, and traverse return structured empty results from an empty DB.
