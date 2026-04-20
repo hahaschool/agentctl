@@ -1250,7 +1250,7 @@ Add env vars through the existing centralized config path used by control-plane/
 
 1. **PR A: Eval Harness**
    - Delivered across PR #655/#660/#667/#681/#685 for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, first `memory_dedup_check` empty-DB/null-arguments route coverage, and first `memory_traverse` worker cold-start/null-arguments coverage.
-   - Remaining: live search adapter, private fixture coverage, and release/weekly held-out automation.
+   - Remaining: private fixture coverage and release/weekly held-out automation.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
@@ -1337,6 +1337,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Legacy facts without drawer provenance still search, render, inject, and sync.
 - [x] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, drawer-hit rate, and p95 search time for deterministic mock runs. *(PR #655)*
 - [x] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42 and guards full-set runs behind explicit release/full flags. *(PR #655)*
+- [x] `pnpm memory:eval --no-mock` runs the same fixture split through live control-plane `MemorySearch` using `DATABASE_URL` plus embedding config, keeps mock ranking as the default, maps returned facts into eval `factId` candidates, and closes the PG pool after the run.
 - [ ] Eval report prints per-category metrics and includes at least five examples for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
 - [x] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock ranking/scoring without DB or embedding dependencies.
 - [x] Cold-start tests prove current worker memory search, recall, and stats/report routes return structured empty results from an empty control-plane response.
