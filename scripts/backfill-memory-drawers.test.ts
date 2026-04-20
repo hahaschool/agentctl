@@ -751,7 +751,7 @@ describe('claude-mem fact mapping', () => {
     expect(memoryStore.addFact.mock.calls[0]?.[0].source.source_key).toBe('observations:42:fact:1');
   });
 
-  it('does not emit facts for session_summaries rows', async () => {
+  it('keeps session_summaries fact counts separate from observation fact counts', async () => {
     const summaryDrawer = makeDrawer({
       id: 'drawer-summary-7',
       chunkIndex: 0,
@@ -778,9 +778,12 @@ describe('claude-mem fact mapping', () => {
     });
 
     expect(result.written).toBe(1);
+    // Observation-scoped counters stay at zero because only a session summary was processed.
     expect(result.factCandidates).toBe(0);
     expect(result.factsWritten).toBe(0);
-    expect(memoryStore.addFact).not.toHaveBeenCalled();
+    // Session-summary-scoped counters tally the summary-originated fact.
+    expect(result.sessionSummaryFactCandidates).toBe(1);
+    expect(result.sessionSummaryFactsWritten).toBe(1);
   });
 
   it('surfaces fact-write errors and leaves state failed so resume retries the same observation', async () => {
@@ -810,5 +813,199 @@ describe('claude-mem fact mapping', () => {
 
     expect(stateStore.markFailed).toHaveBeenCalledWith('state-1', expect.any(Error));
     expect(stateStore.markComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe('claude-mem session_summaries fact mapping', () => {
+  function drawerFromSessionSummaryFixture(): MockMemoryDrawer {
+    return makeDrawer({
+      id: 'drawer-summary-7-0',
+      chunkIndex: 0,
+      content: 'The session chose a conservative drawer backfill slice.',
+    });
+  }
+
+  it('co-writes drawer and one atomic session-summary fact with a deterministic :parent source key', async () => {
+    const drawer = drawerFromSessionSummaryFixture();
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    const db = createClaudeMemDb([], [createClaudeMemSessionSummary()]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+      scope: 'project:agentctl',
+      topic: 'claude-mem',
+      machineId: 'macmini-1',
+    });
+
+    expect(result.written).toBe(1);
+    expect(result.sessionSummaryFactCandidates).toBe(1);
+    expect(result.sessionSummaryFactsWritten).toBe(1);
+    expect(result.sessionSummaryFactsSkipped).toBe(0);
+    // Observation-specific counters stay untouched.
+    expect(result.factCandidates).toBe(0);
+    expect(result.factsWritten).toBe(0);
+
+    expect(memoryStore.addFact).toHaveBeenCalledTimes(1);
+    const call = memoryStore.addFact.mock.calls[0]?.[0];
+    expect(call).toMatchObject({
+      scope: 'project:agentctl',
+      content: 'The session chose a conservative drawer backfill slice.',
+      entity_type: 'concept',
+      confidence: 0.85,
+    });
+    expect(call.source).toMatchObject({
+      source: 'claude-mem',
+      source_table: 'session_summaries',
+      source_id: '7',
+      source_key: 'session_summaries:7:parent',
+      session_id: 'claude-session-1',
+      machine_id: 'macmini-1',
+      original_created_at: '2026-04-20T13:00:00.000Z',
+    });
+    expect(call.sourceSpans).toEqual([
+      {
+        drawerId: 'drawer-summary-7-0',
+        startOffset: 0,
+        endOffset: drawer.content.length,
+        sourceJson: { match: 'exact', chunkIndex: 0 },
+      },
+    ]);
+  });
+
+  it('falls back to the full-drawer span when sanitizing mutates the summary text', async () => {
+    const rawSecret = ['sk', '-proj-', 'secret', 'AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJ'].join(
+      '',
+    );
+    // Drawer is what writeSource returns; the sanitizer never runs against it in the test,
+    // so we force a mismatch by making the drawer content differ from the sanitized summary.
+    const drawer = makeDrawer({
+      id: 'drawer-summary-fallback',
+      chunkIndex: 0,
+      content: 'Drawer body that does not contain the sanitized summary verbatim.',
+    });
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'redacted',
+      redactionCount: 1,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    const db = createClaudeMemDb(
+      [],
+      [
+        createClaudeMemSessionSummary({
+          summary: `OPENAI_API_KEY=${rawSecret} — session decisions summary.`,
+        }),
+      ],
+    );
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+    });
+
+    expect(result.sessionSummaryFactsWritten).toBe(1);
+    const call = memoryStore.addFact.mock.calls[0]?.[0];
+    expect(call.source.source_key).toBe('session_summaries:7:parent');
+    expect(call.sourceSpans).toEqual([
+      {
+        drawerId: 'drawer-summary-fallback',
+        startOffset: 0,
+        endOffset: drawer.content.length,
+        sourceJson: { match: 'fallback_full_drawer', chunkIndex: 0 },
+      },
+    ]);
+    // Confirm we never leaked the raw secret through the addFact payload.
+    expect(JSON.stringify(call)).not.toContain(rawSecret);
+  });
+
+  it('skips the session-summary fact when the source_key is already present (idempotent resume)', async () => {
+    const drawer = drawerFromSessionSummaryFixture();
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore(['session_summaries:7:parent']);
+    const db = createClaudeMemDb([], [createClaudeMemSessionSummary()]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+    });
+
+    // Drawer write is idempotent via (source_type, source_id, chunk_index), so the drawer
+    // candidate still counts as "written"; the atomic fact is the part we dedupe here.
+    expect(result.written).toBe(1);
+    expect(result.sessionSummaryFactCandidates).toBe(1);
+    expect(result.sessionSummaryFactsWritten).toBe(0);
+    expect(result.sessionSummaryFactsSkipped).toBe(1);
+    expect(memoryStore.findFactBySourceKey).toHaveBeenCalledWith('session_summaries:7:parent');
+    expect(memoryStore.addFact).not.toHaveBeenCalled();
+  });
+
+  it('surfaces session-summary fact write errors through summarizeBackfillError and marks state failed', async () => {
+    const drawer = drawerFromSessionSummaryFixture();
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    const failure = Object.assign(new Error('simulated summary fact failure'), {
+      code: 'memory_fact_conflict',
+    });
+    memoryStore.addFact.mockRejectedValueOnce(failure);
+    const logger = createLogger();
+    const db = createClaudeMemDb([], [createClaudeMemSessionSummary()]);
+
+    await expect(
+      backfillMemoryDrawers({
+        sourceType: 'claude-mem',
+        sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+        claudeMemDb: db,
+        dryRun: false,
+        drawerStore: drawerStore as never,
+        stateStore: stateStore as never,
+        memoryStore: memoryStore as never,
+        logger,
+      }),
+    ).rejects.toThrow('simulated summary fact failure');
+
+    expect(stateStore.markFailed).toHaveBeenCalledWith('state-1', expect.any(Error));
+    expect(stateStore.markComplete).not.toHaveBeenCalled();
+    // The structured warn log goes through summarizeBackfillError → the error.code string.
+    const combinedLog = logger.entries.join('\n');
+    expect(combinedLog).toContain('memory_fact_backfill_write_failed');
+    expect(combinedLog).toContain('memory_fact_conflict');
+    expect(combinedLog).toContain('session_summaries:7:parent');
   });
 });
