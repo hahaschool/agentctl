@@ -130,7 +130,7 @@ import { agentsApi } from './api/agents';
 import { type Attachment, healthApi } from './api/core';
 import { deploymentApi } from './api/deployment';
 import { machinesApi } from './api/machines';
-import { memoryApi } from './api/memory';
+import { memoryApi, memoryDrawersApi } from './api/memory';
 import { meshAutoUpdateApi } from './api/mesh-auto-update';
 import { meshConfigApi } from './api/mesh-config';
 import { schedulerApi } from './api/scheduler';
@@ -155,6 +155,7 @@ export const api = {
   ...securityApi,
   ...machinesApi,
   ...memoryApi,
+  memoryDrawers: memoryDrawersApi,
   ...schedulerApi,
   ...spacesApi,
   ...deploymentApi,
