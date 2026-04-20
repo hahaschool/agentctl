@@ -67,6 +67,13 @@ type EnabledTwoNodeMeshFixtureConfig = {
   schemaAheadEnabled: boolean;
   schemaAheadDatabaseUrl: string | null;
   schemaAheadTimeoutMs: number;
+  machineVisibilityEnabled: boolean;
+  machineVisibilityMissingEnv: string[];
+  machineVisibilityInvalidEnv: string[];
+  machineVisibilitySecondaryWebUrl: ((path?: string) => string) | null;
+  machineVisibilityMachineHostname: string;
+  machineVisibilityOriginLabel: string;
+  machineVisibilityTimeoutMs: number;
   primaryWebUrl: (path?: string) => string;
   primaryApiUrl: (path?: string) => string;
 };
@@ -79,6 +86,10 @@ const ENABLE_ENV = 'AGENTCTL_MESH_TWO_NODE_E2E';
 const DRY_RUN_ENABLE_ENV = 'AGENTCTL_MESH_DRY_RUN_E2E';
 const SCHEMA_AHEAD_ENABLE_ENV = 'AGENTCTL_MESH_SCHEMA_AHEAD_E2E';
 const SCHEMA_AHEAD_DATABASE_URL_ENV = 'AGENTCTL_MESH_PRIMARY_DATABASE_URL';
+const MACHINE_VISIBILITY_ENABLE_ENV = 'AGENTCTL_MESH_MACHINE_VISIBILITY_E2E';
+const MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV = 'AGENTCTL_MESH_SECONDARY_WEB_URL';
+const MACHINE_VISIBILITY_MACHINE_HOSTNAME_ENV = 'AGENTCTL_MESH_SYNCED_MACHINE_HOSTNAME';
+const MACHINE_VISIBILITY_ORIGIN_LABEL_ENV = 'AGENTCTL_MESH_SYNCED_MACHINE_ORIGIN_LABEL';
 const REQUIRED_ENV = [
   'AGENTCTL_MESH_PRIMARY_WEB_URL',
   'AGENTCTL_MESH_PEER_MACHINE_ID',
@@ -239,6 +250,38 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
     };
   }
 
+  const machineVisibilityEnabled = env[MACHINE_VISIBILITY_ENABLE_ENV] === '1';
+  const machineVisibilityMissingEnv: string[] = [];
+  const machineVisibilityInvalidEnv: string[] = [];
+  const secondaryWebUrlRaw = env[MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV]?.trim();
+  const secondaryWebBase = normalizeBaseUrl(secondaryWebUrlRaw);
+  const machineVisibilityMachineHostname =
+    env[MACHINE_VISIBILITY_MACHINE_HOSTNAME_ENV]?.trim() ?? '';
+  const machineVisibilityOriginLabel =
+    env[MACHINE_VISIBILITY_ORIGIN_LABEL_ENV]?.trim() ?? '';
+  const machineVisibilityTimeout = readOptionalPositiveInt(
+    env,
+    'AGENTCTL_MESH_MACHINE_VISIBILITY_TIMEOUT_MS',
+    30_000,
+  );
+
+  if (machineVisibilityEnabled) {
+    if (!secondaryWebUrlRaw) {
+      machineVisibilityMissingEnv.push(MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV);
+    } else if (!secondaryWebBase) {
+      machineVisibilityInvalidEnv.push(MACHINE_VISIBILITY_SECONDARY_WEB_URL_ENV);
+    }
+    if (!machineVisibilityMachineHostname) {
+      machineVisibilityMissingEnv.push(MACHINE_VISIBILITY_MACHINE_HOSTNAME_ENV);
+    }
+    if (!machineVisibilityOriginLabel) {
+      machineVisibilityMissingEnv.push(MACHINE_VISIBILITY_ORIGIN_LABEL_ENV);
+    }
+    if (machineVisibilityTimeout.invalid) {
+      machineVisibilityInvalidEnv.push('AGENTCTL_MESH_MACHINE_VISIBILITY_TIMEOUT_MS');
+    }
+  }
+
   return {
     enabled: true,
     peerMachineId: env.AGENTCTL_MESH_PEER_MACHINE_ID?.trim() ?? '',
@@ -250,6 +293,15 @@ export function getTwoNodeMeshFixtureConfig(env: Env = process.env): TwoNodeMesh
     schemaAheadEnabled: env[SCHEMA_AHEAD_ENABLE_ENV] === '1',
     schemaAheadDatabaseUrl: env[SCHEMA_AHEAD_DATABASE_URL_ENV]?.trim() || null,
     schemaAheadTimeoutMs: schemaAheadTimeout.value,
+    machineVisibilityEnabled,
+    machineVisibilityMissingEnv,
+    machineVisibilityInvalidEnv,
+    machineVisibilitySecondaryWebUrl: secondaryWebBase
+      ? (path = '/') => joinUrl(secondaryWebBase, path)
+      : null,
+    machineVisibilityMachineHostname,
+    machineVisibilityOriginLabel,
+    machineVisibilityTimeoutMs: machineVisibilityTimeout.value,
     primaryWebUrl: (path = '/') => joinUrl(primaryWebBase, path),
     primaryApiUrl: (path = '/') => joinUrl(primaryApiBase, path),
   };
@@ -293,6 +345,28 @@ export function skipReasonForTwoNodeMeshSchemaAhead(
     return `Set ${SCHEMA_AHEAD_DATABASE_URL_ENV} to the primary node database URL for the schema-ahead rejection assertion.`;
   }
   return 'two-node mesh schema-ahead assertion is enabled';
+}
+
+export function skipReasonForTwoNodeMeshMachineVisibility(
+  config: TwoNodeMeshFixtureConfig,
+): string {
+  if (!config.enabled) {
+    return skipReasonForTwoNodeMeshFixture(config);
+  }
+  if (!config.machineVisibilityEnabled) {
+    return `Set ${MACHINE_VISIBILITY_ENABLE_ENV}=1 to run the live A-to-B machine visibility assertion.`;
+  }
+
+  const parts: string[] = [];
+  if (config.machineVisibilityMissingEnv.length > 0) {
+    parts.push(`Missing: ${config.machineVisibilityMissingEnv.join(', ')}.`);
+  }
+  if (config.machineVisibilityInvalidEnv.length > 0) {
+    parts.push(`Invalid: ${config.machineVisibilityInvalidEnv.join(', ')}.`);
+  }
+  if (parts.length > 0) return parts.join(' ');
+
+  return 'two-node mesh A-to-B machine visibility assertion is enabled';
 }
 
 async function readPeer(request: APIRequestContext, config: EnabledTwoNodeMeshFixtureConfig) {
