@@ -89,6 +89,7 @@ import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
+import { memoryTraverseRoutes } from './routes/memory-traverse.js';
 import { meshAutoUpdateRoutes } from './routes/mesh-auto-update.js';
 import { meshConfigRoutes } from './routes/mesh-config.js';
 import { createRequestTracker, metricsRoutes, recordRequest } from './routes/metrics.js';
@@ -561,6 +562,12 @@ export async function createServer({
 
     await app.register(memoryDecayRoutes, {
       prefix: '/api/memory/decay',
+      pool: pgPool,
+      logger,
+    });
+
+    await app.register(memoryTraverseRoutes, {
+      prefix: '/api/memory/traverse',
       pool: pgPool,
       logger,
     });
