@@ -165,27 +165,32 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
         // Semantic search when available, SQL ILIKE fallback otherwise
         if (memorySearch) {
           const visibleScopes = scope ? [scope as MemoryScope] : [];
-          const results = await memorySearch.search({
+          const rawResults = await memorySearch.search({
             query: q,
             visibleScopes,
             limit: limit + offset,
             entityType: entityType as EntityType | undefined,
           });
-          const facts = results
-            .map((result) => result.fact)
-            .filter((fact) =>
-              factMatchesFilters(fact, {
-                sessionId,
-                agentId,
-                machineId,
-                minConfidence: minConfidenceValue,
-              }),
-            );
+          const filteredResults = rawResults.filter((result) =>
+            factMatchesFilters(result.fact, {
+              sessionId,
+              agentId,
+              machineId,
+              minConfidence: minConfidenceValue,
+            }),
+          );
+          const pagedResults = filteredResults.slice(offset, offset + limit).map((result) => ({
+            fact: result.fact,
+            score: result.score,
+            source_path: result.source_path,
+          }));
+          const pagedFacts = pagedResults.map((entry) => entry.fact);
 
           return {
             ok: true,
-            facts: facts.slice(offset, offset + limit),
-            total: facts.length,
+            facts: pagedFacts,
+            results: pagedResults,
+            total: filteredResults.length,
           };
         }
 

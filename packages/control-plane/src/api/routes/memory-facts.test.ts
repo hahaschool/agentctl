@@ -99,6 +99,7 @@ describe('memory fact routes', () => {
     expect(response.json()).toEqual({
       ok: true,
       facts: [makeFact()],
+      results: [{ fact: makeFact(), score: 0.92, source_path: 'vector' }],
       total: 1,
     });
     expect(memorySearch.search).toHaveBeenCalledWith({
@@ -107,6 +108,107 @@ describe('memory fact routes', () => {
       limit: 5,
       entityType: 'decision',
     });
+  });
+
+  it('surfaces score and source_path on semantic-search results for dedup consumers', async () => {
+    const factA = makeFact({ id: 'fact-a' });
+    const factB = makeFact({ id: 'fact-b' });
+    const factC = makeFact({ id: 'fact-c' });
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: factA, score: 0.99, source_path: 'vector' },
+      { fact: factB, score: 0.81, source_path: 'bm25' },
+      { fact: factC, score: 0.42, source_path: 'graph' },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=scoring&scope=project:agentctl',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.results).toEqual([
+      { fact: factA, score: 0.99, source_path: 'vector' },
+      { fact: factB, score: 0.81, source_path: 'bm25' },
+      { fact: factC, score: 0.42, source_path: 'graph' },
+    ]);
+    expect(body.facts).toEqual([factA, factB, factC]);
+    expect(body.total).toBe(3);
+  });
+
+  it('applies identical pagination to facts and results', async () => {
+    const factA = makeFact({ id: 'fact-a' });
+    const factB = makeFact({ id: 'fact-b' });
+    const factC = makeFact({ id: 'fact-c' });
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: factA, score: 0.9, source_path: 'vector' },
+      { fact: factB, score: 0.7, source_path: 'bm25' },
+      { fact: factC, score: 0.5, source_path: 'graph' },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=pagination&scope=project:agentctl&limit=1&offset=1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.facts).toEqual([factB]);
+    expect(body.results).toEqual([{ fact: factB, score: 0.7, source_path: 'bm25' }]);
+    // total still counts all filtered results, not just the page
+    expect(body.total).toBe(3);
+  });
+
+  it('applies source filters before building results (dedup consumers see same subset)', async () => {
+    const factMatch = makeFact({
+      id: 'fact-match',
+      source: {
+        session_id: 'session-1',
+        agent_id: 'agent-1',
+        machine_id: 'machine-1',
+        turn_index: 1,
+        extraction_method: 'manual',
+      },
+    });
+    const factOther = makeFact({
+      id: 'fact-other',
+      source: {
+        session_id: 'session-2',
+        agent_id: 'agent-1',
+        machine_id: 'machine-1',
+        turn_index: 2,
+        extraction_method: 'manual',
+      },
+    });
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: factMatch, score: 0.88, source_path: 'vector' },
+      { fact: factOther, score: 0.77, source_path: 'bm25' },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=filters&scope=project:agentctl&sessionId=session-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.facts).toEqual([factMatch]);
+    expect(body.results).toEqual([{ fact: factMatch, score: 0.88, source_path: 'vector' }]);
+    expect(body.total).toBe(1);
+  });
+
+  it('omits results field when empty q falls through to listFacts (no semantic scoring)', async () => {
+    vi.mocked(memoryStore.listFacts).mockResolvedValueOnce([makeFact()]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?scope=project:agentctl',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body).toEqual({ ok: true, facts: [makeFact()], total: 1 });
+    expect(body.results).toBeUndefined();
   });
 
   it('lists facts with source filters', async () => {
@@ -421,5 +523,66 @@ describe('memory fact routes', () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error).toBe('INVALID_CONTENT');
+  });
+});
+
+describe('memory fact routes — SQL ILIKE fallback (no memorySearch)', () => {
+  let app: FastifyInstance;
+  let memoryStore: MemoryStore;
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+    }
+  });
+
+  it('returns facts only (no results field) when embeddings are unavailable', async () => {
+    const factRow = {
+      id: 'fact-sql',
+      scope: 'project:agentctl',
+      content: 'Use SQL ILIKE fallback when embeddings are missing',
+      content_model: 'none',
+      entity_type: 'decision',
+      confidence: 0.8,
+      strength: 1.0,
+      source_json: {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      },
+      valid_from: '2026-03-11T10:00:00.000Z',
+      valid_until: null,
+      created_at: '2026-03-11T10:00:00.000Z',
+      accessed_at: '2026-03-11T10:00:00.000Z',
+      tags: [],
+      usage_count: 0,
+    };
+    const pgPool = { query: vi.fn().mockResolvedValue({ rows: [factRow] }) };
+    memoryStore = createMockMemoryStore();
+    // No memorySearch provided — forces SQL ILIKE fallback path
+    app = await createServer({
+      logger,
+      memoryStore,
+      pgPool: pgPool as never,
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=fallback&scope=project:agentctl',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.ok).toBe(true);
+    expect(Array.isArray(body.facts)).toBe(true);
+    expect(body.facts).toHaveLength(1);
+    expect(body.facts[0].id).toBe('fact-sql');
+    // SQL fallback does not emit results — consumers treat missing score as defensive path
+    expect(body.results).toBeUndefined();
+    expect(body.total).toBe(1);
+    expect(pgPool.query).toHaveBeenCalledTimes(1);
   });
 });
