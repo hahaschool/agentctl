@@ -99,6 +99,29 @@ function makeSessionEndEntry(): AuditEntry {
   };
 }
 
+function makeMemoryWriteEntry(overrides?: Partial<AuditEntry>): AuditEntry {
+  return {
+    kind: 'memory_write',
+    timestamp: '2026-04-20T00:00:00.000Z',
+    sessionId: 'session-1',
+    agentId: 'agent-1',
+    machineId: 'machine-1',
+    drawerId: 'drawer-1',
+    sourceType: 'manual',
+    scope: 'project:agentctl',
+    chunkIndex: 0,
+    contentHash: 'c'.repeat(64),
+    redactionStatus: 'sanitized',
+    success: true,
+    error: null,
+    metadata: {
+      token: '[REDACTED]',
+      safe: 'visible',
+    },
+    ...overrides,
+  };
+}
+
 /**
  * Build a Buffer from NDJSON lines and set up the mock open handle
  * to return it from the given byte offset.
@@ -345,6 +368,49 @@ describe('AuditReporter', () => {
 
       expect(body.actions).toHaveLength(1);
       expect(body.actions[0]).toEqual({ actionType: 'session_end' });
+    });
+
+    it('maps memory_write entries to redacted audit action metadata', async () => {
+      setupAuditFile([
+        makeMemoryWriteEntry({
+          metadata: {
+            token: '[REDACTED]',
+            safe: 'visible',
+            content: 'raw drawer content should not be forwarded',
+          },
+        }),
+      ]);
+
+      const reporter = makeReporter();
+      reporter.start();
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+
+      expect(body.actions).toHaveLength(1);
+      expect(body.actions[0]).toEqual({
+        actionType: 'memory_write',
+        toolName: 'memory_drawer_write',
+        toolInput: {
+          sessionId: 'session-1',
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          drawerId: 'drawer-1',
+          sourceType: 'manual',
+          scope: 'project:agentctl',
+          chunkIndex: 0,
+          contentHash: 'c'.repeat(64),
+          redactionStatus: 'sanitized',
+          success: true,
+          error: null,
+          metadata: {
+            token: '[REDACTED]',
+            safe: 'visible',
+          },
+        },
+      });
+      expect(JSON.stringify(body)).not.toContain('raw drawer content');
     });
 
     it('maps denied pre_tool_use with approvedBy null', async () => {

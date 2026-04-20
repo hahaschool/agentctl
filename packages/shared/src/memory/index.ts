@@ -1,3 +1,4 @@
+export * from './audit.js';
 export * from './constants.js';
 export * from './query-sanitizer.js';
 export * from './redaction.js';

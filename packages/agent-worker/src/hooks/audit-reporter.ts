@@ -3,7 +3,7 @@ import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, relative, resolve } from 'node:path';
 
-import { WorkerError } from '@agentctl/shared';
+import { buildMemoryWriteAuditEntry, WorkerError } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
 import { sanitizePath } from '../utils/path-security.js';
@@ -59,6 +59,29 @@ function toActionPayload(entry: AuditEntry): AuditActionPayload {
       return {
         actionType: 'session_end',
       };
+
+    case 'memory_write': {
+      const sanitizedEntry = buildMemoryWriteAuditEntry(entry);
+
+      return {
+        actionType: 'memory_write',
+        toolName: 'memory_drawer_write',
+        toolInput: {
+          sessionId: sanitizedEntry.sessionId,
+          agentId: sanitizedEntry.agentId,
+          machineId: sanitizedEntry.machineId,
+          drawerId: sanitizedEntry.drawerId,
+          sourceType: sanitizedEntry.sourceType,
+          scope: sanitizedEntry.scope,
+          chunkIndex: sanitizedEntry.chunkIndex,
+          contentHash: sanitizedEntry.contentHash,
+          redactionStatus: sanitizedEntry.redactionStatus,
+          success: sanitizedEntry.success,
+          error: sanitizedEntry.error,
+          metadata: sanitizedEntry.metadata,
+        },
+      };
+    }
   }
 }
 

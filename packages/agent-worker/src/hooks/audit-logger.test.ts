@@ -326,6 +326,89 @@ describe('AuditLogger', () => {
       expect(parsed.totalTurns).toBe(3);
     });
 
+    it('writes a redacted memory_write entry without raw drawer content', async () => {
+      const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
+
+      await logger.writeMemoryWrite({
+        timestamp: '2026-04-20T00:00:00.000Z',
+        sessionId: 'session-1',
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+        drawerId: 'drawer-1',
+        sourceType: 'session-jsonl',
+        scope: 'project:agentctl',
+        chunkIndex: 1,
+        contentHash: 'b'.repeat(64),
+        redactionStatus: 'sanitized',
+        success: true,
+        metadata: {
+          token: 'raw-token',
+          safe: 'visible',
+          content: 'raw drawer content with sk-proj-secret1234567890',
+          nested: { authorization: 'Bearer raw' },
+        },
+      });
+
+      const content = mockAppendFile.mock.calls[0][1] as string;
+      const parsed = JSON.parse(content.trim());
+
+      expect(parsed).toMatchObject({
+        kind: 'memory_write',
+        timestamp: '2026-04-20T00:00:00.000Z',
+        sessionId: 'session-1',
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+        drawerId: 'drawer-1',
+        sourceType: 'session-jsonl',
+        scope: 'project:agentctl',
+        chunkIndex: 1,
+        contentHash: 'b'.repeat(64),
+        redactionStatus: 'sanitized',
+        success: true,
+        error: null,
+        metadata: {
+          token: '[REDACTED]',
+          safe: 'visible',
+          nested: { authorization: '[REDACTED]' },
+        },
+      });
+      expect(parsed.metadata).not.toHaveProperty('content');
+      expect(JSON.stringify(parsed)).not.toContain('raw-token');
+      expect(JSON.stringify(parsed)).not.toContain('raw drawer content');
+      expect(parsed.hash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('redacts memory_write entries passed directly to write()', async () => {
+      const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
+
+      await logger.write({
+        kind: 'memory_write',
+        timestamp: '2026-04-20T00:00:00.000Z',
+        sessionId: 'session-1',
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+        drawerId: 'drawer-1',
+        sourceType: 'manual',
+        scope: 'project:agentctl',
+        chunkIndex: 0,
+        contentHash: 'd'.repeat(64),
+        redactionStatus: 'sanitized',
+        success: true,
+        error: null,
+        metadata: {
+          token: 'raw-token',
+          content: 'raw drawer content',
+        },
+      });
+
+      const content = mockAppendFile.mock.calls[0][1] as string;
+      const parsed = JSON.parse(content.trim());
+
+      expect(parsed.metadata).toEqual({ token: '[REDACTED]' });
+      expect(JSON.stringify(parsed)).not.toContain('raw-token');
+      expect(JSON.stringify(parsed)).not.toContain('raw drawer content');
+    });
+
     it('includes denyReason in pre_tool_use entry when present', async () => {
       const logger = new AuditLogger({ logDir: '/logs', logger: mockLogger });
       const entry = makePreToolEntry({

@@ -105,4 +105,115 @@ describe('MemoryDrawerStore', () => {
     expect(vi.mocked(pool.query).mock.calls[0]?.[1]?.[4]).toBe('source-a');
     expect(vi.mocked(pool.query).mock.calls[1]?.[1]?.[4]).toBe('source-b');
   });
+
+  it('emits a redacted memory_write audit entry after storing a drawer', async () => {
+    const pool = createMockPool();
+    const auditLogger = { writeMemoryWrite: vi.fn().mockResolvedValue(undefined) };
+    const store = new MemoryDrawerStore({
+      pool: pool as never,
+      logger: createMockLogger(),
+      auditLogger,
+    });
+
+    const openAiValue = joinFixtureParts(['sk', '-proj-', 'secret', '1234567890']);
+    const result = await store.writeSource({
+      scope: 'project:agentctl',
+      sourceType: 'session-jsonl',
+      sourceId: 'session-1.jsonl',
+      content: `remember OPENAI_API_KEY=${openAiValue}`,
+      sourceJson: {
+        session_id: 'session-1',
+        agent_id: 'agent-1',
+        machine_id: 'machine-1',
+        token: 'raw-token',
+        safe: 'visible',
+        content: 'raw drawer content',
+      },
+    });
+
+    expect(auditLogger.writeMemoryWrite).toHaveBeenCalledTimes(1);
+    expect(auditLogger.writeMemoryWrite).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      agentId: 'agent-1',
+      machineId: 'machine-1',
+      drawerId: result.drawers[0]?.id,
+      sourceType: 'session-jsonl',
+      scope: 'project:agentctl',
+      chunkIndex: 0,
+      contentHash: result.drawers[0]?.contentSha256,
+      redactionStatus: 'sanitized',
+      success: true,
+      metadata: {
+        session_id: 'session-1',
+        agent_id: 'agent-1',
+        machine_id: 'machine-1',
+        token: '[REDACTED]',
+        safe: 'visible',
+      },
+    });
+    expect(JSON.stringify(auditLogger.writeMemoryWrite.mock.calls[0][0])).not.toContain(
+      'raw-token',
+    );
+    expect(JSON.stringify(auditLogger.writeMemoryWrite.mock.calls[0][0])).not.toContain(
+      'raw drawer content',
+    );
+    expect(JSON.stringify(auditLogger.writeMemoryWrite.mock.calls[0][0])).not.toContain(
+      openAiValue,
+    );
+  });
+
+  it('emits a failed memory_write audit entry without leaking drawer content when insert fails', async () => {
+    const pool = createMockPool();
+    const auditLogger = { writeMemoryWrite: vi.fn().mockResolvedValue(undefined) };
+    const dbError = Object.assign(new Error('raw drawer content leaked by driver'), {
+      code: '23505',
+    });
+    vi.mocked(pool.query).mockRejectedValueOnce(dbError);
+
+    const store = new MemoryDrawerStore({
+      pool: pool as never,
+      logger: createMockLogger(),
+      auditLogger,
+    });
+
+    await expect(
+      store.writeSource({
+        scope: 'project:agentctl',
+        sourceType: 'manual',
+        sourceId: 'manual-1',
+        content: 'raw drawer content with password=hunter2',
+        sourceJson: {
+          sessionId: 'session-1',
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          password: 'hunter2',
+        },
+      }),
+    ).rejects.toThrow(dbError);
+
+    expect(auditLogger.writeMemoryWrite).toHaveBeenCalledTimes(1);
+    expect(auditLogger.writeMemoryWrite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+        drawerId: null,
+        sourceType: 'manual',
+        scope: 'project:agentctl',
+        chunkIndex: 0,
+        success: false,
+        error: '23505',
+        metadata: {
+          sessionId: 'session-1',
+          agentId: 'agent-1',
+          machineId: 'machine-1',
+          password: '[REDACTED]',
+        },
+      }),
+    );
+    expect(JSON.stringify(auditLogger.writeMemoryWrite.mock.calls[0][0])).not.toContain(
+      'raw drawer content',
+    );
+    expect(JSON.stringify(auditLogger.writeMemoryWrite.mock.calls[0][0])).not.toContain('hunter2');
+  });
 });
