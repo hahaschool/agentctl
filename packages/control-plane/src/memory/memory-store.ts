@@ -31,6 +31,14 @@ export type AddFactInput = {
   source: FactSource;
   confidence?: number;
   tags?: string[];
+  sourceSpans?: AddFactSourceSpanInput[];
+};
+
+export type AddFactSourceSpanInput = {
+  drawerId: string;
+  startOffset: number;
+  endOffset: number;
+  sourceJson?: Record<string, unknown>;
 };
 
 export type AddConsolidationItemInput = {
@@ -121,6 +129,25 @@ function parseSource(value: unknown): FactSource {
   }) as FactSource;
 }
 
+function normalizeFactSourceSpan(input: AddFactSourceSpanInput): Required<AddFactSourceSpanInput> {
+  if (input.drawerId.length === 0) {
+    throw new Error('Invalid memory fact source span: drawerId is required');
+  }
+  if (!Number.isInteger(input.startOffset) || input.startOffset < 0) {
+    throw new Error('Invalid memory fact source span: startOffset must be a non-negative integer');
+  }
+  if (!Number.isInteger(input.endOffset) || input.endOffset < input.startOffset) {
+    throw new Error('Invalid memory fact source span: endOffset must be greater than startOffset');
+  }
+
+  return {
+    drawerId: input.drawerId,
+    startOffset: input.startOffset,
+    endOffset: input.endOffset,
+    sourceJson: input.sourceJson ?? {},
+  };
+}
+
 export class MemoryStore {
   private readonly pool: Pool;
   private readonly embeddingClient: EmbeddingClient | undefined;
@@ -174,6 +201,7 @@ export class MemoryStore {
       ],
     );
 
+    await this.insertFactSourceSpans(id, input.sourceSpans ?? [], now);
     await this.detectAndFlagContradictions(id);
 
     return {
@@ -564,6 +592,34 @@ export class MemoryStore {
       (scope): scope is string => typeof scope === 'string' && scope.length > 0,
     );
     return [...new Set(scopes)];
+  }
+
+  private async insertFactSourceSpans(
+    factId: string,
+    spans: AddFactSourceSpanInput[],
+    createdAt: string,
+  ): Promise<void> {
+    for (const span of spans) {
+      const normalizedSpan = normalizeFactSourceSpan(span);
+      await this.pool.query(
+        `INSERT INTO memory_fact_sources (
+           id, fact_id, drawer_id, start_offset, end_offset, source_json, created_at
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, $7
+         )
+         ON CONFLICT (fact_id, drawer_id, start_offset, end_offset)
+         DO UPDATE SET source_json = EXCLUDED.source_json`,
+        [
+          generateMemoryId(),
+          factId,
+          normalizedSpan.drawerId,
+          normalizedSpan.startOffset,
+          normalizedSpan.endOffset,
+          normalizedSpan.sourceJson,
+          createdAt,
+        ],
+      );
+    }
   }
 
   private async detectAndFlagContradictions(newFactId: string): Promise<void> {

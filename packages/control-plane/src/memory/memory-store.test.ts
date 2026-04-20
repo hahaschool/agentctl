@@ -68,6 +68,66 @@ describe('MemoryStore', () => {
     expect(result.source.agent_id).toBe('agent-1');
   });
 
+  it('links a new fact to supporting drawer offsets when source spans are provided', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const { store } = makeStore({ query });
+
+    const result = await store.addFact({
+      scope: 'global' as MemoryScope,
+      content: 'MemPalace facts point back to sanitized drawer spans',
+      entity_type: 'decision' as EntityType,
+      source: {
+        session_id: null,
+        agent_id: 'agent-1',
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      } satisfies FactSource,
+      sourceSpans: [
+        {
+          drawerId: 'drawer-1',
+          startOffset: 0,
+          endOffset: 42,
+          sourceJson: { extractor: 'unit-test' },
+        },
+        {
+          drawerId: 'drawer-2',
+          startOffset: 7,
+          endOffset: 19,
+        },
+      ],
+    });
+
+    const sourceCalls = query.mock.calls.filter(([sql]) =>
+      String(sql).includes('memory_fact_sources'),
+    );
+    expect(sourceCalls).toHaveLength(2);
+    expect(sourceCalls[0]?.[1]).toEqual([
+      expect.any(String),
+      result.id,
+      'drawer-1',
+      0,
+      42,
+      { extractor: 'unit-test' },
+      expect.any(String),
+    ]);
+    expect(sourceCalls[1]?.[1]).toEqual([
+      expect.any(String),
+      result.id,
+      'drawer-2',
+      7,
+      19,
+      {},
+      expect.any(String),
+    ]);
+  });
+
   it('stores a fact even when embedding generation fails', async () => {
     const pool = createMockPool();
     // 1. INSERT fact; 2. SELECT pre-existing edges; 3. SELECT embedding (no rows → exits early)
