@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "baseline": "facts-only",
+  "description": "Phase 0 facts-only baseline for the MemPalace-inspired memory evolution plan. Deterministic mock ranking over the public sample fixture with the drawer and vector retrieval paths disabled. Provides a fixed target for later phases to compare against.",
+  "createdAt": "2026-04-20T18:08:22.589Z",
+  "gitCommit": "c97b61df3c88d0eff56c13ce9b0006abb87ba1f1",
+  "fixture": {
+    "path": "docs/fixtures/memory-eval/agentctl-memory-eval.sample.json",
+    "sha256": "sha256:acd958489196a665e1a9118f48dc5b8de76162342458ae7ddd32ab7bddab773f",
+    "rowCount": 3,
+    "includedRowCount": 3,
+    "splitSeed": 42,
+    "categories": [
+      "AgentCTL-internal",
+      "LongMemEval-project-memory",
+      "LongMemEval-single-session-preference"
+    ]
+  },
+  "config": {
+    "seed": 42,
+    "rankerDistractorCount": 4,
+    "drawerPathEnabled": false,
+    "vectorPathEnabled": false
+  },
+  "aggregate": {
+    "recallAt5": 0.5,
+    "recallAt10": 0.5,
+    "mrr": 1,
+    "ndcgAt10": 0.7871546029909718,
+    "groundingCoverage": 0,
+    "drawerOnlyHitRate": 0,
+    "totalRows": 3,
+    "p50DurationMs": 0,
+    "p95DurationMs": 0,
+    "p99DurationMs": 0
+  },
+  "byCategory": {
+    "AgentCTL-internal": {
+      "totalRows": 1,
+      "recallAt5": 0.5,
+      "recallAt10": 0.5,
+      "mrr": 1,
+      "ndcgAt10": 0.7871546029909718,
+      "groundingCoverage": 0,
+      "drawerOnlyHitRate": 0,
+      "p95DurationMs": 0
+    },
+    "LongMemEval-project-memory": {
+      "totalRows": 1,
+      "recallAt5": 0.5,
+      "recallAt10": 0.5,
+      "mrr": 1,
+      "ndcgAt10": 0.7871546029909718,
+      "groundingCoverage": 0,
+      "drawerOnlyHitRate": 0,
+      "p95DurationMs": 0
+    },
+    "LongMemEval-single-session-preference": {
+      "totalRows": 1,
+      "recallAt5": 0.5,
+      "recallAt10": 0.5,
+      "mrr": 1,
+      "ndcgAt10": 0.7871546029909718,
+      "groundingCoverage": 0,
+      "drawerOnlyHitRate": 0,
+      "p95DurationMs": 0
+    }
+  }
+}
