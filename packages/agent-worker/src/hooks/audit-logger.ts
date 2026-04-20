@@ -2,7 +2,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { appendFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { WorkerError } from '@agentctl/shared';
+import {
+  buildMemoryWriteAuditEntry,
+  type MemoryWriteAuditEntry,
+  type MemoryWriteAuditInput,
+  WorkerError,
+} from '@agentctl/shared';
 import type { Logger } from 'pino';
 
 /**
@@ -41,7 +46,13 @@ export type AuditEntrySessionEnd = {
   totalTurns: number;
 };
 
-export type AuditEntry = AuditEntryPreTool | AuditEntryPostTool | AuditEntrySessionEnd;
+export type AuditEntryMemoryWrite = MemoryWriteAuditEntry;
+
+export type AuditEntry =
+  | AuditEntryPreTool
+  | AuditEntryPostTool
+  | AuditEntrySessionEnd
+  | AuditEntryMemoryWrite;
 
 /**
  * An audit entry as written to disk, including hash chain fields.
@@ -69,6 +80,14 @@ export function sha256(value: unknown): string {
  */
 export function computeEntryHash(entry: AuditEntry, previousHash: string): string {
   return sha256(JSON.stringify(entry) + previousHash);
+}
+
+function normalizeAuditEntry(entry: AuditEntry): AuditEntry {
+  if (entry.kind === 'memory_write') {
+    return buildMemoryWriteAuditEntry(entry);
+  }
+
+  return entry;
 }
 
 /**
@@ -142,9 +161,10 @@ export class AuditLogger {
   async write(entry: AuditEntry): Promise<void> {
     this.rotateIfNeeded();
 
-    const hash = computeEntryHash(entry, this.previousHash);
+    const auditEntry = normalizeAuditEntry(entry);
+    const hash = computeEntryHash(auditEntry, this.previousHash);
     const hashedEntry: HashedAuditEntry = {
-      ...entry,
+      ...auditEntry,
       previousHash: this.previousHash,
       hash,
     };
@@ -161,6 +181,10 @@ export class AuditLogger {
         path: this.currentPath,
       });
     }
+  }
+
+  async writeMemoryWrite(input: MemoryWriteAuditInput): Promise<void> {
+    await this.write(buildMemoryWriteAuditEntry(input));
   }
 
   /**

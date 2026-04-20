@@ -2,7 +2,8 @@ import type { MemoryDrawer } from '@agentctl/shared';
 import {
   MEMORY_EMBEDDING_MODEL,
   MEMORY_EMBEDDING_VERSION,
-  redactKeys,
+  type MemoryWriteAuditInput,
+  redactMemoryWriteMetadata,
   sanitizeName,
 } from '@agentctl/shared';
 import type { Pool } from 'pg';
@@ -19,7 +20,12 @@ import type {
 export type MemoryDrawerStoreOptions = {
   pool: Pool;
   embeddingClient?: EmbeddingClient;
+  auditLogger?: MemoryWriteAuditLogger;
   logger: Logger;
+};
+
+export type MemoryWriteAuditLogger = {
+  writeMemoryWrite(input: MemoryWriteAuditInput): Promise<void>;
 };
 
 type MemoryDrawerRow = {
@@ -93,11 +99,13 @@ function rowToDrawer(row: MemoryDrawerRow): MemoryDrawer {
 export class MemoryDrawerStore {
   private readonly pool: Pool;
   private readonly embeddingClient: EmbeddingClient | undefined;
+  private readonly auditLogger: MemoryWriteAuditLogger | undefined;
   private readonly logger: Logger;
 
   constructor(options: MemoryDrawerStoreOptions) {
     this.pool = options.pool;
     this.embeddingClient = options.embeddingClient;
+    this.auditLogger = options.auditLogger;
     this.logger = options.logger;
   }
 
@@ -106,73 +114,101 @@ export class MemoryDrawerStore {
     const sanitizedTopic = sanitizeName(input.topic ?? 'general');
     const sanitized = sanitizeMemoryDrawerContent(input.content);
     const chunks = chunkMemoryDrawerContent(sanitized.content);
-    const sourceJson = redactKeys(input.sourceJson ?? {});
+    const sourceJson = redactMemoryWriteMetadata(input.sourceJson ?? {});
+    const auditContext = getMemoryWriteAuditContext(input, sourceJson);
     const embeddings = await this.embedChunks(chunks.map((chunk) => chunk.content));
     const drawers: MemoryDrawer[] = [];
 
     for (const chunk of chunks) {
+      const drawerId = generateMemoryDrawerId();
       const embedding = embeddings[chunk.chunkIndex];
       const embeddingLiteral = embedding ? `[${embedding.join(',')}]` : null;
       const contentSha256 = hashMemoryDrawerContent(chunk.content);
+      const auditBase = {
+        ...auditContext,
+        sourceType: input.sourceType,
+        scope: sanitizedScope,
+        chunkIndex: chunk.chunkIndex,
+        contentHash: contentSha256,
+        redactionStatus: sanitized.redactionStatus,
+        metadata: sourceJson,
+      };
 
-      const result = await this.pool.query(
-        `INSERT INTO memory_drawers (
-           id, scope, topic, source_type, source_id, source_uri, chunk_index,
-           content, content_sha256, embedding, embedding_model, embedding_version,
-           token_count, source_json, sync_visibility, retention_expires_at,
-           archived_at, redaction_status
-         ) VALUES (
-           $1, $2, $3, $4, $5, $6, $7,
-           $8, $9, $10::vector, $11, $12,
-           $13, $14, $15, $16,
-           $17, $18
-         )
-         ON CONFLICT (source_type, source_id, chunk_index)
-         DO UPDATE SET
-           scope = EXCLUDED.scope,
-           topic = EXCLUDED.topic,
-           source_uri = EXCLUDED.source_uri,
-           content = EXCLUDED.content,
-           content_sha256 = EXCLUDED.content_sha256,
-           embedding = EXCLUDED.embedding,
-           embedding_model = EXCLUDED.embedding_model,
-           embedding_version = EXCLUDED.embedding_version,
-           token_count = EXCLUDED.token_count,
-           source_json = EXCLUDED.source_json,
-           sync_visibility = EXCLUDED.sync_visibility,
-           retention_expires_at = EXCLUDED.retention_expires_at,
-           archived_at = EXCLUDED.archived_at,
-           redaction_status = EXCLUDED.redaction_status,
-           updated_at = now()
-         RETURNING id, scope, topic, source_type, source_id, source_uri, chunk_index,
-           content, content_sha256, embedding_model, embedding_version, token_count,
-           source_json, sync_visibility, retention_expires_at, archived_at,
-           redaction_status, created_at, updated_at`,
-        [
-          generateMemoryDrawerId(),
-          sanitizedScope,
-          sanitizedTopic,
-          input.sourceType,
-          input.sourceId,
-          input.sourceUri ?? null,
-          chunk.chunkIndex,
-          chunk.content,
-          contentSha256,
-          embeddingLiteral,
-          MEMORY_EMBEDDING_MODEL,
-          MEMORY_EMBEDDING_VERSION,
-          estimateTokenCount(chunk.content),
-          sourceJson,
-          input.syncVisibility ?? 'local',
-          input.retentionExpiresAt ?? null,
-          input.archivedAt ?? null,
-          sanitized.redactionStatus,
-        ],
-      );
+      let row: MemoryDrawerRow | undefined;
+      try {
+        const result = await this.pool.query<MemoryDrawerRow>(
+          `INSERT INTO memory_drawers (
+             id, scope, topic, source_type, source_id, source_uri, chunk_index,
+             content, content_sha256, embedding, embedding_model, embedding_version,
+             token_count, source_json, sync_visibility, retention_expires_at,
+             archived_at, redaction_status
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7,
+             $8, $9, $10::vector, $11, $12,
+             $13, $14, $15, $16,
+             $17, $18
+           )
+           ON CONFLICT (source_type, source_id, chunk_index)
+           DO UPDATE SET
+             scope = EXCLUDED.scope,
+             topic = EXCLUDED.topic,
+             source_uri = EXCLUDED.source_uri,
+             content = EXCLUDED.content,
+             content_sha256 = EXCLUDED.content_sha256,
+             embedding = EXCLUDED.embedding,
+             embedding_model = EXCLUDED.embedding_model,
+             embedding_version = EXCLUDED.embedding_version,
+             token_count = EXCLUDED.token_count,
+             source_json = EXCLUDED.source_json,
+             sync_visibility = EXCLUDED.sync_visibility,
+             retention_expires_at = EXCLUDED.retention_expires_at,
+             archived_at = EXCLUDED.archived_at,
+             redaction_status = EXCLUDED.redaction_status,
+             updated_at = now()
+           RETURNING id, scope, topic, source_type, source_id, source_uri, chunk_index,
+             content, content_sha256, embedding_model, embedding_version, token_count,
+             source_json, sync_visibility, retention_expires_at, archived_at,
+             redaction_status, created_at, updated_at`,
+          [
+            drawerId,
+            sanitizedScope,
+            sanitizedTopic,
+            input.sourceType,
+            input.sourceId,
+            input.sourceUri ?? null,
+            chunk.chunkIndex,
+            chunk.content,
+            contentSha256,
+            embeddingLiteral,
+            MEMORY_EMBEDDING_MODEL,
+            MEMORY_EMBEDDING_VERSION,
+            estimateTokenCount(chunk.content),
+            sourceJson,
+            input.syncVisibility ?? 'local',
+            input.retentionExpiresAt ?? null,
+            input.archivedAt ?? null,
+            sanitized.redactionStatus,
+          ],
+        );
+        row = result.rows[0];
+      } catch (error) {
+        await this.emitMemoryWriteAudit({
+          ...auditBase,
+          drawerId: null,
+          success: false,
+          error: summarizeMemoryWriteError(error),
+        });
+        throw error;
+      }
 
-      const row = result.rows[0] as MemoryDrawerRow | undefined;
       if (row) {
-        drawers.push(rowToDrawer(row));
+        const drawer = rowToDrawer(row);
+        drawers.push(drawer);
+        await this.emitMemoryWriteAudit({
+          ...auditBase,
+          drawerId: drawer.id,
+          success: true,
+        });
       }
     }
 
@@ -195,4 +231,60 @@ export class MemoryDrawerStore {
       return [];
     }
   }
+
+  private async emitMemoryWriteAudit(input: MemoryWriteAuditInput): Promise<void> {
+    if (!this.auditLogger) {
+      return;
+    }
+
+    try {
+      await this.auditLogger.writeMemoryWrite(input);
+    } catch {
+      this.logger.warn(
+        {
+          drawerId: input.drawerId,
+          sourceType: input.sourceType,
+          chunkIndex: input.chunkIndex,
+        },
+        'Failed to write memory drawer audit entry',
+      );
+    }
+  }
+}
+
+function readContextValue(sourceJson: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = sourceJson[key];
+    if (typeof value === 'string' && value.length > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function getMemoryWriteAuditContext(
+  input: WriteMemoryDrawerSourceInput,
+  sourceJson: Record<string, unknown>,
+): Pick<MemoryWriteAuditInput, 'sessionId' | 'agentId' | 'machineId'> {
+  return {
+    sessionId: input.sessionId ?? readContextValue(sourceJson, ['sessionId', 'session_id']),
+    agentId: input.agentId ?? readContextValue(sourceJson, ['agentId', 'agent_id']),
+    machineId: input.machineId ?? readContextValue(sourceJson, ['machineId', 'machine_id']),
+  };
+}
+
+function summarizeMemoryWriteError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && code.length > 0) {
+      return code;
+    }
+  }
+
+  if (error instanceof Error && error.name.length > 0) {
+    return error.name;
+  }
+
+  return 'unknown_error';
 }

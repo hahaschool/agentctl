@@ -25,6 +25,9 @@ export type SanitizeMemoryDrawerContentResult = {
 export type WriteMemoryDrawerSourceInput = {
   scope: MemoryScope;
   topic?: string;
+  sessionId?: string | null;
+  agentId?: string | null;
+  machineId?: string | null;
   sourceType: MemoryDrawerSourceType;
   sourceId: string;
   sourceUri?: string | null;
