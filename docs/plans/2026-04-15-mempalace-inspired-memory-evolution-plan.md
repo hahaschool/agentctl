@@ -794,12 +794,13 @@ release/weekly held-out automation.
    - Remaining: wire the same bench shape to live search once the drawer/search path exists.
    - Remaining: run larger N={100,1000,5000} curves on release tags, not on every PR.
 14. Add empty-DB contract matrix before any new route ships:
-   - `memory_search` returns `{ results: [], total: 0 }`.
-   - `memory_recall` returns `{ facts: [], edges: [] }`.
-   - `memory_report` / stats route returns zero counts, not nulls.
+   - ✅ Current worker route slice: `memory_search` returns `{ results: [], total: 0 }` while preserving `facts`.
+   - ✅ Current worker route slice: `memory_recall` returns `{ facts: [], edges: [] }`.
+   - ✅ Current worker route slice: `memory_report` / stats route returns zero counts, not nulls.
    - `memory_traverse` for a missing entity returns an empty graph, not `404`.
    - `memory_dedup_check` on an empty DB recommends `store_new` with `nearest_matches: []`.
-   - Every MCP route accepts `{ arguments: null }` without hanging and returns a structured `400` within one second.
+   - ✅ Current worker route slice: every existing memory MCP route rejects `{ arguments: null }` without hanging and returns a structured `400` within one second.
+   - Remaining: add matching cold-start/null-arguments coverage for `memory_dedup_check` and `memory_traverse` when those planned routes exist.
 
 **Tests:**
 
@@ -812,8 +813,8 @@ release/weekly held-out automation.
 - Per-category report output is stable markdown.
 - Contaminated-query eval fixture path exists for Phase 4.
 - Planted-needle bench enforces recall@5 threshold on mock embeddings.
-- Empty-DB MCP route contract returns structured empty results.
-- Null MCP `arguments` test covers current routes and planned memory routes.
+- Existing worker memory MCP routes return structured empty results for search, recall, and report.
+- Existing worker memory MCP routes reject null `arguments`; planned `memory_dedup_check` / `memory_traverse` get matching tests when implemented.
 
 **Rollback:** No product behavior change.
 
@@ -1315,8 +1316,9 @@ Add env vars through the existing centralized config path used by control-plane/
 - [x] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42 and guards full-set runs behind explicit release/full flags. *(PR #655)*
 - [ ] Eval report prints per-category metrics and includes at least five examples for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
 - [x] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock ranking/scoring without DB or embedding dependencies.
-- [ ] Cold-start tests prove memory search, recall, stats/report, dedup-check, and traverse return structured empty results from an empty DB.
-- [ ] Every memory MCP route rejects `{ arguments: null }` within one second without hanging.
+- [x] Cold-start tests prove current worker memory search, recall, and stats/report routes return structured empty results from an empty control-plane response.
+- [x] Every existing worker memory MCP route rejects `{ arguments: null }` within one second without hanging.
+- [ ] Cold-start/null-arguments coverage extends to `memory_dedup_check` and `memory_traverse` when those routes ship.
 - [ ] Phase 0 records a facts-only baseline number before drawer-aware search changes ranking.
 - [ ] Drawer-aware search is not default-enabled unless R@5 is at least the facts-only baseline and p95 stays within the accepted threshold.
 - [ ] Query sanitizer implements passthrough, question-extraction, and tail-sentence fallback stages, and contamination eval NDCG@10 drop stays under 5 points.

@@ -13,6 +13,8 @@
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
+import { extractMcpArguments } from './mcp-arguments.js';
+
 type MemoryPromoteRouteOptions = FastifyPluginOptions & {
   controlPlaneUrl: string;
   logger: Logger;
@@ -52,7 +54,12 @@ export async function memoryPromoteRoutes(
   app.post(
     '/memory-promote',
     async (request: FastifyRequest<{ Body: PromoteBody }>, reply: FastifyReply) => {
-      const body = request.body as PromoteBody;
+      const extracted = extractMcpArguments<PromoteBody>(request.body);
+      if (!extracted.ok) {
+        return reply.code(400).send(extracted.error);
+      }
+
+      const body = extracted.body;
       const factId = body?.factId;
 
       if (!factId || typeof factId !== 'string' || factId.trim().length === 0) {

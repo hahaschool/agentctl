@@ -14,6 +14,8 @@ import type { FeedbackSignal } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
+import { extractMcpArguments } from './mcp-arguments.js';
+
 const VALID_SIGNALS: FeedbackSignal[] = ['used', 'irrelevant', 'outdated'];
 
 type MemoryFeedbackRouteOptions = FastifyPluginOptions & {
@@ -35,7 +37,12 @@ export async function memoryFeedbackRoutes(
   app.post(
     '/memory-feedback',
     async (request: FastifyRequest<{ Body: FeedbackBody }>, reply: FastifyReply) => {
-      const body = request.body as FeedbackBody;
+      const extracted = extractMcpArguments<FeedbackBody>(request.body);
+      if (!extracted.ok) {
+        return reply.code(400).send(extracted.error);
+      }
+
+      const body = extracted.body;
       const factId = body?.factId;
       const signal = body?.signal as FeedbackSignal | undefined;
 

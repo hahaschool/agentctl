@@ -8,6 +8,8 @@
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
+import { extractMcpArguments } from './mcp-arguments.js';
+
 type MemorySearchRouteOptions = FastifyPluginOptions & {
   controlPlaneUrl: string;
   logger: Logger;
@@ -29,7 +31,12 @@ export async function memorySearchRoutes(
   app.post(
     '/memory-search',
     async (request: FastifyRequest<{ Body: SearchBody }>, reply: FastifyReply) => {
-      const body = request.body as SearchBody;
+      const extracted = extractMcpArguments<SearchBody>(request.body);
+      if (!extracted.ok) {
+        return reply.code(400).send(extracted.error);
+      }
+
+      const body = extracted.body;
       const query = body?.query;
 
       if (!query || typeof query !== 'string' || query.trim().length === 0) {
@@ -90,10 +97,18 @@ export async function memorySearchRoutes(
           const factTags = Array.isArray(fact.tags) ? (fact.tags as string[]) : [];
           return factTags.some((tag) => tagSet.has(tag));
         });
-        return { ok: true, facts: filtered, total: filtered.length };
+        return { ok: true, facts: filtered, results: filtered, total: filtered.length };
       }
 
-      return { ok: true, ...result };
+      const facts = Array.isArray(result.facts)
+        ? result.facts
+        : Array.isArray(result.results)
+          ? result.results
+          : [];
+      const results = Array.isArray(result.results) ? result.results : facts;
+      const total = typeof result.total === 'number' ? result.total : facts.length;
+
+      return { ok: true, ...result, facts, results, total };
     },
   );
 }

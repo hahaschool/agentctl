@@ -8,6 +8,8 @@
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
+import { extractMcpArguments } from './mcp-arguments.js';
+
 const VALID_ENTITY_TYPES = [
   'code_artifact',
   'decision',
@@ -44,7 +46,12 @@ export async function memoryStoreRoutes(
   app.post(
     '/memory-store',
     async (request: FastifyRequest<{ Body: StoreBody }>, reply: FastifyReply) => {
-      const body = request.body as StoreBody;
+      const extracted = extractMcpArguments<StoreBody>(request.body);
+      if (!extracted.ok) {
+        return reply.code(400).send(extracted.error);
+      }
+
+      const body = extracted.body;
 
       if (!body.content || typeof body.content !== 'string' || body.content.trim().length === 0) {
         return reply.code(400).send({

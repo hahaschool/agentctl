@@ -13,6 +13,8 @@
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
+import { extractMcpArguments } from './mcp-arguments.js';
+
 const VALID_REPORT_TYPES = ['progress', 'health', 'activity'] as const;
 type ReportType = (typeof VALID_REPORT_TYPES)[number];
 
@@ -36,7 +38,12 @@ export async function memoryReportRoutes(
   app.post(
     '/memory-report',
     async (request: FastifyRequest<{ Body: ReportBody }>, reply: FastifyReply) => {
-      const body = request.body as ReportBody;
+      const extracted = extractMcpArguments<ReportBody>(request.body);
+      if (!extracted.ok) {
+        return reply.code(400).send(extracted.error);
+      }
+
+      const body = extracted.body;
 
       if (
         !body.reportType ||
