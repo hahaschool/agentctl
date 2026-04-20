@@ -9,12 +9,13 @@
 // the drawer layer — see §4.16 Memory Evolution Plan, PR F.
 // ---------------------------------------------------------------------------
 
-import type { MemoryDrawerSearchResult, MemoryDrawerSearchResultMatchType } from '@agentctl/shared';
+import type { MemoryDrawerSearchResult } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import type React from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
+import { matchTypeClass, matchTypeLabel } from '@/components/memory/drawerMatchType';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,25 +45,6 @@ function formatScore(score: number | null): string {
 function truncateId(id: string): string {
   if (id.length <= 16) return id;
   return `${id.slice(0, 8)}…${id.slice(-6)}`;
-}
-
-function matchTypeClass(matchType: MemoryDrawerSearchResultMatchType | null): string {
-  // Semantic tokens only — no hardcoded hex. Each match-type path gets a
-  // distinct accent color so users can tell keyword vs. vector matches apart.
-  switch (matchType) {
-    case 'keyword':
-      return 'border-sky-500/40 bg-sky-500/10 text-sky-300';
-    case 'vector':
-      return 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300';
-    case 'grep':
-      return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300';
-    default:
-      return 'border-border bg-muted/40 text-muted-foreground';
-  }
-}
-
-function matchTypeLabel(matchType: MemoryDrawerSearchResultMatchType | null): string {
-  return matchType ?? 'unknown';
 }
 
 async function copyToClipboard(text: string): Promise<void> {
