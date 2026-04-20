@@ -519,6 +519,13 @@ export async function createServer({
       memorySearch,
       memoryStore,
       pool: pgPool,
+      // §4.16 MemPalace drawer-aware fusion. Flag is read once here at
+      // registration; the route plugin never re-reads `process.env` per
+      // request. Both embeddingClient + pgPool are required to activate the
+      // additive `drawerResults` envelope field.
+      embeddingClient,
+      drawerFusionEnabled: process.env.MEMORY_DRAWER_FUSION === 'true',
+      logger,
     });
     await app.register(memoryEdgeRoutes, {
       prefix: '/api/memory/edges',

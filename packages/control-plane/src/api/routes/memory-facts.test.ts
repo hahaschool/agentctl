@@ -2,6 +2,7 @@ import type { MemoryEdge, MemoryFact } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { DrawerEmbeddingClient } from '../../memory/memory-drawer-search.js';
 import type { MemorySearch } from '../../memory/memory-search.js';
 import type { MemoryStore } from '../../memory/memory-store.js';
 import { createServer } from '../server.js';
@@ -584,5 +585,179 @@ describe('memory fact routes — SQL ILIKE fallback (no memorySearch)', () => {
     expect(body.results).toBeUndefined();
     expect(body.total).toBe(1);
     expect(pgPool.query).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §4.16 MemPalace drawer-aware fusion feature flag
+//
+// These tests exercise the additive `drawerResults` envelope field that only
+// appears when MEMORY_DRAWER_FUSION=true AND an embedding client + pg pool are
+// wired. The default (flag off) path must keep byte-identical behaviour.
+// ---------------------------------------------------------------------------
+
+function makeDrawerSearchRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'drawer-A',
+    scope: 'session:sess-1',
+    topic: 'general',
+    source_type: 'session-jsonl',
+    source_id: 'sess-1',
+    chunk_index: 0,
+    content: 'drawer snippet content',
+    score: 0.5,
+    rank: 1,
+    ...overrides,
+  };
+}
+
+type PoolMock = { query: ReturnType<typeof vi.fn> };
+
+function createDrawerAwarePgPool(
+  rows: Array<Record<string, unknown>> = [makeDrawerSearchRow()],
+): PoolMock {
+  return {
+    query: vi.fn().mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes('content_tsv_simple')) {
+        return { rows };
+      }
+      if (typeof sql === 'string' && sql.includes('embedding <=>')) {
+        return { rows };
+      }
+      return { rows: [] };
+    }),
+  };
+}
+
+describe('memory fact routes — drawer-aware fusion flag', () => {
+  let app: FastifyInstance;
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+    }
+    vi.unstubAllEnvs();
+  });
+
+  it('excludes drawerResults when MEMORY_DRAWER_FUSION is not set (byte-identical envelope)', async () => {
+    const memorySearch = createMockMemorySearch();
+    const memoryStore = createMockMemoryStore();
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+    const embed = vi.fn();
+    const embeddingClient: DrawerEmbeddingClient = { embed };
+    const pgPool = createDrawerAwarePgPool();
+
+    app = await createServer({
+      logger,
+      memorySearch,
+      memoryStore,
+      embeddingClient,
+      pgPool: pgPool as never,
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=flag-off',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.drawerResults).toBeUndefined();
+    // Base envelope is preserved
+    expect(body).toEqual({
+      ok: true,
+      facts: [makeFact()],
+      results: [{ fact: makeFact(), score: 0.9, source_path: 'vector' }],
+      total: 1,
+    });
+    // Flag off → drawer SQL + embedding pipeline must not fire
+    expect(embed).not.toHaveBeenCalled();
+    const drawerSqlCall = pgPool.query.mock.calls.find(
+      (call) =>
+        typeof call[0] === 'string' &&
+        (call[0].includes('content_tsv_simple') || call[0].includes('embedding <=>')),
+    );
+    expect(drawerSqlCall).toBeUndefined();
+  });
+
+  it('includes drawerResults when flag is on and embeddings + drawers are available', async () => {
+    vi.stubEnv('MEMORY_DRAWER_FUSION', 'true');
+    const memorySearch = createMockMemorySearch();
+    const memoryStore = createMockMemoryStore();
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+    const embeddingClient: DrawerEmbeddingClient = {
+      embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+    };
+    const pgPool = createDrawerAwarePgPool([
+      makeDrawerSearchRow({ id: 'drawer-A', rank: 1 }),
+      makeDrawerSearchRow({ id: 'drawer-B', rank: 2 }),
+    ]);
+
+    app = await createServer({
+      logger,
+      memorySearch,
+      memoryStore,
+      embeddingClient,
+      pgPool: pgPool as never,
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=flag-on',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(Array.isArray(body.drawerResults)).toBe(true);
+    expect(body.drawerResults.length).toBeGreaterThan(0);
+    // Fused score ordering: first result should have the highest score
+    const scores = body.drawerResults.map((r: { score: number | null }) => r.score);
+    const sortedDesc = [...scores].sort((a, b) => (b ?? 0) - (a ?? 0));
+    expect(scores).toEqual(sortedDesc);
+    // Base envelope is still present (additive only)
+    expect(body.facts).toEqual([makeFact()]);
+    expect(body.results).toEqual([{ fact: makeFact(), score: 0.9, source_path: 'vector' }]);
+    expect(body.total).toBe(1);
+  });
+
+  it('omits drawerResults when flag is on but no embedding client is configured (quiet fallback)', async () => {
+    vi.stubEnv('MEMORY_DRAWER_FUSION', 'true');
+    const memorySearch = createMockMemorySearch();
+    const memoryStore = createMockMemoryStore();
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+    const pgPool = createDrawerAwarePgPool();
+
+    app = await createServer({
+      logger,
+      memorySearch,
+      memoryStore,
+      // Deliberately no embeddingClient — quiet fallback.
+      pgPool: pgPool as never,
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=flag-on-no-embed',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.drawerResults).toBeUndefined();
+    // Envelope matches the non-flagged shape.
+    expect(body).toEqual({
+      ok: true,
+      facts: [makeFact()],
+      results: [{ fact: makeFact(), score: 0.9, source_path: 'vector' }],
+      total: 1,
+    });
   });
 });

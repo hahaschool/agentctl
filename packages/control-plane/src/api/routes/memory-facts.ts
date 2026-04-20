@@ -2,13 +2,19 @@ import type {
   EntityType,
   FactSource,
   FeedbackSignal,
+  MemoryDrawerSearchResult,
   MemoryFact,
   MemoryScope,
 } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
+import type { Logger } from 'pino';
 import { z } from 'zod';
 
+import {
+  type DrawerEmbeddingClient,
+  searchMemoryDrawers,
+} from '../../memory/memory-drawer-search.js';
 import type { MemorySearch } from '../../memory/memory-search.js';
 import type { MemoryStore, UpdateFactInput } from '../../memory/memory-store.js';
 
@@ -24,6 +30,12 @@ const MAX_FACT_QUERY_LENGTH = 1_024;
 const MAX_FACT_LIMIT = 500;
 const MAX_FACT_SOURCE_SPANS = 32;
 
+// §4.16 MemPalace — drawer-aware fusion is additive and env-flagged. The
+// cap mirrors the drawer route's MAX_LIMIT so a facts-side query can't pull a
+// denser drawer slice than the dedicated route would.
+const DEFAULT_DRAWER_RESULT_LIMIT = 25;
+const MAX_DRAWER_RESULT_LIMIT = 100;
+
 type MemoryFactRoutesOptions = {
   memorySearch?: Pick<MemorySearch, 'search'>;
   memoryStore: Pick<
@@ -37,6 +49,16 @@ type MemoryFactRoutesOptions = {
     | 'updateFact'
   >;
   pool?: Pool;
+  /**
+   * Embedding client used to run the drawer-aware fusion pass when the
+   * `MEMORY_DRAWER_FUSION` feature flag is enabled. When absent, the flag is
+   * a no-op and behaviour matches the pre-flag envelope.
+   */
+  embeddingClient?: DrawerEmbeddingClient;
+  /** Resolved once at registration; do NOT read `process.env` per request. */
+  drawerFusionEnabled?: boolean;
+  /** Logger used for drawer-fusion warnings. Falls back to a stub. */
+  logger?: Logger;
 };
 
 const DEFAULT_LIMIT = 50;
@@ -85,6 +107,7 @@ const listFactsQuerySchema = z.object({
   minConfidence: z.string().max(32).optional(),
   limit: z.string().max(16).optional(),
   offset: z.string().max(16).optional(),
+  drawerLimit: z.string().max(16).optional(),
 });
 
 function mapFactBodyIssue(issue: z.ZodIssue | undefined): { error: string; message: string } {
@@ -129,7 +152,18 @@ const DEFAULT_SOURCE: FactSource = {
 };
 
 export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = async (app, opts) => {
-  const { memorySearch, memoryStore, pool } = opts;
+  const { memorySearch, memoryStore, pool, embeddingClient } = opts;
+  // Resolve the flag once at registration — never re-read process.env per
+  // request. Callers that want to invert the gate pass `drawerFusionEnabled`
+  // explicitly; otherwise we fall back to the documented env variable so
+  // ops can flip the flag without a code change.
+  const drawerFusionEnabled =
+    opts.drawerFusionEnabled ?? process.env.MEMORY_DRAWER_FUSION === 'true';
+  const fusionLogger: Logger = opts.logger ?? (app.log as Logger);
+  // Only run the fusion pass when every dependency is wired. Keeps the
+  // behaviour additive: if embeddings or the pg pool aren't available we
+  // silently skip, matching the request contract in the task description.
+  const drawerFusionActive = Boolean(drawerFusionEnabled && embeddingClient && pool);
 
   app.get<{
     Querystring: {
@@ -142,6 +176,7 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       minConfidence?: string;
       limit?: string;
       offset?: string;
+      drawerLimit?: string;
     };
   }>(
     '/',
@@ -186,11 +221,33 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
           }));
           const pagedFacts = pagedResults.map((entry) => entry.fact);
 
+          // Drawer-aware fusion pass (additive, feature-flagged).
+          //
+          // When `MEMORY_DRAWER_FUSION=true` AND an embedding client + pg pool
+          // are wired, also surface drawer hits via the shared drawer search
+          // helper. We do NOT modify `facts` / `results` in this slice — see
+          // the plan in docs/plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md
+          // (Phase 4: Drawer-Aware Search Fusion) — a unified ranking is a
+          // follow-up. Any drawer-side failure degrades to the non-flagged
+          // envelope; it must not break the fact response.
+          const drawerResults =
+            drawerFusionActive && pool && embeddingClient
+              ? await runDrawerFusion({
+                  pool,
+                  embeddingClient,
+                  logger: fusionLogger,
+                  query: q,
+                  scope,
+                  drawerLimit: parsedQuery.data.drawerLimit,
+                })
+              : undefined;
+
           return {
             ok: true,
             facts: pagedFacts,
             results: pagedResults,
             total: filteredResults.length,
+            ...(drawerResults !== undefined ? { drawerResults } : {}),
           };
         }
 
@@ -444,6 +501,57 @@ function parseInteger(value: string | undefined, fallback: number): number {
 function parseFloatValue(value: string | undefined): number | undefined {
   const parsed = Number.parseFloat(value ?? '');
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Drawer-aware fusion helper
+// ---------------------------------------------------------------------------
+
+type RunDrawerFusionInput = {
+  pool: Pool;
+  embeddingClient: DrawerEmbeddingClient;
+  logger: Logger;
+  query: string;
+  scope?: string;
+  drawerLimit: string | undefined;
+};
+
+async function runDrawerFusion(
+  input: RunDrawerFusionInput,
+): Promise<MemoryDrawerSearchResult[] | undefined> {
+  const limit = resolveDrawerLimit(input.drawerLimit);
+  if (limit === null) {
+    return undefined;
+  }
+  try {
+    return await searchMemoryDrawers(
+      {
+        query: input.query,
+        scope: input.scope ?? null,
+        limit,
+      },
+      {
+        pool: input.pool,
+        embeddingClient: input.embeddingClient,
+        logger: input.logger,
+      },
+    );
+  } catch (err) {
+    // Additive behaviour: drawer fusion must never break the fact envelope.
+    input.logger.warn({ err }, 'Drawer fusion pass failed — falling back to fact-only envelope');
+    return undefined;
+  }
+}
+
+function resolveDrawerLimit(raw: string | undefined): number | null {
+  if (raw === undefined || raw === '') {
+    return DEFAULT_DRAWER_RESULT_LIMIT;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return null;
+  }
+  return Math.min(parsed, MAX_DRAWER_RESULT_LIMIT);
 }
 
 function factMatchesFilters(
