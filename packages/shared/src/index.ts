@@ -9,6 +9,7 @@ export {
 } from './dag-validation.js';
 export * from './discovery/index.js';
 export * from './health/index.js';
+export * from './memory/index.js';
 export * from './mesh/index.js';
 export * from './metrics/index.js';
 export type { NativeImportAttempt, NativeImportAttemptReason } from './protocol/handoff.js';

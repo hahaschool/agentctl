@@ -4,6 +4,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  customType,
   index,
   inet,
   integer,
@@ -13,8 +14,21 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
+const vector1536 = customType<{ data: string | null; driverData: string | null }>({
+  dataType() {
+    return 'vector(1536)';
+  },
+});
+
+const tsvector = customType<{ data: string | null; driverData: string | null }>({
+  dataType() {
+    return 'tsvector';
+  },
+});
 
 export const machines = pgTable('machines', {
   id: text('id').primaryKey(),
@@ -278,6 +292,46 @@ export const memoryScopes = pgTable('memory_scopes', {
   displayName: text('display_name'),
   configJson: jsonb('config_json').notNull().default({}),
 });
+
+export const memoryDrawers = pgTable(
+  'memory_drawers',
+  {
+    id: text('id').primaryKey(),
+    scope: text('scope')
+      .notNull()
+      .references(() => memoryScopes.scope, { onDelete: 'cascade' }),
+    topic: text('topic').notNull().default('general'),
+    sourceType: text('source_type').notNull(),
+    sourceId: text('source_id').notNull(),
+    sourceUri: text('source_uri'),
+    chunkIndex: integer('chunk_index').notNull().default(0),
+    content: text('content').notNull(),
+    contentSha256: text('content_sha256').notNull(),
+    embedding: vector1536('embedding'),
+    embeddingModel: text('embedding_model').notNull().default('text-embedding-3-small'),
+    embeddingVersion: integer('embedding_version').notNull().default(1),
+    contentTsvSimple: tsvector('content_tsv_simple'),
+    tokenCount: integer('token_count').notNull().default(0),
+    sourceJson: jsonb('source_json').notNull().default({}),
+    syncVisibility: text('sync_visibility').notNull().default('local'),
+    retentionExpiresAt: timestamp('retention_expires_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    redactionStatus: text('redaction_status').notNull().default('unreviewed'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('memory_drawers_source_unique').on(
+      table.sourceType,
+      table.sourceId,
+      table.chunkIndex,
+    ),
+    index('idx_memory_drawers_scope_topic').on(table.scope, table.topic),
+    index('idx_memory_drawers_source').on(table.sourceType, table.sourceId, table.chunkIndex),
+    index('idx_memory_drawers_content_sha256').on(table.contentSha256),
+    index('idx_memory_drawers_retention').on(table.retentionExpiresAt),
+  ],
+);
 
 export const memoryFacts = pgTable(
   'memory_facts',

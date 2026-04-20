@@ -11,6 +11,7 @@ import {
   machineRuntimeState,
   machines,
   managedSessions,
+  memoryDrawers,
   memoryEdges,
   memoryFacts,
   memoryScopes,
@@ -109,9 +110,11 @@ describe('Schema module exports', () => {
     expect(memoryScopes).toBeDefined();
     expect(memoryFacts).toBeDefined();
     expect(memoryEdges).toBeDefined();
+    expect(memoryDrawers).toBeDefined();
     expect(getTableName(memoryScopes)).toBe('memory_scopes');
     expect(getTableName(memoryFacts)).toBe('memory_facts');
     expect(getTableName(memoryEdges)).toBe('memory_edges');
+    expect(getTableName(memoryDrawers)).toBe('memory_drawers');
   });
 });
 
@@ -1521,6 +1524,52 @@ describe('memoryEdges table columns', () => {
     expect(meta.weight.columnType).toBe('PgNumeric');
     expect(meta.weight.notNull).toBe(true);
     expect(meta.weight.hasDefault).toBe(true);
+  });
+});
+
+describe('memoryDrawers table columns', () => {
+  const meta = getColumnMeta(memoryDrawers);
+
+  it('has the drawer storage contract columns', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'scope',
+      'topic',
+      'sourceType',
+      'sourceId',
+      'sourceUri',
+      'chunkIndex',
+      'content',
+      'contentSha256',
+      'embedding',
+      'embeddingModel',
+      'embeddingVersion',
+      'contentTsvSimple',
+      'tokenCount',
+      'sourceJson',
+      'syncVisibility',
+      'retentionExpiresAt',
+      'archivedAt',
+      'redactionStatus',
+      'createdAt',
+      'updatedAt',
+    ]);
+  });
+
+  it('stores sanitized drawer content and source-local identity as required fields', () => {
+    expect(meta.id.primary).toBe(true);
+    expect(meta.scope.notNull).toBe(true);
+    expect(meta.sourceType.notNull).toBe(true);
+    expect(meta.sourceId.notNull).toBe(true);
+    expect(meta.chunkIndex.notNull).toBe(true);
+    expect(meta.chunkIndex.hasDefault).toBe(true);
+    expect(meta.content.notNull).toBe(true);
+    expect(meta.contentSha256.notNull).toBe(true);
+    expect(meta.embeddingModel.hasDefault).toBe(true);
+    expect(meta.embeddingVersion.hasDefault).toBe(true);
+    expect(meta.sourceJson.hasDefault).toBe(true);
+    expect(meta.syncVisibility.hasDefault).toBe(true);
+    expect(meta.redactionStatus.hasDefault).toBe(true);
   });
 });
 

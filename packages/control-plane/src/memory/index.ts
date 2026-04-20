@@ -7,6 +7,22 @@ export type {
   SearchMemoryRequest,
 } from './mem0-client.js';
 export { Mem0Client } from './mem0-client.js';
+export {
+  chunkMemoryDrawerContent,
+  reconstructMemoryDrawerContent,
+} from './memory-drawer-chunker.js';
+export {
+  hashMemoryDrawerContent,
+  normalizeMemoryDrawerContent,
+  sanitizeMemoryDrawerContent,
+} from './memory-drawer-sanitizer.js';
+export { MemoryDrawerStore } from './memory-drawer-store.js';
+export type {
+  MemoryDrawerChunk,
+  SanitizeMemoryDrawerContentResult,
+  WriteMemoryDrawerSourceInput,
+  WriteMemoryDrawerSourceResult,
+} from './memory-drawer-types.js';
 export type {
   MemoryEvalCandidate,
   MemoryEvalDrawerSource,
