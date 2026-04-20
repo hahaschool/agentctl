@@ -1,6 +1,6 @@
 # Mesh Bidirectional Registration Plan
 
-**Status:** In Review — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, two-node replication proof, the opt-in live fixture foundation, and the PR #673 A-to-B machine visibility browser assertion landed; PR #675 adds the remaining 33.8 add-peer/reverse-registration and one-way warning/retry browser assertions
+**Status:** Delivered — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, two-node replication proof, the opt-in live fixture foundation, and the PR #673 A-to-B machine visibility browser assertion landed; PR #675 added the remaining 33.8 add-peer/reverse-registration and one-way warning/retry browser assertions
 **Roadmap:** 33.8 Mesh Bidirectional Registration + Cross-Node Visibility
 **Created:** 2026-04-15
 
@@ -70,7 +70,7 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
    - Integration proof is delivered in PR #589.
    - PR #654 created the opt-in fixture foundation.
    - PR #673 added the A-to-B machine visibility browser assertion.
-   - PR #675 adds the add-peer/reverse-registration and one-way warning/retry browser assertions.
+   - PR #675 added the add-peer/reverse-registration and one-way warning/retry browser assertions.
 
 2. Add mesh health summary. *(Delivered in PR #576.)*
    - Summarize bidirectional, one-way, and stale peer counts in the
