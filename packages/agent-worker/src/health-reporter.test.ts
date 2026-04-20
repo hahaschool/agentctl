@@ -219,6 +219,22 @@ describe('HealthReporter', () => {
       expect(body.tailscaleIp).toBe('100.64.0.1');
     });
 
+    it('pipes the tailscale CLI stderr so host errors never leak to worker stderr', async () => {
+      // Regression: execSync default behavior inherits stderr from the parent,
+      // causing "/bin/sh: tailscale: command not found" to surface in PM2 logs
+      // on hosts without Tailscale installed. stdio must explicitly pipe stderr.
+      const { execSync } = await import('node:child_process');
+      mockFetchOk();
+      const reporter = makeReporter();
+
+      await reporter.register();
+
+      expect(execSync).toHaveBeenCalledWith(
+        'tailscale ip -4',
+        expect.objectContaining({ stdio: ['ignore', 'pipe', 'pipe'] }),
+      );
+    });
+
     it('falls back to 127.0.0.1 when CLI fails', async () => {
       const { execSync } = await import('node:child_process');
       (execSync as ReturnType<typeof vi.fn>).mockImplementation(() => {

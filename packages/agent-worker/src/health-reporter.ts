@@ -42,9 +42,13 @@ async function resolveTailscaleIp(logger: Logger): Promise<string> {
   }
 
   try {
+    // stdio: ['ignore', 'pipe', 'pipe'] captures the child shell's stderr so
+    // "/bin/sh: tailscale: command not found" (on hosts without the CLI)
+    // doesn't leak onto the worker's own stderr and clutter PM2 logs.
     const output = execSync('tailscale ip -4', {
       timeout: TAILSCALE_CLI_TIMEOUT_MS,
       encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
 
     if (output) {
