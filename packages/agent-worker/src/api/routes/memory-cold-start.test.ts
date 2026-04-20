@@ -10,6 +10,7 @@ import { memoryRecallRoutes } from './memory-recall.js';
 import { memoryReportRoutes } from './memory-report.js';
 import { memorySearchRoutes } from './memory-search.js';
 import { memoryStoreRoutes } from './memory-store-route.js';
+import { memoryTraverseRoutes } from './memory-traverse.js';
 
 const CONTROL_PLANE_URL = 'http://localhost:8080';
 
@@ -25,6 +26,7 @@ function makeApp(): FastifyInstance {
   void app.register(memoryFeedbackRoutes, routeOptions);
   void app.register(memoryPromoteRoutes, routeOptions);
   void app.register(memoryDedupCheckRoutes, routeOptions);
+  void app.register(memoryTraverseRoutes, routeOptions);
 
   return app;
 }
@@ -133,6 +135,30 @@ describe('memory MCP cold-start contract', () => {
     });
   });
 
+  it('returns an empty traverse graph when no entity graph exists yet', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, nodes: [], edges: [], partial: false }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-traverse',
+      payload: {
+        start_entity_canonical_id: '550e8400-e29b-41d4-a716-446655440000',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      nodes: [],
+      edges: [],
+      partial: false,
+    });
+  });
+
   it('rejects null arguments on every current memory MCP route without hanging', async () => {
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-search');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-recall');
@@ -141,5 +167,6 @@ describe('memory MCP cold-start contract', () => {
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-feedback');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-promote');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-dedup-check');
+    await expectFastNullArgumentsRejection(app, '/api/mcp/memory-traverse');
   });
 });
