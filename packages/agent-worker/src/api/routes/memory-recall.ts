@@ -12,6 +12,8 @@
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
+import { extractMcpArguments } from './mcp-arguments.js';
+
 const DEFAULT_MAX_HOPS = 2;
 const MAX_ALLOWED_HOPS = 4;
 
@@ -66,7 +68,12 @@ export async function memoryRecallRoutes(
   app.post(
     '/memory-recall',
     async (request: FastifyRequest<{ Body: RecallBody }>, reply: FastifyReply) => {
-      const body = request.body as RecallBody;
+      const extracted = extractMcpArguments<RecallBody>(request.body);
+      if (!extracted.ok) {
+        return reply.code(400).send(extracted.error);
+      }
+
+      const body = extracted.body;
       const factId = body?.factId;
 
       if (!factId || typeof factId !== 'string' || factId.trim().length === 0) {
@@ -87,6 +94,7 @@ export async function memoryRecallRoutes(
       // BFS traversal
       const visited = new Set<string>([factId]);
       const relatedFacts: FactRecord[] = [];
+      const relatedEdges: EdgeRecord[] = [];
       let frontier: string[] = [factId];
 
       for (let hop = 0; hop < maxHops; hop++) {
@@ -96,12 +104,13 @@ export async function memoryRecallRoutes(
           frontier.map((id) => fetchEdgesForFact(controlPlaneUrl, id)),
         );
 
-        for (const edges of edgeBatches) {
+        for (const [batchIndex, edges] of edgeBatches.entries()) {
+          const currentFactId = frontier[batchIndex];
           for (const edge of edges) {
+            relatedEdges.push(edge);
+
             const neighbourId =
-              edge.source_fact_id === frontier[edgeBatches.indexOf(edges)]
-                ? edge.target_fact_id
-                : edge.source_fact_id;
+              edge.source_fact_id === currentFactId ? edge.target_fact_id : edge.source_fact_id;
 
             if (!visited.has(neighbourId)) {
               visited.add(neighbourId);
@@ -131,7 +140,7 @@ export async function memoryRecallRoutes(
         'memory_recall BFS complete',
       );
 
-      return { ok: true, seedFactId: factId, maxHops, facts: relatedFacts };
+      return { ok: true, seedFactId: factId, maxHops, facts: relatedFacts, edges: relatedEdges };
     },
   );
 }

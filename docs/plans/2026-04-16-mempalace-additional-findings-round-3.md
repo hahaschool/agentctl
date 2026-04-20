@@ -208,22 +208,24 @@ DoS. Log every traversal with hop_count and result_size.
 ```
 Phase 0 also ships an empty-DB contract test matrix:
 
-- [ ] memory-search with empty DB returns { results: [], total: 0 }, not
+- [x] memory-search with empty DB returns { results: [], total: 0 }, not
       an error.
-- [ ] memory-recall with empty DB returns { facts: [], edges: [] }.
-- [ ] memory-stats with empty DB returns { fact_count: 0,
+- [x] memory-recall with empty DB returns { facts: [], edges: [] }.
+- [x] memory-stats/report with empty DB returns { fact_count: 0,
       drawer_count: 0, ... } — all zeros, not nulls.
 - [ ] memory-traverse from a nonexistent entity returns empty graph, not
       404.
-- [ ] Every MCP route accepts { arguments: null } without hanging
+- [x] Existing memory MCP routes reject { arguments: null } without hanging
       (issue-#394 parallel — mirrors MemPalace's fix).
 - [ ] memory-dedup-check on empty DB recommends 'store_new' with
       nearest_matches: [].
 
-Test file: packages/agent-worker/src/api/routes/__tests__/
-memory-cold-start.test.ts. Use an isolated test DB with zero rows
-across all memory tables. Shared with control-plane route tests via a
-helper createEmptyMemoryDb().
+Current worker routes are covered in `packages/agent-worker/src/api/routes/
+memory-cold-start.test.ts`; `memory-traverse` and `memory-dedup-check`
+remain planned-route work and need matching tests when their route files exist.
+
+Future control-plane coverage should use an isolated test DB with zero rows
+across all memory tables, shared via a helper such as `createEmptyMemoryDb()`.
 
 This is a 🔴 priority for Phase 0 because first-run UX is load-bearing
 for adoption and regressions here are invisible to populated-DB tests.
