@@ -213,7 +213,7 @@ Phase 0 also ships an empty-DB contract test matrix:
 - [x] memory-recall with empty DB returns { facts: [], edges: [] }.
 - [x] memory-stats/report with empty DB returns { fact_count: 0,
       drawer_count: 0, ... } — all zeros, not nulls.
-- [ ] memory-traverse from a nonexistent entity returns empty graph, not
+- [x] memory-traverse from a nonexistent entity returns empty graph, not
       404.
 - [x] Existing memory MCP routes reject { arguments: null } without hanging
       (issue-#394 parallel — mirrors MemPalace's fix).
@@ -221,9 +221,10 @@ Phase 0 also ships an empty-DB contract test matrix:
       nearest_matches: [] (PR #681).
 
 Current worker routes are covered in `packages/agent-worker/src/api/routes/
-memory-cold-start.test.ts`; `memory-dedup-check` now has first-route coverage
-in `memory-dedup-check.test.ts`, while `memory-traverse` remains planned-route
-work and needs matching tests when its route file exists.
+memory-cold-start.test.ts`; `memory-dedup-check` has first-route coverage in
+`memory-dedup-check.test.ts`, and `memory-traverse` has worker route coverage in
+`memory-traverse.test.ts`. Control-plane recursive traversal, temporal edge
+validity, and timeline behavior remain planned work.
 
 Future control-plane coverage should use an isolated test DB with zero rows
 across all memory tables, shared via a helper such as `createEmptyMemoryDb()`.
