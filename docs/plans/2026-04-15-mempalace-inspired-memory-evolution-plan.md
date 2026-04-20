@@ -826,7 +826,7 @@ held-out automation.
 
 **Goal:** Preserve sanitized raw evidence without replacing existing facts.
 
-**Status:** Partially delivered in PR #671. The merged slice added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. Remaining Phase 1/1.5 scope is audit entry wiring plus resumable JSONL/claude-mem backfill state; drawers still have no sync triggers and no default retrieval behavior.
+**Status:** Partially delivered in PRs #671 and #679. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. Remaining Phase 1.5 scope is resumable JSONL/claude-mem backfill plus persisted backfill state; drawers still have no sync triggers and no default retrieval behavior.
 
 **Files:**
 
@@ -847,6 +847,10 @@ held-out automation.
 - Create: `packages/control-plane/src/memory/memory-drawer-sanitizer.test.ts`
 - Modify: `packages/agent-worker/src/hooks/audit-logger.ts`
 - Modify: `packages/agent-worker/src/hooks/audit-logger.test.ts`
+- Modify: `packages/agent-worker/src/hooks/audit-reporter.ts`
+- Modify: `packages/agent-worker/src/hooks/audit-reporter.test.ts`
+- Create: `packages/shared/src/memory/audit.ts`
+- Create: `packages/shared/src/memory/audit.test.ts`
 - Modify: `packages/control-plane/src/memory/index.ts`
 
 **Work:**
@@ -856,7 +860,7 @@ held-out automation.
 3. Implement the chunker with the constants in [Chunking Specification](#chunking-specification).
 4. Implement raw-transcript sanitizer and quarantine logic.
 5. Store only sanitized content, sanitized hash, and sanitized embeddings.
-6. Add memory write audit entry kind to existing `AuditLogger`.
+6. Add memory write audit entry kind to existing `AuditLogger`. *(Delivered in PR #679.)*
 7. Apply `sanitizeName()` to scope/entity fields before drawer/fact/edge writes.
 8. Do not add sync triggers for drawers in this phase.
 
@@ -868,6 +872,7 @@ held-out automation.
 - Quarantined drawers are not searchable by default.
 - Duplicate `content_sha256` across different sources is legal.
 - Duplicate `(source_type, source_id, chunk_index)` is skipped/upserted idempotently.
+- Memory write audit entries strip raw content-like metadata keys, redact sensitive keys, and summarize failures without logging raw drawer content.
 - Chunker property tests cover round-trip, boundaries, determinism, and size invariants.
 - Audit entry writes hashed metadata without raw content.
 
@@ -1037,6 +1042,7 @@ held-out automation.
    - Empty DB returns `store_new` with no matches.
    - `memory_store` prompt/tool docs should call `memory_dedup_check` first by default, with an explicit `force_store` escape hatch.
 8. Implement the three-stage query sanitizer in both worker route and control-plane search before embedding.
+   - Delivered in PR #677 for existing worker `memory-search` proxying and control-plane `MemorySearch`.
 9. Basic temporal parser supports relative dates only.
 10. Event-anchored temporal search is Phase 4b and must not block Phase 4.
 11. Report eval before/after using dev during tuning. Default enablement requires drawer-aware dev R@5 >= facts-only dev R@5 and no p95 regression beyond the accepted threshold. Held-out comparison happens only in release/weekly eval jobs.
@@ -1250,7 +1256,7 @@ Add env vars through the existing centralized config path used by control-plane/
 
 2. **PR B: Drawer Schema + Store**
    - Partially delivered in PR #671: `0030`, chunker, sanitizer, drawer store, shared redaction/validation, and tests.
-   - Remaining: memory write audit entry wiring.
+   - PR #679 completed the redacted memory write audit entry foundation.
    - No retrieval behavior change.
 
 3. **PR C: Backfill**
@@ -1265,7 +1271,8 @@ Add env vars through the existing centralized config path used by control-plane/
    - Adds `0031`, fact-source links, injector budget modes, and Surface A dry-run generator.
 
 6. **PR F: Drawer-Aware Search**
-   - Adds drawer search behind feature flags, three-stage query sanitizer, `memory_dedup_check`, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
+   - PR #677 delivered the three-stage query sanitizer for existing memory search paths.
+   - Remaining: drawer search behind feature flags, `memory_dedup_check`, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
 
 7. **PR G: Diaries**
    - Adds diary-as-fact route and basic UI.

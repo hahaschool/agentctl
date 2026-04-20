@@ -1,6 +1,6 @@
 # Mesh Fleet Rollout + Peer Update Plan
 
-**Status:** In progress — PM2 CLI, opt-in schedulers, settings UI, provenance, rollback, fleet structure, update-available banner, and all three opt-in live two-node fixture slices landed; end-to-end canary dry-run remains
+**Status:** In progress — PM2 CLI, opt-in schedulers, settings UI, provenance, rollback, fleet structure, update-available banner, all three opt-in live two-node fixture slices, and Docker-topology dry-run/canary guards landed; operator-executed end-to-end dry-run and canary run remain
 **Roadmap:** 33.11 Fleet Rollout & Peer Auto-Update
 **Created:** 2026-04-15
 
@@ -29,7 +29,10 @@ separately gated peer-update dry-run fixture assertion over
 `/api/mesh/auto-update/dry-run`. PR #668 added the separately gated
 schema-ahead assertion by forcing a `schemaVersion + 2` envelope through the
 primary node's apply-side compat gate and asserting the 33.10 badge on
-`/mesh-peers`.
+`/mesh-peers`. PR #678 scoped `deploy-fleet.yml` and `fleet-bootstrap.ts` to
+`labels.topology: docker`, added static workflow/bootstrap coverage, and
+documented the first dry-run/canary invocation sequence without touching beta,
+dev, or prod promotion workflows.
 
 ## Scope
 
@@ -37,6 +40,7 @@ primary node's apply-side compat gate and asserting the 33.10 badge on
    - Fleet structure landed in PR #593.
    - Build provenance landed in PR #575.
    - Migration gate landed in PR #579.
+   - Docker topology filtering and the dry-run/canary runbook landed in PR #678.
    - Remaining: exercise `deploy-fleet.yml` first in dry-run, then canary mode.
 
 2. Add a PM2 mesh peer update path.
@@ -97,7 +101,7 @@ primary node's apply-side compat gate and asserting the 33.10 badge on
   dry-run steps.
 - PR #668's opt-in schema-ahead fixture verifies the compatibility gate rejects
   unsafe envelopes and surfaces the persisted 33.10 badge.
-- Deploy-fleet dry-run/canary preparation now has a static topology guard and
+- PR #678 deploy-fleet dry-run/canary preparation now has a static topology guard and
   runbook: the workflow and bootstrap helper target only
   `labels.topology: docker`, with focused tests covering the guard. The live
   GitHub Actions dry-run and canary invocation still remain operator actions.
