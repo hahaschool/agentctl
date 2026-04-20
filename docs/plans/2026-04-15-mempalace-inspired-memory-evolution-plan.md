@@ -28,7 +28,7 @@ skip/merge/store_new scoring at plan thresholds (0.92/0.82), defensive
 `store_new` on missing/non-finite top score, and a populated
 `MemoryDedupCheckResponse.match_id`. PR #695 closed the end-to-end scoring
 gap by adding an additive `results: [{fact, score, source_path}]` array on
-the semantic-search branch of `POST /api/memory/facts`, so dedup candidates
+the semantic-search branch of `GET /api/memory/facts`, so dedup candidates
 carry similarity scores into the worker route without breaking the existing
 `facts` envelope or the ILIKE/empty-`q` branches. Live search wiring,
 private/full fixture coverage, `claude-mem` → `memory_fact_sources` link
@@ -1304,7 +1304,7 @@ Add env vars through the existing centralized config path used by control-plane/
    - PR #677 delivered the three-stage query sanitizer for existing memory search paths.
    - PR #681 delivered the first `memory_dedup_check` route contract, including empty-DB `store_new` behavior and explicit scoring-unavailable responses when candidates exist.
    - PR #694 replaced the `501 DEDUP_SCORING_UNAVAILABLE` branch with full skip/merge/store_new scoring at plan thresholds (`0.92`/`0.82`), defensive `store_new` on missing/non-finite top score, and a populated `MemoryDedupCheckResponse.match_id`.
-   - PR #695 added the CP score pass-through: `POST /api/memory/facts` now returns an additive `results: [{fact, score, source_path}]` array on the semantic-search branch alongside `facts`, preserving filter-then-paginate order across both arrays and leaving the ILIKE/empty-`q` branches untouched. This closes the end-to-end scoring gap so dedup candidates carry similarity scores through without the defensive `store_new` fallback.
+   - PR #695 added the CP score pass-through: `GET /api/memory/facts` now returns an additive `results: [{fact, score, source_path}]` array on the semantic-search branch alongside `facts`, preserving filter-then-paginate order across both arrays and leaving the ILIKE/empty-`q` branches untouched. This closes the end-to-end scoring gap so dedup candidates carry similarity scores through without the defensive `store_new` fallback.
    - Remaining: drawer search behind feature flags, MCP drawer parity, eval comparison, and no default enablement until metrics pass.
 
 7. **PR G: Diaries**
