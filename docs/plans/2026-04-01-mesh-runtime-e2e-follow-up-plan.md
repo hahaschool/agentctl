@@ -15,6 +15,9 @@
 > tracking doc. PR #431 later extended the same browser-coverage push to
 > `/mesh-peers`, covering render, empty, ping-success, and ping-failure
 > states for the section 33.4 peer-registry UI.
+> Follow-up sync (2026-04-20): PR #662 added the already backend-independent
+> `session-config.spec.ts` slice to the focused web `test:e2e:ci` gate,
+> taking the lane to 20 specs / 68 tests after the PR Web E2E check passed.
 
 ---
 
