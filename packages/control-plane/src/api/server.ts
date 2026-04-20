@@ -82,6 +82,7 @@ import { mcpToolsRoutes } from './routes/mcp-tools.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryConsolidationRoutes } from './routes/memory-consolidation.js';
 import { memoryDecayRoutes } from './routes/memory-decay.js';
+import type { DrawerEmbeddingClient } from './routes/memory-drawers.js';
 import { memoryDrawerRoutes } from './routes/memory-drawers.js';
 import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
 import { memoryFactRoutes } from './routes/memory-facts.js';
@@ -152,6 +153,13 @@ type CreateServerOptions = {
     | 'recordFeedback'
     | 'updateFact'
   >;
+  /**
+   * Optional embedding client forwarded to `memoryDrawerRoutes` so drawer
+   * search can do pgvector fusion (RRF k=60) in addition to keyword search.
+   * Kept as the structural {@link DrawerEmbeddingClient} shape so tests and
+   * stubs don't need to construct the full production client.
+   */
+  embeddingClient?: DrawerEmbeddingClient;
   memoryInjector?: MemoryInjector | null;
   pgPool?: Pool;
   workerPort?: number;
@@ -194,6 +202,7 @@ export async function createServer({
   mem0Client,
   memorySearch,
   memoryStore,
+  embeddingClient,
   memoryInjector = null,
   pgPool,
   workerPort = 9000,
@@ -577,6 +586,7 @@ export async function createServer({
       prefix: '/api/memory/drawers',
       pool: pgPool,
       logger,
+      embeddingClient,
     });
 
     if (memoryStore) {
