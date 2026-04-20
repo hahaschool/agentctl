@@ -53,6 +53,7 @@ export type BackfillMemoryDrawersCliOptions = {
   topic: string;
   limit?: number;
   machineId?: string;
+  embeddingUsdPer1MTokens: number;
 };
 
 export type DrawerStoreLike = {
@@ -109,6 +110,7 @@ export type BackfillMemoryDrawersOptions = {
   scope?: MemoryScope;
   topic?: string;
   limit?: number;
+  embeddingUsdPer1MTokens?: number;
 };
 
 export type BackfillMemoryDrawersResult = {
@@ -132,6 +134,10 @@ export type BackfillMemoryDrawersResult = {
   sessionSummaryFactCandidates: number;
   sessionSummaryFactsWritten: number;
   sessionSummaryFactsSkipped: number;
+  estimatedDrawerChunks: number;
+  estimatedEmbeddingTokens: number;
+  estimatedEmbeddingCostUsd: number;
+  estimatedStorageBytes: number;
   lastCursor: BackfillCursor | null;
 };
 
@@ -176,6 +182,10 @@ type StreamLine = {
 const DEFAULT_SCOPE: MemoryScope = 'global';
 const DEFAULT_TOPIC = 'claude-code-jsonl';
 const DEFAULT_CURSOR_LINE = 1;
+const DEFAULT_EMBEDDING_USD_PER_1M_TOKENS = 0.02;
+const ESTIMATED_CHUNK_TARGET_CHARS = 1_200;
+const VECTOR_AND_INDEX_BYTES_PER_DRAWER = 6 * 1024;
+const POSTGRES_ROW_OVERHEAD_BYTES_PER_DRAWER = 512;
 
 function usage(): string {
   return `Usage: pnpm memory:backfill-drawers --source-root <path> [--dry-run|--execute] [options]
@@ -194,6 +204,8 @@ Options:
   --topic <topic>          Drawer topic. Default: claude-code-jsonl.
   --limit <count>          Stop after count candidate entries.
   --machine-id <id>        Machine id tagged onto fact source metadata.
+  --embedding-usd-per-1m-tokens <usd>
+                           Estimate embedding spend. Default: ${DEFAULT_EMBEDDING_USD_PER_1M_TOKENS}.
   --json                   Print JSON summary.
   --help                   Show this message.`;
 }
@@ -210,6 +222,7 @@ export function parseArgs(
     json: false,
     scope: DEFAULT_SCOPE,
     topic: DEFAULT_TOPIC,
+    embeddingUsdPer1MTokens: DEFAULT_EMBEDDING_USD_PER_1M_TOKENS,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -280,6 +293,17 @@ export function parseArgs(
       continue;
     }
 
+    if (arg === '--embedding-usd-per-1m-tokens') {
+      const value = argv[index + 1];
+      if (!value) throw new Error('--embedding-usd-per-1m-tokens requires a number');
+      options.embeddingUsdPer1MTokens = parseNonNegativeNumber(
+        value,
+        '--embedding-usd-per-1m-tokens',
+      );
+      index += 1;
+      continue;
+    }
+
     if (arg === '--dry-run') {
       options.dryRun = true;
       continue;
@@ -325,6 +349,14 @@ function parsePositiveInteger(value: string, optionName: string): number {
   return parsed;
 }
 
+function parseNonNegativeNumber(value: string, optionName: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${optionName} requires a non-negative number`);
+  }
+  return parsed;
+}
+
 function parseMemoryScope(value: string): MemoryScope {
   if (
     value === 'global' ||
@@ -336,6 +368,36 @@ function parseMemoryScope(value: string): MemoryScope {
   }
 
   throw new Error('--scope must be global, project:<id>, agent:<id>, or session:<id>');
+}
+
+function estimateEmbeddingTokens(content: string): number {
+  return Math.ceil(content.length / 4);
+}
+
+function recordCandidateEstimate(
+  result: BackfillMemoryDrawersResult,
+  sanitizedContent: string,
+  embeddingUsdPer1MTokens: number,
+): void {
+  const normalizedContent = sanitizedContent.trim();
+  if (normalizedContent.length === 0) {
+    return;
+  }
+
+  const chunkCount = Math.max(
+    1,
+    Math.ceil(normalizedContent.length / ESTIMATED_CHUNK_TARGET_CHARS),
+  );
+  const tokenCount = estimateEmbeddingTokens(normalizedContent);
+  const storageBytes =
+    Buffer.byteLength(normalizedContent, 'utf8') +
+    chunkCount * (VECTOR_AND_INDEX_BYTES_PER_DRAWER + POSTGRES_ROW_OVERHEAD_BYTES_PER_DRAWER);
+
+  result.estimatedDrawerChunks += chunkCount;
+  result.estimatedEmbeddingTokens += tokenCount;
+  result.estimatedStorageBytes += storageBytes;
+  result.estimatedEmbeddingCostUsd =
+    Math.round((result.estimatedEmbeddingTokens / 1_000_000) * embeddingUsdPer1MTokens * 1e8) / 1e8;
 }
 
 export function findJsonlFiles(sourceRoot: string): string[] {
@@ -374,6 +436,8 @@ export async function backfillMemoryDrawers(
   const dryRun = options.dryRun;
   const scope = options.scope ?? DEFAULT_SCOPE;
   const topic = options.topic ?? DEFAULT_TOPIC;
+  const embeddingUsdPer1MTokens =
+    options.embeddingUsdPer1MTokens ?? DEFAULT_EMBEDDING_USD_PER_1M_TOKENS;
   const files = sourceType === 'session-jsonl' ? findJsonlFiles(sourceRoot) : [];
   const state = dryRun
     ? null
@@ -403,6 +467,10 @@ export async function backfillMemoryDrawers(
     sessionSummaryFactCandidates: 0,
     sessionSummaryFactsWritten: 0,
     sessionSummaryFactsSkipped: 0,
+    estimatedDrawerChunks: 0,
+    estimatedEmbeddingTokens: 0,
+    estimatedEmbeddingCostUsd: 0,
+    estimatedStorageBytes: 0,
     lastCursor: null,
   };
 
@@ -466,6 +534,7 @@ export async function backfillMemoryDrawers(
         if (sanitized.redactionStatus !== 'unreviewed') {
           result.sanitizedCandidates += 1;
         }
+        recordCandidateEstimate(result, sanitized.content, embeddingUsdPer1MTokens);
 
         if (!dryRun) {
           const drawerStore = requireDrawerStore(options);
@@ -746,6 +815,11 @@ async function processClaudeMemCandidate(params: {
   if (sanitized.redactionStatus !== 'unreviewed') {
     result.sanitizedCandidates += 1;
   }
+  recordCandidateEstimate(
+    result,
+    sanitized.content,
+    options.embeddingUsdPer1MTokens ?? DEFAULT_EMBEDDING_USD_PER_1M_TOKENS,
+  );
 
   if (observation) {
     const factPlan = planObservationFactWrites(observation);
@@ -1408,6 +1482,10 @@ function formatSummary(result: BackfillMemoryDrawersResult): string {
     `Candidate entries: ${result.candidates}`,
     `Sanitized candidates: ${result.sanitizedCandidates}`,
     `Parse errors: ${result.parseErrors}`,
+    `Estimated drawer chunks: ${result.estimatedDrawerChunks}`,
+    `Estimated embedding tokens: ${result.estimatedEmbeddingTokens}`,
+    `Estimated embedding cost USD: ${result.estimatedEmbeddingCostUsd.toFixed(8)}`,
+    `Estimated storage bytes: ${result.estimatedStorageBytes}`,
     `Drawers written: ${result.written}`,
     `Fact candidates (observations): ${result.factCandidates}`,
     `Facts written (observations): ${result.factsWritten}`,
@@ -1472,6 +1550,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       scope: options.scope,
       topic: options.topic,
       limit: options.limit,
+      embeddingUsdPer1MTokens: options.embeddingUsdPer1MTokens,
     });
 
     if (options.json) {
