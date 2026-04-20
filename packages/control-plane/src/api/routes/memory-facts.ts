@@ -6,6 +6,7 @@ import type {
   MemoryFact,
   MemoryScope,
 } from '@agentctl/shared';
+import { querySanitizerLogFields, sanitizeQuery } from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
@@ -97,6 +98,17 @@ const updateFactBodySchema = z.object({
   strength: z.number().min(0).max(1).optional(),
 });
 
+// Strict `drawerLimit` validator — rejects `25abc`, `1.5`, `0`, `101`, etc.
+// with a 400 before the handler runs. We stay on the Zod path (mirroring
+// `listFactsQuerySchema` precedent) instead of adding a separate Fastify JSON
+// schema so a single rejection envelope owns every query-param error.
+const drawerLimitSchema = z
+  .string()
+  .regex(/^[0-9]+$/, 'drawerLimit must be an integer')
+  .transform((value) => Number.parseInt(value, 10))
+  .pipe(z.number().int().min(1).max(MAX_DRAWER_RESULT_LIMIT))
+  .optional();
+
 const listFactsQuerySchema = z.object({
   q: z.string().max(MAX_FACT_QUERY_LENGTH).optional(),
   scope: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
@@ -107,7 +119,7 @@ const listFactsQuerySchema = z.object({
   minConfidence: z.string().max(32).optional(),
   limit: z.string().max(16).optional(),
   offset: z.string().max(16).optional(),
-  drawerLimit: z.string().max(16).optional(),
+  drawerLimit: drawerLimitSchema,
 });
 
 function mapFactBodyIssue(issue: z.ZodIssue | undefined): { error: string; message: string } {
@@ -184,6 +196,14 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
     async (request, reply) => {
       const parsedQuery = listFactsQuerySchema.safeParse(request.query);
       if (!parsedQuery.success) {
+        const firstIssue = parsedQuery.error.issues[0];
+        if (firstIssue?.path[0] === 'drawerLimit') {
+          reply.code(400).send({
+            error: 'INVALID_DRAWER_LIMIT',
+            message: `drawerLimit must be an integer between 1 and ${MAX_DRAWER_RESULT_LIMIT}`,
+          });
+          return;
+        }
         reply.code(400).send({
           error: 'INVALID_FACT_QUERY',
           message: 'memory fact query parameters exceed bounded limits',
@@ -230,6 +250,14 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
           // (Phase 4: Drawer-Aware Search Fusion) — a unified ranking is a
           // follow-up. Any drawer-side failure degrades to the non-flagged
           // envelope; it must not break the fact response.
+          //
+          // The raw user query is routed through the shared three-stage
+          // `sanitizeQuery` helper before it ever reaches the drawer search
+          // helper — mirroring what the fact-path already does inside
+          // `MemorySearch.search`. If sanitization rejects the query (empty
+          // after trim, prefix-smell, etc.), we silently skip drawer fusion
+          // and return the fact-only envelope; a rejected drawer query must
+          // never 400 the whole fact request.
           const drawerResults =
             drawerFusionActive && pool && embeddingClient
               ? await runDrawerFusion({
@@ -513,20 +541,32 @@ type RunDrawerFusionInput = {
   logger: Logger;
   query: string;
   scope?: string;
-  drawerLimit: string | undefined;
+  drawerLimit: number | undefined;
 };
 
 async function runDrawerFusion(
   input: RunDrawerFusionInput,
 ): Promise<MemoryDrawerSearchResult[] | undefined> {
-  const limit = resolveDrawerLimit(input.drawerLimit);
-  if (limit === null) {
-    return undefined;
-  }
+  const limit = input.drawerLimit ?? DEFAULT_DRAWER_RESULT_LIMIT;
   try {
+    // Mirror `MemorySearch.search` — run the raw query through the shared
+    // three-stage sanitizer so drawer fusion never sees system prompts,
+    // transcript dumps, or oversized input. An `empty` verdict means the
+    // query is unusable for drawer search: degrade to fact-only (return
+    // undefined) rather than 400ing the whole fact request.
+    const sanitized = sanitizeQuery(input.query);
+    input.logger.debug(querySanitizerLogFields(sanitized), 'Sanitized drawer fusion query');
+    if (sanitized.stage === 'empty') {
+      input.logger.debug(
+        { reason: 'query_empty' },
+        'Drawer fusion skipped — sanitizer rejected query',
+      );
+      return undefined;
+    }
+
     return await searchMemoryDrawers(
       {
-        query: input.query,
+        query: sanitized.query,
         scope: input.scope ?? null,
         limit,
       },
@@ -541,17 +581,6 @@ async function runDrawerFusion(
     input.logger.warn({ err }, 'Drawer fusion pass failed — falling back to fact-only envelope');
     return undefined;
   }
-}
-
-function resolveDrawerLimit(raw: string | undefined): number | null {
-  if (raw === undefined || raw === '') {
-    return DEFAULT_DRAWER_RESULT_LIMIT;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    return null;
-  }
-  return Math.min(parsed, MAX_DRAWER_RESULT_LIMIT);
 }
 
 function factMatchesFilters(
