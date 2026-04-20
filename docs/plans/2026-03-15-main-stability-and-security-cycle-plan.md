@@ -40,6 +40,13 @@
 
 > Follow-up sync (2026-04-20): PR #649 repaired the scheduled Cleanup Old Docker Images workflow so missing GHCR packages are treated as a no-op instead of failing the run, and moved `actions/github-script` to v8. PR #650 pinned patched `@fastify/static` 9.1.1 through the root pnpm override, clearing Dependabot alerts #33/#34. PR #651 silenced expected `tailscale` CLI stderr in worker health reporting on hosts without the binary. At this checkpoint `main@4ecb7f54` reports 0 open code-scanning, Dependabot, and secret-scanning alerts; beta/dev CD workflows were not changed.
 
+> Follow-up sync (2026-04-20): PR #662 added the already mock-based
+> `session-config.spec.ts` slice to the focused Web E2E CI lane. The PR
+> checks passed before merge, including Web E2E at 20 specs / 68 tests, CI,
+> and Security Audit. PR #663 synced the post-#662 roadmap checkpoint, and
+> post-#663 main CI, Security Audit, and Build & Publish passed. Beta/dev CD
+> workflows were not changed.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
