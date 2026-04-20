@@ -22,6 +22,7 @@ const MAX_FACT_CONTENT_LENGTH = 8_192;
 const MAX_FACT_FILTER_LENGTH = 128;
 const MAX_FACT_QUERY_LENGTH = 1_024;
 const MAX_FACT_LIMIT = 500;
+const MAX_FACT_SOURCE_SPANS = 32;
 
 type MemoryFactRoutesOptions = {
   memorySearch?: Pick<MemorySearch, 'search'>;
@@ -40,12 +41,30 @@ type MemoryFactRoutesOptions = {
 
 const DEFAULT_LIMIT = 50;
 
+const factSourceSpanBodySchema = z
+  .object({
+    drawerId: z.string().min(1).max(MAX_FACT_FILTER_LENGTH),
+    startOffset: z.number().int().min(0),
+    endOffset: z.number().int().min(0),
+    sourceJson: z.record(z.unknown()).optional(),
+  })
+  .superRefine((span, ctx) => {
+    if (span.endOffset < span.startOffset) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endOffset'],
+        message: 'endOffset must be greater than or equal to startOffset',
+      });
+    }
+  });
+
 const createFactBodySchema = z.object({
   content: z.string().min(1).max(MAX_FACT_CONTENT_LENGTH),
   scope: z.string().min(1).max(MAX_FACT_FILTER_LENGTH),
   entityType: z.string().min(1).max(MAX_FACT_FILTER_LENGTH),
   confidence: z.number().min(0).max(1).optional(),
   source: z.record(z.unknown()).optional(),
+  sourceSpans: z.array(factSourceSpanBodySchema).max(MAX_FACT_SOURCE_SPANS).optional(),
 });
 
 const updateFactBodySchema = z.object({
@@ -88,6 +107,12 @@ function mapFactBodyIssue(issue: z.ZodIssue | undefined): { error: string; messa
       };
     case 'confidence':
       return { error: 'INVALID_CONFIDENCE', message: '"confidence" must be a number in [0, 1]' };
+    case 'sourceSpans':
+      return {
+        error: 'INVALID_SOURCE_SPANS',
+        message:
+          '"sourceSpans" must contain bounded drawer offsets with endOffset greater than or equal to startOffset',
+      };
     case 'strength':
       return { error: 'INVALID_STRENGTH', message: '"strength" must be a number in [0, 1]' };
     default:
@@ -207,6 +232,12 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       entityType: EntityType;
       confidence?: number;
       source?: FactSource;
+      sourceSpans?: Array<{
+        drawerId: string;
+        startOffset: number;
+        endOffset: number;
+        sourceJson?: Record<string, unknown>;
+      }>;
     };
   }>(
     '/',
@@ -216,7 +247,7 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       if (!parsed.success) {
         return reply.code(400).send(mapFactBodyIssue(parsed.error.issues[0]));
       }
-      const { content, scope, entityType, confidence, source } = parsed.data;
+      const { content, scope, entityType, confidence, source, sourceSpans } = parsed.data;
 
       const fact = await memoryStore.addFact({
         content,
@@ -224,6 +255,7 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
         entity_type: entityType as EntityType,
         confidence,
         source: (source as FactSource | undefined) ?? DEFAULT_SOURCE,
+        sourceSpans,
       });
 
       return reply.code(201).send({ ok: true, fact });

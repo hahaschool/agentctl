@@ -222,6 +222,68 @@ describe('memory fact routes', () => {
     });
   });
 
+  it('passes drawer source spans when creating a fact', async () => {
+    vi.mocked(memoryStore.addFact).mockResolvedValueOnce(makeFact());
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts',
+      payload: {
+        content: 'Remember the evidence drawer span',
+        scope: 'project:agentctl',
+        entityType: 'decision',
+        sourceSpans: [
+          {
+            drawerId: 'drawer-1',
+            startOffset: 12,
+            endOffset: 48,
+            sourceJson: { extractor: 'memory-write' },
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(memoryStore.addFact).toHaveBeenCalledWith({
+      content: 'Remember the evidence drawer span',
+      scope: 'project:agentctl',
+      entity_type: 'decision',
+      confidence: undefined,
+      source: {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      },
+      sourceSpans: [
+        {
+          drawerId: 'drawer-1',
+          startOffset: 12,
+          endOffset: 48,
+          sourceJson: { extractor: 'memory-write' },
+        },
+      ],
+    });
+  });
+
+  it('rejects invalid drawer source spans', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts',
+      payload: {
+        content: 'Invalid span',
+        scope: 'project:agentctl',
+        entityType: 'decision',
+        sourceSpans: [{ drawerId: 'drawer-1', startOffset: 50, endOffset: 10 }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'INVALID_SOURCE_SPANS' });
+    expect(memoryStore.addFact).not.toHaveBeenCalled();
+  });
+
   it('gets a fact with its edges', async () => {
     vi.mocked(memoryStore.getFact).mockResolvedValueOnce(makeFact());
     vi.mocked(memoryStore.listEdges).mockResolvedValueOnce([makeEdge()]);
