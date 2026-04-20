@@ -225,4 +225,74 @@ describe('MemoryBrowserView', () => {
       expect(screen.queryByTestId('memory-delete-confirm')).toBeNull();
     });
   });
+
+  describe('drawer results section', () => {
+    it('does not render when drawerResults is absent', () => {
+      render(<MemoryBrowserView />);
+
+      expect(screen.queryByTestId('drawer-results-section')).toBeNull();
+    });
+
+    it('does not render when drawerResults is an empty array', () => {
+      mockUseQuery.mockImplementation((opts: { queryKey: unknown[]; enabled?: boolean }) => {
+        if (
+          Array.isArray(opts.queryKey) &&
+          opts.queryKey[0] === 'memory' &&
+          opts.queryKey[1] === 'facts'
+        ) {
+          return {
+            data: {
+              facts: [makeFact({ id: 'fact-1', content: 'First fact' })],
+              total: 1,
+              drawerResults: [],
+            },
+            isLoading: false,
+          };
+        }
+        return { data: null, isLoading: false };
+      });
+
+      render(<MemoryBrowserView />);
+
+      expect(screen.queryByTestId('drawer-results-section')).toBeNull();
+    });
+
+    it('renders the drawer results section when drawerResults is non-empty', () => {
+      mockUseQuery.mockImplementation((opts: { queryKey: unknown[]; enabled?: boolean }) => {
+        if (
+          Array.isArray(opts.queryKey) &&
+          opts.queryKey[0] === 'memory' &&
+          opts.queryKey[1] === 'facts'
+        ) {
+          return {
+            data: {
+              facts: [makeFact({ id: 'fact-1', content: 'First fact' })],
+              total: 1,
+              drawerResults: [
+                {
+                  id: 'drawer-1',
+                  scope: 'project:agentctl',
+                  topic: 'fusion-topic',
+                  source_type: 'session',
+                  source_id: 'session-1',
+                  chunk_index: 0,
+                  content_preview: 'fusion preview',
+                  score: 0.42,
+                  match_type: 'keyword',
+                },
+              ],
+            },
+            isLoading: false,
+          };
+        }
+        return { data: null, isLoading: false };
+      });
+
+      render(<MemoryBrowserView />);
+
+      expect(screen.getByTestId('drawer-results-section')).toBeDefined();
+      expect(screen.getByText('Raw Drawers (1)')).toBeDefined();
+      expect(screen.getByText('fusion-topic')).toBeDefined();
+    });
+  });
 });

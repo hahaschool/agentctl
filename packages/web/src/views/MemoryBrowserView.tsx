@@ -12,6 +12,7 @@ import {
   BrowserFilterSidebar,
   type BrowserFilters,
 } from '@/components/memory/BrowserFilterSidebar';
+import { DrawerResultsSection } from '@/components/memory/DrawerResultsSection';
 import { FactsList } from '@/components/memory/FactsList';
 import type { FactMatchSourcePath } from '@/components/memory/MatchSourceBadge';
 import { Button } from '@/components/ui/button';
@@ -178,6 +179,10 @@ export function MemoryBrowserView(): React.JSX.Element {
     }
     return map;
   }, [factsQueryResult.data?.results]);
+  // Drawer-layer fusion results (MEMORY_DRAWER_FUSION=true + embedding client).
+  // Usually absent; render only when the CP emits a non-empty array so the
+  // existing browser layout stays identical in the common case.
+  const drawerResults = factsQueryResult.data?.drawerResults;
   const hasActiveFilters =
     debouncedQ.trim().length > 0 ||
     filters.scope.length > 0 ||
@@ -368,6 +373,9 @@ export function MemoryBrowserView(): React.JSX.Element {
           sourcePathByFactId={sourcePathByFactId}
           className="flex-1 overflow-auto"
         />
+        {drawerResults && drawerResults.length > 0 ? (
+          <DrawerResultsSection drawerResults={drawerResults} />
+        ) : null}
       </div>
 
       {/* Detail Panel */}
