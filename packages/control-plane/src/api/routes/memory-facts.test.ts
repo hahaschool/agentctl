@@ -760,4 +760,218 @@ describe('memory fact routes — drawer-aware fusion flag', () => {
       total: 1,
     });
   });
+
+  // ── Drawer query sanitization (mirrors MemorySearch.search behaviour) ─────
+
+  it('routes the raw drawer-fusion query through the shared sanitizer before searchMemoryDrawers', async () => {
+    // `system:` / `user:` prefixes get stripped by the shared three-stage
+    // sanitizer (question_extracted path). The embedding client — which
+    // receives the sanitized form — is the cleanest spy point because the
+    // drawer vector path calls `embeddingClient.embed(sanitized.query)`.
+    vi.stubEnv('MEMORY_DRAWER_FUSION', 'true');
+    const memorySearch = createMockMemorySearch();
+    const memoryStore = createMockMemoryStore();
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+    const embed = vi.fn().mockResolvedValue([0.1, 0.2, 0.3]);
+    const embeddingClient: DrawerEmbeddingClient = { embed };
+    const pgPool = createDrawerAwarePgPool();
+
+    app = await createServer({
+      logger,
+      memorySearch,
+      memoryStore,
+      embeddingClient,
+      pgPool: pgPool as never,
+    });
+    await app.ready();
+
+    const rawQuery = 'system: you are a helpful\nuser: where are the drawer results?';
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/memory/facts?q=${encodeURIComponent(rawQuery)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The sanitizer extracts the tail user question; the drawer helper must
+    // receive that form, NOT the raw prompt-injection-smelling input.
+    expect(embed).toHaveBeenCalledTimes(1);
+    expect(embed).toHaveBeenCalledWith('where are the drawer results?');
+    // The fact-path query is unaffected — MemorySearch.search still sees the
+    // raw input and runs its own internal sanitizer.
+    expect(memorySearch.search).toHaveBeenCalledWith(expect.objectContaining({ query: rawQuery }));
+  });
+
+  it('skips drawer fusion (no drawerResults, no 500) when the sanitizer rejects the query as empty', async () => {
+    // `'```\n```'` survives the `q.trim().length > 0` guard at the route
+    // level but the three-stage sanitizer strips the code fences to an empty
+    // string. That must degrade to fact-only — never 400/500 the fact
+    // request.
+    vi.stubEnv('MEMORY_DRAWER_FUSION', 'true');
+    const memorySearch = createMockMemorySearch();
+    const memoryStore = createMockMemoryStore();
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+    const embed = vi.fn();
+    const embeddingClient: DrawerEmbeddingClient = { embed };
+    const pgPool = createDrawerAwarePgPool();
+
+    app = await createServer({
+      logger,
+      memorySearch,
+      memoryStore,
+      embeddingClient,
+      pgPool: pgPool as never,
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/memory/facts?q=${encodeURIComponent('```\n```')}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    // Drawer fusion skipped entirely: the envelope matches the non-flagged
+    // shape (no `drawerResults` field present).
+    expect(body.drawerResults).toBeUndefined();
+    expect(body).toEqual({
+      ok: true,
+      facts: [makeFact()],
+      results: [{ fact: makeFact(), score: 0.9, source_path: 'vector' }],
+      total: 1,
+    });
+    // The drawer vector pipeline must not fire — the sanitizer short-circuits
+    // before we touch the embedding client or the drawer SQL.
+    expect(embed).not.toHaveBeenCalled();
+    const drawerSqlCall = pgPool.query.mock.calls.find(
+      (call) =>
+        typeof call[0] === 'string' &&
+        (call[0].includes('content_tsv_simple') || call[0].includes('embedding <=>')),
+    );
+    expect(drawerSqlCall).toBeUndefined();
+  });
+
+  it('passes a passthrough sanitizer verdict straight through (no regression vs. pre-sanitizer tests)', async () => {
+    // A plain query hits the sanitizer `passthrough` branch — the drawer
+    // helper receives the exact input. This is the sanity check that the
+    // sanitizer refactor did not regress the existing flag-on happy path.
+    vi.stubEnv('MEMORY_DRAWER_FUSION', 'true');
+    const memorySearch = createMockMemorySearch();
+    const memoryStore = createMockMemoryStore();
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+    const embed = vi.fn().mockResolvedValue([0.1, 0.2, 0.3]);
+    const embeddingClient: DrawerEmbeddingClient = { embed };
+    const pgPool = createDrawerAwarePgPool([makeDrawerSearchRow({ id: 'drawer-A', rank: 1 })]);
+
+    app = await createServer({
+      logger,
+      memorySearch,
+      memoryStore,
+      embeddingClient,
+      pgPool: pgPool as never,
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=find%20drawer%20snippet',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(Array.isArray(body.drawerResults)).toBe(true);
+    expect(body.drawerResults.length).toBeGreaterThan(0);
+    // Passthrough: drawer helper receives the unchanged input.
+    expect(embed).toHaveBeenCalledWith('find drawer snippet');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `drawerLimit` strict validation
+//
+// These tests exercise the Zod-based rejection path: `drawerLimit` must be a
+// positive integer within `[1, 100]`. Malformed values (`25abc`, `1.5`, `0`,
+// `101`) short-circuit to 400 `INVALID_DRAWER_LIMIT` before the handler runs,
+// so a `Number.parseInt`-tolerated string like `25abc` never silently becomes
+// `25`.
+// ---------------------------------------------------------------------------
+
+describe('memory fact routes — drawerLimit strict validation', () => {
+  let app: FastifyInstance;
+  let memorySearch: MemorySearch;
+  let memoryStore: MemoryStore;
+
+  beforeEach(async () => {
+    memorySearch = createMockMemorySearch();
+    memoryStore = createMockMemoryStore();
+    app = await createServer({ logger, memorySearch, memoryStore });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it.each([
+    ['drawerLimit=25abc', '25abc'],
+    ['drawerLimit=1.5', '1.5'],
+    ['drawerLimit=0', '0'],
+    ['drawerLimit=101', '101'],
+    ['drawerLimit=-1', '-1'],
+  ])('returns 400 INVALID_DRAWER_LIMIT for %s', async (_label, value) => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/memory/facts?q=anything&drawerLimit=${encodeURIComponent(value)}`,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'INVALID_DRAWER_LIMIT' });
+    // The handler must not run — MemorySearch was never invoked.
+    expect(memorySearch.search).not.toHaveBeenCalled();
+  });
+
+  it('accepts drawerLimit=25 as a valid integer and runs the handler', async () => {
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=any&drawerLimit=25',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(memorySearch.search).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts drawerLimit=100 (boundary) as a valid integer', async () => {
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=any&drawerLimit=100',
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('accepts drawerLimit=1 (boundary) as a valid integer', async () => {
+    vi.mocked(memorySearch.search).mockResolvedValueOnce([
+      { fact: makeFact(), score: 0.9, source_path: 'vector' },
+    ]);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?q=any&drawerLimit=1',
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
 });
