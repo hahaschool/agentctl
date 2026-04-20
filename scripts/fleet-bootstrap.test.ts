@@ -99,14 +99,20 @@ machines:
     role: control-plane
     tailscale_ip: 100.64.0.1
     hostname: cp-primary
+    labels:
+      topology: docker
   - id: worker-ec2-1
     role: agent-worker
     tailscale_ip: 100.64.0.2
     hostname: ec2-us-east
+    labels:
+      topology: docker
   - id: worker-mac-mini-1
     role: agent-worker
     tailscale_ip: 100.64.0.3
     hostname: mac-mini-home
+    labels:
+      topology: docker
 `;
 
 // ---------------------------------------------------------------------------
@@ -158,6 +164,7 @@ describe('parseArgs', () => {
     expect(config.dryRun).toBe(false);
     expect(config.sshTimeoutMs).toBe(30_000);
     expect(config.roleFilter).toBeUndefined();
+    expect(config.topologyFilter).toBeUndefined();
   });
 
   it('parses --dry-run flag', () => {
@@ -178,6 +185,26 @@ describe('parseArgs', () => {
   it('sets roleFilter to undefined for --role all', () => {
     const config = parseArgs(['node', 'script.ts', '--role', 'all']);
     expect(config.roleFilter).toBeUndefined();
+  });
+
+  it('parses --topology docker', () => {
+    const config = parseArgs(['node', 'script.ts', '--topology', 'docker']);
+    expect(config.topologyFilter).toBe('docker');
+  });
+
+  it('sets topologyFilter to undefined for --topology all', () => {
+    const config = parseArgs(['node', 'script.ts', '--topology', 'all']);
+    expect(config.topologyFilter).toBeUndefined();
+  });
+
+  it('throws on invalid --topology value', () => {
+    expect(() => parseArgs(['node', 'script.ts', '--topology', 'beta'])).toThrow(
+      FleetBootstrapError,
+    );
+  });
+
+  it('throws on missing --topology value', () => {
+    expect(() => parseArgs(['node', 'script.ts', '--topology'])).toThrow(FleetBootstrapError);
   });
 
   it('throws on invalid --role value', () => {
@@ -254,6 +281,8 @@ describe('parseArgs', () => {
       '--dry-run',
       '--role',
       'worker',
+      '--topology',
+      'docker',
       '--concurrency',
       '10',
       '--ssh-timeout',
@@ -263,6 +292,7 @@ describe('parseArgs', () => {
     ]);
     expect(config.dryRun).toBe(true);
     expect(config.roleFilter).toBe('worker');
+    expect(config.topologyFilter).toBe('docker');
     expect(config.concurrency).toBe(10);
     expect(config.sshTimeoutMs).toBe(5000);
     expect(config.inventoryPath).toContain('inventory.yml');
@@ -315,6 +345,26 @@ describe('parseMinimalYaml', () => {
     const result = parseMinimalYaml(yaml);
     const machines = result.machines as Record<string, unknown>[];
     expect(machines[0]?.services).toEqual(['control-plane', 'worker']);
+  });
+
+  it('parses nested labels on machine entries', () => {
+    const yaml = `machines:
+  - id: docker-worker
+    role: agent-worker
+    tailscale_ip: 100.64.0.2
+    labels:
+      topology: docker
+      owner: ops
+  - id: mesh-worker
+    role: agent-worker
+    tailscale_ip: 100.64.0.10
+    labels:
+      topology: pm2-mesh`;
+    const result = parseMinimalYaml(yaml);
+    const machines = result.machines as RawMachineEntry[];
+
+    expect(machines[0]?.labels).toEqual({ topology: 'docker', owner: 'ops' });
+    expect(machines[1]?.labels).toEqual({ topology: 'pm2-mesh' });
   });
 
   it('handles comments and empty lines', () => {
@@ -634,6 +684,30 @@ describe('parseMachineInventory', () => {
   it('filters by worker role', () => {
     const machines = parseMachineInventory(rawEntries, 'worker');
     expect(machines).toHaveLength(2);
+  });
+
+  it('filters by docker topology before bootstrap', () => {
+    const machines = parseMachineInventory(
+      [
+        {
+          id: 'docker-worker',
+          role: 'agent-worker',
+          tailscale_ip: '100.64.0.2',
+          labels: { topology: 'docker' },
+        },
+        {
+          id: 'mesh-worker',
+          role: 'agent-worker',
+          tailscale_ip: '100.64.0.10',
+          labels: { topology: 'pm2-mesh' },
+        },
+      ],
+      'worker',
+      'docker',
+    );
+
+    expect(machines).toHaveLength(1);
+    expect(machines[0]?.host).toBe('docker-worker');
   });
 
   it('returns empty array when filter matches nothing', () => {
@@ -1272,6 +1346,33 @@ describe('integration: dry-run with inventory', () => {
 
     expect(result.success).toBe(true);
     expect(result.machines).toHaveLength(2);
+  });
+
+  it('filters to docker topology only in dry-run', async () => {
+    vi.mocked(readFile).mockResolvedValue(`${SAMPLE_YAML}
+  - id: mesh-worker
+    role: agent-worker
+    tailscale_ip: 100.64.0.10
+    hostname: mesh-worker
+    labels:
+      topology: pm2-mesh
+`);
+
+    const result = await main([
+      'node',
+      'script.ts',
+      '--dry-run',
+      '--role',
+      'worker',
+      '--topology',
+      'docker',
+    ]);
+
+    expect(result.success).toBe(true);
+    expect(result.machines.map((machine) => machine.host)).toEqual([
+      'worker-ec2-1',
+      'worker-mac-mini-1',
+    ]);
   });
 
   it('respects concurrency setting in config output', async () => {

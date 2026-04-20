@@ -38,6 +38,82 @@ depend on. The step:
 Because the gate lives in the `validate` job (before any `docker pull`),
 a single verification failure blocks the entire fleet rollout.
 
+## First dry-run and canary exercise
+
+Use this sequence for the first §33.11 Docker fleet exercise. It keeps the
+PM2 mesh out of scope and preserves beta/dev/prod promotion paths.
+
+### Local no-secret preflight
+
+Before invoking GitHub Actions, render the bootstrap target set locally:
+
+```bash
+pnpm tsx scripts/fleet-bootstrap.ts \
+  --inventory infra/machines.yml \
+  --topology docker \
+  --role worker \
+  --dry-run
+```
+
+Confirm the JSON output contains only machines whose inventory entry has
+`labels.topology: docker`. Stop if any `mesh-*` / `pm2-mesh` machine appears.
+
+### GitHub Actions dry-run
+
+Run the workflow with `dry_run=true` and `bootstrap=false` first. Use an image
+tag already produced by `build-images.yml`, with attestations available.
+
+```bash
+gh workflow run deploy-fleet.yml \
+  --ref main \
+  -f image_tag=<attested-image-tag> \
+  -f target_role=worker \
+  -f strategy=canary \
+  -f canary_percentage=20 \
+  -f dry_run=true \
+  -f bootstrap=false \
+  -f skip_attestation_verification=false \
+  -f allow_destructive_migrations=false
+```
+
+Watch the run:
+
+```bash
+gh run list --workflow deploy-fleet.yml --limit 1
+gh run watch <run-id>
+```
+
+In the `Validate inventory & image` summary, verify:
+
+- `Topology` is `docker`.
+- `Dry run` is `true`.
+- The machine list contains only Docker-topology machines.
+- The attestation and migration gates passed without using either override.
+
+### Canary exercise
+
+Only after the dry-run passes, rerun with `dry_run=false` against a
+non-critical Docker target:
+
+```bash
+gh workflow run deploy-fleet.yml \
+  --ref main \
+  -f image_tag=<same-attested-image-tag> \
+  -f target_role=worker \
+  -f strategy=canary \
+  -f canary_percentage=20 \
+  -f dry_run=false \
+  -f bootstrap=false \
+  -f skip_attestation_verification=false \
+  -f allow_destructive_migrations=false
+```
+
+The canary job deploys only the canary matrix first, then waits at the
+`fleet-canary-approval` environment before rolling out the remaining Docker
+fleet. Approve only after the canary health check and image tag match the
+expected target. Do not approve if the target list includes PM2 mesh machines
+or if either safety override was enabled unexpectedly.
+
 ## Manual verification (for operators)
 
 To verify an image locally before triggering a deploy:

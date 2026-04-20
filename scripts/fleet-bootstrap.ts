@@ -52,6 +52,7 @@ export class FleetBootstrapError extends Error {
 // ---------------------------------------------------------------------------
 
 export type MachineRole = 'control-plane' | 'worker';
+export type MachineTopology = 'docker' | 'pm2-mesh';
 
 export type MachineEntry = {
   host: string;
@@ -67,6 +68,7 @@ export type BootstrapConfig = {
   dryRun: boolean;
   sshTimeoutMs: number;
   roleFilter?: string;
+  topologyFilter?: MachineTopology;
 };
 
 export type BootstrapResult = {
@@ -100,6 +102,7 @@ export type RawMachineEntry = {
   hostname?: string;
   ssh_user?: string;
   labels?: Record<string, string>;
+  topology?: string;
   services?: string[];
   deploy_order?: number;
   capabilities?: Record<string, unknown>;
@@ -131,6 +134,7 @@ export const EXIT_INVENTORY_ERROR = 2;
 export const EXIT_INVALID_ARGS = 3;
 
 const VALID_ROLES: ReadonlySet<string> = new Set(['control-plane', 'worker', 'all']);
+const VALID_TOPOLOGIES: ReadonlySet<string> = new Set(['docker', 'pm2-mesh', 'all']);
 
 /**
  * Tailscale CGNAT range: 100.64.0.0/10 means 100.64.0.0 – 100.127.255.255.
@@ -150,6 +154,7 @@ export function parseArgs(argv: string[]): BootstrapConfig {
   let dryRun = false;
   let sshTimeoutMs = DEFAULT_SSH_TIMEOUT_MS;
   let roleFilter: string | undefined;
+  let topologyFilter: MachineTopology | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -165,6 +170,16 @@ export function parseArgs(argv: string[]): BootstrapConfig {
         );
       }
       roleFilter = next === 'all' ? undefined : next;
+      i++;
+    } else if (arg === '--topology') {
+      const next = args[i + 1];
+      if (next === undefined || !VALID_TOPOLOGIES.has(next)) {
+        throw new FleetBootstrapError(
+          'INVALID_ARGS',
+          `--topology requires one of: docker, pm2-mesh, all (got: ${next ?? 'nothing'})`,
+        );
+      }
+      topologyFilter = next === 'all' ? undefined : (next as MachineTopology);
       i++;
     } else if (arg === '--concurrency') {
       const next = args[i + 1];
@@ -193,7 +208,7 @@ export function parseArgs(argv: string[]): BootstrapConfig {
     }
   }
 
-  return { inventoryPath, concurrency, dryRun, sshTimeoutMs, roleFilter };
+  return { inventoryPath, concurrency, dryRun, sshTimeoutMs, roleFilter, topologyFilter };
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +248,8 @@ export function parseMinimalYaml(content: string): Record<string, unknown> {
   let currentTopKey = '';
   let inArray = false;
   let currentArrayItem: Record<string, unknown> | null = null;
+  let currentArrayNestedKey: string | null = null;
+  let currentArrayNestedIndent = 0;
   let arrayItems: Record<string, unknown>[] = [];
 
   for (const rawLine of lines) {
@@ -278,6 +295,8 @@ export function parseMinimalYaml(content: string): Record<string, unknown> {
         arrayItems.push(currentArrayItem);
       }
       currentArrayItem = {};
+      currentArrayNestedKey = null;
+      currentArrayNestedIndent = 0;
       inArray = true;
 
       const afterDash = trimmed.slice(2).trim();
@@ -290,8 +309,30 @@ export function parseMinimalYaml(content: string): Record<string, unknown> {
       continue;
     }
 
+    // Nested key: value inside an array item's sub-object, e.g.
+    // labels:
+    //   topology: docker
+    if (
+      inArray &&
+      currentArrayItem &&
+      currentArrayNestedKey &&
+      indent > currentArrayNestedIndent &&
+      trimmed.includes(':')
+    ) {
+      const nested = currentArrayItem[currentArrayNestedKey];
+      if (typeof nested === 'object' && nested !== null && !Array.isArray(nested)) {
+        const colonIdx = trimmed.indexOf(':');
+        const key = trimmed.slice(0, colonIdx).trim();
+        const value = trimmed.slice(colonIdx + 1).trim();
+        (nested as Record<string, unknown>)[key] = parseScalar(value);
+      }
+      continue;
+    }
+
     // Nested key: value in array item or sub-object
     if (inArray && currentArrayItem && trimmed.includes(':')) {
+      currentArrayNestedKey = null;
+      currentArrayNestedIndent = 0;
       const colonIdx = trimmed.indexOf(':');
       const key = trimmed.slice(0, colonIdx).trim();
       const value = trimmed.slice(colonIdx + 1).trim();
@@ -301,8 +342,10 @@ export function parseMinimalYaml(content: string): Record<string, unknown> {
         const inner = value.slice(1, -1);
         currentArrayItem[key] = inner.split(',').map((s) => parseScalar(s.trim()));
       } else if (value === '') {
-        // Sub-object — store empty for now (not deeply parsed)
+        // Sub-object — parse one level of nested scalar keys below it.
         currentArrayItem[key] = {};
+        currentArrayNestedKey = key;
+        currentArrayNestedIndent = indent;
       } else {
         currentArrayItem[key] = parseScalar(value);
       }
@@ -487,11 +530,16 @@ export function validateTailscaleIp(ip: string, host: string): void {
 export function parseMachineInventory(
   rawEntries: RawMachineEntry[],
   roleFilter?: string,
+  topologyFilter?: MachineTopology,
 ): MachineEntry[] {
   const machines: MachineEntry[] = [];
 
   for (let i = 0; i < rawEntries.length; i++) {
     const raw = rawEntries[i] as RawMachineEntry;
+    if (topologyFilter && machineTopology(raw) !== topologyFilter) {
+      continue;
+    }
+
     const entry = validateMachineEntry(raw, i);
 
     if (roleFilter && entry.role !== roleFilter) {
@@ -526,6 +574,16 @@ export function parseMachineInventory(
   }
 
   return machines;
+}
+
+function machineTopology(raw: RawMachineEntry): string | undefined {
+  if (typeof raw.labels?.topology === 'string') {
+    return raw.labels.topology;
+  }
+  if (typeof raw.topology === 'string') {
+    return raw.topology;
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -802,7 +860,7 @@ export async function runBootstrap(
 
   // 1. Load and validate inventory
   const rawEntries = await deps.loadInventory(config.inventoryPath);
-  const machines = parseMachineInventory(rawEntries, config.roleFilter);
+  const machines = parseMachineInventory(rawEntries, config.roleFilter, config.topologyFilter);
 
   if (machines.length === 0) {
     return {
@@ -850,6 +908,9 @@ export async function main(argv: string[] = process.argv): Promise<BootstrapResu
   console.error(`[fleet-bootstrap] SSH timeout: ${config.sshTimeoutMs}ms`);
   if (config.roleFilter) {
     console.error(`[fleet-bootstrap] Role filter: ${config.roleFilter}`);
+  }
+  if (config.topologyFilter) {
+    console.error(`[fleet-bootstrap] Topology filter: ${config.topologyFilter}`);
   }
   if (config.dryRun) {
     console.error('[fleet-bootstrap] DRY RUN — no remote commands will be executed');
