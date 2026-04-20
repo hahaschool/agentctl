@@ -15,6 +15,7 @@ import {
   memoryDrawerBackfillState,
   memoryDrawers,
   memoryEdges,
+  memoryFactSources,
   memoryFacts,
   memoryScopes,
   nativeImportAttempts,
@@ -114,11 +115,13 @@ describe('Schema module exports', () => {
     expect(memoryEdges).toBeDefined();
     expect(memoryDrawers).toBeDefined();
     expect(memoryDrawerBackfillState).toBeDefined();
+    expect(memoryFactSources).toBeDefined();
     expect(getTableName(memoryScopes)).toBe('memory_scopes');
     expect(getTableName(memoryFacts)).toBe('memory_facts');
     expect(getTableName(memoryEdges)).toBe('memory_edges');
     expect(getTableName(memoryDrawers)).toBe('memory_drawers');
     expect(getTableName(memoryDrawerBackfillState)).toBe('memory_drawer_backfill_state');
+    expect(getTableName(memoryFactSources)).toBe('memory_fact_sources');
   });
 });
 
@@ -1419,8 +1422,8 @@ describe('memoryScopes table columns', () => {
 describe('memoryFacts table columns', () => {
   const meta = getColumnMeta(memoryFacts);
 
-  it('has exactly 12 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(12);
+  it('has exactly 13 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(13);
   });
 
   it('has all expected column keys', () => {
@@ -1429,6 +1432,7 @@ describe('memoryFacts table columns', () => {
       'scope',
       'content',
       'contentModel',
+      'embeddingVersion',
       'entityType',
       'confidence',
       'strength',
@@ -1471,6 +1475,9 @@ describe('memoryFacts table columns', () => {
     expect(meta.contentModel.columnType).toBe('PgText');
     expect(meta.contentModel.notNull).toBe(true);
     expect(meta.contentModel.hasDefault).toBe(true);
+    expect(meta.embeddingVersion.columnType).toBe('PgInteger');
+    expect(meta.embeddingVersion.notNull).toBe(true);
+    expect(meta.embeddingVersion.hasDefault).toBe(true);
     expect(meta.sourceJson.columnType).toBe('PgJsonb');
     expect(meta.sourceJson.hasDefault).toBe(true);
   });
@@ -1493,8 +1500,8 @@ describe('memoryFacts table columns', () => {
 describe('memoryEdges table columns', () => {
   const meta = getColumnMeta(memoryEdges);
 
-  it('has exactly 6 columns', () => {
-    expect(Object.keys(meta)).toHaveLength(6);
+  it('has exactly 7 columns', () => {
+    expect(Object.keys(meta)).toHaveLength(7);
   });
 
   it('has all expected column keys', () => {
@@ -1503,6 +1510,7 @@ describe('memoryEdges table columns', () => {
       'sourceFactId',
       'targetFactId',
       'relation',
+      'embeddingVersion',
       'weight',
       'createdAt',
     ]);
@@ -1528,6 +1536,9 @@ describe('memoryEdges table columns', () => {
     expect(meta.weight.columnType).toBe('PgNumeric');
     expect(meta.weight.notNull).toBe(true);
     expect(meta.weight.hasDefault).toBe(true);
+    expect(meta.embeddingVersion.columnType).toBe('PgInteger');
+    expect(meta.embeddingVersion.notNull).toBe(true);
+    expect(meta.embeddingVersion.hasDefault).toBe(true);
   });
 });
 
@@ -1606,17 +1617,55 @@ describe('memoryDrawerBackfillState table columns', () => {
   });
 });
 
+describe('memory fact provenance columns', () => {
+  const factsMeta = getColumnMeta(memoryFacts);
+  const edgesMeta = getColumnMeta(memoryEdges);
+  const factSourcesMeta = getColumnMeta(memoryFactSources);
+
+  it('stamps facts and edges with embedding versions while keeping legacy rows usable', () => {
+    expect(factsMeta.contentModel.notNull).toBe(true);
+    expect(factsMeta.embeddingVersion.notNull).toBe(true);
+    expect(factsMeta.embeddingVersion.hasDefault).toBe(true);
+    expect(edgesMeta.embeddingVersion.notNull).toBe(true);
+    expect(edgesMeta.embeddingVersion.hasDefault).toBe(true);
+  });
+
+  it('links facts to supporting drawer offsets without requiring quoted content copies', () => {
+    expect(Object.keys(factSourcesMeta)).toEqual([
+      'id',
+      'factId',
+      'drawerId',
+      'startOffset',
+      'endOffset',
+      'sourceJson',
+      'createdAt',
+    ]);
+    expect(factSourcesMeta.id.primary).toBe(true);
+    expect(factSourcesMeta.factId.notNull).toBe(true);
+    expect(factSourcesMeta.drawerId.notNull).toBe(true);
+    expect(factSourcesMeta.startOffset.notNull).toBe(true);
+    expect(factSourcesMeta.endOffset.notNull).toBe(true);
+    expect(factSourcesMeta.sourceJson.notNull).toBe(true);
+    expect(factSourcesMeta.sourceJson.hasDefault).toBe(true);
+    expect(factSourcesMeta.createdAt.hasDefault).toBe(true);
+  });
+});
+
 describe('Drizzle memory drawer migration journal', () => {
-  it('tracks the backfill state migration after the drawer table migration', () => {
+  it('tracks fact-source provenance before the backfill state migration', () => {
     const journal = JSON.parse(
       readFileSync(new URL('../../drizzle/meta/_journal.json', import.meta.url), 'utf8'),
     ) as { entries: Array<{ tag: string }> };
 
     const tags = journal.entries.map((entry) => entry.tag);
     expect(tags).toContain('0030_add_memory_drawers');
+    expect(tags).toContain('0031_add_memory_fact_sources_and_versions');
     expect(tags).toContain('0032_add_memory_drawer_backfill_state');
-    expect(tags.indexOf('0032_add_memory_drawer_backfill_state')).toBeGreaterThan(
+    expect(tags.indexOf('0031_add_memory_fact_sources_and_versions')).toBeGreaterThan(
       tags.indexOf('0030_add_memory_drawers'),
+    );
+    expect(tags.indexOf('0031_add_memory_fact_sources_and_versions')).toBeLessThan(
+      tags.indexOf('0032_add_memory_drawer_backfill_state'),
     );
   });
 });

@@ -358,6 +358,7 @@ export const memoryFacts = pgTable(
     scope: text('scope').notNull(),
     content: text('content').notNull(),
     contentModel: text('content_model').notNull().default('text-embedding-3-small'),
+    embeddingVersion: integer('embedding_version').notNull().default(1),
     entityType: text('entity_type').notNull(),
     confidence: numeric('confidence', { precision: 4, scale: 3 }).notNull().default('0.800'),
     strength: numeric('strength', { precision: 4, scale: 3 }).notNull().default('1.000'),
@@ -373,6 +374,33 @@ export const memoryFacts = pgTable(
   ],
 );
 
+export const memoryFactSources = pgTable(
+  'memory_fact_sources',
+  {
+    id: text('id').primaryKey(),
+    factId: text('fact_id')
+      .notNull()
+      .references(() => memoryFacts.id, { onDelete: 'cascade' }),
+    drawerId: text('drawer_id')
+      .notNull()
+      .references(() => memoryDrawers.id, { onDelete: 'cascade' }),
+    startOffset: integer('start_offset').notNull(),
+    endOffset: integer('end_offset').notNull(),
+    sourceJson: jsonb('source_json').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('memory_fact_sources_unique_span').on(
+      table.factId,
+      table.drawerId,
+      table.startOffset,
+      table.endOffset,
+    ),
+    index('idx_memory_fact_sources_fact').on(table.factId),
+    index('idx_memory_fact_sources_drawer').on(table.drawerId),
+  ],
+);
+
 export const memoryEdges = pgTable(
   'memory_edges',
   {
@@ -384,6 +412,7 @@ export const memoryEdges = pgTable(
       .notNull()
       .references(() => memoryFacts.id, { onDelete: 'cascade' }),
     relation: text('relation').notNull(),
+    embeddingVersion: integer('embedding_version').notNull().default(1),
     weight: numeric('weight', { precision: 4, scale: 3 }).notNull().default('0.500'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
