@@ -249,6 +249,10 @@ export type {
   InjectionBudget,
   InjectionResult,
   InjectionTier,
+  MemoryDedupCheckRequest,
+  MemoryDedupCheckResponse,
+  MemoryDedupNearestMatch,
+  MemoryDedupRecommendation,
   MemoryDrawer,
   MemoryDrawerRedactionStatus,
   MemoryDrawerSourceType,
@@ -267,7 +271,7 @@ export type {
   TriggerContext,
   TriggerSpec,
 } from './memory.js';
-export { DEFAULT_INJECTION_BUDGET } from './memory.js';
+export { DEFAULT_INJECTION_BUDGET, MEMORY_ENTITY_TYPES } from './memory.js';
 export type {
   AutoUpdateDryRunEvent,
   AutoUpdateLastRun,

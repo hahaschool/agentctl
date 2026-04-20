@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createSilentLogger } from '../../test-helpers.js';
+import { memoryDedupCheckRoutes } from './memory-dedup-check.js';
 import { memoryFeedbackRoutes } from './memory-feedback.js';
 import { memoryPromoteRoutes } from './memory-promote.js';
 import { memoryRecallRoutes } from './memory-recall.js';
@@ -23,6 +24,7 @@ function makeApp(): FastifyInstance {
   void app.register(memoryStoreRoutes, routeOptions);
   void app.register(memoryFeedbackRoutes, routeOptions);
   void app.register(memoryPromoteRoutes, routeOptions);
+  void app.register(memoryDedupCheckRoutes, routeOptions);
 
   return app;
 }
@@ -138,5 +140,6 @@ describe('memory MCP cold-start contract', () => {
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-store');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-feedback');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-promote');
+    await expectFastNullArgumentsRejection(app, '/api/mcp/memory-dedup-check');
   });
 });
