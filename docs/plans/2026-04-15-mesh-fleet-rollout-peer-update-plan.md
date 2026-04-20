@@ -1,6 +1,6 @@
 # Mesh Fleet Rollout + Peer Update Plan
 
-**Status:** In progress — PM2 CLI, opt-in schedulers, settings UI, provenance, rollback, fleet structure, update-available banner, and the first opt-in live two-node fixture slice landed; end-to-end canary dry-run plus schema-ahead/dry-run fixture assertions remain
+**Status:** In progress — PM2 CLI, opt-in schedulers, settings UI, provenance, rollback, fleet structure, update-available banner, and the first two opt-in live two-node fixture slices landed; end-to-end canary dry-run plus schema-ahead fixture assertion remain
 **Roadmap:** 33.11 Fleet Rollout & Peer Auto-Update
 **Created:** 2026-04-15
 
@@ -24,7 +24,9 @@ PRs #571/#572/#577/#580 completed the PM2 operator path with the
 PRs #575/#579/#593 added Docker build provenance, migration gates, and the
 fleet structure. PR #582 added the update-available banner. PR #654 added the
 opt-in live two-node fixture foundation and first version-drift assertion
-without changing default E2E or beta/dev/prod CD behavior.
+without changing default E2E or beta/dev/prod CD behavior. PR #659 added the
+separately gated peer-update dry-run fixture assertion over
+`/api/mesh/auto-update/dry-run`.
 
 ## Scope
 
@@ -63,8 +65,10 @@ without changing default E2E or beta/dev/prod CD behavior.
    - PR #654 delivered the opt-in fixture foundation and first assertion:
      after one live peer ping, the `/mesh-peers` row and update-available
      banner show the configured peer version.
-   - Remaining: schema-ahead rejection banner and `agentctl peer update
-     --dry-run` planned-step reporting without mutating state.
+   - PR #659 delivered the separately gated `agentctl peer update --dry-run`
+     assertion: the fixture streams the SSE route, parses the JSON result, and
+     verifies reported planned steps are marked `dryRun`.
+   - Remaining: schema-ahead rejection banner.
 
 ## Non-Goals
 
@@ -82,6 +86,8 @@ without changing default E2E or beta/dev/prod CD behavior.
 - Focused UI coverage for settings state and peer update affordances landed in PR #577.
 - PR #654 opt-in live fixture verifies the first drift path: peer ping updates
   the row and update-available banner with the expected peer version.
+- PR #659 opt-in dry-run fixture verifies the SSE stream reports
+  `pnpm agentctl peer update --dry-run`, exits 0, and marks planned steps as
+  dry-run steps.
 - Remaining two-node fixture assertions after 33.9/33.10: compatibility gate
-  rejects unsafe envelopes, and dry-run update reports planned steps without
-  mutating state.
+  rejects unsafe envelopes.
