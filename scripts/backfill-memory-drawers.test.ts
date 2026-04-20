@@ -23,6 +23,52 @@ type MockStateStore = {
   markFailed: ReturnType<typeof vi.fn>;
 };
 
+type MockMemoryStore = {
+  addFact: ReturnType<typeof vi.fn>;
+  findFactBySourceKey: ReturnType<typeof vi.fn>;
+};
+
+type MockMemoryDrawer = {
+  id: string;
+  chunkIndex: number;
+  content: string;
+};
+
+function makeDrawer(overrides: Partial<MockMemoryDrawer> = {}): MockMemoryDrawer {
+  return {
+    id: 'drawer-1',
+    chunkIndex: 0,
+    content: 'default drawer content',
+    ...overrides,
+  };
+}
+
+function createMemoryStore(existingKeys: string[] = []): MockMemoryStore {
+  const existing = new Set(existingKeys);
+  const store: MockMemoryStore = {
+    addFact: vi.fn(async (input: { content: string }) => ({
+      id: `fact-${existing.size}`,
+      scope: 'global',
+      content: input.content,
+      content_model: 'text-embedding-3-small',
+      entity_type: 'concept',
+      confidence: 0.8,
+      strength: 1,
+      source: {},
+      valid_from: '2026-04-20T00:00:00.000Z',
+      valid_until: null,
+      created_at: '2026-04-20T00:00:00.000Z',
+      accessed_at: '2026-04-20T00:00:00.000Z',
+      tags: [],
+      usage_count: 0,
+    })),
+    findFactBySourceKey: vi.fn(async (sourceKey: string) => {
+      return existing.has(sourceKey) ? { id: `existing-${sourceKey}` } : null;
+    }),
+  };
+  return store;
+}
+
 let tmpDir: string;
 
 function createTmpDir(): string {
@@ -494,5 +540,275 @@ describe('backfillMemoryDrawers', () => {
       'observations:42',
       'session_summaries:7',
     ]);
+  });
+});
+
+describe('claude-mem fact mapping', () => {
+  function drawerFromObservationFixture(): MockMemoryDrawer {
+    return makeDrawer({
+      id: 'drawer-42-0',
+      chunkIndex: 0,
+      content: [
+        'Prefer Biome for formatting',
+        '',
+        'Keep formatting and linting unified',
+        '',
+        'Context: Repeated lint drift made a single formatter easier to enforce.',
+        '',
+        'Facts:',
+        '- Biome replaces ESLint formatting',
+        '- Run focused Biome on touched files',
+      ].join('\n'),
+    });
+  }
+
+  it('counts fact candidates separately from drawer candidates in dry-run', async () => {
+    const db = createClaudeMemDb([createClaudeMemObservation()], [createClaudeMemSessionSummary()]);
+    const memoryStore = createMemoryStore();
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: true,
+      memoryStore: memoryStore as never,
+    });
+
+    expect(result.candidates).toBe(2);
+    expect(result.factCandidates).toBe(3);
+    expect(result.factsWritten).toBe(0);
+    expect(memoryStore.addFact).not.toHaveBeenCalled();
+    expect(memoryStore.findFactBySourceKey).not.toHaveBeenCalled();
+  });
+
+  it('co-writes drawer and atomic facts with offsets into the sanitized drawer', async () => {
+    const drawer = drawerFromObservationFixture();
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    const db = createClaudeMemDb([createClaudeMemObservation()]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+      scope: 'project:agentctl',
+      topic: 'claude-mem',
+    });
+
+    expect(result.written).toBe(1);
+    expect(result.factsWritten).toBe(3);
+    expect(result.factsSkipped).toBe(0);
+    expect(result.factCandidates).toBe(3);
+
+    expect(memoryStore.addFact).toHaveBeenCalledTimes(3);
+    const titleCall = memoryStore.addFact.mock.calls[0]?.[0];
+    expect(titleCall).toMatchObject({
+      scope: 'project:agentctl',
+      content: 'Prefer Biome for formatting',
+      entity_type: 'decision',
+    });
+    expect(titleCall.source).toMatchObject({
+      source: 'claude-mem',
+      source_table: 'observations',
+      source_key: 'observations:42:parent',
+    });
+    expect(titleCall.sourceSpans).toEqual([
+      {
+        drawerId: 'drawer-42-0',
+        startOffset: 0,
+        endOffset: 'Prefer Biome for formatting'.length,
+        sourceJson: { match: 'exact', chunkIndex: 0 },
+      },
+    ]);
+
+    const firstFactCall = memoryStore.addFact.mock.calls[1]?.[0];
+    expect(firstFactCall.content).toBe('Biome replaces ESLint formatting');
+    expect(firstFactCall.source.source_key).toBe('observations:42:fact:0');
+    const firstSpan = firstFactCall.sourceSpans[0];
+    expect(firstSpan.drawerId).toBe('drawer-42-0');
+    expect(drawer.content.slice(firstSpan.startOffset, firstSpan.endOffset)).toBe(
+      'Biome replaces ESLint formatting',
+    );
+
+    const secondFactCall = memoryStore.addFact.mock.calls[2]?.[0];
+    expect(secondFactCall.source.source_key).toBe('observations:42:fact:1');
+    const secondSpan = secondFactCall.sourceSpans[0];
+    expect(drawer.content.slice(secondSpan.startOffset, secondSpan.endOffset)).toBe(
+      'Run focused Biome on touched files',
+    );
+  });
+
+  it('writes only the title fact when the observation has no facts array', async () => {
+    const drawer = makeDrawer({
+      id: 'drawer-no-facts',
+      chunkIndex: 0,
+      content: 'Prefer Biome for formatting\n\nKeep formatting and linting unified',
+    });
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    const db = createClaudeMemDb([createClaudeMemObservation({ facts: null })]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+    });
+
+    expect(result.factsWritten).toBe(1);
+    expect(result.factCandidates).toBe(1);
+    expect(memoryStore.addFact).toHaveBeenCalledTimes(1);
+    expect(memoryStore.addFact.mock.calls[0]?.[0].source.source_key).toBe('observations:42:parent');
+  });
+
+  it('falls back to the full-drawer span when the fact text is not present verbatim', async () => {
+    const drawer = makeDrawer({
+      id: 'drawer-fallback',
+      chunkIndex: 0,
+      content: 'Prefer Biome for formatting',
+    });
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    const db = createClaudeMemDb([
+      createClaudeMemObservation({
+        title: null as unknown as string,
+        facts: JSON.stringify(['Biome is not in the drawer content at all']),
+      }),
+    ]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+    });
+
+    expect(result.factsWritten).toBe(1);
+    const call = memoryStore.addFact.mock.calls[0]?.[0];
+    expect(call.sourceSpans).toEqual([
+      {
+        drawerId: 'drawer-fallback',
+        startOffset: 0,
+        endOffset: drawer.content.length,
+        sourceJson: { match: 'fallback_full_drawer', chunkIndex: 0 },
+      },
+    ]);
+  });
+
+  it('skips facts whose source_key already exists (idempotent resume)', async () => {
+    const drawer = drawerFromObservationFixture();
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore(['observations:42:parent', 'observations:42:fact:0']);
+    const db = createClaudeMemDb([createClaudeMemObservation()]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+    });
+
+    expect(result.factsWritten).toBe(1);
+    expect(result.factsSkipped).toBe(2);
+    expect(memoryStore.addFact).toHaveBeenCalledTimes(1);
+    expect(memoryStore.addFact.mock.calls[0]?.[0].source.source_key).toBe('observations:42:fact:1');
+  });
+
+  it('does not emit facts for session_summaries rows', async () => {
+    const summaryDrawer = makeDrawer({
+      id: 'drawer-summary-7',
+      chunkIndex: 0,
+      content: 'The session chose a conservative drawer backfill slice.',
+    });
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [summaryDrawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    const db = createClaudeMemDb([], [createClaudeMemSessionSummary()]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+    });
+
+    expect(result.written).toBe(1);
+    expect(result.factCandidates).toBe(0);
+    expect(result.factsWritten).toBe(0);
+    expect(memoryStore.addFact).not.toHaveBeenCalled();
+  });
+
+  it('surfaces fact-write errors and leaves state failed so resume retries the same observation', async () => {
+    const drawer = drawerFromObservationFixture();
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    memoryStore.addFact.mockRejectedValueOnce(new Error('simulated fact failure'));
+    const db = createClaudeMemDb([createClaudeMemObservation()]);
+
+    await expect(
+      backfillMemoryDrawers({
+        sourceType: 'claude-mem',
+        sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+        claudeMemDb: db,
+        dryRun: false,
+        drawerStore: drawerStore as never,
+        stateStore: stateStore as never,
+        memoryStore: memoryStore as never,
+      }),
+    ).rejects.toThrow('simulated fact failure');
+
+    expect(stateStore.markFailed).toHaveBeenCalledWith('state-1', expect.any(Error));
+    expect(stateStore.markComplete).not.toHaveBeenCalled();
   });
 });
