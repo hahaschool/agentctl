@@ -86,7 +86,10 @@ describe('env-up.sh', () => {
       const pnpmCalls = readFileSync(pnpmLog, 'utf8');
       expect(output).toContain('Warning: removing stale tier lock for dev-test.');
       expect(output).toContain('Web:    http://localhost:15573');
-      expect(pnpmCalls).toContain('args=drizzle-kit migrate');
+      // env-up.sh replaces `pnpm drizzle-kit migrate` (broken in v0.31.9) with
+      // a direct invocation of scripts/drizzle-migrate-apply.ts via `pnpm tsx`.
+      expect(pnpmCalls).toContain('drizzle-migrate-apply.ts');
+      expect(pnpmCalls).not.toContain('drizzle-kit migrate');
       expect(pnpmCalls).toContain('skip=true|web=15573|args=--filter @agentctl/control-plane dev');
       expect(pnpmCalls).toContain('web=15573|args=--filter @agentctl/agent-worker dev');
       expect(pnpmCalls).toContain('web=15573|args=--filter @agentctl/web dev');
