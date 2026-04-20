@@ -1,6 +1,6 @@
 # Mesh Bidirectional Registration Plan
 
-**Status:** In Progress — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, two-node replication proof, the opt-in live fixture foundation, and the A-to-B machine visibility browser assertion landed; remaining browser assertions cover 33.8 add-peer/reverse-registration and one-way warning/retry flows
+**Status:** In Progress — reverse-registration, machine provenance, mesh health, live-fleet PM2 env passthrough, two-node replication proof, the opt-in live fixture foundation, and the PR #673 A-to-B machine visibility browser assertion landed; remaining browser assertions cover 33.8 add-peer/reverse-registration and one-way warning/retry flows
 **Roadmap:** 33.8 Mesh Bidirectional Registration + Cross-Node Visibility
 **Created:** 2026-04-15
 
@@ -47,7 +47,7 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
      expected peer version, polling, and `AGENTCTL_PLAYWRIGHT_NO_WEBSERVER=1`
      for externally running nodes.
 
-7. Separately gated A-to-B machine visibility browser assertion.
+7. Separately gated A-to-B machine visibility browser assertion *(PR #673)*.
    - The two-node fixture can now be opted into with
      `AGENTCTL_MESH_MACHINE_VISIBILITY_E2E=1`.
    - The assertion opens the secondary node's `/machines` page, searches for a
@@ -80,7 +80,7 @@ The sync protocol can pull changes once peers exist on both sides; the missing p
 - Store/migration tests for machine provenance and reverse-registration columns landed across PRs #554/#564.
 - Sync-loop integration coverage proving node B pulls machine rows from node A after bidirectional registration landed in PR #589.
 - PR #654 fixture foundation verification: skipped by default without explicit env, documented live-node prerequisites, and no default E2E or beta/dev/prod CD behavior changes.
-- The A-to-B machine visibility fixture assertion remains default-skipped unless
+- The PR #673 A-to-B machine visibility fixture assertion remains default-skipped unless
   `AGENTCTL_MESH_MACHINE_VISIBILITY_E2E=1`,
   `AGENTCTL_MESH_SECONDARY_WEB_URL`,
   `AGENTCTL_MESH_SYNCED_MACHINE_HOSTNAME`, and
