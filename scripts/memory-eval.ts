@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-
+import { Pool } from 'pg';
+import type { Logger } from 'pino';
+import { EmbeddingClient } from '../packages/control-plane/src/memory/embedding-client.js';
 import {
   createDeterministicMockRanker,
   formatMemoryEvalMarkdown,
@@ -8,9 +10,14 @@ import {
   getFullSet,
   getHeldOutSet,
   loadMemoryEvalFixture,
+  type MemoryEvalCandidate,
   type MemoryEvalFixtureRow,
+  type MemoryEvalRanker,
+  type MemoryEvalRun,
   runMemoryEval,
 } from '../packages/control-plane/src/memory/memory-eval.js';
+import { MemorySearch } from '../packages/control-plane/src/memory/memory-search.js';
+import { MEMORY_EMBEDDING_MODEL } from '../packages/shared/src/memory/constants.js';
 
 type EvalSplit = 'dev' | 'held-out' | 'full';
 
@@ -22,21 +29,39 @@ type CliOptions = {
   allowFullSet: boolean;
 };
 
+export type LiveMemoryEvalConfig = {
+  databaseUrl: string;
+  embeddingBaseUrl: string;
+  embeddingModel: string;
+};
+
+type MemoryEvalEnv = Record<string, string | undefined>;
+type LiveMemorySearch = Pick<MemorySearch, 'search'>;
+
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
 const DEFAULT_FIXTURE_PATH = path.join(
   REPO_ROOT,
   'docs/fixtures/memory-eval/agentctl-memory-eval.sample.json',
 );
+const LIVE_SEARCH_LIMIT = 10;
+const EMBEDDING_BASE_URL_ENV_KEYS = [
+  'EMBEDDING_API_URL',
+  'LITELLM_PROXY_URL',
+  'LITELLM_URL',
+] as const;
 
 function usage(): string {
-  return `Usage: pnpm memory:eval [--fixture path] [--split dev|held-out|full] [--json] [--mock]
+  return `Usage: pnpm memory:eval [--fixture path] [--split dev|held-out|full] [--json] [--mock|--no-mock]
 
-Runs the Phase 0 memory eval harness in deterministic mock-ranking mode.
-Live control-plane search wiring is intentionally out of scope for this first harness slice.`;
+Runs the Phase 0 memory eval harness.
+
+Default: deterministic mock ranking.
+Live mode: --no-mock uses DATABASE_URL plus embedding config from EMBEDDING_API_URL,
+LITELLM_PROXY_URL, or LITELLM_URL.`;
 }
 
-function parseArgs(argv: readonly string[]): CliOptions {
+export function parseArgs(argv: readonly string[]): CliOptions {
   const options: CliOptions = {
     fixturePath: DEFAULT_FIXTURE_PATH,
     split: 'dev',
@@ -118,24 +143,116 @@ function selectRows(
   return getFullSet(rows, { allowFullSet: options.allowFullSet });
 }
 
-export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
-  const options = parseArgs(argv);
-  if (!options.mock) {
-    throw new Error('Live memory search eval is not wired in Phase 0. Run with --mock.');
+export function resolveLiveMemoryEvalConfig(
+  env: MemoryEvalEnv = process.env,
+): LiveMemoryEvalConfig {
+  const databaseUrl = readRequiredEnv(env, 'DATABASE_URL');
+  const embeddingBaseUrl = readFirstEnv(env, EMBEDDING_BASE_URL_ENV_KEYS);
+  if (!embeddingBaseUrl) {
+    throw new Error(
+      '--no-mock requires an embedding base URL via EMBEDDING_API_URL, LITELLM_PROXY_URL, or LITELLM_URL',
+    );
   }
 
+  return {
+    databaseUrl,
+    embeddingBaseUrl,
+    embeddingModel: env.EMBEDDING_MODEL?.trim() || MEMORY_EMBEDDING_MODEL,
+  };
+}
+
+export function createLiveMemorySearchRanker(memorySearch: LiveMemorySearch): MemoryEvalRanker {
+  return async (row) => {
+    const results = await memorySearch.search({
+      query: row.query,
+      visibleScopes: [],
+      limit: LIVE_SEARCH_LIMIT,
+    });
+
+    return results.map(
+      (result, index): MemoryEvalCandidate => ({
+        id: result.fact.id,
+        factId: result.fact.id,
+        score: result.score,
+        metadata: {
+          rank: index + 1,
+          sourcePath: result.source_path,
+        },
+      }),
+    );
+  };
+}
+
+export async function runLiveMemoryEval(
+  rows: readonly MemoryEvalFixtureRow[],
+  config: LiveMemoryEvalConfig,
+): Promise<MemoryEvalRun> {
+  const pool = new Pool({ connectionString: config.databaseUrl });
+  const logger = createScriptLogger();
+  const embeddingClient = new EmbeddingClient({
+    baseUrl: config.embeddingBaseUrl,
+    model: config.embeddingModel,
+    logger,
+  });
+  const memorySearch = new MemorySearch({
+    pool,
+    embeddingClient,
+    logger,
+  });
+
+  try {
+    return await runMemoryEval(rows, createLiveMemorySearchRanker(memorySearch));
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  const options = parseArgs(argv);
   const fixture = loadMemoryEvalFixture(options.fixturePath);
   const rows = selectRows(fixture.rows, options);
-  const run = await runMemoryEval(rows, createDeterministicMockRanker());
+  const run = options.mock
+    ? await runMemoryEval(rows, createDeterministicMockRanker())
+    : await runLiveMemoryEval(rows, resolveLiveMemoryEvalConfig());
 
   if (options.json) {
     console.log(JSON.stringify(run, null, 2));
     return;
   }
 
-  console.log(`# Memory Eval (${options.split}, mock ranking)`);
+  console.log(
+    `# Memory Eval (${options.split}, ${options.mock ? 'mock ranking' : 'live MemorySearch'})`,
+  );
   console.log('');
   console.log(formatMemoryEvalMarkdown(run.summary));
+}
+
+function readRequiredEnv(env: MemoryEvalEnv, name: string): string {
+  const value = env[name]?.trim();
+  if (!value) {
+    throw new Error(`--no-mock requires ${name}`);
+  }
+  return value;
+}
+
+function readFirstEnv(env: MemoryEvalEnv, names: readonly string[]): string | null {
+  for (const name of names) {
+    const value = env[name]?.trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+function createScriptLogger(): Logger {
+  return {
+    debug() {},
+    info() {},
+    warn() {},
+    error() {},
+    child() {
+      return this;
+    },
+  } as Logger;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
