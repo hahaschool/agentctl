@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // Worker-side memory_dedup_check MCP tool route
 //
-// First contract slice: validate the planned MemPalace-inspired request shape
-// and prove the safe no-candidate path via the existing facts search. Full
-// skip/merge scoring waits for drawer-aware search/backfill.
+// Validates the MemPalace-inspired request shape, delegates candidate lookup
+// to the control-plane facts search, and scores the top candidate against the
+// skip/merge thresholds to recommend skip / merge / store_new.
 // ---------------------------------------------------------------------------
 
 import {
@@ -11,6 +11,7 @@ import {
   type MemoryDedupCheckRequest,
   type MemoryDedupCheckResponse,
   type MemoryDedupNearestMatch,
+  type MemoryDedupRecommendation,
   querySanitizerLogFields,
   sanitizeName,
   sanitizeQuery,
@@ -21,6 +22,10 @@ import type { Logger } from 'pino';
 import { extractMcpArguments } from './mcp-arguments.js';
 
 const DEDUP_CANDIDATE_LIMIT = 5;
+
+// Thresholds per docs/plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md (Phase 4, Step 7).
+const DEDUP_SKIP_THRESHOLD = 0.92;
+const DEDUP_MERGE_THRESHOLD = 0.82;
 
 type MemoryDedupCheckRouteOptions = FastifyPluginOptions & {
   controlPlaneUrl: string;
@@ -150,19 +155,127 @@ export async function memoryDedupCheckRoutes(
           nearest_matches: [],
           recommendation: 'store_new',
           rationale: 'No existing memory candidates matched this content preview.',
+          match_id: null,
         };
         return noMatchResponse;
       }
 
-      const nearestMatches = candidates.map(candidateToNearestMatch);
-      return reply.code(501).send({
-        error: 'DEDUP_SCORING_UNAVAILABLE',
-        message:
-          'memory_dedup_check candidate scoring requires drawer-aware search/backfill and is not enabled in this first contract slice',
-        nearest_matches: nearestMatches,
-      });
+      const sortedMatches = candidates
+        .map(candidateToNearestMatch)
+        .slice()
+        .sort(compareByScoreDesc);
+      const scoredResponse = scoreDedupMatches(sortedMatches);
+      logger.debug(
+        {
+          topScore: scoredResponse.topScore,
+          recommendation: scoredResponse.response.recommendation,
+          matchCount: sortedMatches.length,
+          ...querySanitizerLogFields(sanitizedPreview),
+        },
+        'memory_dedup_check scored candidates',
+      );
+      return scoredResponse.response;
     },
   );
+}
+
+type DedupScoringResult = {
+  response: MemoryDedupCheckResponse;
+  topScore: number | null;
+};
+
+function scoreDedupMatches(sortedMatches: MemoryDedupNearestMatch[]): DedupScoringResult {
+  const [topCandidate] = sortedMatches;
+  const topScore = topCandidate?.score ?? null;
+  const topId = topCandidate?.id ?? null;
+
+  if (topScore === null || !Number.isFinite(topScore)) {
+    return {
+      response: {
+        ok: true,
+        is_duplicate: false,
+        nearest_matches: sortedMatches,
+        recommendation: 'store_new',
+        rationale:
+          'Top candidate has no similarity score; defaulting to store_new until scoring is available.',
+        match_id: null,
+      },
+      topScore: null,
+    };
+  }
+
+  const scoreText = topScore.toFixed(3);
+
+  if (topScore >= DEDUP_SKIP_THRESHOLD) {
+    return {
+      response: buildScoredResponse({
+        sortedMatches,
+        isDuplicate: true,
+        recommendation: 'skip',
+        matchId: topId,
+        rationale: `Top candidate is an exact or near-duplicate (score ${scoreText} >= skip threshold ${DEDUP_SKIP_THRESHOLD}); skip storing to avoid duplication.`,
+      }),
+      topScore,
+    };
+  }
+
+  if (topScore >= DEDUP_MERGE_THRESHOLD) {
+    return {
+      response: buildScoredResponse({
+        sortedMatches,
+        isDuplicate: false,
+        recommendation: 'merge',
+        matchId: topId,
+        rationale: `Top candidate is similar but not identical (score ${scoreText} in [${DEDUP_MERGE_THRESHOLD}, ${DEDUP_SKIP_THRESHOLD})); suggest merging with existing fact.`,
+      }),
+      topScore,
+    };
+  }
+
+  return {
+    response: buildScoredResponse({
+      sortedMatches,
+      isDuplicate: false,
+      recommendation: 'store_new',
+      matchId: null,
+      rationale: `Top candidate similarity is low (score ${scoreText} < merge threshold ${DEDUP_MERGE_THRESHOLD}); store as a new fact.`,
+    }),
+    topScore,
+  };
+}
+
+type BuildScoredResponseInput = {
+  sortedMatches: MemoryDedupNearestMatch[];
+  isDuplicate: boolean;
+  recommendation: MemoryDedupRecommendation;
+  matchId: string | null;
+  rationale: string;
+};
+
+function buildScoredResponse(input: BuildScoredResponseInput): MemoryDedupCheckResponse {
+  return {
+    ok: true,
+    is_duplicate: input.isDuplicate,
+    nearest_matches: sanitizeMatchIds(input.sortedMatches),
+    recommendation: input.recommendation,
+    rationale: input.rationale,
+    match_id: input.matchId,
+  };
+}
+
+// Ensure nearest_matches are plain objects (no hidden prototypes) and keep
+// the immutable copy pattern so callers cannot mutate our cached candidate set.
+function sanitizeMatchIds(matches: MemoryDedupNearestMatch[]): MemoryDedupNearestMatch[] {
+  return matches.map((match) => ({ ...match }));
+}
+
+function compareByScoreDesc(a: MemoryDedupNearestMatch, b: MemoryDedupNearestMatch): number {
+  const aScore = typeof a.score === 'number' && Number.isFinite(a.score) ? a.score : -Infinity;
+  const bScore = typeof b.score === 'number' && Number.isFinite(b.score) ? b.score : -Infinity;
+  if (aScore === bScore) {
+    return 0;
+  }
+  return bScore - aScore;
 }
 
 function normalizeNonEmptyString(value: unknown): string | null {
