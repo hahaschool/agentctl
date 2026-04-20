@@ -7,11 +7,11 @@
 // The browser then connects to an SSE endpoint (proxied through CP-A) to
 // stream live stdout/stderr from the update script.
 //
-// The script pipeline is: fetch → reset → install → build → drizzle-kit
-// migrate → pm2 reload → poll /health. `pm2 reload` kills the CP process, so
-// the SSE stream always drops at reload; the script then races the new CP
-// against a bounded health probe and runs a full rollback (git + deps + build
-// + pm2) if the probe fails. See docs/LESSONS_LEARNED.md
+// The script pipeline is: fetch → reset → install → build → psql migration
+// applier → redirect post-reload logs → pm2 reload → poll /health. `pm2 reload`
+// kills the CP process, so the SSE stream always drops at reload; after that
+// point script output goes to the post-reload log file so closed parent pipes
+// cannot SIGPIPE the health probe/rollback. See docs/LESSONS_LEARNED.md
 // "Remote peer upgrade bricked macmini" for the RCA behind these steps.
 // ---------------------------------------------------------------------------
 

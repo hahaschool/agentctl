@@ -25,14 +25,18 @@ describe('scripts/peer-update.sh', () => {
     expect(SOURCE).toMatch(/PREVIOUS_SHA="\$\(git rev-parse HEAD\)"/);
   });
 
-  it('runs drizzle-kit migrate before pm2 reload', () => {
+  it('runs the canonical psql migration applier before pm2 reload', () => {
     // Migrations must happen before the new CP boots, otherwise the new code
     // queries columns that do not exist in the old schema and crashes.
-    const migrateIdx = SOURCE.indexOf('drizzle-kit migrate');
-    const reloadIdx = SOURCE.indexOf('pm2 reload');
+    const migrateIdx = SOURCE.indexOf('drizzle-migrate-apply.ts');
+    const reloadIdx = SOURCE.lastIndexOf('pm2 reload');
     expect(migrateIdx).toBeGreaterThan(-1);
     expect(reloadIdx).toBeGreaterThan(-1);
     expect(migrateIdx).toBeLessThan(reloadIdx);
+    const requiredDatabaseUrlLine =
+      'DATABASE_URL="$' + '{DATABASE_URL:?DATABASE_URL is required for DB migrations}"';
+    expect(SOURCE).toContain(requiredDatabaseUrlLine);
+    expect(SOURCE).not.toMatch(/exec drizzle-kit migrate/);
   });
 
   it('allows skipping migrations via AGENTCTL_SKIP_MIGRATIONS=1', () => {
@@ -47,6 +51,16 @@ describe('scripts/peer-update.sh', () => {
     expect(SOURCE).toMatch(/AGENTCTL_PEER_HEALTH_TIMEOUT_SEC/);
     expect(SOURCE).toMatch(/curl --silent --fail/);
     expect(SOURCE).toMatch(/deadline=/);
+  });
+
+  it('redirects post-reload output before pm2 reload so pipe closure cannot kill rollback', () => {
+    const redirectSnippet = 'exec >>"$' + '{POST_RELOAD_LOG}" 2>&1';
+    const redirectIdx = SOURCE.indexOf(redirectSnippet);
+    const reloadIdx = SOURCE.lastIndexOf('pm2 reload');
+    expect(redirectIdx).toBeGreaterThan(-1);
+    expect(reloadIdx).toBeGreaterThan(-1);
+    expect(redirectIdx).toBeLessThan(reloadIdx);
+    expect(SOURCE).toMatch(/AGENTCTL_PEER_POST_RELOAD_LOG/);
   });
 
   it('rolls back git + deps + build + pm2 reload on health-probe failure', () => {

@@ -6,7 +6,7 @@
 # endpoint when `:peerId` matches the local machine id. The script:
 #   1. snapshots the current git SHA
 #   2. fast-forwards to origin/main
-#   3. installs deps + builds + runs DB migrations
+#   3. installs deps + builds + runs DB migrations with the canonical psql applier
 #   4. reloads the PM2 ecosystem
 #   5. probes /health until the new CP answers (or rolls back)
 #
@@ -22,7 +22,8 @@
 #   AGENTCTL_PEER_HEALTH_URL         Health endpoint to poll (default http://127.0.0.1:8080/health)
 #   AGENTCTL_PEER_HEALTH_TIMEOUT_SEC Health probe budget (default 90)
 #   AGENTCTL_PEER_MAX_VERSION_SKEW   Refuse auto-upgrade when jumping more than N minor versions (unset = unlimited)
-#   AGENTCTL_SKIP_MIGRATIONS         Set to 1 to skip drizzle-kit migrate (default 0)
+#   AGENTCTL_SKIP_MIGRATIONS         Set to 1 to skip the psql migration applier (default 0)
+#   AGENTCTL_PEER_POST_RELOAD_LOG    File for post-reload probe/rollback logs
 #
 # Roadmap: docs/ROADMAP.md §33.11 Fleet Rollout & Peer Auto-Update.
 # ---------------------------------------------------------------------------
@@ -33,6 +34,7 @@ HEALTH_URL="${AGENTCTL_PEER_HEALTH_URL:-http://127.0.0.1:8080/health}"
 HEALTH_TIMEOUT_SEC="${AGENTCTL_PEER_HEALTH_TIMEOUT_SEC:-90}"
 SKIP_MIGRATIONS="${AGENTCTL_SKIP_MIGRATIONS:-0}"
 MAX_VERSION_SKEW="${AGENTCTL_PEER_MAX_VERSION_SKEW:-}"
+POST_RELOAD_LOG="${AGENTCTL_PEER_POST_RELOAD_LOG:-}"
 
 if [ -z "${PM2_ECOSYSTEM}" ]; then
   echo "peer-update: AGENTCTL_PM2_ECOSYSTEM env var is required" >&2
@@ -41,6 +43,9 @@ fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}"
+if [ -z "${POST_RELOAD_LOG}" ]; then
+  POST_RELOAD_LOG="${REPO_ROOT}/logs/peer-update-post-reload.log"
+fi
 
 PREVIOUS_SHA="$(git rev-parse HEAD)"
 PREVIOUS_VERSION="$(node -p "require('./package.json').version" 2>/dev/null || echo 'unknown')"
@@ -92,18 +97,28 @@ pnpm install --frozen-lockfile
 pnpm build
 
 # ---------------------------------------------------------------------------
-# Run DB migrations BEFORE pm2 reload (matches env-promote.sh). Migrations are
-# forward-only and idempotent (IF NOT EXISTS / DEFAULTs), so it is safe to run
-# them even when the beta PM2 config sets SKIP_MIGRATIONS=true on the CP.
-# Without this step a remote upgrade that crosses a schema version will bring
-# up a CP that crashes on the first query to a missing column.
+# Run DB migrations BEFORE pm2 reload (matches env-promote.sh). This must use
+# scripts/drizzle-migrate-apply.ts, not `drizzle-kit migrate`: drizzle-kit
+# v0.31.9 can silently no-op on pending SQL, while the local applier computes
+# SHA-256 journal hashes and applies pending SQL through psql.
 # ---------------------------------------------------------------------------
 if [ "${SKIP_MIGRATIONS}" != "1" ]; then
-  echo "peer-update: applying DB migrations (drizzle-kit migrate)"
-  pnpm --filter @agentctl/control-plane exec drizzle-kit migrate
+  echo "peer-update: applying DB migrations (drizzle-migrate-apply.ts)"
+  DATABASE_URL="${DATABASE_URL:?DATABASE_URL is required for DB migrations}" \
+    pnpm tsx "${REPO_ROOT}/scripts/drizzle-migrate-apply.ts" \
+    --migrations-dir "${REPO_ROOT}/packages/control-plane/drizzle"
 else
   echo "peer-update: AGENTCTL_SKIP_MIGRATIONS=1 — skipping DB migrations"
 fi
+
+# The parent control-plane process is about to reload and can close the pipes
+# backing this script's stdout/stderr. Redirect the probe and rollback phase to
+# a file before `pm2 reload` so late echo/curl/pm2 writes cannot SIGPIPE the
+# script before rollback has a chance to run.
+mkdir -p "$(dirname "${POST_RELOAD_LOG}")"
+echo "peer-update: redirecting post-reload logs to ${POST_RELOAD_LOG}"
+exec >>"${POST_RELOAD_LOG}" 2>&1
+echo "peer-update: post-reload phase continuing at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 pm2 reload "${PM2_ECOSYSTEM}"
 
