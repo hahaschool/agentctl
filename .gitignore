@@ -40,3 +40,6 @@ packages/agent-worker/.agentctl/
 coverage/
 test-results/
 .superpowers/
+
+# Private memory eval fixtures
+tmp/memory-eval/

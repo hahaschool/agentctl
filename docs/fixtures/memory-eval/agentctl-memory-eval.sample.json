@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "splitSeed": 42,
+  "description": "Sanitized public sample for the AgentCTL memory eval harness. Real internal rows belong under tmp/memory-eval and must not be committed.",
+  "rows": [
+    {
+      "id": "sample-longmem-pref-backup-format",
+      "query": "Which backup format did Taylor prefer for the nightly snapshot handoff?",
+      "category": "LongMemEval-single-session-preference",
+      "expectedFacts": [
+        {
+          "id": "fact:sample:backup-format",
+          "relevance": 3
+        }
+      ],
+      "expectedDrawerSources": [
+        {
+          "sourceType": "session-jsonl",
+          "sourceId": "fixture-session-redacted-backup",
+          "chunkIndex": 0,
+          "relevance": 2
+        }
+      ],
+      "redactedAnswerHints": [
+        "Taylor preferred compressed tarballs over folder sync for the nightly snapshot handoff."
+      ],
+      "tags": ["vocabulary-gap", "assistant-reference"],
+      "public": true
+    },
+    {
+      "id": "sample-longmem-relative-time",
+      "query": "What did the operator decide a few days after the rate-limit retry incident?",
+      "category": "LongMemEval-project-memory",
+      "expectedFacts": [
+        {
+          "id": "fact:sample:retry-decision",
+          "relevance": 3
+        }
+      ],
+      "expectedDrawerSources": [
+        {
+          "sourceType": "runtime-checkpoint",
+          "sourceId": "fixture-checkpoint-redacted-retry",
+          "chunkIndex": 1,
+          "relevance": 2
+        }
+      ],
+      "redactedAnswerHints": [
+        "The operator chose capped exponential backoff and a visible retry budget."
+      ],
+      "tags": ["temporal-ambiguity"],
+      "public": true
+    },
+    {
+      "id": "sample-agentctl-noisy-distractor",
+      "query": "Which worker pool should stay on the smaller concurrency cap despite similar queue names?",
+      "category": "AgentCTL-internal",
+      "expectedFacts": [
+        {
+          "id": "fact:sample:worker-pool-cap",
+          "relevance": 3
+        }
+      ],
+      "expectedDrawerSources": [
+        {
+          "sourceType": "manual",
+          "sourceId": "fixture-note-redacted-worker-pool",
+          "chunkIndex": 0,
+          "relevance": 2
+        }
+      ],
+      "redactedAnswerHints": [
+        "The image-generation worker pool keeps the smaller cap; the similarly named ingest pool does not."
+      ],
+      "tags": ["noisy-distractor-rejection", "person-name-underweighting"],
+      "public": true
+    }
+  ]
+}
