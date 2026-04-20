@@ -8,7 +8,7 @@
 deterministic eval foundation: fixture schema/sanitization, seed-42 split
 helpers, mock scoring utilities for R@5/R@10/MRR/NDCG@10/grounding/drawer-hit
 rate/p95, by-category/by-tag summaries, sanitized sample fixture, `pnpm
-memory:eval`, and focused tests. The planted-needle slice adds deterministic
+memory:eval`, and focused tests. PR #660 adds deterministic
 mock recall@5 threshold enforcement, env-configurable bench sizing, p50/p95/p99
 latency reporting, and `pnpm memory:bench` without live DB or embedding
 dependencies. Live search wiring, cold-start MCP contracts, and private/full
@@ -736,7 +736,7 @@ Mobile constraint:
 
 **Status:** In progress. PR #655 delivered the fixture schema, deterministic
 split helpers, scoring utilities, sanitized sample fixture, and baseline CLI.
-The planted-needle slice adds a deterministic mock PR bench with threshold
+PR #660 adds a deterministic mock PR bench with threshold
 enforcement and latency percentiles. The remaining Phase 0 work is live-search
 wiring, cold-start/null-argument contracts, private fixture growth, and
 release/weekly held-out automation.
@@ -1238,7 +1238,7 @@ Add env vars through the existing centralized config path used by control-plane/
 
 1. **PR A: Eval Harness**
    - Partially delivered in PR #655: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, and `pnpm memory:eval`.
-   - Remaining: live search adapter, planted-needle bench, cold-start MCP contract tests, private fixture coverage, and release/weekly held-out automation.
+   - Remaining: live search adapter, cold-start MCP contract tests, private fixture coverage, and release/weekly held-out automation.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
