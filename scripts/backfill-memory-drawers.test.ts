@@ -26,6 +26,7 @@ type MockStateStore = {
 type MockMemoryStore = {
   addFact: ReturnType<typeof vi.fn>;
   findFactBySourceKey: ReturnType<typeof vi.fn>;
+  addFactSourceSpans: ReturnType<typeof vi.fn>;
 };
 
 type MockMemoryDrawer = {
@@ -65,6 +66,7 @@ function createMemoryStore(existingKeys: string[] = []): MockMemoryStore {
     findFactBySourceKey: vi.fn(async (sourceKey: string) => {
       return existing.has(sourceKey) ? { id: `existing-${sourceKey}` } : null;
     }),
+    addFactSourceSpans: vi.fn(async () => undefined),
   };
   return store;
 }
@@ -747,6 +749,13 @@ describe('claude-mem fact mapping', () => {
 
     expect(result.factsWritten).toBe(1);
     expect(result.factsSkipped).toBe(2);
+    expect(memoryStore.addFactSourceSpans).toHaveBeenCalledTimes(2);
+    expect(memoryStore.addFactSourceSpans.mock.calls[0]?.[0]).toBe(
+      'existing-observations:42:parent',
+    );
+    expect(memoryStore.addFactSourceSpans.mock.calls[1]?.[0]).toBe(
+      'existing-observations:42:fact:0',
+    );
     expect(memoryStore.addFact).toHaveBeenCalledTimes(1);
     expect(memoryStore.addFact.mock.calls[0]?.[0].source.source_key).toBe('observations:42:fact:1');
   });
@@ -870,7 +879,7 @@ describe('claude-mem session_summaries fact mapping', () => {
       source: 'claude-mem',
       source_table: 'session_summaries',
       source_id: '7',
-      source_key: 'session_summaries:7:parent',
+      source_key: 'session_summaries:7',
       session_id: 'claude-session-1',
       machine_id: 'macmini-1',
       original_created_at: '2026-04-20T13:00:00.000Z',
@@ -925,7 +934,7 @@ describe('claude-mem session_summaries fact mapping', () => {
 
     expect(result.sessionSummaryFactsWritten).toBe(1);
     const call = memoryStore.addFact.mock.calls[0]?.[0];
-    expect(call.source.source_key).toBe('session_summaries:7:parent');
+    expect(call.source.source_key).toBe('session_summaries:7');
     expect(call.sourceSpans).toEqual([
       {
         drawerId: 'drawer-summary-fallback',
@@ -938,7 +947,106 @@ describe('claude-mem session_summaries fact mapping', () => {
     expect(JSON.stringify(call)).not.toContain(rawSecret);
   });
 
-  it('skips the session-summary fact when the source_key is already present (idempotent resume)', async () => {
+  it('falls back across every drawer chunk when a long summary spans multiple chunks', async () => {
+    const drawers = [
+      makeDrawer({
+        id: 'drawer-summary-long-0',
+        chunkIndex: 0,
+        content: 'First chunk of a long session summary.',
+      }),
+      makeDrawer({
+        id: 'drawer-summary-long-1',
+        chunkIndex: 1,
+        content: 'Second chunk of a long session summary.',
+      }),
+    ];
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers,
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore();
+    const db = createClaudeMemDb(
+      [],
+      [
+        createClaudeMemSessionSummary({
+          summary: 'A long summary whose complete text is split across more than one drawer chunk.',
+        }),
+      ],
+    );
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+    });
+
+    expect(result.sessionSummaryFactsWritten).toBe(1);
+    const call = memoryStore.addFact.mock.calls[0]?.[0];
+    expect(call.sourceSpans).toEqual([
+      {
+        drawerId: 'drawer-summary-long-0',
+        startOffset: 0,
+        endOffset: drawers[0].content.length,
+        sourceJson: { match: 'fallback_full_drawer', chunkIndex: 0 },
+      },
+      {
+        drawerId: 'drawer-summary-long-1',
+        startOffset: 0,
+        endOffset: drawers[1].content.length,
+        sourceJson: { match: 'fallback_full_drawer', chunkIndex: 1 },
+      },
+    ]);
+  });
+
+  it('skips and repairs the session-summary fact when the legacy source_key is already present', async () => {
+    const drawer = drawerFromSessionSummaryFixture();
+    const drawerStore = createDrawerStore();
+    drawerStore.writeSource.mockResolvedValue({
+      drawers: [drawer],
+      redactionStatus: 'unreviewed',
+      redactionCount: 0,
+    });
+    const stateStore = createStateStore();
+    const memoryStore = createMemoryStore(['session_summaries:7']);
+    const db = createClaudeMemDb([], [createClaudeMemSessionSummary()]);
+
+    const result = await backfillMemoryDrawers({
+      sourceType: 'claude-mem',
+      sourceRoot: path.join(tmpDir, 'claude-mem.db'),
+      claudeMemDb: db,
+      dryRun: false,
+      drawerStore: drawerStore as never,
+      stateStore: stateStore as never,
+      memoryStore: memoryStore as never,
+    });
+
+    // Drawer write is idempotent via (source_type, source_id, chunk_index), so the drawer
+    // candidate still counts as "written"; the atomic fact is the part we dedupe here.
+    expect(result.written).toBe(1);
+    expect(result.sessionSummaryFactCandidates).toBe(1);
+    expect(result.sessionSummaryFactsWritten).toBe(0);
+    expect(result.sessionSummaryFactsSkipped).toBe(1);
+    expect(memoryStore.findFactBySourceKey).toHaveBeenCalledWith('session_summaries:7');
+    expect(memoryStore.findFactBySourceKey).not.toHaveBeenCalledWith('session_summaries:7:parent');
+    expect(memoryStore.addFactSourceSpans).toHaveBeenCalledWith('existing-session_summaries:7', [
+      {
+        drawerId: 'drawer-summary-7-0',
+        startOffset: 0,
+        endOffset: drawer.content.length,
+        sourceJson: { match: 'exact', chunkIndex: 0 },
+      },
+    ]);
+    expect(memoryStore.addFact).not.toHaveBeenCalled();
+  });
+
+  it('also dedupes the short-lived PR #703 :parent session-summary source key', async () => {
     const drawer = drawerFromSessionSummaryFixture();
     const drawerStore = createDrawerStore();
     drawerStore.writeSource.mockResolvedValue({
@@ -960,13 +1068,14 @@ describe('claude-mem session_summaries fact mapping', () => {
       memoryStore: memoryStore as never,
     });
 
-    // Drawer write is idempotent via (source_type, source_id, chunk_index), so the drawer
-    // candidate still counts as "written"; the atomic fact is the part we dedupe here.
-    expect(result.written).toBe(1);
-    expect(result.sessionSummaryFactCandidates).toBe(1);
     expect(result.sessionSummaryFactsWritten).toBe(0);
     expect(result.sessionSummaryFactsSkipped).toBe(1);
+    expect(memoryStore.findFactBySourceKey).toHaveBeenCalledWith('session_summaries:7');
     expect(memoryStore.findFactBySourceKey).toHaveBeenCalledWith('session_summaries:7:parent');
+    expect(memoryStore.addFactSourceSpans).toHaveBeenCalledWith(
+      'existing-session_summaries:7:parent',
+      expect.any(Array),
+    );
     expect(memoryStore.addFact).not.toHaveBeenCalled();
   });
 
@@ -1006,6 +1115,6 @@ describe('claude-mem session_summaries fact mapping', () => {
     const combinedLog = logger.entries.join('\n');
     expect(combinedLog).toContain('memory_fact_backfill_write_failed');
     expect(combinedLog).toContain('memory_fact_conflict');
-    expect(combinedLog).toContain('session_summaries:7:parent');
+    expect(combinedLog).toContain('session_summaries:7');
   });
 });

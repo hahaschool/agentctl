@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
@@ -77,6 +78,7 @@ export type AddFactLikeInput = {
 export type MemoryStoreLike = {
   addFact(input: AddFactLikeInput): Promise<MemoryFact>;
   findFactBySourceKey(sourceKey: string): Promise<{ id: string } | null>;
+  addFactSourceSpans?(factId: string, spans: AddFactSourceSpan[]): Promise<void>;
 };
 
 export type BackfillStateStoreLike = {
@@ -1003,12 +1005,6 @@ async function writeObservationFacts(params: {
   const entityType = mapObservationType(observation.type);
 
   for (const plan of plans) {
-    const existing = await memoryStore.findFactBySourceKey(plan.sourceKey);
-    if (existing) {
-      result.factsSkipped += 1;
-      continue;
-    }
-
     const sanitizedFact = sanitizeMemoryDrawerContent(plan.rawText).content.trim();
     if (sanitizedFact.length === 0) {
       result.factsSkipped += 1;
@@ -1016,6 +1012,13 @@ async function writeObservationFacts(params: {
     }
 
     const sourceSpans = computeFactSourceSpans(sanitizedFact, drawers);
+    const existing = await memoryStore.findFactBySourceKey(plan.sourceKey);
+    if (existing) {
+      await repairExistingFactSourceSpans(memoryStore, existing.id, sourceSpans);
+      result.factsSkipped += 1;
+      continue;
+    }
+
     const source = buildImportedSource({
       sourceTable: 'observations',
       sourceId: observation.id,
@@ -1051,6 +1054,7 @@ async function writeObservationFacts(params: {
 
 type SessionSummaryFactPlan = {
   sourceKey: string;
+  lookupSourceKeys: string[];
   rawText: string;
 };
 
@@ -1058,10 +1062,10 @@ type SessionSummaryFactPlan = {
  * Session summaries carry a single free-form text blob in `summary`, with no
  * atomic facts array. Following the observation precedent (title → parent
  * source key), we map the whole sanitized summary into exactly one atomic fact
- * keyed `session_summaries:<id>:parent`. That fact and the drawer share the
- * same source anchor, so downstream provenance resolves to one span covering
- * the full drawer content. If the summary is empty after sanitization, no
- * atomic fact is emitted.
+ * keyed `session_summaries:<id>` for compatibility with the older claude-mem
+ * importer. The PR #703-only `:parent` key remains a lookup alias so a retry
+ * does not duplicate rows written by that short-lived format. If the summary is
+ * empty after sanitization, no atomic fact is emitted.
  */
 function planSessionSummaryFactWrites(summary: ClaudeMemSessionSummary): SessionSummaryFactPlan[] {
   const content = summary.summary?.trim() ?? '';
@@ -1071,7 +1075,11 @@ function planSessionSummaryFactWrites(summary: ClaudeMemSessionSummary): Session
 
   return [
     {
-      sourceKey: `session_summaries:${summary.id}:parent`,
+      sourceKey: `session_summaries:${summary.id}`,
+      lookupSourceKeys: [
+        `session_summaries:${summary.id}`,
+        `session_summaries:${summary.id}:parent`,
+      ],
       rawText: content,
     },
   ];
@@ -1100,12 +1108,6 @@ async function writeSessionSummaryFacts(params: {
   const importedAt = new Date().toISOString();
 
   for (const plan of plans) {
-    const existing = await memoryStore.findFactBySourceKey(plan.sourceKey);
-    if (existing) {
-      result.sessionSummaryFactsSkipped += 1;
-      continue;
-    }
-
     const sanitizedFact = sanitizeMemoryDrawerContent(plan.rawText).content.trim();
     if (sanitizedFact.length === 0) {
       result.sessionSummaryFactsSkipped += 1;
@@ -1113,6 +1115,13 @@ async function writeSessionSummaryFacts(params: {
     }
 
     const sourceSpans = computeFactSourceSpans(sanitizedFact, drawers);
+    const existing = await findExistingFactBySourceKeys(memoryStore, plan.lookupSourceKeys);
+    if (existing) {
+      await repairExistingFactSourceSpans(memoryStore, existing.id, sourceSpans);
+      result.sessionSummaryFactsSkipped += 1;
+      continue;
+    }
+
     const source = buildImportedSource({
       sourceTable: 'session_summaries',
       sourceId: sessionSummary.id,
@@ -1145,6 +1154,30 @@ async function writeSessionSummaryFacts(params: {
   }
 }
 
+async function findExistingFactBySourceKeys(
+  memoryStore: MemoryStoreLike,
+  sourceKeys: string[],
+): Promise<{ id: string } | null> {
+  for (const sourceKey of sourceKeys) {
+    const existing = await memoryStore.findFactBySourceKey(sourceKey);
+    if (existing) {
+      return existing;
+    }
+  }
+  return null;
+}
+
+async function repairExistingFactSourceSpans(
+  memoryStore: MemoryStoreLike,
+  factId: string,
+  sourceSpans: AddFactSourceSpan[],
+): Promise<void> {
+  if (sourceSpans.length === 0 || !memoryStore.addFactSourceSpans) {
+    return;
+  }
+  await memoryStore.addFactSourceSpans(factId, sourceSpans);
+}
+
 function computeFactSourceSpans(
   sanitizedFact: string,
   drawers: MemoryDrawer[],
@@ -1173,22 +1206,15 @@ function computeFactSourceSpans(
     return spans;
   }
 
-  const fallbackDrawer = drawers[0];
-  if (!fallbackDrawer) {
-    return spans;
-  }
-
-  return [
-    {
-      drawerId: fallbackDrawer.id,
-      startOffset: 0,
-      endOffset: fallbackDrawer.content.length,
-      sourceJson: {
-        match: 'fallback_full_drawer',
-        chunkIndex: fallbackDrawer.chunkIndex,
-      },
+  return drawers.map((drawer) => ({
+    drawerId: drawer.id,
+    startOffset: 0,
+    endOffset: drawer.content.length,
+    sourceJson: {
+      match: 'fallback_full_drawer',
+      chunkIndex: drawer.chunkIndex,
     },
-  ];
+  }));
 }
 
 function summarizeBackfillError(error: unknown): string {
@@ -1331,6 +1357,29 @@ async function createCliStores(
       );
       const row = result.rows[0];
       return row ? { id: row.id } : null;
+    },
+    async addFactSourceSpans(factId: string, spans: AddFactSourceSpan[]) {
+      const createdAt = new Date().toISOString();
+      for (const span of spans) {
+        await pool.query(
+          `INSERT INTO memory_fact_sources (
+             id, fact_id, drawer_id, start_offset, end_offset, source_json, created_at
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7
+           )
+           ON CONFLICT (fact_id, drawer_id, start_offset, end_offset)
+           DO UPDATE SET source_json = EXCLUDED.source_json`,
+          [
+            `mem_${crypto.randomUUID().replace(/-/g, '')}`,
+            factId,
+            span.drawerId,
+            Math.max(0, Math.trunc(span.startOffset)),
+            Math.max(0, Math.trunc(span.endOffset)),
+            span.sourceJson ?? {},
+            createdAt,
+          ],
+        );
+      }
     },
   };
 
