@@ -13,8 +13,10 @@
 //   - vector path uses cosine distance over the pgvector `embedding` column
 //     when an embedding client is available. No client → keyword-only.
 //   - both candidate lists are fused via Reciprocal Rank Fusion (k=60).
-//   - any SQL / embedding failure on a single path degrades to empty for
-//     that path so the surrounding surface can still return the other one.
+//   - SQL failures degrade to empty by default (for callers that want fact-
+//     or drawer-only surfaces to stay usable). Callers that want a total DB
+//     outage to surface as 5xx pass `degradeOnSqlError: false` — the helper
+//     then rethrows the underlying error as `MemoryDrawerSearchDbError`.
 //
 // Keeping this helper side-effect-free (no Fastify, no HTTP concerns) means
 // any route that already has a `pg.Pool` + optional embedding client can opt
@@ -48,11 +50,39 @@ export type MemoryDrawerSearchDeps = {
   pool: Pool;
   logger: Logger;
   embeddingClient?: DrawerEmbeddingClient;
+  /**
+   * When `false`, any SQL failure on either path is rethrown as a
+   * {@link MemoryDrawerSearchDbError} so the caller can return 5xx. Defaults
+   * to `true` (legacy behavior): per-path SQL failures degrade to empty so
+   * the surviving path still returns results.
+   */
+  degradeOnSqlError?: boolean;
 };
 
 export const RRF_K = 60;
 export const CANDIDATE_LIMIT = 50;
 const CONTENT_PREVIEW_MAX_LENGTH = 240;
+
+/**
+ * Typed error raised when drawer search is called with
+ * `degradeOnSqlError: false` and the underlying SQL query fails. Callers
+ * (e.g. the drawer route) map this to a 5xx response instead of returning
+ * `{ ok: true, results: [] }` — a silent empty result would be
+ * indistinguishable from a legitimate miss.
+ */
+export class MemoryDrawerSearchDbError extends Error {
+  constructor(
+    public readonly code: 'MEMORY_DRAWER_SEARCH_DB_ERROR',
+    message: string,
+    public readonly context: {
+      path: 'keyword' | 'vector';
+      cause: unknown;
+    },
+  ) {
+    super(message);
+    this.name = 'MemoryDrawerSearchDbError';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -76,9 +106,18 @@ export async function searchMemoryDrawers(
   const candidateLimit = Math.max(limit, Math.floor(input.candidateLimit ?? CANDIDATE_LIMIT));
   const scope = typeof input.scope === 'string' && input.scope.length > 0 ? input.scope : null;
 
+  const options: SearchFailureOptions = { degradeOnSqlError: deps.degradeOnSqlError };
   const [keyword, vector] = await Promise.all([
-    keywordSearch(deps.pool, query, scope, candidateLimit, deps.logger),
-    vectorSearch(deps.pool, query, scope, candidateLimit, deps.embeddingClient, deps.logger),
+    keywordSearch(deps.pool, query, scope, candidateLimit, deps.logger, options),
+    vectorSearch(
+      deps.pool,
+      query,
+      scope,
+      candidateLimit,
+      deps.embeddingClient,
+      deps.logger,
+      options,
+    ),
   ]);
 
   return fuseRankedMatches(keyword, vector, limit);
@@ -93,12 +132,21 @@ export type RankedDrawerMatch = {
   result: MemoryDrawerSearchResult;
 };
 
+export type SearchFailureOptions = {
+  /**
+   * When `false`, rethrow SQL failures as {@link MemoryDrawerSearchDbError}
+   * instead of degrading to an empty result. Defaults to `true`.
+   */
+  degradeOnSqlError?: boolean;
+};
+
 export async function keywordSearch(
   pool: Pool,
   query: string,
   scope: string | null,
   limit: number,
   logger: Logger,
+  options: SearchFailureOptions = {},
 ): Promise<RankedDrawerMatch[]> {
   const tokens = tokenizeForTsquery(query);
   if (tokens.length === 0) {
@@ -140,7 +188,14 @@ export async function keywordSearch(
       result: rowToDrawerResult(row, 'keyword', toFloat(row.score)),
     }));
   } catch (error) {
-    logger.warn({ err: error }, 'Drawer keyword search failed — returning empty path');
+    logger.warn({ err: error }, 'Drawer keyword search failed');
+    if (options.degradeOnSqlError === false) {
+      throw new MemoryDrawerSearchDbError(
+        'MEMORY_DRAWER_SEARCH_DB_ERROR',
+        'Drawer keyword search SQL query failed',
+        { path: 'keyword', cause: error },
+      );
+    }
     return [];
   }
 }
@@ -152,6 +207,7 @@ export async function vectorSearch(
   limit: number,
   embeddingClient: DrawerEmbeddingClient | undefined,
   logger: Logger,
+  options: SearchFailureOptions = {},
 ): Promise<RankedDrawerMatch[]> {
   if (!embeddingClient) {
     return [];
@@ -197,7 +253,14 @@ export async function vectorSearch(
       result: rowToDrawerResult(row, 'vector', toFloat(row.score)),
     }));
   } catch (error) {
-    logger.warn({ err: error }, 'Drawer vector search failed — returning empty path');
+    logger.warn({ err: error }, 'Drawer vector search failed');
+    if (options.degradeOnSqlError === false) {
+      throw new MemoryDrawerSearchDbError(
+        'MEMORY_DRAWER_SEARCH_DB_ERROR',
+        'Drawer vector search SQL query failed',
+        { path: 'vector', cause: error },
+      );
+    }
     return [];
   }
 }

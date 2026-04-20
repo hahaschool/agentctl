@@ -39,6 +39,7 @@ import {
   type DrawerEmbeddingClient,
   fuseRankedMatches,
   keywordSearch,
+  MemoryDrawerSearchDbError,
   vectorSearch,
 } from '../../memory/memory-drawer-search.js';
 
@@ -108,13 +109,37 @@ export const memoryDrawerRoutes: FastifyPluginAsync<MemoryDrawerRoutesOptions> =
         return reply.code(400).send(limitResult.body);
       }
       const limit = limitResult.value;
+      // Per-path candidate window must be at least the default fan-out
+      // (CANDIDATE_LIMIT) AND at least the requested limit. Without this,
+      // `limit > CANDIDATE_LIMIT` silently capped results at CANDIDATE_LIMIT
+      // because each path fetched only CANDIDATE_LIMIT rows.
+      const candidateLimit = Math.max(CANDIDATE_LIMIT, limit);
 
       const startedAt = Date.now();
 
-      const [keywordMatches, vectorMatches] = await Promise.all([
-        keywordSearch(pool, sanitized.query, scope, CANDIDATE_LIMIT, logger),
-        vectorSearch(pool, sanitized.query, scope, CANDIDATE_LIMIT, embeddingClient, logger),
-      ]);
+      let keywordMatches: Awaited<ReturnType<typeof keywordSearch>>;
+      let vectorMatches: Awaited<ReturnType<typeof vectorSearch>>;
+      try {
+        [keywordMatches, vectorMatches] = await Promise.all([
+          keywordSearch(pool, sanitized.query, scope, candidateLimit, logger, {
+            degradeOnSqlError: false,
+          }),
+          vectorSearch(pool, sanitized.query, scope, candidateLimit, embeddingClient, logger, {
+            degradeOnSqlError: false,
+          }),
+        ]);
+      } catch (error) {
+        // Surface total DB failure as 5xx instead of returning `{ ok: true,
+        // results: [] }` — a silent empty index is indistinguishable from a
+        // legitimate miss and hid Postgres outages in the past.
+        const code =
+          error instanceof MemoryDrawerSearchDbError ? error.code : 'MEMORY_DRAWER_SEARCH_FAILED';
+        logger.warn({ err: error, code }, 'Memory drawer search failed');
+        return reply.code(500).send({
+          error: code,
+          message: 'Memory drawer search failed',
+        });
+      }
 
       const fused = fuseRankedMatches(keywordMatches, vectorMatches, limit);
 
@@ -205,7 +230,20 @@ function normalizeLimit(raw: string | undefined): LimitResult {
   if (raw === undefined || raw === '') {
     return { ok: true, value: DEFAULT_LIMIT };
   }
-  const parsed = Number.parseInt(raw, 10);
+  const trimmed = raw.trim();
+  // Reject malformed values like `10abc`, `1.5`, or leading signs before
+  // handing to parseInt — which happily accepts `10abc` (→ 10) and `1.5`
+  // (→ 1) otherwise. We only allow an unsigned decimal integer literal.
+  if (!/^\d+$/u.test(trimmed)) {
+    return {
+      ok: false,
+      body: {
+        error: 'INVALID_PARAMS',
+        message: `limit must be an integer between 1 and ${MAX_LIMIT}`,
+      },
+    };
+  }
+  const parsed = Number.parseInt(trimmed, 10);
   if (!Number.isInteger(parsed) || parsed < 1) {
     return {
       ok: false,
@@ -247,6 +285,9 @@ function hasControlCharacter(value: string): boolean {
 // ---------------------------------------------------------------------------
 
 async function loadDrawerById(pool: Pool, drawerId: string): Promise<MemoryDrawer | null> {
+  // `archived_at IS NULL` — archived drawers are soft-deleted and must 404
+  // to mirror the worker-side DRAWER_NOT_FOUND contract. The 0030 migration
+  // defines `archived_at timestamptz` (nullable); non-null = tombstoned.
   const sql = `
     SELECT id, scope, topic, source_type, source_id, source_uri, chunk_index,
            content, content_sha256, embedding_model, embedding_version,
@@ -254,6 +295,7 @@ async function loadDrawerById(pool: Pool, drawerId: string): Promise<MemoryDrawe
            archived_at, redaction_status, created_at, updated_at
       FROM memory_drawers
      WHERE id = $1
+       AND archived_at IS NULL
      LIMIT 1
   `;
   const { rows } = await pool.query<DrawerRow>(sql, [drawerId]);
