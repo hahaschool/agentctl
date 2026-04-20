@@ -127,6 +127,9 @@ export type BackfillMemoryDrawersResult = {
   factCandidates: number;
   factsWritten: number;
   factsSkipped: number;
+  sessionSummaryFactCandidates: number;
+  sessionSummaryFactsWritten: number;
+  sessionSummaryFactsSkipped: number;
   lastCursor: BackfillCursor | null;
 };
 
@@ -395,6 +398,9 @@ export async function backfillMemoryDrawers(
     factCandidates: 0,
     factsWritten: 0,
     factsSkipped: 0,
+    sessionSummaryFactCandidates: 0,
+    sessionSummaryFactsWritten: 0,
+    sessionSummaryFactsSkipped: 0,
     lastCursor: null,
   };
 
@@ -572,6 +578,7 @@ async function backfillClaudeMemDrawers(params: {
         topic,
         result,
         candidate,
+        sessionSummary: summary,
         nextCursor,
       });
       if (shouldStop) {
@@ -709,10 +716,21 @@ async function processClaudeMemCandidate(params: {
   result: BackfillMemoryDrawersResult;
   candidate: ClaudeMemDrawerCandidate | null;
   observation?: ClaudeMemObservation;
+  sessionSummary?: ClaudeMemSessionSummary;
   nextCursor: ClaudeMemBackfillCursor;
 }): Promise<boolean> {
-  const { options, state, dryRun, scope, topic, result, candidate, observation, nextCursor } =
-    params;
+  const {
+    options,
+    state,
+    dryRun,
+    scope,
+    topic,
+    result,
+    candidate,
+    observation,
+    sessionSummary,
+    nextCursor,
+  } = params;
 
   if (!candidate) {
     result.skipped += 1;
@@ -730,6 +748,11 @@ async function processClaudeMemCandidate(params: {
   if (observation) {
     const factPlan = planObservationFactWrites(observation);
     result.factCandidates += factPlan.length;
+  }
+
+  if (sessionSummary) {
+    const summaryPlan = planSessionSummaryFactWrites(sessionSummary);
+    result.sessionSummaryFactCandidates += summaryPlan.length;
   }
 
   if (!dryRun) {
@@ -750,6 +773,18 @@ async function processClaudeMemCandidate(params: {
     if (observation && options.memoryStore) {
       await writeObservationFacts({
         observation,
+        drawers: writeResult.drawers ?? [],
+        memoryStore: options.memoryStore,
+        scope,
+        machineId: options.machineId ?? null,
+        logger: options.logger,
+        result,
+      });
+    }
+
+    if (sessionSummary && options.memoryStore) {
+      await writeSessionSummaryFacts({
+        sessionSummary,
         drawers: writeResult.drawers ?? [],
         memoryStore: options.memoryStore,
         scope,
@@ -1014,6 +1049,102 @@ async function writeObservationFacts(params: {
   }
 }
 
+type SessionSummaryFactPlan = {
+  sourceKey: string;
+  rawText: string;
+};
+
+/**
+ * Session summaries carry a single free-form text blob in `summary`, with no
+ * atomic facts array. Following the observation precedent (title → parent
+ * source key), we map the whole sanitized summary into exactly one atomic fact
+ * keyed `session_summaries:<id>:parent`. That fact and the drawer share the
+ * same source anchor, so downstream provenance resolves to one span covering
+ * the full drawer content. If the summary is empty after sanitization, no
+ * atomic fact is emitted.
+ */
+function planSessionSummaryFactWrites(summary: ClaudeMemSessionSummary): SessionSummaryFactPlan[] {
+  const content = summary.summary?.trim() ?? '';
+  if (content.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      sourceKey: `session_summaries:${summary.id}:parent`,
+      rawText: content,
+    },
+  ];
+}
+
+async function writeSessionSummaryFacts(params: {
+  sessionSummary: ClaudeMemSessionSummary;
+  drawers: MemoryDrawer[];
+  memoryStore: MemoryStoreLike;
+  scope: MemoryScope;
+  machineId: string | null;
+  logger: BackfillLogger | undefined;
+  result: BackfillMemoryDrawersResult;
+}): Promise<void> {
+  const { sessionSummary, drawers, memoryStore, scope, machineId, logger, result } = params;
+
+  if (drawers.length === 0) {
+    return;
+  }
+
+  const plans = planSessionSummaryFactWrites(sessionSummary);
+  if (plans.length === 0) {
+    return;
+  }
+
+  const importedAt = new Date().toISOString();
+
+  for (const plan of plans) {
+    const existing = await memoryStore.findFactBySourceKey(plan.sourceKey);
+    if (existing) {
+      result.sessionSummaryFactsSkipped += 1;
+      continue;
+    }
+
+    const sanitizedFact = sanitizeMemoryDrawerContent(plan.rawText).content.trim();
+    if (sanitizedFact.length === 0) {
+      result.sessionSummaryFactsSkipped += 1;
+      continue;
+    }
+
+    const sourceSpans = computeFactSourceSpans(sanitizedFact, drawers);
+    const source = buildImportedSource({
+      sourceTable: 'session_summaries',
+      sourceId: sessionSummary.id,
+      sourceKey: plan.sourceKey,
+      sessionId: sessionSummary.session_id,
+      memorySessionId: null,
+      machineId,
+      importedAt,
+      originalCreatedAt: sessionSummary.created_at,
+    });
+
+    try {
+      await memoryStore.addFact({
+        scope,
+        content: sanitizedFact,
+        entity_type: 'concept',
+        source,
+        confidence: 0.85,
+        sourceSpans,
+      });
+      result.sessionSummaryFactsWritten += 1;
+    } catch (error: unknown) {
+      logger?.warn?.({
+        event: 'memory_fact_backfill_write_failed',
+        sourceKey: plan.sourceKey,
+        error: summarizeBackfillError(error),
+      });
+      throw error;
+    }
+  }
+}
+
 function computeFactSourceSpans(
   sanitizedFact: string,
   drawers: MemoryDrawer[],
@@ -1229,9 +1360,12 @@ function formatSummary(result: BackfillMemoryDrawersResult): string {
     `Sanitized candidates: ${result.sanitizedCandidates}`,
     `Parse errors: ${result.parseErrors}`,
     `Drawers written: ${result.written}`,
-    `Fact candidates: ${result.factCandidates}`,
-    `Facts written: ${result.factsWritten}`,
-    `Facts skipped (idempotent/empty): ${result.factsSkipped}`,
+    `Fact candidates (observations): ${result.factCandidates}`,
+    `Facts written (observations): ${result.factsWritten}`,
+    `Facts skipped (observations idempotent/empty): ${result.factsSkipped}`,
+    `Fact candidates (session summaries): ${result.sessionSummaryFactCandidates}`,
+    `Facts written (session summaries): ${result.sessionSummaryFactsWritten}`,
+    `Facts skipped (session summaries idempotent/empty): ${result.sessionSummaryFactsSkipped}`,
     `Skipped: ${result.skipped}`,
   ].join('\n');
 }
