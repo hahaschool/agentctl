@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Delete old package versions
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         id: cleanup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -36,6 +36,59 @@ jobs:
             const owner = context.repo.owner;
             const packageName = "${{ matrix.package }}";
             const keepCount = parseInt("${{ env.KEEP_COUNT }}", 10);
+            let packageOwnerType = null;
+
+            function isNotFound(err) {
+              return err?.status === 404;
+            }
+
+            async function listVersionsForOwnerType(ownerType, page, perPage) {
+              if (ownerType === "org") {
+                const { data } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
+                  package_type: "container",
+                  package_name: packageName,
+                  org: owner,
+                  page,
+                  per_page: perPage,
+                });
+                return data;
+              }
+
+              const { data } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
+                package_type: "container",
+                package_name: packageName,
+                username: owner,
+                page,
+                per_page: perPage,
+              });
+              return data;
+            }
+
+            async function listFirstVersionsPage(perPage) {
+              try {
+                const versions = await listVersionsForOwnerType("org", 1, perPage);
+                packageOwnerType = "org";
+                return versions;
+              } catch (err) {
+                if (!isNotFound(err)) {
+                  throw err;
+                }
+
+                core.info(`Package ${packageName} was not found in org namespace ${owner}; checking user namespace.`);
+              }
+
+              try {
+                const versions = await listVersionsForOwnerType("user", 1, perPage);
+                packageOwnerType = "user";
+                return versions;
+              } catch (err) {
+                if (isNotFound(err)) {
+                  return null;
+                }
+
+                throw err;
+              }
+            }
 
             // ── Fetch all versions of the container package ──────────────
             core.info(`Fetching versions for package: ${packageName}`);
@@ -44,22 +97,27 @@ jobs:
             const perPage = 100;
 
             while (true) {
-              const { data: versions } = await github.rest.packages.getAllPackageVersionsForPackageOwnedByOrg({
-                package_type: "container",
-                package_name: packageName,
-                org: owner,
-                page,
-                per_page: perPage,
-              }).catch(async () => {
-                // Fall back to user-owned package if org call fails
-                return github.rest.packages.getAllPackageVersionsForPackageOwnedByUser({
-                  package_type: "container",
-                  package_name: packageName,
-                  username: owner,
-                  page,
-                  per_page: perPage,
-                });
-              });
+              const versions = page === 1
+                ? await listFirstVersionsPage(perPage)
+                : await listVersionsForOwnerType(packageOwnerType, page, perPage);
+
+              if (versions === null) {
+                const message = `Package ${packageName} was not found in org or user namespace ${owner}; nothing to delete.`;
+                core.info(message);
+                await core.summary.addRaw([
+                  `## ${packageName}`,
+                  "",
+                  message,
+                  "",
+                  `| Metric | Count |`,
+                  `|--------|-------|`,
+                  `| Total versions found | 0 |`,
+                  `| Deleted | 0 |`,
+                  `| Delete failures | 0 |`,
+                  "",
+                ].join("\n")).write();
+                return { deleted: 0, failed: 0, skipped: "package-not-found" };
+              }
 
               if (versions.length === 0) break;
               allVersions = allVersions.concat(versions);
@@ -68,6 +126,7 @@ jobs:
             }
 
             core.info(`Found ${allVersions.length} total versions for ${packageName}`);
+            core.info(`Package owner namespace: ${packageOwnerType}`);
 
             // ── Categorize versions ─────────────────────────────────────
             // Protected tag patterns: main-latest, dev-latest, semver v*.*.*
@@ -159,6 +218,8 @@ jobs:
             // ── Build summary ───────────────────────────────────────────
             const summary = [
               `## ${packageName}`,
+              "",
+              `Package owner namespace: ${packageOwnerType}`,
               "",
               `| Metric | Count |`,
               `|--------|-------|`,
