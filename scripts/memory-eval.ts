@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 import { EmbeddingClient } from '../packages/control-plane/src/memory/embedding-client.js';
 import {
   createDeterministicMockRanker,
-  formatMemoryEvalMarkdown,
+  formatMemoryEvalReport,
   getDevSet,
   getFullSet,
   getHeldOutSet,
@@ -217,7 +217,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     `# Memory Eval (${options.split}, ${options.mock ? 'mock ranking' : 'live MemorySearch'})`,
   );
   console.log('');
-  console.log(formatMemoryEvalMarkdown(run.summary));
+  console.log(formatMemoryEvalReport(run));
 }
 
 function readRequiredEnv(env: MemoryEvalEnv, name: string): string {
