@@ -1,5 +1,10 @@
 import { expect, type Page, test } from '@playwright/test';
-import type { MemoryEdge, MemoryFact } from '@agentctl/shared';
+import type {
+  MemoryDrawerSearchResult,
+  MemoryEdge,
+  MemoryFact,
+  MemorySearchResult,
+} from '@agentctl/shared';
 
 const NOW = '2026-04-14T08:00:00.000Z';
 
@@ -66,6 +71,35 @@ const RELATED_EDGE: MemoryEdge = {
   created_at: NOW,
 };
 
+function makeSearchResult(
+  fact: MemoryFact,
+  overrides: Partial<MemorySearchResult> = {},
+): MemorySearchResult {
+  return {
+    fact,
+    score: 0.91,
+    source_path: 'vector',
+    ...overrides,
+  };
+}
+
+function makeDrawerResult(
+  overrides: Partial<MemoryDrawerSearchResult> = {},
+): MemoryDrawerSearchResult {
+  return {
+    id: 'drawer-1',
+    scope: 'project:agentctl',
+    topic: 'fusion-topic',
+    source_type: 'session',
+    source_id: 'session-1',
+    chunk_index: 0,
+    content_preview: 'fusion preview',
+    score: 0.42,
+    match_type: 'keyword',
+    ...overrides,
+  };
+}
+
 type ListRequest = {
   readonly q: string | null;
   readonly scope: string | null;
@@ -86,7 +120,15 @@ type FeedbackRequest = {
   readonly body: unknown;
 };
 
-async function mockMemoryBrowserApis(page: Page): Promise<{
+type MockMemoryBrowserApiOptions = {
+  results?: readonly MemorySearchResult[];
+  drawerResults?: readonly MemoryDrawerSearchResult[];
+};
+
+async function mockMemoryBrowserApis(
+  page: Page,
+  options: MockMemoryBrowserApiOptions = {},
+): Promise<{
   readonly listRequests: ListRequest[];
   readonly updateRequests: UpdateRequest[];
   readonly deleteRequests: string[];
@@ -230,10 +272,20 @@ async function mockMemoryBrowserApis(page: Page): Promise<{
         facts = facts.filter((fact) => fact.confidence >= Number(minConfidence));
       }
 
+      const results = options.results?.filter((entry) =>
+        facts.some((fact) => fact.id === entry.fact.id),
+      );
+
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ok: true, facts, total: facts.length }),
+        body: JSON.stringify({
+          ok: true,
+          facts,
+          total: facts.length,
+          ...(results ? { results } : {}),
+          ...(options.drawerResults ? { drawerResults: options.drawerResults } : {}),
+        }),
       });
       return;
     }
@@ -306,6 +358,45 @@ test.describe('Memory browser facts flow', () => {
       });
   });
 
+  test('renders match-source badges and raw drawer results when the search API enriches the response', async ({
+    page,
+  }) => {
+    const decisionFact = INITIAL_FACTS[0];
+    const responseState: MockMemoryBrowserApiOptions = {
+      results: [makeSearchResult(decisionFact, { source_path: 'graph', score: 0.88 })],
+      drawerResults: [
+        makeDrawerResult(),
+        makeDrawerResult({ id: 'drawer-2', topic: 'beta-gate', match_type: 'vector' }),
+        makeDrawerResult({ id: 'drawer-3', topic: 'rollback', match_type: 'grep' }),
+        makeDrawerResult({ id: 'drawer-4', topic: 'release-checks', score: null }),
+        makeDrawerResult({ id: 'drawer-5', topic: 'ops-notes' }),
+        makeDrawerResult({ id: 'drawer-6', topic: 'launch-runbook' }),
+      ],
+    };
+
+    await mockMemoryBrowserApis(page, responseState);
+
+    await openMemoryBrowser(page);
+
+    await expect(
+      page.locator('[data-testid="fact-match-source-badge"][data-source-path="graph"]').first(),
+    ).toBeVisible();
+    await expect(page.getByTestId('drawer-results-section')).toBeVisible();
+    await expect(page.getByText('Raw Drawers (6)')).toBeVisible();
+    await expect(page.getByText('fusion-topic')).toBeVisible();
+    await expect(page.getByText('launch-runbook')).toBeHidden();
+    await expect(page.getByTestId('drawer-results-overflow')).toHaveText('+1 more');
+
+    responseState.results = undefined;
+    responseState.drawerResults = undefined;
+    await page.getByLabel('Search facts').fill('Project deploy');
+    await expect(page).toHaveURL(/q=Project\+deploy/);
+    await expect(
+      page.locator('[data-testid="fact-match-source-badge"][data-source-path="graph"]').first(),
+    ).toBeHidden();
+    await expect(page.getByTestId('drawer-results-section')).toBeHidden();
+  });
+
   test('opens a fact detail panel, edits content, and deletes the fact', async ({ page }) => {
     const state = await mockMemoryBrowserApis(page);
 
@@ -339,6 +430,8 @@ test.describe('Memory browser facts flow', () => {
     ).toBeVisible();
 
     await page.getByRole('button', { name: 'Delete fact' }).click();
+    await expect(page.getByTestId('memory-delete-confirm')).toBeVisible();
+    await page.getByTestId('memory-delete-confirm-btn').click();
 
     await expect
       .poll(() => state.deleteRequests, { message: 'detail DELETE request captured' })
@@ -359,6 +452,8 @@ test.describe('Memory browser facts flow', () => {
 
     await expect(page.getByText('2 selected')).toBeVisible();
     await page.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByTestId('memory-delete-confirm')).toBeVisible();
+    await page.getByTestId('memory-delete-confirm-btn').click();
 
     await expect
       .poll(() => state.deleteRequests, { message: 'bulk DELETE requests captured' })
