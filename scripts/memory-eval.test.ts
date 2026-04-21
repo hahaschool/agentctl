@@ -97,6 +97,24 @@ describe('memory-eval live mode', () => {
     expect(mockSearch).not.toHaveBeenCalled();
   });
 
+  it('prints tag metrics and the failure section in human-readable mode', async () => {
+    delete process.env.DATABASE_URL;
+    delete process.env.EMBEDDING_API_URL;
+    delete process.env.LITELLM_PROXY_URL;
+    delete process.env.LITELLM_URL;
+
+    await main(['--fixture', writeFixture()]);
+
+    const output = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(output).toContain('# Memory Eval (dev, mock ranking)');
+    expect(output).toContain('## By Tag');
+    expect(output).toContain('| vocabulary-gap | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |');
+    expect(output).toContain('## Failure Examples');
+    expect(output).toContain('None.');
+    expect(mockPool).not.toHaveBeenCalled();
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
+
   it('requires DATABASE_URL for --no-mock runs', async () => {
     process.env.LITELLM_URL = 'http://localhost:4000';
     delete process.env.DATABASE_URL;
@@ -130,10 +148,22 @@ describe('memory-eval live mode', () => {
     expect(mockPool).not.toHaveBeenCalled();
   });
 
+  it('keeps the held-out guard in live mode', async () => {
+    process.env.DATABASE_URL = 'postgres://localhost/agentctl';
+    process.env.LITELLM_URL = 'http://localhost:4000';
+
+    await expect(
+      main(['--no-mock', '--fixture', writeFixture(), '--split', 'held-out']),
+    ).rejects.toThrow(/workflow eval jobs/);
+
+    expect(mockPool).not.toHaveBeenCalled();
+  });
+
   it('runs real MemorySearch, maps fact ids into eval candidates, and closes the pool', async () => {
     process.env.DATABASE_URL = 'postgres://localhost/agentctl';
     process.env.LITELLM_URL = 'http://localhost:4000';
     process.env.EMBEDDING_MODEL = 'text-embedding-3-small';
+    process.env.MEMORY_EVAL_ALLOW_FULL_SET = 'true';
     mockSearch.mockResolvedValueOnce([
       {
         fact: { id: 'fact:alpha' },
@@ -148,7 +178,6 @@ describe('memory-eval live mode', () => {
       writeFixture(),
       '--split',
       'full',
-      '--allow-full',
       '--json',
     ]);
 

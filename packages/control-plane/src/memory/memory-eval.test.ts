@@ -8,6 +8,7 @@ import {
   createMemoryPlantedNeedleRows,
   EVAL_SPLIT_SEED,
   formatMemoryEvalMarkdown,
+  formatMemoryEvalReport,
   getDevSet,
   getFullSet,
   getHeldOutSet,
@@ -162,7 +163,69 @@ describe('memory eval scoring', () => {
       | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
       | all | 3 | 0.556 | 0.556 | 0.667 | 0.604 | 0.000 | 0.000 | 120 |
       | category: AgentCTL-internal | 1 | 0.667 | 0.667 | 1.000 | 0.812 | 0.000 | 0.000 | 10 |
-      | category: LongMemEval-project-memory | 2 | 0.500 | 0.500 | 0.500 | 0.500 | 0.000 | 0.000 | 120 |"
+      | category: LongMemEval-project-memory | 2 | 0.500 | 0.500 | 0.500 | 0.500 | 0.000 | 0.000 | 120 |
+
+      ## By Tag
+
+      | Tag | Rows | R@5 | R@10 | MRR | NDCG@10 | Grounding | Drawer hit | p95 ms |
+      | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+      | assistant-reference | 1 | 0.667 | 0.667 | 1.000 | 0.812 | 0.000 | 0.000 | 10 |
+      | temporal-ambiguity | 2 | 0.500 | 0.500 | 0.500 | 0.500 | 0.000 | 0.000 | 120 |
+      | vocabulary-gap | 1 | 0.667 | 0.667 | 1.000 | 0.812 | 0.000 | 0.000 | 10 |"
+    `);
+
+    expect(
+      formatMemoryEvalReport(
+        {
+          rowResults: [rowA, rowB, rowC],
+          summary,
+        },
+        { failureExampleLimit: 2 },
+      ),
+    ).toMatchInlineSnapshot(`
+      "| Segment | Rows | R@5 | R@10 | MRR | NDCG@10 | Grounding | Drawer hit | p95 ms |
+      | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+      | all | 3 | 0.556 | 0.556 | 0.667 | 0.604 | 0.000 | 0.000 | 120 |
+      | category: AgentCTL-internal | 1 | 0.667 | 0.667 | 1.000 | 0.812 | 0.000 | 0.000 | 10 |
+      | category: LongMemEval-project-memory | 2 | 0.500 | 0.500 | 0.500 | 0.500 | 0.000 | 0.000 | 120 |
+
+      ## By Tag
+
+      | Tag | Rows | R@5 | R@10 | MRR | NDCG@10 | Grounding | Drawer hit | p95 ms |
+      | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+      | assistant-reference | 1 | 0.667 | 0.667 | 1.000 | 0.812 | 0.000 | 0.000 | 10 |
+      | temporal-ambiguity | 2 | 0.500 | 0.500 | 0.500 | 0.500 | 0.000 | 0.000 | 120 |
+      | vocabulary-gap | 1 | 0.667 | 0.667 | 1.000 | 0.812 | 0.000 | 0.000 | 10 |
+
+      ## Failure Examples (showing 2 of 2)
+
+      ### \`fixture-beta\`
+
+      Category: \`LongMemEval-project-memory\`
+
+      Tags: \`temporal-ambiguity\`
+
+      Query: "Which deployment format did the operator prefer?"
+
+      Metrics: R@5=0.000 R@10=0.000 MRR=0.000 Grounding=1.000 FirstRelevantRank=miss
+
+      Matched@10: 0/1
+
+      Top results: \`fact:fact:other\`
+
+      ### \`fixture-alpha\`
+
+      Category: \`AgentCTL-internal\`
+
+      Tags: \`vocabulary-gap\`, \`assistant-reference\`
+
+      Query: "Which deployment format did the operator prefer?"
+
+      Metrics: R@5=0.667 R@10=0.667 MRR=1.000 Grounding=0.000 FirstRelevantRank=1
+
+      Matched@10: 2/3
+
+      Top results: \`fact:fact:deployment-format\`, \`fact:fact:rollout-window\`"
     `);
   });
 });
@@ -191,7 +254,7 @@ describe('memory eval fixture hygiene and split helpers', () => {
     ).toThrow(/unredacted internal id/i);
   });
 
-  it('splits fixtures deterministically with seed 42 and guards full-set access', () => {
+  it('splits fixtures deterministically with seed 42 and guards held-out/full access', () => {
     const rows = Array.from(
       { length: 20 },
       (_, index): MemoryEvalFixtureRow => ({
@@ -209,7 +272,8 @@ describe('memory eval fixture hygiene and split helpers', () => {
 
     expect(firstDev).toEqual(secondDev);
     expect(firstDev).toHaveLength(2);
-    expect(getHeldOutSet(rows)).toHaveLength(18);
+    expect(() => getHeldOutSet(rows)).toThrow(/workflow eval jobs/i);
+    expect(getHeldOutSet(rows, { allowHeldOut: true })).toHaveLength(18);
     expect(() => getFullSet(rows)).toThrow(/release eval/i);
     expect(getFullSet(rows, { allowFullSet: true })).toHaveLength(20);
   });

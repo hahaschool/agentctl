@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 import { EmbeddingClient } from '../packages/control-plane/src/memory/embedding-client.js';
 import {
   createDeterministicMockRanker,
-  formatMemoryEvalMarkdown,
+  formatMemoryEvalReport,
   getDevSet,
   getFullSet,
   getHeldOutSet,
@@ -26,7 +26,6 @@ type CliOptions = {
   split: EvalSplit;
   json: boolean;
   mock: boolean;
-  allowFullSet: boolean;
 };
 
 export type LiveMemoryEvalConfig = {
@@ -67,7 +66,6 @@ export function parseArgs(argv: readonly string[]): CliOptions {
     split: 'dev',
     json: false,
     mock: true,
-    allowFullSet: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -115,11 +113,6 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       continue;
     }
 
-    if (arg === '--allow-full') {
-      options.allowFullSet = true;
-      continue;
-    }
-
     if (arg.startsWith('-')) {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -138,9 +131,9 @@ function selectRows(
     return getDevSet(rows);
   }
   if (options.split === 'held-out') {
-    return getHeldOutSet(rows);
+    return getHeldOutSet(rows, { env: process.env });
   }
-  return getFullSet(rows, { allowFullSet: options.allowFullSet });
+  return getFullSet(rows, { env: process.env });
 }
 
 export function resolveLiveMemoryEvalConfig(
@@ -224,7 +217,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     `# Memory Eval (${options.split}, ${options.mock ? 'mock ranking' : 'live MemorySearch'})`,
   );
   console.log('');
-  console.log(formatMemoryEvalMarkdown(run.summary));
+  console.log(formatMemoryEvalReport(run));
 }
 
 function readRequiredEnv(env: MemoryEvalEnv, name: string): string {

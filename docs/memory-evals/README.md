@@ -39,6 +39,50 @@ pnpm memory:bench --baseline facts-only \
 The command is mock-only — it does not touch a live PostgreSQL, an embedding
 API, or any network dependency — so it can run in CI on a bare checkout.
 
+## Split discipline
+
+- Local/default use is `pnpm memory:eval --split dev`. This is the only split
+  intended for everyday tuning.
+- The default human-readable output prints the aggregate/category summary table,
+  a `By Tag` table, and a capped `Failure Examples` section. Use `--json` if
+  you need the raw run payload instead.
+- `--split held-out` is reserved for workflow-owned eval jobs and requires
+  `MEMORY_EVAL_ALLOW_HELD_OUT=true`.
+- `--split full` is reserved for release-style eval jobs and requires
+  `MEMORY_EVAL_ALLOW_FULL_SET=true`.
+- Private fixture coverage is intentionally not committed in-repo. Future
+  weekly/release jobs should stage the private fixture into a CI-only path
+  such as `tmp/memory-eval/` and set the workflow-owned env gate(s) above
+  before invoking `pnpm memory:eval`.
+
+## Workflow automation
+
+GitHub Actions now reserves the non-dev splits for a dedicated workflow:
+[`../../.github/workflows/memory-evals.yml`](../../.github/workflows/memory-evals.yml).
+
+- **Weekly schedule (`schedule`)** runs `held-out` and skips cleanly until the
+  required eval secrets are provisioned.
+- **Release tags (`push` on `v*.*.*`)** run `full` and fail fast when the eval
+  environment is not configured, so release-style evidence cannot silently
+  disappear.
+- **Manual dispatch (`workflow_dispatch`)** lets maintainers choose
+  `held-out` or `full` without re-enabling those splits locally.
+
+The workflow stages the private fixture into `tmp/memory-eval/agentctl-private.json`
+and optionally writes a gitignored changelog file at
+`tmp/memory-eval/fixtures/CHANGELOG.md`.
+
+Required repository secrets:
+
+- `MEMORY_EVAL_DATABASE_URL`
+- `MEMORY_EVAL_PRIVATE_FIXTURE_JSON_B64`
+- One of `MEMORY_EVAL_EMBEDDING_API_URL`, `MEMORY_EVAL_LITELLM_PROXY_URL`, or
+  `MEMORY_EVAL_LITELLM_URL`
+
+Optional repository secret:
+
+- `MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64`
+
 ### What counts as a change
 
 - **Ranker or fixture schema changes** that move the committed metrics:

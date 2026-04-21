@@ -4,7 +4,7 @@
 
 **Goal:** Upgrade AgentCTL memory from extracted fact recall into source-grounded, measurable, privacy-safe recall with verbatim evidence, bounded injection, temporal provenance, and recovery paths.
 
-**Status sync (2026-04-21):** `main@1d4ef0cd` is current through PR #723. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, and opt-in live `pnpm memory:eval --no-mock` wiring (PRs #655, #660, #667, #681, #685, #713, #722). Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, and dry-run chunk/token/cost/storage estimates (PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 has provenance schema/write-path groundwork plus optional `InjectionBudget.tierTokenCaps` context-budget enforcement (PRs #684, #688, #720). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, and raw drawer results under Memory Browser facts (PRs #709, #719, #723). Remaining plan work is private/full fixture coverage, release/weekly gates, embedding backfill for CLI-written facts, batching/backoff, injector result modes/wrapper plumbing, Surface A dry-run generation, drawer-aware fusion default-on criteria, broader evidence UI, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
+**Status sync (2026-04-21):** `main@f852e5d9` is current through PR #728 plus the local Phase 1.5/eval follow-ups. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, workflow-owned gates for `held-out/full` split execution (`86e15168`; PRs #655, #660, #667, #681, #685, #713, #722), richer human-readable reporting via By Tag tables plus capped failure examples (`f852e5d9`), and this branch's workflow-owned weekly/release automation in `.github/workflows/memory-evals.yml` that stages gitignored fixtures under `tmp/memory-eval/`. Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, dry-run chunk/token/cost/storage estimates, and now execute-mode embedding generation/backfill for CLI-written facts with bounded batch/retry behavior (`36288808`; PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 has provenance schema/write-path groundwork, fact-detail evidence previews/unavailable markers, and optional `InjectionBudget.tierTokenCaps` context-budget enforcement (PRs #684, #688, #720, #728). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, raw drawer results under Memory Browser facts, browser-level enrichment coverage, and fact-detail evidence previews in the Memory Browser detail panel (PRs #709, #719, #723, #726, #728). Remaining plan work is private fixture secret provisioning/changelog discipline, legacy no-provenance behavior, richer failure-mode-targeted eval examples, injector result modes/wrapper plumbing, Surface A dry-run generation, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
 
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
@@ -736,8 +736,12 @@ enforcement and latency percentiles, and PR #667 locks first-run /
 adds the first `memory_traverse` worker route/cold-start contract. PR #713
 committed the facts-only baseline snapshot. PR #722 wired `pnpm memory:eval
 --no-mock` to live `MemorySearch` behind explicit `DATABASE_URL` plus embedding
-endpoint guards while keeping mock ranking as the default. The remaining Phase
-0 work is private fixture growth and release/weekly held-out automation.
+endpoint guards while keeping mock ranking as the default. Local commit
+`f852e5d9` adds human-readable By Tag tables plus capped failure examples while
+leaving JSON output unchanged. This branch adds the release/weekly held-out
+automation via `.github/workflows/memory-evals.yml`; the remaining Phase 0
+work is private fixture secret provisioning/changelog discipline and richer
+failure-mode-targeted examples.
 
 **Files:**
 
@@ -760,8 +764,8 @@ endpoint guards while keeping mock ranking as the default. The remaining Phase
    - `EVAL_SPLIT_SEED = 42`
    - 10% dev / 90% held-out
    - tuning PRs use dev only
-   - held-out runs only on release tags and weekly cron
-   - held-out rows are immutable after the first tag; bad rows use `excluded: true` plus `fixtures/CHANGELOG.md`, not deletion or silent expected-answer edits.
+   - held-out runs only on the workflow-owned weekly cron / manual dispatch lanes; full runs only on release tags / explicit workflow dispatch
+   - held-out rows are immutable after the first tag; bad rows use `excluded: true` plus the staged gitignored `tmp/memory-eval/fixtures/CHANGELOG.md`, not deletion or silent expected-answer edits.
 5. Add API helpers:
    - `getDevSet(): Fixture[]`
    - `getHeldOutSet(): Fixture[]`
@@ -821,7 +825,7 @@ endpoint guards while keeping mock ranking as the default. The remaining Phase
 
 **Goal:** Preserve sanitized raw evidence without replacing existing facts.
 
-**Status:** Partially delivered in PRs #671, #679, #682, #686, #692, #699, #703, #708, and #721. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. PR #682 added persisted drawer backfill state (`0032_add_memory_drawer_backfill_state.sql`), shared `MemoryDrawerBackfill*` contracts, Drizzle schema/journal/schema tests, and `MemoryDrawerBackfillStateStore` coverage for start/resume, cursor update, and safe failed-state errors. PR #686 added the JSONL drawer backfill CLI foundation. PRs #692/#699/#703/#708 delivered the `claude-mem` drawer and atomic-fact mapping with fact-source repair/fallback provenance. PR #721 added dry-run chunk/token/cost/storage estimates. Remaining Phase 1.5 scope is embedding generation/backfill for CLI-written facts plus batching/backoff; drawers still have no sync triggers and no default retrieval behavior.
+**Status:** Phase 1 foundation landed in PRs #671, #679, #682, #686, #692, #699, #703, #708, and #721, and the remaining Phase 1.5 backfill slice landed locally in `c6238281`. PR #671 added `0030_add_memory_drawers.sql`, Drizzle schema/journal/schema tests, shared memory constants/redaction/validation, drawer types, deterministic chunking, red-team sanitizer coverage, and `MemoryDrawerStore` tests for sanitized hash/embed/store behavior. PR #679 added the shared redacted `memory_write` audit entry builder, audit logger/reporter support, and `MemoryDrawerStore` success/failure audit emission without raw drawer content. PR #682 added persisted drawer backfill state (`0032_add_memory_drawer_backfill_state.sql`), shared `MemoryDrawerBackfill*` contracts, Drizzle schema/journal/schema tests, and `MemoryDrawerBackfillStateStore` coverage for start/resume, cursor update, and safe failed-state errors. PR #686 added the JSONL drawer backfill CLI foundation. PRs #692/#699/#703/#708 delivered the `claude-mem` drawer and atomic-fact mapping with fact-source repair/fallback provenance. PR #721 added dry-run chunk/token/cost/storage estimates. Local commit `c6238281` finished execute-mode embedding generation/backfill for CLI-written facts plus bounded batch/retry behavior. Drawers still have no sync triggers and no default retrieval behavior.
 
 **Files:**
 
@@ -877,7 +881,7 @@ endpoint guards while keeping mock ranking as the default. The remaining Phase
 
 **Goal:** Create enough drawer data for search evals and provenance without waiting months.
 
-**Status:** State persistence landed in PR #682. PR #686 added the JSONL drawer backfill CLI foundation, PR #692 added the `--source-type claude-mem` drawer-write path, PR #699 added observation atomic-fact writes with offset source spans, PR #703 added session-summary atomic-fact writes, and PR #708 repaired source-key compatibility plus missing-source-span retry edge cases. PR #721 added dry-run estimates for drawer chunks, embedding tokens, embedding cost, and storage bytes. Remaining scope is embedding generation/backfill for CLI-written facts, batching/backoff, and broader source-local idempotency coverage for the claude-mem path.
+**Status:** State persistence landed in PR #682. PR #686 added the JSONL drawer backfill CLI foundation, PR #692 added the `--source-type claude-mem` drawer-write path, PR #699 added observation atomic-fact writes with offset source spans, PR #703 added session-summary atomic-fact writes, and PR #708 repaired source-key compatibility plus missing-source-span retry edge cases. PR #721 added dry-run estimates for drawer chunks, embedding tokens, embedding cost, and storage bytes. Local commit `c6238281` finishes embedding generation/backfill for CLI-written facts and adds bounded batch/retry behavior to the backfill embedding path. Remaining scope is broader source-local idempotency coverage for the claude-mem path.
 
 **Files:**
 
@@ -892,9 +896,7 @@ endpoint guards while keeping mock ranking as the default. The remaining Phase
 **Work:**
 
 1. ✅ Backfill from Claude Code JSONL under `~/.claude/projects/**`.
-2. Partially delivered: PR #692 added the `--source-type claude-mem` drawer-write path; PR #699 added observation atomic-fact writes; PR #703 added session-summary atomic-fact writes. Remaining for this item:
-   - Generate/backfill embeddings for CLI-written facts.
-   - Add batching/backoff.
+2. ✅ PR #692 added the `--source-type claude-mem` drawer-write path; PR #699 added observation atomic-fact writes; PR #703 added session-summary atomic-fact writes; `c6238281` adds embedding generation/backfill for CLI-written facts plus bounded batching/backoff.
 3. ✅ Add resumable state in `memory_drawer_backfill_state`.
 4. Batch embedding calls and rate-limit with exponential backoff.
 5. Partially delivered: JSONL CLI writes through `(source_type, source_id, chunk_index)` and resumes by cursor; extend idempotency coverage to `claude-mem` imports and fact-source links.
@@ -964,7 +966,7 @@ endpoint guards while keeping mock ranking as the default. The remaining Phase
 
 **Goal:** Link facts to evidence and prevent drawer snippets from exploding prompt tokens.
 
-**Status:** Schema groundwork landed in PR #684: `0031_add_memory_fact_sources_and_versions.sql`, Drizzle schema/journal/schema tests, `memory_fact_sources` offsets, and fact/edge `embedding_version` defaults. PR #688 added the write path: `MemoryStore.addFact` accepts an optional `sourceSpans` array and persists offset-only provenance to `memory_fact_sources`, `POST /api/memory/facts` validates and passes through `sourceSpans`, and unit tests cover valid/invalid drawer offsets for both the store and the route. PR #720 added the optional `InjectionBudget.tierTokenCaps` contract and context-budget enforcement while leaving default behavior unchanged. Remaining scope is read-time quote previews, legacy rendering/search behavior, injector wrapper plumbing/result modes, merge-time provenance preservation, and the bounded Surface A dry-run bridge.
+**Status:** Schema groundwork landed in PR #684: `0031_add_memory_fact_sources_and_versions.sql`, Drizzle schema/journal/schema tests, `memory_fact_sources` offsets, and fact/edge `embedding_version` defaults. PR #688 added the write path: `MemoryStore.addFact` accepts an optional `sourceSpans` array and persists offset-only provenance to `memory_fact_sources`, `POST /api/memory/facts` validates and passes through `sourceSpans`, and unit tests cover valid/invalid drawer offsets for both the store and the route. PR #720 added the optional `InjectionBudget.tierTokenCaps` contract and context-budget enforcement while leaving default behavior unchanged. PR #728 completed the first read path by adding additive fact-detail source previews/quote previews plus archived/unavailable markers to `GET /api/memory/facts/:id` and the Memory Browser detail panel. The smallest open Phase 3 slice is now legacy rendering/search behavior for facts without provenance, followed by injector wrapper plumbing/result modes, merge-time provenance preservation, and the bounded Surface A dry-run bridge.
 
 **Files:**
 
@@ -976,7 +978,7 @@ endpoint guards while keeping mock ranking as the default. The remaining Phase
 - Modify: `packages/agent-worker/src/hooks/experience-extractor.ts`
 - Modify: `packages/agent-worker/src/hooks/experience-extraction-prompt.ts`
 - Modify: `packages/control-plane/src/api/routes/memory-facts.ts`
-- Modify: `packages/web/src/components/memory/FactDetailPanel.tsx`
+- Modify: `packages/web/src/components/memory/BrowserDetailPanel.tsx`
 - Create: `scripts/generate-memory-md.ts`
 - Add docs: `docs/MEMORY_SURFACE_BRIDGE.md`
 
@@ -984,7 +986,7 @@ endpoint guards while keeping mock ranking as the default. The remaining Phase
 
 1. Partially delivered: add `memory_fact_sources` and `embedding_version`; `is_diary` and `draft` remain future diary/review-state work.
 2. Extend fact creation with optional drawer offsets, not copied quotes.
-3. Read quote previews from sanitized drawer content at API read time.
+3. Delivered in PR #728: read quote previews from sanitized drawer content at API read time and surface archived/unavailable provenance markers on fact detail.
 4. Merge provenance during knowledge synthesis dedup; do not lose evidence when facts merge.
 5. Include drawer evidence in contradiction review UI and maintenance reports.
 6. Partially delivered: extend `InjectionBudget` with `tierTokenCaps`; result modes and injector wrapper plumbing remain open. *(PR #720)*
@@ -1170,9 +1172,11 @@ endpoint guards while keeping mock ranking as the default. The remaining Phase
 piece of result type / why-this-matched visibility. PR #723 added the compact
 raw-drawer results section below the fact list when `/api/memory/facts` returns
 non-empty `drawerResults`, covering the first drawer-side visibility slice.
-Remaining Phase 7 work is deeper evidence/detail panels, raw-source filters,
-the context-picker include-raw toggle, broader why-this-matched explanations,
-and mobile/dashboard polish.
+PR #728 added fact-detail evidence previews plus archived/unavailable
+provenance markers in the Memory Browser detail panel. Remaining Phase 7 work
+is raw-source filters, the context-picker include-raw toggle, broader
+why-this-matched explanations, Diary/Timeline result treatment, and
+mobile/dashboard polish.
 
 **Files to verify or modify:**
 
@@ -1195,7 +1199,7 @@ and mobile/dashboard polish.
 **Work:**
 
 1. Partially delivered: add result type badges / sections for Fact and Drawer search outputs; Diary and Timeline remain future slices. *(PRs #719, #723)*
-2. Evidence panel appears as soon as Phase 3 lands; Phase 7 is polish, not the first UI.
+2. Delivered in PR #728: the first evidence/detail panel lands with Phase 3 read paths; Phase 7 now covers follow-on polish and richer explanation/filtering.
 3. Add raw source filters: source type, topic, has evidence, redaction status.
 4. Add "include raw drawers" toggle to context picker memory panel.
 5. Add "why this matched" row: vector, keyword, drawer-grep, graph, temporal, source boost.
@@ -1217,8 +1221,8 @@ and mobile/dashboard polish.
 
 **Tests:**
 
-- Backend-independent Memory Browser drawer result section render. *(PR #723 unit coverage; add browser/E2E coverage when widening the Memory Browser lane.)*
-- Evidence panel render.
+- Backend-independent Memory Browser drawer result section render. *(PR #723 unit coverage, PR #726 browser/E2E coverage.)*
+- Evidence/detail panel render. *(PR #728 shared route + web unit coverage; browser/E2E follow-up can land when the lane widens again.)*
 - Include-raw toggle changes query params.
 - No-provenance facts still render.
 - Mobile layout truncates evidence without overflow.
@@ -1260,8 +1264,8 @@ Add env vars through the existing centralized config path used by control-plane/
 ## Suggested PR Slices
 
 1. **PR A: Eval Harness**
-   - Delivered across PR #655/#660/#667/#681/#685/#713/#722 for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, first `memory_dedup_check` empty-DB/null-arguments route coverage, first `memory_traverse` worker cold-start/null-arguments coverage, facts-only baseline snapshot, and opt-in live `--no-mock` eval wiring.
-   - Remaining: private fixture coverage and release/weekly held-out automation.
+   - Delivered across PR #655/#660/#667/#681/#685/#713/#722 plus local `f852e5d9` for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, first `memory_dedup_check` empty-DB/null-arguments route coverage, first `memory_traverse` worker cold-start/null-arguments coverage, facts-only baseline snapshot, opt-in live `--no-mock` eval wiring, and human-readable By Tag/failure-example reporting.
+   - Remaining: private fixture secret provisioning/changelog discipline and richer failure-mode-targeted examples.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
@@ -1275,7 +1279,7 @@ Add env vars through the existing centralized config path used by control-plane/
    - PR #692 extended the CLI with a `--source-type claude-mem` drawer-write path for `observations` and `session_summaries`, with deterministic source refs and resumable table/id cursors.
    - PR #699 added the claude-mem atomic-fact mapping: `observations` now fan out into drawer + atomic `memory_facts` writes through a `MemoryStoreLike`/`AddFactLikeInput` seam with deterministic `observations:<id>:parent`/`:fact:<idx>` source-span keys, offsets resolved via sanitized-text lookup with full-drawer fallback, a new `--machine-id` flag, 4 helpers extracted for testability, and 7 new `describe('claude-mem fact mapping')` Vitest cases. `session_summaries` remain drawer-only for this slice.
    - PR #708 repaired source-key/source-span compatibility and PR #721 added dry-run chunk/token/cost/storage estimates.
-   - Remaining: embedding generation/backfill for CLI-written facts and batching/backoff.
+   - Completed locally in `36288808`: execute-mode embedding generation/backfill for CLI-written facts plus bounded batching/backoff.
    - Produces first real drawer corpus for eval.
 
 4. **PR D: Checkpoint Capture**
@@ -1284,7 +1288,8 @@ Add env vars through the existing centralized config path used by control-plane/
 
 5. **PR E: Provenance + Injection Budget**
    - PR #684 added `0031`, fact-source schema links, and embedding-version defaults.
-   - Remaining: fact-source write paths, injector budget modes, and Surface A dry-run generator.
+   - PR #728 added the first fact-detail read path (source previews, quote previews, archived/unavailable markers).
+   - Remaining: legacy no-provenance behavior, injector budget/result modes and wrapper plumbing, merge-time provenance preservation, and Surface A dry-run generator.
 
 6. **PR F: Drawer-Aware Search**
    - PR #677 delivered the three-stage query sanitizer for existing memory search paths.
@@ -1348,9 +1353,10 @@ Add env vars through the existing centralized config path used by control-plane/
 - [x] Extracted facts link to supporting drawer offsets without copying quoted content. *(PR #688 foundation, PR #699 observations, PR #703 session summaries, and PR #708 retry/source-key edge-case repair with fallback provenance over every returned drawer chunk.)*
 - [ ] Legacy facts without drawer provenance still search, render, inject, and sync.
 - [x] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, drawer-hit rate, and p95 search time for deterministic mock runs. *(PR #655)*
-- [x] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42 and guards full-set runs behind explicit release/full flags. *(PR #655)*
+- [x] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42 and gates `held-out/full` runs behind workflow-owned env flags rather than a local bypass. *(PR #655 foundation; workflow-owned gate hardening in local `86e15168`.)*
 - [x] `pnpm memory:eval --no-mock` runs the same fixture split through live control-plane `MemorySearch` using `DATABASE_URL` plus explicit embedding endpoint config, keeps mock ranking as the default, maps returned facts into eval `factId` candidates, and closes the PG pool after the run. *(PR #722)*
-- [ ] Eval report prints per-category metrics and includes at least five examples for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
+- [x] Human-readable eval report now prints per-category/per-tag metrics plus capped failure examples without changing `--json` output. *(local `f852e5d9`)*
+- [ ] Eval report still needs failure-mode-targeted examples that guarantee coverage for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
 - [x] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock ranking/scoring without DB or embedding dependencies.
 - [x] Cold-start tests prove current worker memory search, recall, and stats/report routes return structured empty results from an empty control-plane response.
 - [x] Every existing worker memory MCP route rejects `{ arguments: null }` within one second without hanging.
@@ -1361,7 +1367,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Query sanitizer implements passthrough, question-extraction, and tail-sentence fallback stages, and contamination eval NDCG@10 drop stays under 5 points.
 - [x] `memory_dedup_check` returns `skip`, `merge`, and `store_new` recommendations at threshold boundaries; empty DB already defaults to `store_new`. *(empty-DB contract in PR #681; full skip/merge/store_new scoring at plan thresholds 0.92/0.82 with populated `match_id` and 8 boundary/ordering Vitest cases in PR #694; end-to-end CP score pass-through via `results[]` on `/api/memory/facts` landed in PR #695)*
 - [x] Memory Browser can show fact-side match-source badges and the raw drawer fusion results returned with a facts response. *(PRs #719, #723)*
-- [ ] Memory Browser still needs the fuller why-this-matched explanation row, evidence detail panel, Diary/Timeline result treatment, and raw-source filters.
+- [ ] Memory Browser still needs the fuller why-this-matched explanation row, Diary/Timeline result treatment, and raw-source filters.
 - [ ] Injector supports fact-only, fact-plus-snippet, and full-drawer modes with injector-plumbed per-tier caps. *(The `InjectionBudget.tierTokenCaps` contract/enforcement landed in PR #720.)*
 - [ ] Checkpoint capture cannot block an agent run, proven by simulated PG/embedding failure tests.
 - [ ] PreCompact checkpoint hook returns within 2.5 seconds under a stalled queue fixture.

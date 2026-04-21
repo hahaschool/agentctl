@@ -6,6 +6,7 @@ export const DEV_SPLIT_RATIO = 0.1;
 export const DEFAULT_MEMORY_BENCH_NEEDLE_COUNT = 100;
 export const DEFAULT_MEMORY_BENCH_NOISE_COUNT = 2_000;
 export const DEFAULT_MEMORY_BENCH_MIN_RECALL = 0.85;
+export const DEFAULT_MEMORY_EVAL_FAILURE_EXAMPLE_LIMIT = 5;
 export const DEFAULT_FAILURE_MODE_TAGS = [
   'vocabulary-gap',
   'temporal-ambiguity',
@@ -111,10 +112,13 @@ export type MemoryEvalRanker = (
 
 export type MemoryEvalSplitOptions = {
   seed?: number;
+  allowHeldOut?: boolean;
+  env?: Record<string, string | undefined>;
 };
 
 export type MemoryEvalFullSetOptions = {
   allowFullSet?: boolean;
+  env?: Record<string, string | undefined>;
 };
 
 export type MemoryPlantedNeedleBenchEnv = Record<string, string | undefined>;
@@ -233,6 +237,12 @@ export function getHeldOutSet(
   rows: readonly MemoryEvalFixtureRow[],
   options: MemoryEvalSplitOptions = {},
 ): MemoryEvalFixtureRow[] {
+  if (!options.allowHeldOut && options.env?.MEMORY_EVAL_ALLOW_HELD_OUT !== 'true') {
+    throw new Error(
+      'Held-out memory eval set is reserved for workflow eval jobs. Use getDevSet() for local tuning.',
+    );
+  }
+
   const includedRows = rows.filter((row) => !row.excluded);
   if (includedRows.length === 0) return [];
 
@@ -244,7 +254,7 @@ export function getFullSet(
   rows: readonly MemoryEvalFixtureRow[],
   options: MemoryEvalFullSetOptions = {},
 ): MemoryEvalFixtureRow[] {
-  if (!options.allowFullSet && process.env.MEMORY_EVAL_ALLOW_FULL_SET !== 'true') {
+  if (!options.allowFullSet && options.env?.MEMORY_EVAL_ALLOW_FULL_SET !== 'true') {
     throw new Error(
       'Full memory eval set is reserved for release eval jobs. Use getDevSet() for tuning.',
     );
@@ -364,11 +374,31 @@ export function formatMemoryEvalMarkdown(summary: MemoryEvalSummary): string {
       ),
   ];
 
+  const sections = [formatSummaryTable('Segment', rows)];
+  const byTagRows = Object.entries(summary.byTag)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([tag, segment]) =>
+      formatSummaryRow(tag, segment.totalRows, segment, segment.p95DurationMs),
+    );
+
+  if (byTagRows.length > 0) {
+    sections.push(['## By Tag', formatSummaryTable('Tag', byTagRows)].join('\n\n'));
+  }
+
+  return sections.join('\n\n');
+}
+
+export function formatMemoryEvalReport(
+  run: MemoryEvalRun,
+  options: { failureExampleLimit?: number } = {},
+): string {
   return [
-    '| Segment | Rows | R@5 | R@10 | MRR | NDCG@10 | Grounding | Drawer hit | p95 ms |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
-    ...rows,
-  ].join('\n');
+    formatMemoryEvalMarkdown(run.summary),
+    formatFailureExamplesSection(
+      run.rowResults,
+      options.failureExampleLimit ?? DEFAULT_MEMORY_EVAL_FAILURE_EXAMPLE_LIMIT,
+    ),
+  ].join('\n\n');
 }
 
 export async function runMemoryEval(
@@ -871,6 +901,14 @@ function percentileDuration(
   return sorted[index] ?? 0;
 }
 
+function formatSummaryTable(segmentLabel: string, rows: readonly string[]): string {
+  return [
+    `| ${segmentLabel} | Rows | R@5 | R@10 | MRR | NDCG@10 | Grounding | Drawer hit | p95 ms |`,
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+    ...rows,
+  ].join('\n');
+}
+
 function formatSummaryRow(
   segment: string,
   rows: number,
@@ -886,6 +924,78 @@ function formatSummaryRow(
 
 function formatMetric(value: number): string {
   return value.toFixed(3);
+}
+
+function formatFailureExamplesSection(
+  rowResults: readonly MemoryEvalRowResult[],
+  failureExampleLimit: number,
+): string {
+  const failures = rowResults.filter(isFailureExample).sort(compareFailureExamples);
+  if (failures.length === 0) {
+    return ['## Failure Examples', 'None.'].join('\n\n');
+  }
+
+  const shown = failures.slice(0, normalizeFailureExampleLimit(failureExampleLimit));
+  return [
+    `## Failure Examples (showing ${shown.length} of ${failures.length})`,
+    ...shown.flatMap((row) => formatFailureExample(row)),
+  ].join('\n\n');
+}
+
+function isFailureExample(row: MemoryEvalRowResult): boolean {
+  return row.recallAt10 < 1 || row.groundingCoverage < 1;
+}
+
+function compareFailureExamples(left: MemoryEvalRowResult, right: MemoryEvalRowResult): number {
+  if (left.recallAt10 !== right.recallAt10) {
+    return left.recallAt10 - right.recallAt10;
+  }
+  if (left.groundingCoverage !== right.groundingCoverage) {
+    return left.groundingCoverage - right.groundingCoverage;
+  }
+  if (left.mrr !== right.mrr) {
+    return left.mrr - right.mrr;
+  }
+
+  const leftRank = left.firstRelevantRank ?? Number.POSITIVE_INFINITY;
+  const rightRank = right.firstRelevantRank ?? Number.POSITIVE_INFINITY;
+  if (leftRank !== rightRank) {
+    return rightRank - leftRank;
+  }
+  if (left.durationMs !== right.durationMs) {
+    return right.durationMs - left.durationMs;
+  }
+  return left.fixtureId.localeCompare(right.fixtureId);
+}
+
+function normalizeFailureExampleLimit(limit: number): number {
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.trunc(limit));
+}
+
+function formatFailureExample(row: MemoryEvalRowResult): string[] {
+  return [
+    `### \`${row.fixtureId}\``,
+    `Category: \`${row.category}\``,
+    `Tags: ${formatInlineValues(row.tags)}`,
+    `Query: ${JSON.stringify(row.query)}`,
+    `Metrics: R@5=${formatMetric(row.recallAt5)} R@10=${formatMetric(row.recallAt10)} MRR=${formatMetric(row.mrr)} Grounding=${formatMetric(row.groundingCoverage)} FirstRelevantRank=${formatFirstRelevantRank(row.firstRelevantRank)}`,
+    `Matched@10: ${row.matchedExpectedKeysAt10.length}/${row.expectedCount}`,
+    `Top results: ${formatInlineValues(row.rankedResultKeys.slice(0, 3))}`,
+  ];
+}
+
+function formatInlineValues(values: readonly string[]): string {
+  if (values.length === 0) {
+    return '(none)';
+  }
+  return values.map((value) => `\`${value}\``).join(', ');
+}
+
+function formatFirstRelevantRank(rank: number | null): string {
+  return rank === null ? 'miss' : String(rank);
 }
 
 function average(values: readonly number[]): number {

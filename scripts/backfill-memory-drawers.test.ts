@@ -5,7 +5,12 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BackfillLogger } from './backfill-memory-drawers.js';
-import { backfillMemoryDrawers, findJsonlFiles, parseArgs } from './backfill-memory-drawers.js';
+import {
+  backfillMemoryDrawers,
+  createBackfillEmbeddingClient,
+  findJsonlFiles,
+  parseArgs,
+} from './backfill-memory-drawers.js';
 import type {
   ClaudeMemDatabase,
   ClaudeMemObservation,
@@ -27,6 +32,11 @@ type MockMemoryStore = {
   addFact: ReturnType<typeof vi.fn>;
   findFactBySourceKey: ReturnType<typeof vi.fn>;
   addFactSourceSpans: ReturnType<typeof vi.fn>;
+  backfillFactEmbedding: ReturnType<typeof vi.fn>;
+};
+
+type MockFactEmbeddingClient = {
+  embedBatch: ReturnType<typeof vi.fn>;
 };
 
 type MockMemoryDrawer = {
@@ -67,11 +77,24 @@ function createMemoryStore(existingKeys: string[] = []): MockMemoryStore {
       return existing.has(sourceKey) ? { id: `existing-${sourceKey}` } : null;
     }),
     addFactSourceSpans: vi.fn(async () => undefined),
+    backfillFactEmbedding: vi.fn(async () => false),
   };
   return store;
 }
 
+function createFactEmbeddingClient(embeddings?: number[][]): MockFactEmbeddingClient {
+  return {
+    embedBatch: vi.fn(async (texts: string[]) => {
+      if (embeddings) {
+        return embeddings;
+      }
+      return texts.map((_text, index) => [index + 0.1, index + 0.2, index + 0.3]);
+    }),
+  };
+}
+
 let tmpDir: string;
+const originalFetch = globalThis.fetch;
 
 function createTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'backfill-memory-drawers-test-'));
@@ -217,6 +240,8 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
+  globalThis.fetch = originalFetch;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -270,6 +295,74 @@ describe('parseArgs', () => {
     expect(options.sourceType).toBe('claude-mem');
     expect(options.sourceRoot).toBe(path.resolve('/tmp/claude-mem.db'));
     expect(options.dryRun).toBe(true);
+  });
+});
+
+describe('createBackfillEmbeddingClient', () => {
+  it('splits large embedding requests into conservative batches', async () => {
+    const requests: unknown[] = [];
+    globalThis.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { input: string | string[] };
+      requests.push(body.input);
+      const inputs = Array.isArray(body.input) ? body.input : [body.input];
+      return {
+        ok: true,
+        json: async () => ({
+          data: inputs.map((text, index) => ({
+            embedding: [String(text).length, index + 0.5],
+            index,
+          })),
+          model: 'text-embedding-3-small',
+        }),
+      } as Response;
+    }) as never;
+
+    const client = createBackfillEmbeddingClient(
+      { EMBEDDING_API_URL: 'http://localhost:4000' },
+      createLogger(),
+    );
+    expect(client).toBeDefined();
+
+    const embeddings = await client!.embedBatch(
+      Array.from({ length: 17 }, (_, index) => `fact ${index}`),
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(Array.isArray(requests[0])).toBe(true);
+    expect((requests[0] as string[])).toHaveLength(16);
+    expect(requests[1]).toBe('fact 16');
+    expect(embeddings).toHaveLength(17);
+  });
+
+  it('retries failed embedding batches with exponential backoff before succeeding', async () => {
+    vi.useFakeTimers();
+    const logger = createLogger();
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('temporary outage 1'))
+      .mockRejectedValueOnce(new Error('temporary outage 2'))
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: [0.1, 0.2, 0.3], index: 0 }],
+          model: 'text-embedding-3-small',
+        }),
+      }) as never;
+
+    const client = createBackfillEmbeddingClient(
+      { EMBEDDING_API_URL: 'http://localhost:4000' },
+      logger,
+    );
+    expect(client).toBeDefined();
+
+    const promise = client!.embedBatch(['retry me']);
+    await vi.runAllTimersAsync();
+    await expect(promise).resolves.toEqual([[0.1, 0.2, 0.3]]);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    const combinedLog = logger.entries.join('\n');
+    expect(combinedLog).toContain('memory_backfill_embedding_retry');
+    expect(combinedLog).toContain('"delayMs":750');
+    expect(combinedLog).toContain('"delayMs":1500');
   });
 });
 
@@ -606,6 +699,11 @@ describe('claude-mem fact mapping', () => {
     });
     const stateStore = createStateStore();
     const memoryStore = createMemoryStore();
+    const factEmbeddingClient = createFactEmbeddingClient([
+      [0.11, 0.12, 0.13],
+      [0.21, 0.22, 0.23],
+      [0.31, 0.32, 0.33],
+    ]);
     const db = createClaudeMemDb([createClaudeMemObservation()]);
 
     const result = await backfillMemoryDrawers({
@@ -616,6 +714,7 @@ describe('claude-mem fact mapping', () => {
       drawerStore: drawerStore as never,
       stateStore: stateStore as never,
       memoryStore: memoryStore as never,
+      factEmbeddingClient: factEmbeddingClient as never,
       scope: 'project:agentctl',
       topic: 'claude-mem',
     });
@@ -624,12 +723,19 @@ describe('claude-mem fact mapping', () => {
     expect(result.factsWritten).toBe(3);
     expect(result.factsSkipped).toBe(0);
     expect(result.factCandidates).toBe(3);
+    expect(factEmbeddingClient.embedBatch).toHaveBeenCalledTimes(1);
+    expect(factEmbeddingClient.embedBatch).toHaveBeenCalledWith([
+      'Prefer Biome for formatting',
+      'Biome replaces ESLint formatting',
+      'Run focused Biome on touched files',
+    ]);
 
     expect(memoryStore.addFact).toHaveBeenCalledTimes(3);
     const titleCall = memoryStore.addFact.mock.calls[0]?.[0];
     expect(titleCall).toMatchObject({
       scope: 'project:agentctl',
       content: 'Prefer Biome for formatting',
+      embedding: [0.11, 0.12, 0.13],
       entity_type: 'decision',
     });
     expect(titleCall.source).toMatchObject({
@@ -648,6 +754,7 @@ describe('claude-mem fact mapping', () => {
 
     const firstFactCall = memoryStore.addFact.mock.calls[1]?.[0];
     expect(firstFactCall.content).toBe('Biome replaces ESLint formatting');
+    expect(firstFactCall.embedding).toEqual([0.21, 0.22, 0.23]);
     expect(firstFactCall.source.source_key).toBe('observations:42:fact:0');
     const firstSpan = firstFactCall.sourceSpans[0];
     expect(firstSpan.drawerId).toBe('drawer-42-0');
@@ -656,6 +763,7 @@ describe('claude-mem fact mapping', () => {
     );
 
     const secondFactCall = memoryStore.addFact.mock.calls[2]?.[0];
+    expect(secondFactCall.embedding).toEqual([0.31, 0.32, 0.33]);
     expect(secondFactCall.source.source_key).toBe('observations:42:fact:1');
     const secondSpan = secondFactCall.sourceSpans[0];
     expect(drawer.content.slice(secondSpan.startOffset, secondSpan.endOffset)).toBe(
@@ -748,6 +856,11 @@ describe('claude-mem fact mapping', () => {
     });
     const stateStore = createStateStore();
     const memoryStore = createMemoryStore(['observations:42:parent', 'observations:42:fact:0']);
+    const factEmbeddingClient = createFactEmbeddingClient([
+      [0.11, 0.12, 0.13],
+      [0.21, 0.22, 0.23],
+      [0.31, 0.32, 0.33],
+    ]);
     const db = createClaudeMemDb([createClaudeMemObservation()]);
 
     const result = await backfillMemoryDrawers({
@@ -758,10 +871,16 @@ describe('claude-mem fact mapping', () => {
       drawerStore: drawerStore as never,
       stateStore: stateStore as never,
       memoryStore: memoryStore as never,
+      factEmbeddingClient: factEmbeddingClient as never,
     });
 
     expect(result.factsWritten).toBe(1);
     expect(result.factsSkipped).toBe(2);
+    expect(factEmbeddingClient.embedBatch).toHaveBeenCalledWith([
+      'Prefer Biome for formatting',
+      'Biome replaces ESLint formatting',
+      'Run focused Biome on touched files',
+    ]);
     expect(memoryStore.addFactSourceSpans).toHaveBeenCalledTimes(2);
     expect(memoryStore.addFactSourceSpans.mock.calls[0]?.[0]).toBe(
       'existing-observations:42:parent',
@@ -769,8 +888,22 @@ describe('claude-mem fact mapping', () => {
     expect(memoryStore.addFactSourceSpans.mock.calls[1]?.[0]).toBe(
       'existing-observations:42:fact:0',
     );
+    expect(memoryStore.backfillFactEmbedding).toHaveBeenCalledTimes(2);
+    expect(memoryStore.backfillFactEmbedding.mock.calls[0]?.[0]).toEqual({
+      factId: 'existing-observations:42:parent',
+      content: 'Prefer Biome for formatting',
+      embedding: [0.11, 0.12, 0.13],
+    });
+    expect(memoryStore.backfillFactEmbedding.mock.calls[1]?.[0]).toEqual({
+      factId: 'existing-observations:42:fact:0',
+      content: 'Biome replaces ESLint formatting',
+      embedding: [0.21, 0.22, 0.23],
+    });
     expect(memoryStore.addFact).toHaveBeenCalledTimes(1);
-    expect(memoryStore.addFact.mock.calls[0]?.[0].source.source_key).toBe('observations:42:fact:1');
+    expect(memoryStore.addFact.mock.calls[0]?.[0].source.source_key).toBe(
+      'observations:42:fact:1',
+    );
+    expect(memoryStore.addFact.mock.calls[0]?.[0].embedding).toEqual([0.31, 0.32, 0.33]);
   });
 
   it('keeps session_summaries fact counts separate from observation fact counts', async () => {
@@ -857,6 +990,7 @@ describe('claude-mem session_summaries fact mapping', () => {
     });
     const stateStore = createStateStore();
     const memoryStore = createMemoryStore();
+    const factEmbeddingClient = createFactEmbeddingClient([[0.71, 0.72, 0.73]]);
     const db = createClaudeMemDb([], [createClaudeMemSessionSummary()]);
 
     const result = await backfillMemoryDrawers({
@@ -867,6 +1001,7 @@ describe('claude-mem session_summaries fact mapping', () => {
       drawerStore: drawerStore as never,
       stateStore: stateStore as never,
       memoryStore: memoryStore as never,
+      factEmbeddingClient: factEmbeddingClient as never,
       scope: 'project:agentctl',
       topic: 'claude-mem',
       machineId: 'macmini-1',
@@ -876,6 +1011,9 @@ describe('claude-mem session_summaries fact mapping', () => {
     expect(result.sessionSummaryFactCandidates).toBe(1);
     expect(result.sessionSummaryFactsWritten).toBe(1);
     expect(result.sessionSummaryFactsSkipped).toBe(0);
+    expect(factEmbeddingClient.embedBatch).toHaveBeenCalledWith([
+      'The session chose a conservative drawer backfill slice.',
+    ]);
     // Observation-specific counters stay untouched.
     expect(result.factCandidates).toBe(0);
     expect(result.factsWritten).toBe(0);
@@ -885,6 +1023,7 @@ describe('claude-mem session_summaries fact mapping', () => {
     expect(call).toMatchObject({
       scope: 'project:agentctl',
       content: 'The session chose a conservative drawer backfill slice.',
+      embedding: [0.71, 0.72, 0.73],
       entity_type: 'concept',
       confidence: 0.85,
     });
@@ -1028,6 +1167,7 @@ describe('claude-mem session_summaries fact mapping', () => {
     });
     const stateStore = createStateStore();
     const memoryStore = createMemoryStore(['session_summaries:7']);
+    const factEmbeddingClient = createFactEmbeddingClient([[0.41, 0.42, 0.43]]);
     const db = createClaudeMemDb([], [createClaudeMemSessionSummary()]);
 
     const result = await backfillMemoryDrawers({
@@ -1038,6 +1178,7 @@ describe('claude-mem session_summaries fact mapping', () => {
       drawerStore: drawerStore as never,
       stateStore: stateStore as never,
       memoryStore: memoryStore as never,
+      factEmbeddingClient: factEmbeddingClient as never,
     });
 
     // Drawer write is idempotent via (source_type, source_id, chunk_index), so the drawer
@@ -1056,6 +1197,11 @@ describe('claude-mem session_summaries fact mapping', () => {
         sourceJson: { match: 'exact', chunkIndex: 0 },
       },
     ]);
+    expect(memoryStore.backfillFactEmbedding).toHaveBeenCalledWith({
+      factId: 'existing-session_summaries:7',
+      content: 'The session chose a conservative drawer backfill slice.',
+      embedding: [0.41, 0.42, 0.43],
+    });
     expect(memoryStore.addFact).not.toHaveBeenCalled();
   });
 
@@ -1069,6 +1215,7 @@ describe('claude-mem session_summaries fact mapping', () => {
     });
     const stateStore = createStateStore();
     const memoryStore = createMemoryStore(['session_summaries:7:parent']);
+    const factEmbeddingClient = createFactEmbeddingClient([[0.51, 0.52, 0.53]]);
     const db = createClaudeMemDb([], [createClaudeMemSessionSummary()]);
 
     const result = await backfillMemoryDrawers({
@@ -1079,6 +1226,7 @@ describe('claude-mem session_summaries fact mapping', () => {
       drawerStore: drawerStore as never,
       stateStore: stateStore as never,
       memoryStore: memoryStore as never,
+      factEmbeddingClient: factEmbeddingClient as never,
     });
 
     expect(result.sessionSummaryFactsWritten).toBe(0);
@@ -1089,6 +1237,11 @@ describe('claude-mem session_summaries fact mapping', () => {
       'existing-session_summaries:7:parent',
       expect.any(Array),
     );
+    expect(memoryStore.backfillFactEmbedding).toHaveBeenCalledWith({
+      factId: 'existing-session_summaries:7:parent',
+      content: 'The session chose a conservative drawer backfill slice.',
+      embedding: [0.51, 0.52, 0.53],
+    });
     expect(memoryStore.addFact).not.toHaveBeenCalled();
   });
 

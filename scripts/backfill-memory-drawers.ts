@@ -16,10 +16,15 @@ import type {
 import pg from 'pg';
 
 import { sanitizeMemoryDrawerContent } from '../packages/control-plane/src/memory/memory-drawer-sanitizer.js';
+import { EmbeddingClient } from '../packages/control-plane/src/memory/embedding-client.js';
 import type {
   WriteMemoryDrawerSourceInput,
   WriteMemoryDrawerSourceResult,
 } from '../packages/control-plane/src/memory/memory-drawer-types.js';
+import {
+  MEMORY_EMBEDDING_MODEL,
+  MEMORY_EMBEDDING_VERSION,
+} from '../packages/shared/src/memory/constants.js';
 import type {
   ClaudeMemDatabase,
   ClaudeMemObservation,
@@ -36,6 +41,7 @@ import {
 } from './claude-mem-migration-lib.js';
 
 type JsonObject = Record<string, unknown>;
+type BackfillEnv = Record<string, string | undefined>;
 
 export type BackfillLogger = {
   info?: (value: unknown, message?: string) => void;
@@ -70,6 +76,7 @@ export type AddFactSourceSpan = {
 export type AddFactLikeInput = {
   scope: MemoryScope;
   content: string;
+  embedding?: number[] | null;
   entity_type: EntityType;
   source: FactSource;
   confidence?: number;
@@ -80,6 +87,11 @@ export type MemoryStoreLike = {
   addFact(input: AddFactLikeInput): Promise<MemoryFact>;
   findFactBySourceKey(sourceKey: string): Promise<{ id: string } | null>;
   addFactSourceSpans?(factId: string, spans: AddFactSourceSpan[]): Promise<void>;
+  backfillFactEmbedding?(input: {
+    factId: string;
+    content: string;
+    embedding?: number[] | null;
+  }): Promise<boolean>;
 };
 
 export type BackfillStateStoreLike = {
@@ -105,6 +117,7 @@ export type BackfillMemoryDrawersOptions = {
   drawerStore?: DrawerStoreLike;
   stateStore?: BackfillStateStoreLike;
   memoryStore?: MemoryStoreLike;
+  factEmbeddingClient?: Pick<EmbeddingClient, 'embedBatch'>;
   machineId?: string | null;
   logger?: BackfillLogger;
   scope?: MemoryScope;
@@ -183,9 +196,17 @@ const DEFAULT_SCOPE: MemoryScope = 'global';
 const DEFAULT_TOPIC = 'claude-code-jsonl';
 const DEFAULT_CURSOR_LINE = 1;
 const DEFAULT_EMBEDDING_USD_PER_1M_TOKENS = 0.02;
+const DEFAULT_EMBEDDING_BATCH_SIZE = 16;
+const DEFAULT_EMBEDDING_MAX_ATTEMPTS = 4;
+const DEFAULT_EMBEDDING_RETRY_BASE_DELAY_MS = 750;
 const ESTIMATED_CHUNK_TARGET_CHARS = 1_200;
 const VECTOR_AND_INDEX_BYTES_PER_DRAWER = 6 * 1024;
 const POSTGRES_ROW_OVERHEAD_BYTES_PER_DRAWER = 512;
+const EMBEDDING_BASE_URL_ENV_KEYS = [
+  'EMBEDDING_API_URL',
+  'LITELLM_PROXY_URL',
+  'LITELLM_URL',
+] as const;
 
 function usage(): string {
   return `Usage: pnpm memory:backfill-drawers --source-root <path> [--dry-run|--execute] [options]
@@ -851,6 +872,7 @@ async function processClaudeMemCandidate(params: {
         observation,
         drawers: writeResult.drawers ?? [],
         memoryStore: options.memoryStore,
+        factEmbeddingClient: options.factEmbeddingClient,
         scope,
         machineId: options.machineId ?? null,
         logger: options.logger,
@@ -863,6 +885,7 @@ async function processClaudeMemCandidate(params: {
         sessionSummary,
         drawers: writeResult.drawers ?? [],
         memoryStore: options.memoryStore,
+        factEmbeddingClient: options.factEmbeddingClient,
         scope,
         machineId: options.machineId ?? null,
         logger: options.logger,
@@ -1057,12 +1080,22 @@ async function writeObservationFacts(params: {
   observation: ClaudeMemObservation;
   drawers: MemoryDrawer[];
   memoryStore: MemoryStoreLike;
+  factEmbeddingClient?: Pick<EmbeddingClient, 'embedBatch'>;
   scope: MemoryScope;
   machineId: string | null;
   logger: BackfillLogger | undefined;
   result: BackfillMemoryDrawersResult;
 }): Promise<void> {
-  const { observation, drawers, memoryStore, scope, machineId, logger, result } = params;
+  const {
+    observation,
+    drawers,
+    memoryStore,
+    factEmbeddingClient,
+    scope,
+    machineId,
+    logger,
+    result,
+  } = params;
 
   if (drawers.length === 0) {
     return;
@@ -1077,6 +1110,7 @@ async function writeObservationFacts(params: {
   const filesModified = parseStringArray(observation.files_modified);
   const importedAt = new Date().toISOString();
   const entityType = mapObservationType(observation.type);
+  const preparedFacts: PreparedObservationFactWrite[] = [];
 
   for (const plan of plans) {
     const sanitizedFact = sanitizeMemoryDrawerContent(plan.rawText).content.trim();
@@ -1085,10 +1119,25 @@ async function writeObservationFacts(params: {
       continue;
     }
 
-    const sourceSpans = computeFactSourceSpans(sanitizedFact, drawers);
-    const existing = await memoryStore.findFactBySourceKey(plan.sourceKey);
+    preparedFacts.push({
+      plan,
+      sanitizedFact,
+      sourceSpans: computeFactSourceSpans(sanitizedFact, drawers),
+    });
+  }
+
+  const embeddings = await embedPreparedFacts(preparedFacts, factEmbeddingClient, logger);
+
+  for (const [index, fact] of preparedFacts.entries()) {
+    const existing = await memoryStore.findFactBySourceKey(fact.plan.sourceKey);
     if (existing) {
-      await repairExistingFactSourceSpans(memoryStore, existing.id, sourceSpans);
+      await repairExistingFactSourceSpans(memoryStore, existing.id, fact.sourceSpans);
+      await backfillExistingFactEmbedding(
+        memoryStore,
+        existing.id,
+        fact.sanitizedFact,
+        embeddings[index] ?? null,
+      );
       result.factsSkipped += 1;
       continue;
     }
@@ -1096,7 +1145,7 @@ async function writeObservationFacts(params: {
     const source = buildImportedSource({
       sourceTable: 'observations',
       sourceId: observation.id,
-      sourceKey: plan.sourceKey,
+      sourceKey: fact.plan.sourceKey,
       sessionId: observation.memory_session_id,
       memorySessionId: observation.memory_session_id,
       machineId,
@@ -1108,17 +1157,19 @@ async function writeObservationFacts(params: {
     try {
       await memoryStore.addFact({
         scope,
-        content: sanitizedFact,
+        content: fact.sanitizedFact,
+        embedding: embeddings[index] ?? null,
         entity_type: entityType,
         source,
-        confidence: plan.kind === 'title' ? confidence : Math.max(0.6, confidence - 0.05),
-        sourceSpans,
+        confidence:
+          fact.plan.kind === 'title' ? confidence : Math.max(0.6, confidence - 0.05),
+        sourceSpans: fact.sourceSpans,
       });
       result.factsWritten += 1;
     } catch (error: unknown) {
       logger?.warn?.({
         event: 'memory_fact_backfill_write_failed',
-        sourceKey: plan.sourceKey,
+        sourceKey: fact.plan.sourceKey,
         error: summarizeBackfillError(error),
       });
       throw error;
@@ -1163,12 +1214,22 @@ async function writeSessionSummaryFacts(params: {
   sessionSummary: ClaudeMemSessionSummary;
   drawers: MemoryDrawer[];
   memoryStore: MemoryStoreLike;
+  factEmbeddingClient?: Pick<EmbeddingClient, 'embedBatch'>;
   scope: MemoryScope;
   machineId: string | null;
   logger: BackfillLogger | undefined;
   result: BackfillMemoryDrawersResult;
 }): Promise<void> {
-  const { sessionSummary, drawers, memoryStore, scope, machineId, logger, result } = params;
+  const {
+    sessionSummary,
+    drawers,
+    memoryStore,
+    factEmbeddingClient,
+    scope,
+    machineId,
+    logger,
+    result,
+  } = params;
 
   if (drawers.length === 0) {
     return;
@@ -1180,6 +1241,7 @@ async function writeSessionSummaryFacts(params: {
   }
 
   const importedAt = new Date().toISOString();
+  const preparedFacts: PreparedSessionSummaryFactWrite[] = [];
 
   for (const plan of plans) {
     const sanitizedFact = sanitizeMemoryDrawerContent(plan.rawText).content.trim();
@@ -1188,10 +1250,25 @@ async function writeSessionSummaryFacts(params: {
       continue;
     }
 
-    const sourceSpans = computeFactSourceSpans(sanitizedFact, drawers);
-    const existing = await findExistingFactBySourceKeys(memoryStore, plan.lookupSourceKeys);
+    preparedFacts.push({
+      plan,
+      sanitizedFact,
+      sourceSpans: computeFactSourceSpans(sanitizedFact, drawers),
+    });
+  }
+
+  const embeddings = await embedPreparedFacts(preparedFacts, factEmbeddingClient, logger);
+
+  for (const [index, fact] of preparedFacts.entries()) {
+    const existing = await findExistingFactBySourceKeys(memoryStore, fact.plan.lookupSourceKeys);
     if (existing) {
-      await repairExistingFactSourceSpans(memoryStore, existing.id, sourceSpans);
+      await repairExistingFactSourceSpans(memoryStore, existing.id, fact.sourceSpans);
+      await backfillExistingFactEmbedding(
+        memoryStore,
+        existing.id,
+        fact.sanitizedFact,
+        embeddings[index] ?? null,
+      );
       result.sessionSummaryFactsSkipped += 1;
       continue;
     }
@@ -1199,7 +1276,7 @@ async function writeSessionSummaryFacts(params: {
     const source = buildImportedSource({
       sourceTable: 'session_summaries',
       sourceId: sessionSummary.id,
-      sourceKey: plan.sourceKey,
+      sourceKey: fact.plan.sourceKey,
       sessionId: sessionSummary.session_id,
       memorySessionId: null,
       machineId,
@@ -1210,17 +1287,18 @@ async function writeSessionSummaryFacts(params: {
     try {
       await memoryStore.addFact({
         scope,
-        content: sanitizedFact,
+        content: fact.sanitizedFact,
+        embedding: embeddings[index] ?? null,
         entity_type: 'concept',
         source,
         confidence: 0.85,
-        sourceSpans,
+        sourceSpans: fact.sourceSpans,
       });
       result.sessionSummaryFactsWritten += 1;
     } catch (error: unknown) {
       logger?.warn?.({
         event: 'memory_fact_backfill_write_failed',
-        sourceKey: plan.sourceKey,
+        sourceKey: fact.plan.sourceKey,
         error: summarizeBackfillError(error),
       });
       throw error;
@@ -1250,6 +1328,64 @@ async function repairExistingFactSourceSpans(
     return;
   }
   await memoryStore.addFactSourceSpans(factId, sourceSpans);
+}
+
+async function backfillExistingFactEmbedding(
+  memoryStore: MemoryStoreLike,
+  factId: string,
+  content: string,
+  embedding: number[] | null,
+): Promise<void> {
+  if (!memoryStore.backfillFactEmbedding) {
+    return;
+  }
+  await memoryStore.backfillFactEmbedding({
+    factId,
+    content,
+    embedding,
+  });
+}
+
+type PreparedObservationFactWrite = {
+  plan: ObservationFactPlan;
+  sanitizedFact: string;
+  sourceSpans: AddFactSourceSpan[];
+};
+
+type PreparedSessionSummaryFactWrite = {
+  plan: SessionSummaryFactPlan;
+  sanitizedFact: string;
+  sourceSpans: AddFactSourceSpan[];
+};
+
+async function embedPreparedFacts(
+  facts: ReadonlyArray<{ sanitizedFact: string }>,
+  factEmbeddingClient: Pick<EmbeddingClient, 'embedBatch'> | undefined,
+  logger: BackfillLogger | undefined,
+) : Promise<number[][]> {
+  if (!factEmbeddingClient || facts.length === 0) {
+    return [];
+  }
+
+  try {
+    const embeddings = await factEmbeddingClient.embedBatch(
+      facts.map((entry) => entry.sanitizedFact),
+    );
+    if (embeddings.length !== facts.length) {
+      throw new Error(
+        `Embedding API returned ${embeddings.length} embeddings for ${facts.length} facts`,
+      );
+    }
+
+    return embeddings;
+  } catch (error: unknown) {
+    logger?.warn?.({
+      event: 'memory_fact_backfill_embedding_failed',
+      error: summarizeBackfillError(error),
+      count: facts.length,
+    });
+    return [];
+  }
 }
 
 function computeFactSourceSpans(
@@ -1398,13 +1534,121 @@ function createStoreLogger(logger: BackfillLogger): BackfillLogger {
   };
 }
 
+function createEmbeddingClientLogger(logger: BackfillLogger) {
+  const adapter = {
+    debug(_value?: unknown, _message?: string) {},
+    info(value?: unknown, message?: string) {
+      if (value !== undefined) {
+        logger.info?.(value, message);
+      }
+    },
+    warn(value?: unknown, message?: string) {
+      if (value !== undefined) {
+        logger.warn?.(value, message);
+      }
+    },
+    error(value?: unknown, message?: string) {
+      if (value !== undefined) {
+        logger.error?.(value, message);
+      }
+    },
+    child() {
+      return adapter;
+    },
+  };
+
+  return adapter;
+}
+
+class BackfillEmbeddingClient {
+  private readonly client: EmbeddingClient;
+  private readonly logger: BackfillLogger;
+  private readonly batchSize: number;
+  private readonly maxAttempts: number;
+  private readonly retryBaseDelayMs: number;
+
+  constructor(options: {
+    baseUrl: string;
+    model: string;
+    logger: BackfillLogger;
+    batchSize?: number;
+    maxAttempts?: number;
+    retryBaseDelayMs?: number;
+  }) {
+    this.client = new EmbeddingClient({
+      baseUrl: options.baseUrl,
+      model: options.model,
+      logger: createEmbeddingClientLogger(options.logger) as never,
+      maxAttempts: 1,
+    });
+    this.logger = options.logger;
+    this.batchSize = Math.max(1, options.batchSize ?? DEFAULT_EMBEDDING_BATCH_SIZE);
+    this.maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_EMBEDDING_MAX_ATTEMPTS);
+    this.retryBaseDelayMs = Math.max(
+      1,
+      options.retryBaseDelayMs ?? DEFAULT_EMBEDDING_RETRY_BASE_DELAY_MS,
+    );
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const [embedding] = await this.embedBatch([text]);
+    if (!embedding) {
+      throw new Error('Embedding API returned no embedding for single-text request');
+    }
+    return embedding;
+  }
+
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    if (texts.length === 0) {
+      return [];
+    }
+
+    const embeddings: number[][] = [];
+    for (let index = 0; index < texts.length; index += this.batchSize) {
+      const batch = texts.slice(index, index + this.batchSize);
+      embeddings.push(...(await this.embedBatchWithRetry(batch)));
+    }
+    return embeddings;
+  }
+
+  private async embedBatchWithRetry(texts: string[]): Promise<number[][]> {
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      try {
+        return await this.client.embedBatch(texts);
+      } catch (error: unknown) {
+        if (attempt >= this.maxAttempts) {
+          throw error;
+        }
+
+        const delayMs = this.retryBaseDelayMs * 2 ** (attempt - 1);
+        this.logger.warn?.({
+          event: 'memory_backfill_embedding_retry',
+          error: summarizeBackfillError(error),
+          attempt,
+          delayMs,
+          count: texts.length,
+        });
+        await sleep(delayMs);
+      }
+    }
+
+    return [];
+  }
+}
+
+function sleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
 async function createCliStores(
   pool: pg.Pool,
   logger: BackfillLogger,
+  env: BackfillEnv = process.env,
 ): Promise<{
   drawerStore: DrawerStoreLike;
   stateStore: BackfillStateStoreLike;
   memoryStore: MemoryStoreLike;
+  factEmbeddingClient?: Pick<EmbeddingClient, 'embedBatch'>;
 }> {
   const [{ MemoryDrawerBackfillStateStore }, { MemoryDrawerStore }, { MemoryStore }] =
     await Promise.all([
@@ -1413,8 +1657,11 @@ async function createCliStores(
       import('../packages/control-plane/src/memory/memory-store.js'),
     ]);
 
+  const embeddingClient = createBackfillEmbeddingClient(env, logger);
+
   const internalStore = new MemoryStore({
     pool,
+    embeddingClient: embeddingClient as EmbeddingClient | undefined,
     logger: createStoreLogger(logger) as never,
   });
 
@@ -1455,16 +1702,77 @@ async function createCliStores(
         );
       }
     },
+    async backfillFactEmbedding(input) {
+      if (!embeddingClient) {
+        return false;
+      }
+
+      const embedding =
+        Array.isArray(input.embedding) && input.embedding.length > 0
+          ? input.embedding
+          : await embeddingClient.embed(input.content);
+      if (embedding.length === 0) {
+        return false;
+      }
+
+      const result = await pool.query(
+        `UPDATE memory_facts
+         SET embedding = $2::vector,
+             content_model = $3,
+             embedding_version = $4
+         WHERE id = $1
+           AND (
+             embedding IS NULL
+             OR content_model IS DISTINCT FROM $3
+             OR embedding_version IS DISTINCT FROM $4
+           )`,
+        [
+          input.factId,
+          `[${embedding.join(',')}]`,
+          MEMORY_EMBEDDING_MODEL,
+          MEMORY_EMBEDDING_VERSION,
+        ],
+      );
+      return (result.rowCount ?? 0) > 0;
+    },
   };
 
   return {
     stateStore: new MemoryDrawerBackfillStateStore({ pool }),
     drawerStore: new MemoryDrawerStore({
       pool,
+      embeddingClient: embeddingClient as EmbeddingClient | undefined,
       logger: createStoreLogger(logger) as never,
     }),
     memoryStore,
+    factEmbeddingClient: embeddingClient,
   };
+}
+
+export function createBackfillEmbeddingClient(
+  env: BackfillEnv,
+  logger: BackfillLogger,
+): Pick<EmbeddingClient, 'embed' | 'embedBatch'> | undefined {
+  const baseUrl = readFirstEnv(env, EMBEDDING_BASE_URL_ENV_KEYS);
+  if (!baseUrl) {
+    return undefined;
+  }
+
+  return new BackfillEmbeddingClient({
+    baseUrl,
+    model: env.EMBEDDING_MODEL?.trim() || 'text-embedding-3-small',
+    logger,
+  });
+}
+
+function readFirstEnv(env: BackfillEnv, names: readonly string[]): string | null {
+  for (const name of names) {
+    const value = env[name]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return null;
 }
 
 function formatSummary(result: BackfillMemoryDrawersResult): string {
@@ -1535,6 +1843,30 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
       stateStore = stores.stateStore;
       drawerStore = stores.drawerStore;
       memoryStore = stores.memoryStore;
+      const factEmbeddingClient = stores.factEmbeddingClient;
+      const result = await backfillMemoryDrawers({
+        sourceType: options.sourceType,
+        sourceRoot: options.sourceRoot,
+        dryRun: options.dryRun,
+        claudeMemDb: claudeMemDb ?? undefined,
+        drawerStore,
+        stateStore,
+        memoryStore,
+        factEmbeddingClient,
+        machineId: options.machineId ?? null,
+        logger,
+        scope: options.scope,
+        topic: options.topic,
+        limit: options.limit,
+        embeddingUsdPer1MTokens: options.embeddingUsdPer1MTokens,
+      });
+
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      console.log(formatSummary(result));
+      return;
     }
 
     const result = await backfillMemoryDrawers({
