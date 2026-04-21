@@ -27,6 +27,7 @@ export type MemoryStoreOptions = {
 export type AddFactInput = {
   scope: MemoryScope;
   content: string;
+  embedding?: number[] | null;
   entity_type: EntityType;
   source: FactSource;
   confidence?: number;
@@ -165,7 +166,9 @@ export class MemoryStore {
     const tags = input.tags ?? [];
 
     let embeddingLiteral: string | null = null;
-    if (this.embeddingClient) {
+    if (Array.isArray(input.embedding) && input.embedding.length > 0) {
+      embeddingLiteral = `[${input.embedding.join(',')}]`;
+    } else if (this.embeddingClient) {
       try {
         const embedding = await this.embeddingClient.embed(input.content);
         embeddingLiteral = `[${embedding.join(',')}]`;

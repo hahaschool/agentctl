@@ -102,4 +102,61 @@ describe('EmbeddingClient', () => {
       code: 'EMBEDDING_CONNECTION_ERROR',
     });
   });
+
+  it('retries retryable API statuses with exponential backoff', async () => {
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const fakeEmbedding = Array.from({ length: 4 }, () => 0.3);
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => 'Rate limited',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [{ embedding: fakeEmbedding, index: 0 }],
+          model: 'text-embedding-3-small',
+          usage: { prompt_tokens: 10, total_tokens: 10 },
+        }),
+      });
+
+    const client = new EmbeddingClient({
+      baseUrl: 'http://localhost:4000/',
+      model: 'text-embedding-3-small',
+      logger,
+      sleep,
+      retryBaseDelayMs: 250,
+    });
+
+    await expect(client.embed('retry me')).resolves.toEqual(fakeEmbedding);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(250);
+  });
+
+  it('retries network failures before surfacing a connection error', async () => {
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('ECONNRESET'))
+      .mockRejectedValueOnce(new Error('Still down'))
+      .mockRejectedValueOnce(new Error('No route'));
+
+    const client = new EmbeddingClient({
+      baseUrl: 'http://localhost:4000/',
+      model: 'text-embedding-3-small',
+      logger,
+      sleep,
+      maxAttempts: 3,
+      retryBaseDelayMs: 200,
+    });
+
+    await expect(client.embedBatch(['one', 'two'])).rejects.toMatchObject({
+      code: 'EMBEDDING_CONNECTION_ERROR',
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 200);
+    expect(sleep).toHaveBeenNthCalledWith(2, 400);
+  });
 });
