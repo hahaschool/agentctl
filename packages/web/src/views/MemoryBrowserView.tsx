@@ -209,6 +209,7 @@ export function MemoryBrowserView(): React.JSX.Element {
   });
   const selectedFact = detailQueryResult.data?.fact ?? null;
   const selectedEdges: readonly MemoryEdge[] = detailQueryResult.data?.edges ?? [];
+  const selectedSourcePreviews = detailQueryResult.data?.sourcePreviews;
 
   // Mutations
   const updateFact = useUpdateMemoryFact();
@@ -383,6 +384,7 @@ export function MemoryBrowserView(): React.JSX.Element {
         <BrowserDetailPanel
           fact={selectedFact}
           edges={selectedEdges as MemoryEdge[]}
+          sourcePreviews={selectedSourcePreviews}
           isLoading={detailQueryResult.isLoading}
           onClose={handleCloseDetail}
           onUpdate={handleUpdateFact}

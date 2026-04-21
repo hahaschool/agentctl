@@ -1,4 +1,4 @@
-import type { MemoryEdge, MemoryFact } from '@agentctl/shared';
+import type { MemoryEdge, MemoryFact, MemoryFactSourcePreview } from '@agentctl/shared';
 import { fireEvent, render, screen } from '@testing-library/react';
 
 import { BrowserDetailPanel } from './BrowserDetailPanel';
@@ -39,6 +39,25 @@ function makeEdge(overrides: Partial<MemoryEdge> = {}): MemoryEdge {
   };
 }
 
+function makeSourcePreview(
+  overrides: Partial<MemoryFactSourcePreview> = {},
+): MemoryFactSourcePreview {
+  return {
+    drawer_id: 'drawer-1',
+    drawer_scope: 'project:agentctl',
+    drawer_topic: 'release-checklist',
+    drawer_chunk_index: 0,
+    drawer_source_type: 'session-jsonl',
+    drawer_source_id: 'session-1',
+    start_offset: 12,
+    end_offset: 48,
+    quote_preview: 'beta gate review happens before promote',
+    status: 'available',
+    created_at: '2026-03-11T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('BrowserDetailPanel', () => {
   const defaultProps = {
     fact: null as MemoryFact | null,
@@ -68,6 +87,7 @@ describe('BrowserDetailPanel', () => {
     expect(screen.getByText('project:agentctl')).toBeDefined();
     expect(screen.getByText('agent-1')).toBeDefined();
     expect(screen.getByText('manual')).toBeDefined();
+    expect(screen.getByText('No supporting drawer evidence.')).toBeDefined();
   });
 
   it('renders edges when present', () => {
@@ -84,6 +104,30 @@ describe('BrowserDetailPanel', () => {
     render(<BrowserDetailPanel {...defaultProps} fact={fact} />);
 
     expect(screen.getByText('No relationships.')).toBeDefined();
+  });
+
+  it('renders available and archived drawer evidence previews', () => {
+    const fact = makeFact();
+    render(
+      <BrowserDetailPanel
+        {...defaultProps}
+        fact={fact}
+        sourcePreviews={[
+          makeSourcePreview(),
+          makeSourcePreview({
+            drawer_id: 'drawer-2',
+            drawer_topic: 'ops-notes',
+            status: 'archived',
+            quote_preview: null,
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('Evidence (2)')).toBeDefined();
+    expect(screen.getByText('beta gate review happens before promote')).toBeDefined();
+    expect(screen.getByText('Archived drawer content unavailable.')).toBeDefined();
+    expect(screen.getByText('Archived')).toBeDefined();
   });
 
   it('calls onClose when close button is clicked', () => {

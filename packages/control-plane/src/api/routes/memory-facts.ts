@@ -4,6 +4,7 @@ import type {
   FeedbackSignal,
   MemoryDrawerSearchResult,
   MemoryFact,
+  MemoryFactSourcePreview,
   MemoryScope,
 } from '@agentctl/shared';
 import { querySanitizerLogFields, sanitizeQuery } from '@agentctl/shared';
@@ -30,6 +31,7 @@ const MAX_FACT_FILTER_LENGTH = 128;
 const MAX_FACT_QUERY_LENGTH = 1_024;
 const MAX_FACT_LIMIT = 500;
 const MAX_FACT_SOURCE_SPANS = 32;
+const MAX_FACT_QUOTE_PREVIEW_LENGTH = 240;
 
 // §4.16 MemPalace — drawer-aware fusion is additive and env-flagged. The
 // cap mirrors the drawer route's MAX_LIMIT so a facts-side query can't pull a
@@ -362,7 +364,24 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       }
 
       const edges = await memoryStore.listEdges({ factId: request.params.id });
-      return { ok: true, fact, edges };
+      let sourcePreviews: MemoryFactSourcePreview[] | undefined;
+      if (pool) {
+        try {
+          sourcePreviews = await listFactSourcePreviews(pool, request.params.id);
+        } catch (error: unknown) {
+          request.log.warn(
+            { err: error, factId: request.params.id },
+            'Failed to load memory fact source previews',
+          );
+        }
+      }
+
+      return {
+        ok: true,
+        fact,
+        edges,
+        ...(sourcePreviews !== undefined ? { sourcePreviews } : {}),
+      };
     },
   );
 
@@ -529,6 +548,79 @@ function parseInteger(value: string | undefined, fallback: number): number {
 function parseFloatValue(value: string | undefined): number | undefined {
   const parsed = Number.parseFloat(value ?? '');
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+type FactSourcePreviewRow = {
+  drawer_id: string;
+  drawer_scope: MemoryScope;
+  drawer_topic: string;
+  drawer_chunk_index: number;
+  drawer_source_type: MemoryFactSourcePreview['drawer_source_type'];
+  drawer_source_id: string;
+  start_offset: number;
+  end_offset: number;
+  drawer_content: string;
+  drawer_archived_at: string | null;
+  created_at: string;
+};
+
+async function listFactSourcePreviews(
+  pool: Pool,
+  factId: string,
+): Promise<MemoryFactSourcePreview[]> {
+  const { rows } = await pool.query(
+    `SELECT
+       mfs.drawer_id,
+       md.scope AS drawer_scope,
+       md.topic AS drawer_topic,
+       md.chunk_index AS drawer_chunk_index,
+       md.source_type AS drawer_source_type,
+       md.source_id AS drawer_source_id,
+       mfs.start_offset,
+       mfs.end_offset,
+       md.content AS drawer_content,
+       md.archived_at AS drawer_archived_at,
+       mfs.created_at
+     FROM memory_fact_sources mfs
+     INNER JOIN memory_drawers md ON md.id = mfs.drawer_id
+     WHERE mfs.fact_id = $1
+     ORDER BY mfs.created_at ASC, mfs.start_offset ASC`,
+    [factId],
+  );
+
+  return (rows as FactSourcePreviewRow[]).map((row) => ({
+    drawer_id: row.drawer_id,
+    drawer_scope: row.drawer_scope,
+    drawer_topic: row.drawer_topic,
+    drawer_chunk_index: Number(row.drawer_chunk_index),
+    drawer_source_type: row.drawer_source_type,
+    drawer_source_id: row.drawer_source_id,
+    start_offset: Number(row.start_offset),
+    end_offset: Number(row.end_offset),
+    quote_preview:
+      row.drawer_archived_at === null
+        ? buildFactQuotePreview(
+            row.drawer_content,
+            Number(row.start_offset),
+            Number(row.end_offset),
+          )
+        : null,
+    status: row.drawer_archived_at === null ? 'available' : 'archived',
+    created_at: row.created_at,
+  }));
+}
+
+function buildFactQuotePreview(
+  content: string,
+  startOffset: number,
+  endOffset: number,
+): string | null {
+  const normalizedStart = Math.max(0, Math.min(startOffset, content.length));
+  const normalizedEnd = Math.max(normalizedStart, Math.min(endOffset, content.length));
+  const preview = content.slice(normalizedStart, normalizedEnd).trim();
+  if (!preview) return null;
+  if (preview.length <= MAX_FACT_QUOTE_PREVIEW_LENGTH) return preview;
+  return `${preview.slice(0, MAX_FACT_QUOTE_PREVIEW_LENGTH - 1)}…`;
 }
 
 // ---------------------------------------------------------------------------

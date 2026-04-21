@@ -268,6 +268,8 @@ export type {
   MemoryDrawerSyncVisibility,
   MemoryEdge,
   MemoryFact,
+  MemoryFactSourcePreview,
+  MemoryFactSourcePreviewStatus,
   MemoryObservation,
   MemoryReport,
   MemoryReportType,
