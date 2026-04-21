@@ -191,7 +191,7 @@ describe('memory eval fixture hygiene and split helpers', () => {
     ).toThrow(/unredacted internal id/i);
   });
 
-  it('splits fixtures deterministically with seed 42 and guards full-set access', () => {
+  it('splits fixtures deterministically with seed 42 and guards held-out/full access', () => {
     const rows = Array.from(
       { length: 20 },
       (_, index): MemoryEvalFixtureRow => ({
@@ -209,7 +209,8 @@ describe('memory eval fixture hygiene and split helpers', () => {
 
     expect(firstDev).toEqual(secondDev);
     expect(firstDev).toHaveLength(2);
-    expect(getHeldOutSet(rows)).toHaveLength(18);
+    expect(() => getHeldOutSet(rows)).toThrow(/workflow eval jobs/i);
+    expect(getHeldOutSet(rows, { allowHeldOut: true })).toHaveLength(18);
     expect(() => getFullSet(rows)).toThrow(/release eval/i);
     expect(getFullSet(rows, { allowFullSet: true })).toHaveLength(20);
   });

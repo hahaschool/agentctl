@@ -130,10 +130,22 @@ describe('memory-eval live mode', () => {
     expect(mockPool).not.toHaveBeenCalled();
   });
 
+  it('keeps the held-out guard in live mode', async () => {
+    process.env.DATABASE_URL = 'postgres://localhost/agentctl';
+    process.env.LITELLM_URL = 'http://localhost:4000';
+
+    await expect(
+      main(['--no-mock', '--fixture', writeFixture(), '--split', 'held-out']),
+    ).rejects.toThrow(/workflow eval jobs/);
+
+    expect(mockPool).not.toHaveBeenCalled();
+  });
+
   it('runs real MemorySearch, maps fact ids into eval candidates, and closes the pool', async () => {
     process.env.DATABASE_URL = 'postgres://localhost/agentctl';
     process.env.LITELLM_URL = 'http://localhost:4000';
     process.env.EMBEDDING_MODEL = 'text-embedding-3-small';
+    process.env.MEMORY_EVAL_ALLOW_FULL_SET = 'true';
     mockSearch.mockResolvedValueOnce([
       {
         fact: { id: 'fact:alpha' },
@@ -148,7 +160,6 @@ describe('memory-eval live mode', () => {
       writeFixture(),
       '--split',
       'full',
-      '--allow-full',
       '--json',
     ]);
 

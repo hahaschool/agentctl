@@ -111,10 +111,13 @@ export type MemoryEvalRanker = (
 
 export type MemoryEvalSplitOptions = {
   seed?: number;
+  allowHeldOut?: boolean;
+  env?: Record<string, string | undefined>;
 };
 
 export type MemoryEvalFullSetOptions = {
   allowFullSet?: boolean;
+  env?: Record<string, string | undefined>;
 };
 
 export type MemoryPlantedNeedleBenchEnv = Record<string, string | undefined>;
@@ -233,6 +236,12 @@ export function getHeldOutSet(
   rows: readonly MemoryEvalFixtureRow[],
   options: MemoryEvalSplitOptions = {},
 ): MemoryEvalFixtureRow[] {
+  if (!options.allowHeldOut && options.env?.MEMORY_EVAL_ALLOW_HELD_OUT !== 'true') {
+    throw new Error(
+      'Held-out memory eval set is reserved for workflow eval jobs. Use getDevSet() for local tuning.',
+    );
+  }
+
   const includedRows = rows.filter((row) => !row.excluded);
   if (includedRows.length === 0) return [];
 
@@ -244,7 +253,7 @@ export function getFullSet(
   rows: readonly MemoryEvalFixtureRow[],
   options: MemoryEvalFullSetOptions = {},
 ): MemoryEvalFixtureRow[] {
-  if (!options.allowFullSet && process.env.MEMORY_EVAL_ALLOW_FULL_SET !== 'true') {
+  if (!options.allowFullSet && options.env?.MEMORY_EVAL_ALLOW_FULL_SET !== 'true') {
     throw new Error(
       'Full memory eval set is reserved for release eval jobs. Use getDevSet() for tuning.',
     );

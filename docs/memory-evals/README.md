@@ -39,6 +39,19 @@ pnpm memory:bench --baseline facts-only \
 The command is mock-only — it does not touch a live PostgreSQL, an embedding
 API, or any network dependency — so it can run in CI on a bare checkout.
 
+## Split discipline
+
+- Local/default use is `pnpm memory:eval --split dev`. This is the only split
+  intended for everyday tuning.
+- `--split held-out` is reserved for workflow-owned eval jobs and requires
+  `MEMORY_EVAL_ALLOW_HELD_OUT=true`.
+- `--split full` is reserved for release-style eval jobs and requires
+  `MEMORY_EVAL_ALLOW_FULL_SET=true`.
+- Private fixture coverage is intentionally not committed in-repo. Future
+  weekly/release jobs should stage the private fixture into a CI-only path
+  such as `tmp/memory-eval/` and set the workflow-owned env gate(s) above
+  before invoking `pnpm memory:eval`.
+
 ### What counts as a change
 
 - **Ranker or fixture schema changes** that move the committed metrics:
