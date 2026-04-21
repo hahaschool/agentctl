@@ -17,6 +17,7 @@ import type {
   MemoryDrawerSearchResult,
   MemoryEdge,
   MemoryFact,
+  MemoryFactSourcePreview,
   MemoryObservation,
   MemoryReport,
   MemoryScope,
@@ -219,9 +220,12 @@ export const memoryApi = {
   },
 
   getMemoryFact: (id: string) =>
-    request<{ ok: boolean; fact: MemoryFact; edges: MemoryEdge[] }>(
-      `/api/memory/facts/${encodeURIComponent(id)}`,
-    ),
+    request<{
+      ok: boolean;
+      fact: MemoryFact;
+      edges: MemoryEdge[];
+      sourcePreviews?: MemoryFactSourcePreview[];
+    }>(`/api/memory/facts/${encodeURIComponent(id)}`),
 
   createMemoryFact: (body: {
     content: string;

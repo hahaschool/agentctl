@@ -11,6 +11,7 @@ import type {
   InjectionTier,
   MemoryEdge,
   MemoryFact,
+  MemoryFactSourcePreview,
   MemoryReport,
   MemoryScope,
   MemorySearchResult,
@@ -181,6 +182,26 @@ describe('memory types', () => {
     expect(result.fact.source).toEqual(source);
     expect(edge.source_fact_id).toBe(fact.id);
     expect(result.source_path).toBe('vector');
+  });
+
+  it('defines memory fact source preview shape', () => {
+    const preview: MemoryFactSourcePreview = {
+      drawer_id: 'drawer-1',
+      drawer_scope: 'project:agentctl',
+      drawer_topic: 'release-checklist',
+      drawer_chunk_index: 0,
+      drawer_source_type: 'session-jsonl',
+      drawer_source_id: 'session-1',
+      start_offset: 12,
+      end_offset: 48,
+      quote_preview: 'beta gate review happens before promote',
+      status: 'available',
+      created_at: '2026-03-11T00:00:00.000Z',
+    };
+
+    expect(preview.drawer_topic).toBe('release-checklist');
+    expect(preview.status).toBe('available');
+    expect(preview.quote_preview).toContain('beta gate');
   });
 
   it('exports the default injection budget from the shared barrel', () => {

@@ -1,6 +1,12 @@
 'use client';
 
-import type { EntityType, MemoryEdge, MemoryFact, MemoryScope } from '@agentctl/shared';
+import type {
+  EntityType,
+  MemoryEdge,
+  MemoryFact,
+  MemoryFactSourcePreview,
+  MemoryScope,
+} from '@agentctl/shared';
 import { PencilIcon, Trash2Icon, XIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -16,6 +22,7 @@ import { ScopeBadge } from './ScopeBadge';
 export function BrowserDetailPanel({
   fact,
   edges,
+  sourcePreviews,
   isLoading: _isLoading,
   onClose,
   onUpdate,
@@ -24,6 +31,7 @@ export function BrowserDetailPanel({
 }: {
   fact: MemoryFact | null;
   edges: readonly MemoryEdge[];
+  sourcePreviews?: readonly MemoryFactSourcePreview[];
   isLoading: boolean;
   onClose: () => void;
   onUpdate: (
@@ -167,6 +175,45 @@ export function BrowserDetailPanel({
               <dd className="capitalize">{fact.source.extraction_method}</dd>
             </div>
           </dl>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-1.5">
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Evidence ({sourcePreviews?.length ?? 0})
+          </h4>
+          {sourcePreviews && sourcePreviews.length > 0 ? (
+            <ul className="space-y-2">
+              {sourcePreviews.map((preview) => (
+                <li
+                  key={`${preview.drawer_id}:${preview.start_offset}:${preview.end_offset}`}
+                  className="rounded-md border border-border px-3 py-2"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <span className="font-mono text-foreground">{preview.drawer_topic}</span>
+                    <span className="font-mono">chunk {preview.drawer_chunk_index}</span>
+                    <span className="font-mono">{preview.drawer_source_type}</span>
+                    {preview.status === 'archived' ? (
+                      <span className="rounded border border-amber-500/40 px-1.5 py-0.5 font-mono uppercase tracking-wide text-amber-300">
+                        Archived
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-foreground">
+                    {preview.status === 'archived'
+                      ? 'Archived drawer content unavailable.'
+                      : (preview.quote_preview ?? 'Preview unavailable.')}
+                  </p>
+                  <div className="mt-1 text-[11px] font-mono text-muted-foreground">
+                    {preview.start_offset}-{preview.end_offset}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">No supporting drawer evidence.</p>
+          )}
         </div>
 
         <Separator />

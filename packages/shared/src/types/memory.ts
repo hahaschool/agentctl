@@ -128,6 +128,22 @@ export type MemoryFact = {
   trigger_spec?: TriggerSpec;
 };
 
+export type MemoryFactSourcePreviewStatus = 'available' | 'archived';
+
+export type MemoryFactSourcePreview = {
+  drawer_id: string;
+  drawer_scope: MemoryScope;
+  drawer_topic: string;
+  drawer_chunk_index: number;
+  drawer_source_type: MemoryDrawerSourceType;
+  drawer_source_id: string;
+  start_offset: number;
+  end_offset: number;
+  quote_preview: string | null;
+  status: MemoryFactSourcePreviewStatus;
+  created_at: string;
+};
+
 export type MemoryEdge = {
   id: string;
   source_fact_id: string;

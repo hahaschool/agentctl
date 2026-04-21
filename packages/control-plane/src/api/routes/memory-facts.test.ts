@@ -1,5 +1,6 @@
 import type { MemoryEdge, MemoryFact } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
+import type { Pool } from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DrawerEmbeddingClient } from '../../memory/memory-drawer-search.js';
@@ -403,6 +404,93 @@ describe('memory fact routes', () => {
       edges: [makeEdge()],
     });
     expect(memoryStore.listEdges).toHaveBeenCalledWith({ factId: 'fact-1' });
+  });
+
+  it('adds fact source previews to the detail envelope when pgPool is available', async () => {
+    const pgPool = {
+      query: vi.fn().mockResolvedValue({
+        rows: [
+          {
+            drawer_id: 'drawer-1',
+            drawer_scope: 'project:agentctl',
+            drawer_topic: 'release-checklist',
+            drawer_chunk_index: 0,
+            drawer_source_type: 'session-jsonl',
+            drawer_source_id: 'session-1',
+            start_offset: 5,
+            end_offset: 29,
+            drawer_content: '12345beta gate review happens before promote and rollback',
+            drawer_archived_at: null,
+            created_at: '2026-03-11T10:00:00.000Z',
+          },
+          {
+            drawer_id: 'drawer-2',
+            drawer_scope: 'project:agentctl',
+            drawer_topic: 'ops-notes',
+            drawer_chunk_index: 1,
+            drawer_source_type: 'session-jsonl',
+            drawer_source_id: 'session-2',
+            start_offset: 0,
+            end_offset: 10,
+            drawer_content: 'archived content',
+            drawer_archived_at: '2026-03-12T10:00:00.000Z',
+            created_at: '2026-03-11T11:00:00.000Z',
+          },
+        ],
+      }),
+    } as unknown as Pool;
+    const fact = makeFact();
+    const edge = makeEdge();
+    vi.mocked(memoryStore.getFact).mockResolvedValueOnce(fact);
+    vi.mocked(memoryStore.listEdges).mockResolvedValueOnce([edge]);
+
+    const detailApp = await createServer({ logger, memorySearch, memoryStore, pgPool });
+    await detailApp.ready();
+
+    const response = await detailApp.inject({
+      method: 'GET',
+      url: '/api/memory/facts/fact-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ok: true,
+      fact,
+      edges: [edge],
+      sourcePreviews: [
+        {
+          drawer_id: 'drawer-1',
+          drawer_scope: 'project:agentctl',
+          drawer_topic: 'release-checklist',
+          drawer_chunk_index: 0,
+          drawer_source_type: 'session-jsonl',
+          drawer_source_id: 'session-1',
+          start_offset: 5,
+          end_offset: 29,
+          quote_preview: 'beta gate review happens',
+          status: 'available',
+          created_at: '2026-03-11T10:00:00.000Z',
+        },
+        {
+          drawer_id: 'drawer-2',
+          drawer_scope: 'project:agentctl',
+          drawer_topic: 'ops-notes',
+          drawer_chunk_index: 1,
+          drawer_source_type: 'session-jsonl',
+          drawer_source_id: 'session-2',
+          start_offset: 0,
+          end_offset: 10,
+          quote_preview: null,
+          status: 'archived',
+          created_at: '2026-03-11T11:00:00.000Z',
+        },
+      ],
+    });
+    expect(pgPool.query).toHaveBeenCalledWith(expect.stringContaining('FROM memory_fact_sources'), [
+      'fact-1',
+    ]);
+
+    await detailApp.close();
   });
 
   it('updates a fact', async () => {
