@@ -82,7 +82,6 @@ Required repository secrets:
 Optional repository secret:
 
 - `MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64`
-
 ### What counts as a change
 
 - **Ranker or fixture schema changes** that move the committed metrics:
