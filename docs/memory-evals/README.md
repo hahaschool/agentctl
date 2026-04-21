@@ -43,6 +43,9 @@ API, or any network dependency — so it can run in CI on a bare checkout.
 
 - Local/default use is `pnpm memory:eval --split dev`. This is the only split
   intended for everyday tuning.
+- The default human-readable output prints the aggregate/category summary table,
+  a `By Tag` table, and a capped `Failure Examples` section. Use `--json` if
+  you need the raw run payload instead.
 - `--split held-out` is reserved for workflow-owned eval jobs and requires
   `MEMORY_EVAL_ALLOW_HELD_OUT=true`.
 - `--split full` is reserved for release-style eval jobs and requires

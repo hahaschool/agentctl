@@ -4,7 +4,7 @@
 
 **Goal:** Upgrade AgentCTL memory from extracted fact recall into source-grounded, measurable, privacy-safe recall with verbatim evidence, bounded injection, temporal provenance, and recovery paths.
 
-**Status sync (2026-04-21):** `main@86e15168` is current through PR #728 plus the local Phase 1.5/eval follow-ups. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, and now workflow-owned gates for `held-out/full` split execution (`86e15168`; PRs #655, #660, #667, #681, #685, #713, #722). Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, dry-run chunk/token/cost/storage estimates, and now execute-mode embedding generation/backfill for CLI-written facts with bounded batch/retry behavior (`36288808`; PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 has provenance schema/write-path groundwork, fact-detail evidence previews/unavailable markers, and optional `InjectionBudget.tierTokenCaps` context-budget enforcement (PRs #684, #688, #720, #728). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, raw drawer results under Memory Browser facts, browser-level enrichment coverage, and fact-detail evidence previews in the Memory Browser detail panel (PRs #709, #719, #723, #726, #728). Remaining plan work is private/full fixture coverage plus weekly/release workflow wiring, legacy no-provenance behavior, injector result modes/wrapper plumbing, Surface A dry-run generation, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
+**Status sync (2026-04-21):** `main@f852e5d9` is current through PR #728 plus the local Phase 1.5/eval follow-ups. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, workflow-owned gates for `held-out/full` split execution (`86e15168`; PRs #655, #660, #667, #681, #685, #713, #722), and richer human-readable reporting via By Tag tables plus capped failure examples (`f852e5d9`). Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, dry-run chunk/token/cost/storage estimates, and now execute-mode embedding generation/backfill for CLI-written facts with bounded batch/retry behavior (`36288808`; PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 has provenance schema/write-path groundwork, fact-detail evidence previews/unavailable markers, and optional `InjectionBudget.tierTokenCaps` context-budget enforcement (PRs #684, #688, #720, #728). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, raw drawer results under Memory Browser facts, browser-level enrichment coverage, and fact-detail evidence previews in the Memory Browser detail panel (PRs #709, #719, #723, #726, #728). Remaining plan work is private/full fixture coverage plus weekly/release workflow wiring, legacy no-provenance behavior, richer failure-mode-targeted eval examples, injector result modes/wrapper plumbing, Surface A dry-run generation, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
 
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
@@ -736,8 +736,11 @@ enforcement and latency percentiles, and PR #667 locks first-run /
 adds the first `memory_traverse` worker route/cold-start contract. PR #713
 committed the facts-only baseline snapshot. PR #722 wired `pnpm memory:eval
 --no-mock` to live `MemorySearch` behind explicit `DATABASE_URL` plus embedding
-endpoint guards while keeping mock ranking as the default. The remaining Phase
-0 work is private fixture growth and release/weekly held-out automation.
+endpoint guards while keeping mock ranking as the default. Local commit
+`f852e5d9` adds human-readable By Tag tables plus capped failure examples while
+leaving JSON output unchanged. The remaining Phase 0 work is private fixture
+growth, richer failure-mode-targeted examples, and release/weekly held-out
+automation.
 
 **Files:**
 
@@ -1260,8 +1263,8 @@ Add env vars through the existing centralized config path used by control-plane/
 ## Suggested PR Slices
 
 1. **PR A: Eval Harness**
-   - Delivered across PR #655/#660/#667/#681/#685/#713/#722 for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, first `memory_dedup_check` empty-DB/null-arguments route coverage, first `memory_traverse` worker cold-start/null-arguments coverage, facts-only baseline snapshot, and opt-in live `--no-mock` eval wiring.
-   - Remaining: private fixture coverage and release/weekly held-out automation.
+   - Delivered across PR #655/#660/#667/#681/#685/#713/#722 plus local `f852e5d9` for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, first `memory_dedup_check` empty-DB/null-arguments route coverage, first `memory_traverse` worker cold-start/null-arguments coverage, facts-only baseline snapshot, opt-in live `--no-mock` eval wiring, and human-readable By Tag/failure-example reporting.
+   - Remaining: private fixture coverage, richer failure-mode-targeted examples, and release/weekly held-out automation.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**
@@ -1351,7 +1354,8 @@ Add env vars through the existing centralized config path used by control-plane/
 - [x] Eval harness reports R@5, R@10, MRR, NDCG@10, grounding coverage, drawer-hit rate, and p95 search time for deterministic mock runs. *(PR #655)*
 - [x] Eval harness uses deterministic 10% dev / 90% held-out split with seed 42 and gates `held-out/full` runs behind workflow-owned env flags rather than a local bypass. *(PR #655 foundation; workflow-owned gate hardening in local `86e15168`.)*
 - [x] `pnpm memory:eval --no-mock` runs the same fixture split through live control-plane `MemorySearch` using `DATABASE_URL` plus explicit embedding endpoint config, keeps mock ranking as the default, maps returned facts into eval `factId` candidates, and closes the PG pool after the run. *(PR #722)*
-- [ ] Eval report prints per-category metrics and includes at least five examples for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
+- [x] Human-readable eval report now prints per-category/per-tag metrics plus capped failure examples without changing `--json` output. *(local `f852e5d9`)*
+- [ ] Eval report still needs failure-mode-targeted examples that guarantee coverage for vocabulary gap, temporal ambiguity, assistant-reference, person-name, and noisy-distractor failure modes.
 - [x] Planted-needle PR bench enforces `NEEDLE_` recall@5 >= 0.85 against deterministic mock ranking/scoring without DB or embedding dependencies.
 - [x] Cold-start tests prove current worker memory search, recall, and stats/report routes return structured empty results from an empty control-plane response.
 - [x] Every existing worker memory MCP route rejects `{ arguments: null }` within one second without hanging.
