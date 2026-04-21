@@ -4,7 +4,7 @@
 
 **Goal:** Upgrade AgentCTL memory from extracted fact recall into source-grounded, measurable, privacy-safe recall with verbatim evidence, bounded injection, temporal provenance, and recovery paths.
 
-**Status sync (2026-04-21):** `main@f852e5d9` is current through PR #728 plus the local Phase 1.5/eval follow-ups. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, workflow-owned gates for `held-out/full` split execution (`86e15168`; PRs #655, #660, #667, #681, #685, #713, #722), and richer human-readable reporting via By Tag tables plus capped failure examples (`f852e5d9`). Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, dry-run chunk/token/cost/storage estimates, and now execute-mode embedding generation/backfill for CLI-written facts with bounded batch/retry behavior (`36288808`; PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 has provenance schema/write-path groundwork, fact-detail evidence previews/unavailable markers, and optional `InjectionBudget.tierTokenCaps` context-budget enforcement (PRs #684, #688, #720, #728). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, raw drawer results under Memory Browser facts, browser-level enrichment coverage, and fact-detail evidence previews in the Memory Browser detail panel (PRs #709, #719, #723, #726, #728). Remaining plan work is private/full fixture coverage plus weekly/release workflow wiring, legacy no-provenance behavior, richer failure-mode-targeted eval examples, injector result modes/wrapper plumbing, Surface A dry-run generation, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
+**Status sync (2026-04-21):** `main@f852e5d9` is current through PR #728 plus the local Phase 1.5/eval follow-ups. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, workflow-owned gates for `held-out/full` split execution (`86e15168`; PRs #655, #660, #667, #681, #685, #713, #722), richer human-readable reporting via By Tag tables plus capped failure examples (`f852e5d9`), and this branch's workflow-owned weekly/release automation in `.github/workflows/memory-evals.yml` that stages gitignored fixtures under `tmp/memory-eval/`. Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, dry-run chunk/token/cost/storage estimates, and now execute-mode embedding generation/backfill for CLI-written facts with bounded batch/retry behavior (`36288808`; PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 has provenance schema/write-path groundwork, fact-detail evidence previews/unavailable markers, and optional `InjectionBudget.tierTokenCaps` context-budget enforcement (PRs #684, #688, #720, #728). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, raw drawer results under Memory Browser facts, browser-level enrichment coverage, and fact-detail evidence previews in the Memory Browser detail panel (PRs #709, #719, #723, #726, #728). Remaining plan work is private fixture secret provisioning/changelog discipline, legacy no-provenance behavior, richer failure-mode-targeted eval examples, injector result modes/wrapper plumbing, Surface A dry-run generation, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
 
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
@@ -738,9 +738,10 @@ committed the facts-only baseline snapshot. PR #722 wired `pnpm memory:eval
 --no-mock` to live `MemorySearch` behind explicit `DATABASE_URL` plus embedding
 endpoint guards while keeping mock ranking as the default. Local commit
 `f852e5d9` adds human-readable By Tag tables plus capped failure examples while
-leaving JSON output unchanged. The remaining Phase 0 work is private fixture
-growth, richer failure-mode-targeted examples, and release/weekly held-out
-automation.
+leaving JSON output unchanged. This branch adds the release/weekly held-out
+automation via `.github/workflows/memory-evals.yml`; the remaining Phase 0
+work is private fixture secret provisioning/changelog discipline and richer
+failure-mode-targeted examples.
 
 **Files:**
 
@@ -763,8 +764,8 @@ automation.
    - `EVAL_SPLIT_SEED = 42`
    - 10% dev / 90% held-out
    - tuning PRs use dev only
-   - held-out runs only on release tags and weekly cron
-   - held-out rows are immutable after the first tag; bad rows use `excluded: true` plus `fixtures/CHANGELOG.md`, not deletion or silent expected-answer edits.
+   - held-out runs only on the workflow-owned weekly cron / manual dispatch lanes; full runs only on release tags / explicit workflow dispatch
+   - held-out rows are immutable after the first tag; bad rows use `excluded: true` plus the staged gitignored `tmp/memory-eval/fixtures/CHANGELOG.md`, not deletion or silent expected-answer edits.
 5. Add API helpers:
    - `getDevSet(): Fixture[]`
    - `getHeldOutSet(): Fixture[]`
@@ -1264,7 +1265,7 @@ Add env vars through the existing centralized config path used by control-plane/
 
 1. **PR A: Eval Harness**
    - Delivered across PR #655/#660/#667/#681/#685/#713/#722 plus local `f852e5d9` for the current scope: fixture schema/sanitization, seed-42 split helpers, deterministic mock scoring, sanitized sample fixture, `pnpm memory:eval`, planted-needle recall bench, current memory MCP cold-start/null-arguments contracts, first `memory_dedup_check` empty-DB/null-arguments route coverage, first `memory_traverse` worker cold-start/null-arguments coverage, facts-only baseline snapshot, opt-in live `--no-mock` eval wiring, and human-readable By Tag/failure-example reporting.
-   - Remaining: private fixture coverage, richer failure-mode-targeted examples, and release/weekly held-out automation.
+   - Remaining: private fixture secret provisioning/changelog discipline and richer failure-mode-targeted examples.
    - No product behavior change.
 
 2. **PR B: Drawer Schema + Store**

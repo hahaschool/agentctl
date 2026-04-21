@@ -377,7 +377,9 @@ export function formatMemoryEvalMarkdown(summary: MemoryEvalSummary): string {
   const sections = [formatSummaryTable('Segment', rows)];
   const byTagRows = Object.entries(summary.byTag)
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([tag, segment]) => formatSummaryRow(tag, segment.totalRows, segment, segment.p95DurationMs));
+    .map(([tag, segment]) =>
+      formatSummaryRow(tag, segment.totalRows, segment, segment.p95DurationMs),
+    );
 
   if (byTagRows.length > 0) {
     sections.push(['## By Tag', formatSummaryTable('Tag', byTagRows)].join('\n\n'));
