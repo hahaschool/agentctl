@@ -364,7 +364,7 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       }
 
       const edges = await memoryStore.listEdges({ factId: request.params.id });
-      let sourcePreviews: MemoryFactSourcePreview[] | undefined;
+      let sourcePreviews: MemoryFactSourcePreview[] | undefined = pool ? [] : undefined;
       if (pool) {
         try {
           sourcePreviews = await listFactSourcePreviews(pool, request.params.id);

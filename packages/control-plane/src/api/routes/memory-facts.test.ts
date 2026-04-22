@@ -493,6 +493,63 @@ describe('memory fact routes', () => {
     await detailApp.close();
   });
 
+  it('returns an empty provenance array when a fact has no source spans', async () => {
+    const pgPool = {
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+    } as unknown as Pool;
+    const fact = makeFact();
+    const edge = makeEdge();
+    vi.mocked(memoryStore.getFact).mockResolvedValueOnce(fact);
+    vi.mocked(memoryStore.listEdges).mockResolvedValueOnce([edge]);
+
+    const detailApp = await createServer({ logger, memorySearch, memoryStore, pgPool });
+    await detailApp.ready();
+
+    const response = await detailApp.inject({
+      method: 'GET',
+      url: '/api/memory/facts/fact-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ok: true,
+      fact,
+      edges: [edge],
+      sourcePreviews: [],
+    });
+
+    await detailApp.close();
+  });
+
+  it('falls back to an empty provenance array when source preview lookup fails', async () => {
+    vi.mocked(logger.warn).mockClear();
+    const lookupError = new Error('preview lookup failed');
+    const pgPool = {
+      query: vi.fn().mockRejectedValue(lookupError),
+    } as unknown as Pool;
+    const fact = makeFact();
+    const edge = makeEdge();
+    vi.mocked(memoryStore.getFact).mockResolvedValueOnce(fact);
+    vi.mocked(memoryStore.listEdges).mockResolvedValueOnce([edge]);
+
+    const detailApp = await createServer({ logger, memorySearch, memoryStore, pgPool });
+    await detailApp.ready();
+
+    const response = await detailApp.inject({
+      method: 'GET',
+      url: '/api/memory/facts/fact-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ok: true,
+      fact,
+      edges: [edge],
+      sourcePreviews: [],
+    });
+    await detailApp.close();
+  });
+
   it('updates a fact', async () => {
     vi.mocked(memoryStore.updateFact).mockResolvedValueOnce(
       makeFact({ content: 'Updated memory', confidence: 0.7 }),
