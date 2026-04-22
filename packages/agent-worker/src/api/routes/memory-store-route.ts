@@ -5,6 +5,7 @@
 // POST /api/memory/facts
 // ---------------------------------------------------------------------------
 
+import { sanitizeName } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
@@ -66,6 +67,15 @@ export async function memoryStoreRoutes(
           message: 'scope must be a non-empty string',
         });
       }
+      let sanitizedScope: string;
+      try {
+        sanitizedScope = sanitizeName(body.scope);
+      } catch {
+        return reply.code(400).send({
+          error: 'INVALID_PARAMS',
+          message: 'scope contains forbidden characters',
+        });
+      }
 
       if (
         !body.entityType ||
@@ -96,7 +106,7 @@ export async function memoryStoreRoutes(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             content: body.content.trim(),
-            scope: body.scope.trim(),
+            scope: sanitizedScope,
             entityType: body.entityType,
             confidence: body.confidence,
             source: {

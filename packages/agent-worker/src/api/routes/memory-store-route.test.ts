@@ -54,6 +54,23 @@ describe('memoryStoreRoutes', () => {
     expect(response.json().error).toBe('INVALID_ENTITY_TYPE');
   });
 
+  it('returns 400 when scope contains forbidden characters', async () => {
+    globalThis.fetch = vi.fn();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-store',
+      payload: { content: 'test', scope: '../global', entityType: 'concept' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: 'INVALID_PARAMS',
+      message: 'scope contains forbidden characters',
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it('proxies fact creation to control-plane and returns 201', async () => {
     const fakeFact = { id: 'fact-new', content: 'test fact', scope: 'global' };
     globalThis.fetch = vi.fn().mockResolvedValue({

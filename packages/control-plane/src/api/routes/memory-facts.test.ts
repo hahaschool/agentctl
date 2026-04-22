@@ -289,6 +289,17 @@ describe('memory fact routes', () => {
     expect(response.json().facts).toHaveLength(1);
   });
 
+  it('rejects unsafe name filters in query parameters', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/memory/facts?sessionId=../session-1',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'INVALID_FACT_QUERY' });
+    expect(memoryStore.listFacts).not.toHaveBeenCalled();
+  });
+
   it('creates a fact', async () => {
     vi.mocked(memoryStore.addFact).mockResolvedValueOnce(makeFact());
 
@@ -380,6 +391,39 @@ describe('memory fact routes', () => {
         scope: 'project:agentctl',
         entityType: 'decision',
         sourceSpans: [{ drawerId: 'drawer-1', startOffset: 50, endOffset: 10 }],
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'INVALID_SOURCE_SPANS' });
+    expect(memoryStore.addFact).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsafe memory scope values when creating a fact', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts',
+      payload: {
+        content: 'Invalid scope',
+        scope: '../project',
+        entityType: 'decision',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: 'INVALID_SCOPE' });
+    expect(memoryStore.addFact).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsafe drawer ids in source spans', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/facts',
+      payload: {
+        content: 'Invalid span',
+        scope: 'project:agentctl',
+        entityType: 'decision',
+        sourceSpans: [{ drawerId: '../drawer', startOffset: 0, endOffset: 10 }],
       },
     });
 

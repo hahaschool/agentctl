@@ -5,7 +5,7 @@
 // GET /api/memory/facts?q=...&scope=...&limit=...
 // ---------------------------------------------------------------------------
 
-import { querySanitizerLogFields, sanitizeQuery } from '@agentctl/shared';
+import { querySanitizerLogFields, sanitizeName, sanitizeQuery } from '@agentctl/shared';
 import type { FastifyInstance, FastifyPluginOptions, FastifyReply, FastifyRequest } from 'fastify';
 import type { Logger } from 'pino';
 
@@ -66,7 +66,16 @@ export async function memorySearchRoutes(
 
       const params = new URLSearchParams({ q: sanitizedQuery.query });
       if (body.scope) {
-        params.set('scope', body.scope);
+        let sanitizedScope: string;
+        try {
+          sanitizedScope = sanitizeName(body.scope);
+        } catch {
+          return reply.code(400).send({
+            error: 'INVALID_PARAMS',
+            message: 'scope contains forbidden characters',
+          });
+        }
+        params.set('scope', sanitizedScope);
       }
       if (limit !== undefined) {
         params.set('limit', String(limit));
