@@ -269,6 +269,14 @@ export type MemoryDrawerGetResponse = {
 
 export type InjectionTier = 'pinned' | 'on-demand' | 'triggered';
 
+export const MEMORY_INJECTION_RESULT_MODES = [
+  'fact-only',
+  'fact-plus-snippet',
+  'full-drawer',
+] as const;
+
+export type MemoryInjectionResultMode = (typeof MEMORY_INJECTION_RESULT_MODES)[number];
+
 export type InjectionBudget = {
   maxTokens: number;
   maxFacts: number;
@@ -286,6 +294,7 @@ export type InjectionBudget = {
    * that tier. The global `maxTokens` always applies on top.
    */
   tierTokenCaps?: Partial<Record<InjectionTier, number>>;
+  resultMode: MemoryInjectionResultMode;
 };
 
 export const DEFAULT_INJECTION_BUDGET: InjectionBudget = {
@@ -299,6 +308,7 @@ export const DEFAULT_INJECTION_BUDGET: InjectionBudget = {
   },
   tiers: ['pinned', 'on-demand', 'triggered'] as const,
   pinnedCap: 5,
+  resultMode: 'fact-only',
 };
 
 export type TriggerContext = {

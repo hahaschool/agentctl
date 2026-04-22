@@ -1,4 +1,4 @@
-import { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError, DEFAULT_INJECTION_BUDGET } from '@agentctl/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockLogger } from '../api/routes/test-helpers.js';
 import type { Mem0Client, MemoryEntry } from './mem0-client.js';
@@ -44,6 +44,7 @@ function createMockMemoryStore(overrides: Partial<MemoryStore> = {}): MemoryStor
   return {
     addFact: vi.fn(),
     listFacts: vi.fn().mockResolvedValue([]),
+    listFactSourcePreviews: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as MemoryStore;
 }
@@ -210,6 +211,192 @@ describe('MemoryInjector', () => {
         visibleScopes: ['agent:agent-1', 'global'],
         limit: 20,
       });
+    });
+
+    it('adds bounded evidence snippets in fact-plus-snippet mode', async () => {
+      const fact1 = {
+        id: 'fact-1',
+        scope: 'agent:agent-1',
+        content: 'Use pnpm workspaces for monorepo installs',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'pattern',
+        confidence: 0.91,
+        strength: 1,
+        source: {
+          session_id: null,
+          agent_id: 'agent-1',
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+      const fact2 = {
+        id: 'fact-2',
+        scope: 'global',
+        content: 'Project uses Biome for formatting and linting',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'decision',
+        confidence: 0.89,
+        strength: 0.95,
+        source: {
+          session_id: null,
+          agent_id: null,
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([
+          { fact: fact1, score: 0.92, source_path: 'vector' },
+          { fact: fact2, score: 0.81, source_path: 'bm25' },
+        ]),
+      });
+
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([fact1, fact2]),
+        listFactSourcePreviews: vi
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              drawer_id: 'drawer-1',
+              drawer_scope: 'agent:agent-1',
+              drawer_topic: 'tooling',
+              drawer_chunk_index: 0,
+              drawer_source_type: 'manual',
+              drawer_source_id: 'source-1',
+              start_offset: 0,
+              end_offset: 120,
+              quote_preview:
+                'pnpm-workspace.yaml should stay at the repo root\nand packageManager must stay pinned.',
+              status: 'available',
+              created_at: '2026-03-11T00:00:00.000Z',
+            },
+          ])
+          .mockResolvedValueOnce([]),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        injectionBudget: {
+          ...DEFAULT_INJECTION_BUDGET,
+          resultMode: 'fact-plus-snippet',
+        },
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe(
+        '## Relevant Memories\n- Use pnpm workspaces for monorepo installs\n  Evidence: pnpm-workspace.yaml should stay at the repo root and packageManager must stay pinned.\n- Project uses Biome for formatting and linting',
+      );
+      expect(memoryStore.listFactSourcePreviews).toHaveBeenNthCalledWith(1, 'fact-1');
+      expect(memoryStore.listFactSourcePreviews).toHaveBeenNthCalledWith(2, 'fact-2');
+    });
+
+    it('falls back to fact-only when fact-plus-snippet preview support is unavailable', async () => {
+      const fact = {
+        id: 'fact-1',
+        scope: 'agent:agent-1',
+        content: 'Use pnpm workspaces for monorepo installs',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'pattern',
+        confidence: 0.91,
+        strength: 1,
+        source: {
+          session_id: null,
+          agent_id: 'agent-1',
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([{ fact, score: 0.92, source_path: 'vector' }]),
+      });
+
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([fact]),
+      });
+      delete (memoryStore as Partial<MemoryStore>).listFactSourcePreviews;
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        injectionBudget: {
+          ...DEFAULT_INJECTION_BUDGET,
+          resultMode: 'fact-plus-snippet',
+        },
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe('## Relevant Memories\n- Use pnpm workspaces for monorepo installs');
+    });
+
+    it('falls back to fact-only when full-drawer mode is requested', async () => {
+      const fact = {
+        id: 'fact-1',
+        scope: 'agent:agent-1',
+        content: 'Use pnpm workspaces for monorepo installs',
+        content_model: 'text-embedding-3-small',
+        entity_type: 'pattern',
+        confidence: 0.91,
+        strength: 1,
+        source: {
+          session_id: null,
+          agent_id: 'agent-1',
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        valid_from: '2026-03-11T00:00:00.000Z',
+        valid_until: null,
+        created_at: '2026-03-11T00:00:00.000Z',
+        accessed_at: '2026-03-11T00:00:00.000Z',
+      };
+
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([{ fact, score: 0.92, source_path: 'vector' }]),
+      });
+
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([fact]),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        injectionBudget: {
+          ...DEFAULT_INJECTION_BUDGET,
+          resultMode: 'full-drawer',
+        },
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe('## Relevant Memories\n- Use pnpm workspaces for monorepo installs');
+      expect(memoryStore.listFactSourcePreviews).not.toHaveBeenCalled();
     });
 
     it('stores a PG fact when syncing a successful run summary', async () => {
