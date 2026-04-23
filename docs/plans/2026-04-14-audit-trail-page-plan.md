@@ -1,7 +1,7 @@
 # Audit Trail Page Plan
 
 Date: 2026-04-14
-Status: Delivered in PR #507 (`main@d3fb1a0b`); plan registered in PR #509 (`main@b0464f2c`); browser-depth follow-up delivered in PR #513 (`main@5eb844ff`); backend summary contract repaired in PR #743 (`main@0a29dc69`)
+Status: Delivered in PR #507 (`main@d3fb1a0b`); plan registered in PR #509 (`main@b0464f2c`); browser-depth follow-up delivered in PR #513 (`main@5eb844ff`); backend summary contract repaired in PR #743 (`main@0a29dc69`); mobile summary contract aligned in PR #745 (`main@d2a12945`)
 Owner: Claude/Codex coordination lane
 
 ## Context
@@ -11,6 +11,8 @@ Audit actions and summaries were already available through the control-plane aud
 PR #507 closed that gap by extracting the audit trail into a dedicated `/audit` page that reuses the existing audit query layer and audit action row component, then adding a sidebar entry so operators can reach audit history without first opening Logs.
 
 Post-delivery contract note: PR #743 corrected the backend `GET /api/audit/summary` response to match the web frontend contract (`toolBreakdown`, `actionTypeBreakdown`, `avgDurationMs`). Earlier plan language that described audit summaries as already aligned should be read as UI/query reuse only, not as proof that the backend summary shape was correct before #743.
+
+Mobile follow-through note: PR #745 aligned the mobile `AuditSummary` client type and focused API-client tests with the same post-#743 contract.
 
 ## Scope
 
@@ -42,9 +44,10 @@ Post-delivery contract note: PR #743 corrected the backend `GET /api/audit/summa
 - Plan registration landed in PR #509; post-merge `main@b0464f2c` checks passed: CI `24405567418`, Security Audit `24405567419`, and Build & Publish Docker Images `24405567447`.
 - Backend-independent `/audit` Playwright coverage landed in PR #513; PR checks passed before merge, and post-merge `main@5eb844ff` checks passed: CI `24407474324`, Security Audit `24407474322`, and Build & Publish Docker Images `24407474278`.
 - Backend summary contract repair landed in PR #743 after CI, CodeQL, Security Audit, container scans, and control-plane tests passed.
+- Mobile API contract alignment landed in PR #745 after focused mobile API-client tests, CI, CodeQL, Security Audit, and container scans passed.
 - Local docs sync validation: `git diff --check`.
 
 ## Follow-Up
 
 - Keep the Logs tab and dedicated `/audit` page behavior aligned when audit filters or row rendering change.
-- Align the mobile `AuditSummary` client type with the post-#743 backend/web contract if mobile keeps using `GET /api/audit/summary`.
+- Keep web and mobile `AuditSummary` client types aligned with `GET /api/audit/summary` whenever backend summary fields change.
