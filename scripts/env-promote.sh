@@ -323,17 +323,7 @@ BETA_TERMINAL_MISMATCH=0
 BETA_PREFIX_CURRENT_OVERLAP_COUNT=0
 BETA_MISSING_TAGS=""
 
-while IFS='=' read -r key value; do
-  case "$key" in
-    SOURCE_CURRENT_COUNT) SOURCE_CURRENT_COUNT="$value" ;;
-    BETA_CURRENT_COUNT) BETA_CURRENT_COUNT="$value" ;;
-    SOURCE_MISSING_COUNT) SOURCE_MISSING_COUNT="$value" ;;
-    BETA_MISSING_COUNT) BETA_MISSING_COUNT="$value" ;;
-    BETA_TERMINAL_MISMATCH) BETA_TERMINAL_MISMATCH="$value" ;;
-    BETA_PREFIX_CURRENT_OVERLAP_COUNT) BETA_PREFIX_CURRENT_OVERLAP_COUNT="$value" ;;
-    BETA_MISSING_TAGS) BETA_MISSING_TAGS="$value" ;;
-  esac
-done < <(
+if ! PARITY_OUTPUT=$(
   FS_METADATA="$FS_METADATA" \
   FROM_APPLIED="$FROM_APPLIED" \
   BETA_APPLIED="$BETA_APPLIED" \
@@ -348,7 +338,7 @@ for line in os.environ.get("FS_METADATA", "").splitlines():
 fs_hashes = {digest for _, _, digest in fs_rows}
 fs_order = [digest for _, _, digest in fs_rows]
 
-def parse_applied(name: str) -> list[tuple[str, int]]:
+def parse_applied(name):
     rows = []
     for line in os.environ.get(name, "").splitlines():
         if not line.strip():
@@ -387,7 +377,23 @@ print(f"BETA_TERMINAL_MISMATCH={terminal_mismatch}")
 print(f"BETA_PREFIX_CURRENT_OVERLAP_COUNT={len(prefix_current_overlap)}")
 print(f"BETA_MISSING_TAGS={','.join(beta_missing[:10])}")
 PY
-)
+); then
+  log_err "Could not evaluate migration parity."
+  trap - ERR
+  exit 1
+fi
+
+while IFS='=' read -r key value; do
+  case "$key" in
+    SOURCE_CURRENT_COUNT) SOURCE_CURRENT_COUNT="$value" ;;
+    BETA_CURRENT_COUNT) BETA_CURRENT_COUNT="$value" ;;
+    SOURCE_MISSING_COUNT) SOURCE_MISSING_COUNT="$value" ;;
+    BETA_MISSING_COUNT) BETA_MISSING_COUNT="$value" ;;
+    BETA_TERMINAL_MISMATCH) BETA_TERMINAL_MISMATCH="$value" ;;
+    BETA_PREFIX_CURRENT_OVERLAP_COUNT) BETA_PREFIX_CURRENT_OVERLAP_COUNT="$value" ;;
+    BETA_MISSING_TAGS) BETA_MISSING_TAGS="$value" ;;
+  esac
+done <<< "$PARITY_OUTPUT"
 
 log "  Filesystem migrations:     ${FS_COUNT}"
 log "  Applied in ${FROM_TIER} DB: ${SOURCE_CURRENT_COUNT}/${FS_COUNT} current (${FROM_COUNT} tracker rows)"
@@ -456,13 +462,14 @@ if ! command -v pm2 &>/dev/null; then
   exit 1
 fi
 
-# Stop beta services (may already be stopped — that's OK)
-log "  Stopping beta services..."
-pm2 stop agentctl-cp-beta agentctl-worker-beta agentctl-web-beta 2>/dev/null || {
+# Delete beta services so PM2 cannot reuse stale pm_exec_path/pm_cwd from a
+# previous worktree when starting apps with the same names.
+log "  Deleting existing beta services..."
+pm2 delete agentctl-cp-beta agentctl-worker-beta agentctl-web-beta 2>/dev/null || {
   log_warn "  Some beta services were not running (OK for first deploy)."
 }
 
-# Start (or restart) from the ecosystem config
+# Start from the ecosystem config
 log "  Starting beta services from PM2 config..."
 if ! pm2 start "$PM2_CONFIG" 2>&1; then
   log_err "PM2 start failed."
