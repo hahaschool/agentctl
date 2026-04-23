@@ -33,9 +33,9 @@ describe('Audit routes — /api/audit (configured)', () => {
     });
     vi.mocked(mockDbRegistry.getAuditSummary).mockResolvedValue({
       totalActions: 0,
-      topTools: [],
-      topAgents: [],
-      errorCount: 0,
+      toolBreakdown: {},
+      actionTypeBreakdown: {},
+      avgDurationMs: null,
     });
   });
 
@@ -475,12 +475,9 @@ describe('Audit routes — GET /api/audit (query)', () => {
     });
     vi.mocked(mockDbRegistry.getAuditSummary).mockResolvedValue({
       totalActions: 50,
-      topTools: [
-        { tool: 'Bash', count: 30 },
-        { tool: 'Read', count: 20 },
-      ],
-      topAgents: [{ agentId: 'agent-1', count: 50 }],
-      errorCount: 3,
+      toolBreakdown: { Bash: 30, Read: 20 },
+      actionTypeBreakdown: { tool_use: 35, tool_result: 15 },
+      avgDurationMs: 210.5,
     });
   });
 
@@ -719,16 +716,9 @@ describe('Audit routes — GET /api/audit/summary', () => {
     vi.clearAllMocks();
     vi.mocked(mockDbRegistry.getAuditSummary).mockResolvedValue({
       totalActions: 100,
-      topTools: [
-        { tool: 'Bash', count: 50 },
-        { tool: 'Read', count: 30 },
-        { tool: 'Write', count: 20 },
-      ],
-      topAgents: [
-        { agentId: 'agent-1', count: 60 },
-        { agentId: 'agent-2', count: 40 },
-      ],
-      errorCount: 5,
+      toolBreakdown: { Bash: 50, Read: 30, Write: 20 },
+      actionTypeBreakdown: { tool_use: 70, tool_result: 30 },
+      avgDurationMs: 185.2,
     });
   });
 
@@ -746,11 +736,9 @@ describe('Audit routes — GET /api/audit/summary', () => {
 
     const body = response.json();
     expect(body.totalActions).toBe(100);
-    expect(body.topTools).toHaveLength(3);
-    expect(body.topTools[0]).toEqual({ tool: 'Bash', count: 50 });
-    expect(body.topAgents).toHaveLength(2);
-    expect(body.topAgents[0]).toEqual({ agentId: 'agent-1', count: 60 });
-    expect(body.errorCount).toBe(5);
+    expect(body.toolBreakdown).toEqual({ Bash: 50, Read: 30, Write: 20 });
+    expect(body.actionTypeBreakdown).toEqual({ tool_use: 70, tool_result: 30 });
+    expect(body.avgDurationMs).toBe(185.2);
   });
 
   it('passes agentId filter to getAuditSummary', async () => {
