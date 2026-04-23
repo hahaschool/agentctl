@@ -467,6 +467,46 @@ describe('MemoryStore', () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it('merges duplicate facts by copying source spans before invalidating duplicates', async () => {
+    const createdAt = '2026-04-23T00:00:00.000Z';
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            drawer_id: 'drawer-1',
+            start_offset: 0,
+            end_offset: 12,
+            source_json: { source: 'duplicate' },
+            created_at: createdAt,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const { store } = makeStore({ query });
+
+    const result = await store.mergeDuplicateFactsPreservingSources({
+      survivorFactId: 'fact-survivor',
+      duplicateFactIds: ['fact-duplicate', 'fact-duplicate', 'fact-survivor', 'fact-already-old'],
+    });
+
+    expect(result).toEqual({
+      survivorFactId: 'fact-survivor',
+      duplicateFactIds: ['fact-duplicate', 'fact-already-old'],
+      copiedSourceSpans: 1,
+      invalidatedFacts: 1,
+    });
+    expect(query).toHaveBeenCalledTimes(4);
+    expect(query.mock.calls[0]?.[0]).toContain('FROM memory_fact_sources');
+    expect(query.mock.calls[1]?.[0]).toContain('INSERT INTO memory_fact_sources');
+    expect(query.mock.calls[2]?.[0]).toContain('UPDATE memory_facts SET valid_until = now()');
+    expect(query.mock.calls[2]?.[1]).toEqual(['fact-duplicate']);
+    expect(query.mock.calls[3]?.[1]).toEqual(['fact-already-old']);
+  });
+
   it('updates a fact and regenerates embeddings when the content changes', async () => {
     const now = new Date().toISOString();
     const query = vi

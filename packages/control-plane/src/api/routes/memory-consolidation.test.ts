@@ -427,6 +427,103 @@ describe('memory-consolidation routes', () => {
       expect(body.ok).toBe(true);
     });
 
+    it('merges current near-duplicate items by copying provenance then invalidating the duplicate', async () => {
+      const createdAt = '2026-04-23T00:00:00.000Z';
+      pool.query
+        .mockResolvedValueOnce({ rows: [makeNearDuplicateRow()] })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              drawer_id: 'drawer-1',
+              start_offset: 2,
+              end_offset: 18,
+              source_json: { source: 'duplicate' },
+              created_at: createdAt,
+            },
+          ],
+          rowCount: 1,
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/consolidation/near-duplicate-fact-1-fact-2/action',
+        payload: { action: 'accept', status: 'accepted' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.ok).toBe(true);
+      expect(body.merge).toEqual({
+        survivorFactId: 'fact-1',
+        duplicateFactIds: ['fact-2'],
+        copiedSourceSpans: 1,
+        invalidatedFacts: 1,
+      });
+      expect(pool.query).toHaveBeenCalledTimes(4);
+      expect(pool.query.mock.calls[0]?.[0]).toContain('JOIN memory_facts b');
+      expect(pool.query.mock.calls[1]?.[0]).toContain('FROM memory_fact_sources');
+      expect(pool.query.mock.calls[1]?.[1]).toEqual([['fact-2']]);
+      expect(pool.query.mock.calls[2]?.[0]).toContain('INSERT INTO memory_fact_sources');
+      expect(pool.query.mock.calls[2]?.[1]).toEqual([
+        expect.any(String),
+        'fact-1',
+        'drawer-1',
+        2,
+        18,
+        { source: 'duplicate' },
+        createdAt,
+      ]);
+      expect(pool.query.mock.calls[3]?.[0]).toContain(
+        'UPDATE memory_facts SET valid_until = now()',
+      );
+      expect(pool.query.mock.calls[3]?.[1]).toEqual(['fact-2']);
+    });
+
+    it('merges near-duplicate actions with explicit fact ids when ids contain separators', async () => {
+      pool.query
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/consolidation/near-duplicate-fact-a-fact-b/action',
+        payload: {
+          action: 'merge',
+          status: 'accepted',
+          factIds: ['fact-a', 'fact-b'],
+          survivorFactId: 'fact-b',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().merge).toEqual({
+        survivorFactId: 'fact-b',
+        duplicateFactIds: ['fact-a'],
+        copiedSourceSpans: 0,
+        invalidatedFacts: 1,
+      });
+      expect(pool.query.mock.calls[0]?.[1]).toEqual([['fact-a']]);
+      expect(pool.query.mock.calls[1]?.[1]).toEqual(['fact-a']);
+    });
+
+    it('does not merge explicit fact ids for non-near-duplicate action ids', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/consolidation/contradiction-edge-1/action',
+        payload: {
+          action: 'merge',
+          status: 'accepted',
+          factIds: ['fact-a', 'fact-b'],
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ ok: true });
+      expect(pool.query).not.toHaveBeenCalled();
+    });
+
     it('skips a consolidation item with action=skip and status=skipped', async () => {
       const res = await app.inject({
         method: 'POST',

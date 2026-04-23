@@ -22,6 +22,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 
+import { MemoryStore } from '../../memory/memory-store.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
 export type MemoryConsolidationRoutesOptions = {
@@ -48,6 +49,14 @@ const VALID_TYPES = new Set<ConsolidationItemType>([
 ]);
 
 const VALID_STATUSES = new Set<ConsolidationStatus>(['pending', 'accepted', 'skipped']);
+const NEAR_DUPLICATE_ID_PREFIX = 'near-duplicate-';
+
+type ConsolidationActionBody = {
+  action: string;
+  status: ConsolidationStatus;
+  factIds?: string[];
+  survivorFactId?: string;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers to map raw SQL rows → ConsolidationItem
@@ -117,6 +126,67 @@ function toISOString(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'string') return value;
   return new Date().toISOString();
+}
+
+function explicitMergeTarget(
+  id: string,
+  body: ConsolidationActionBody,
+): { survivorFactId: string; duplicateFactIds: string[] } | null {
+  if (
+    id.startsWith(NEAR_DUPLICATE_ID_PREFIX) &&
+    Array.isArray(body.factIds) &&
+    body.factIds.length === 2 &&
+    id === `${NEAR_DUPLICATE_ID_PREFIX}${body.factIds[0]}-${body.factIds[1]}`
+  ) {
+    const factIds = [...new Set(body.factIds.filter((factId) => factId.length > 0))];
+    if (factIds.length !== 2) {
+      return null;
+    }
+    const survivorFactId =
+      body.survivorFactId && factIds.includes(body.survivorFactId)
+        ? body.survivorFactId
+        : factIds[0];
+    if (!survivorFactId) {
+      return null;
+    }
+    return {
+      survivorFactId,
+      duplicateFactIds: factIds.filter((factId) => factId !== survivorFactId),
+    };
+  }
+
+  return null;
+}
+
+async function resolveNearDuplicateMergeTarget(
+  pool: Pool,
+  id: string,
+  body: ConsolidationActionBody,
+): Promise<{ survivorFactId: string; duplicateFactIds: string[] } | null> {
+  const explicit = explicitMergeTarget(id, body);
+  if (explicit) {
+    return explicit;
+  }
+
+  if (!id.startsWith(NEAR_DUPLICATE_ID_PREFIX)) {
+    return null;
+  }
+
+  const q = nearDuplicatesQuery(200);
+  const { rows } = await pool.query(q.text, q.values);
+  const item = nearDuplicateItems(rows as Record<string, unknown>[]).find(
+    (candidate) => candidate.id === id,
+  );
+  if (!item || item.factIds.length < 2) {
+    return null;
+  }
+
+  const [survivorFactId, ...duplicateFactIds] = item.factIds;
+  if (!survivorFactId || duplicateFactIds.length === 0) {
+    return null;
+  }
+
+  return { survivorFactId, duplicateFactIds };
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +283,7 @@ export const memoryConsolidationRoutes: FastifyPluginAsync<
   MemoryConsolidationRoutesOptions
 > = async (app, opts) => {
   const { pool, logger } = opts;
+  const memoryStore = new MemoryStore({ pool, logger });
 
   const memoryConsolidationRateLimitMax = readRateLimitEnv(
     'MEMORY_CONSOLIDATION_RATE_LIMIT_MAX',
@@ -340,7 +411,7 @@ export const memoryConsolidationRoutes: FastifyPluginAsync<
   // POST /:id/action — Resolve a consolidation item
   app.post<{
     Params: { id: string };
-    Body: { action: string; status: ConsolidationStatus };
+    Body: ConsolidationActionBody;
   }>(
     '/:id/action',
     {
@@ -358,6 +429,8 @@ export const memoryConsolidationRoutes: FastifyPluginAsync<
           properties: {
             action: { type: 'string' },
             status: { type: 'string', enum: ['pending', 'accepted', 'skipped'] },
+            factIds: { type: 'array', maxItems: 20, items: { type: 'string', maxLength: 256 } },
+            survivorFactId: { type: 'string', maxLength: 256 },
           },
         },
       },
@@ -370,8 +443,17 @@ export const memoryConsolidationRoutes: FastifyPluginAsync<
 
       logger.info({ id, action, status }, 'Consolidation item resolved');
 
+      if (status === 'accepted' && (action === 'accept' || action === 'merge')) {
+        const mergeTarget = await resolveNearDuplicateMergeTarget(pool, id, request.body);
+        if (mergeTarget) {
+          const result = await memoryStore.mergeDuplicateFactsPreservingSources(mergeTarget);
+          logger.info({ id, action, status, ...result }, 'Near-duplicate memory facts merged');
+          return { ok: true, merge: result };
+        }
+      }
+
       // Future: persist resolution state in a consolidation_resolutions table.
-      // For now, log and acknowledge.
+      // Non-merge actions still log and acknowledge until resolution state is persisted.
       return { ok: true };
     },
   );
