@@ -51,6 +51,12 @@ type JsonlSessionMetadata = {
   branch: string | null;
 };
 
+type CodexSessionSnapshot = {
+  headLines: string[];
+  tailLines: string[];
+  totalLineEstimate: number | null;
+};
+
 /** Legacy sessions-index.json entry (Record<sessionId, entry> format). */
 type SessionIndexEntry = {
   summary?: string;
@@ -520,6 +526,8 @@ function discoverFromJsonlFiles(
  * without blocking the event loop on multi-hundred-MB files.
  */
 const JSONL_HEAD_BYTES = 128 * 1024;
+const CODEX_SESSION_HEAD_BYTES = 256 * 1024;
+const CODEX_SESSION_TAIL_BYTES = 64 * 1024;
 
 function extractJsonlSessionMetadata(
   filePath: string,
@@ -577,6 +585,36 @@ function extractJsonlSessionMetadata(
   }
 
   return state;
+}
+
+function readBoundedText(
+  filePath: string,
+  offset: number,
+  maxBytes: number,
+  logger?: DiscoveryLogger,
+): string {
+  const buffer = Buffer.allocUnsafe(maxBytes);
+  let fd: number | null = null;
+
+  try {
+    fd = openSync(filePath, 'r');
+    const bytesRead = readSync(fd, buffer, 0, maxBytes, offset);
+    return buffer.toString('utf8', 0, bytesRead);
+  } catch (err) {
+    logger?.debug(
+      { error: err instanceof Error ? err.message : String(err), path: filePath },
+      'Failed to read bounded JSONL segment during session discovery',
+    );
+    return '';
+  } finally {
+    if (fd !== null) {
+      closeSync(fd);
+    }
+  }
+}
+
+function splitJsonlLines(text: string): string[] {
+  return text.split('\n').filter((line) => line.trim());
 }
 
 function updateMetadataFromJsonlLine(line: string, state: JsonlSessionMetadata): void {
@@ -709,8 +747,8 @@ function discoverCodexSessions(
     const files = collectCodexSessionFiles(codexSessionsDir, maxDepth, logger);
     for (const filePath of files) {
       try {
-        const content = readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n').filter((l) => l.trim());
+        const snapshot = readCodexSessionSnapshot(filePath, logger);
+        const lines = snapshot.headLines;
 
         if (lines.length === 0) continue;
 
@@ -766,10 +804,11 @@ function discoverCodexSessions(
         }
 
         // For large files, get last timestamp from the end
-        if (lines.length > 200) {
-          for (let i = lines.length - 1; i >= lines.length - 10; i--) {
+        const tailLines = snapshot.tailLines.length > 0 ? snapshot.tailLines : lines;
+        if (tailLines.length > 200 || snapshot.totalLineEstimate !== null) {
+          for (let i = tailLines.length - 1; i >= Math.max(0, tailLines.length - 10); i--) {
             try {
-              const line = JSON.parse(lines[i]);
+              const line = JSON.parse(tailLines[i]);
               if (line.timestamp) {
                 lastTimestamp = line.timestamp;
                 break;
@@ -778,8 +817,12 @@ function discoverCodexSessions(
               // skip
             }
           }
-          // Estimate message count for large sessions
-          messageCount = Math.round(messageCount * (lines.length / 200));
+          if (snapshot.totalLineEstimate !== null) {
+            messageCount = Math.max(
+              messageCount,
+              Math.round(messageCount * (snapshot.totalLineEstimate / Math.max(1, lines.length))),
+            );
+          }
         }
 
         discovered.push({
@@ -799,6 +842,42 @@ function discoverCodexSessions(
       }
     }
   }
+}
+
+function readCodexSessionSnapshot(
+  filePath: string,
+  logger?: DiscoveryLogger,
+): CodexSessionSnapshot {
+  let fileSize: number | null = null;
+  try {
+    const stats = statSync(filePath);
+    if (typeof stats.size === 'number' && Number.isFinite(stats.size)) {
+      fileSize = stats.size;
+    }
+  } catch (err) {
+    logger?.debug(
+      { error: err instanceof Error ? err.message : String(err), file: filePath },
+      'Could not stat Codex session file before bounded discovery read',
+    );
+  }
+
+  const headText = readBoundedText(filePath, 0, CODEX_SESSION_HEAD_BYTES, logger);
+  const headLines = splitJsonlLines(headText);
+  if (fileSize === null || fileSize <= CODEX_SESSION_HEAD_BYTES) {
+    return { headLines, tailLines: headLines, totalLineEstimate: null };
+  }
+
+  const tailOffset = Math.max(0, fileSize - CODEX_SESSION_TAIL_BYTES);
+  const tailText = readBoundedText(filePath, tailOffset, CODEX_SESSION_TAIL_BYTES, logger);
+  const rawTailLines = splitJsonlLines(tailText);
+  const tailLines = tailOffset > 0 ? rawTailLines.slice(1) : rawTailLines;
+  const headNewlines = Math.max(1, headText.split('\n').length - 1);
+  const totalLineEstimate = Math.max(
+    headLines.length,
+    Math.round(headNewlines * (fileSize / Math.max(1, CODEX_SESSION_HEAD_BYTES))),
+  );
+
+  return { headLines, tailLines, totalLineEstimate };
 }
 
 function collectCodexSessionFiles(

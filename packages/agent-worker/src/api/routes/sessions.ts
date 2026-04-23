@@ -559,18 +559,18 @@ export async function sessionRoutes(
         }
       }
 
-      const rawJsonlPath = findSessionJsonl(claudeSessionId, safeProjectPath);
+      const resolvedJsonl = findSessionContentJsonl(claudeSessionId, safeProjectPath);
 
-      if (!rawJsonlPath) {
+      if (!resolvedJsonl) {
         return reply.status(404).send({
           error: `JSONL file for session '${claudeSessionId}' not found`,
           code: 'SESSION_CONTENT_NOT_FOUND',
         });
       }
 
-      // Path already validated by findSessionJsonl -> safeExistsSync; store for
+      // Path already validated by findSessionContentJsonl; store for
       // error logging further down.
-      const jsonlPath = sanitizePath(rawJsonlPath, getClaudeProjectsDir());
+      const jsonlPath = sanitizePath(resolvedJsonl.path, resolvedJsonl.rootDir);
 
       try {
         // Safe atomic read: sanitises path, opens with O_RDONLY|O_NOFOLLOW,
@@ -578,7 +578,7 @@ export async function sessionRoutes(
         // (js/path-injection) and TOCTOU races (js/file-system-race).
         let result: { content: string; size: number };
         try {
-          result = safeReadFileAtomic(jsonlPath, getClaudeProjectsDir(), MAX_JSONL_FILE_SIZE);
+          result = safeReadFileAtomic(jsonlPath, resolvedJsonl.rootDir, MAX_JSONL_FILE_SIZE);
         } catch (readErr) {
           const nodeErr = readErr as NodeJS.ErrnoException & { code?: string };
           if (nodeErr.code === 'ENOENT') {
@@ -1529,6 +1529,11 @@ export async function sessionRoutes(
 
 const PREVIEW_TYPES = new Set(['user', 'assistant', 'progress']);
 
+type ResolvedSessionJsonl = {
+  path: string;
+  rootDir: string;
+};
+
 /**
  * Recursively search directories under `~/.claude/projects/` for a JSONL file
  * matching `<claudeSessionId>.jsonl`, respecting a maximum depth.
@@ -1565,6 +1570,130 @@ function findSessionJsonl(claudeSessionId: string, projectPath?: string): string
 
   // Fall back to recursive search across all subdirectories
   return searchForJsonl(projectsDir, fileName, 0, projectsDir);
+}
+
+function findSessionContentJsonl(
+  sessionId: string,
+  projectPath?: string,
+): ResolvedSessionJsonl | null {
+  const claudeProjectsDir = getClaudeProjectsDir();
+  const claudePath = findSessionJsonl(sessionId, projectPath);
+  if (claudePath) {
+    return { path: claudePath, rootDir: claudeProjectsDir };
+  }
+
+  const codexPath = findCodexSessionJsonl(sessionId, projectPath);
+  if (codexPath) {
+    return { path: codexPath, rootDir: getCodexDir() };
+  }
+
+  return null;
+}
+
+function getCodexDir(): string {
+  return join(homedir(), '.codex');
+}
+
+function findCodexSessionJsonl(sessionId: string, projectPath?: string): string | null {
+  const codexDir = getCodexDir();
+  if (!existsSync(codexDir)) {
+    return null;
+  }
+
+  const roots = [
+    { dir: join(codexDir, 'archived_sessions'), maxDepth: 0 },
+    { dir: join(codexDir, 'sessions'), maxDepth: 4 },
+  ];
+
+  for (const root of roots) {
+    const found = searchForCodexJsonl(root.dir, sessionId, projectPath, 0, root.maxDepth, codexDir);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
+
+function searchForCodexJsonl(
+  dir: string,
+  sessionId: string,
+  projectPath: string | undefined,
+  currentDepth: number,
+  maxDepth: number,
+  codexDir: string,
+): string | null {
+  if (currentDepth > maxDepth) {
+    return null;
+  }
+
+  let safeDir: string;
+  try {
+    safeDir = sanitizePath(dir, codexDir);
+  } catch {
+    return null;
+  }
+
+  let entries: string[];
+  try {
+    entries = readdirSync(safeDir);
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries) {
+    let entryPath: string;
+    try {
+      entryPath = sanitizePath(join(safeDir, entry), codexDir);
+    } catch {
+      continue;
+    }
+
+    try {
+      const stats = statSync(entryPath);
+      if (stats.isDirectory()) {
+        const found = searchForCodexJsonl(
+          entryPath,
+          sessionId,
+          projectPath,
+          currentDepth + 1,
+          maxDepth,
+          codexDir,
+        );
+        if (found) {
+          return found;
+        }
+        continue;
+      }
+
+      if (stats.isFile() && entry.endsWith('.jsonl') && entry.includes(sessionId)) {
+        if (!projectPath || codexJsonlMatchesProject(entryPath, projectPath)) {
+          return entryPath;
+        }
+      }
+    } catch {
+      // Skip entries we can't stat/read.
+    }
+  }
+
+  return null;
+}
+
+function codexJsonlMatchesProject(filePath: string, projectPath: string): boolean {
+  try {
+    const firstLine = safeReadFileSync(filePath, getCodexDir()).split('\n')[0];
+    if (!firstLine?.trim()) {
+      return false;
+    }
+    const parsed = JSON.parse(firstLine) as Record<string, unknown>;
+    const payload =
+      parsed && typeof parsed.payload === 'object' && parsed.payload !== null
+        ? (parsed.payload as Record<string, unknown>)
+        : null;
+    return typeof payload?.cwd === 'string' && payload.cwd === projectPath;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -1641,6 +1770,10 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
 
   const obj = entry as Record<string, unknown>;
   const entryType = typeof obj.type === 'string' ? obj.type : null;
+
+  if (entryType === 'response_item') {
+    return parseCodexResponseItem(obj);
+  }
 
   if (!entryType || !PREVIEW_TYPES.has(entryType)) {
     return [];
@@ -1826,6 +1959,112 @@ export function parseJsonlEntry(entry: unknown): ContentMessage[] {
   }
 
   return results;
+}
+
+function parseCodexResponseItem(entry: Record<string, unknown>): ContentMessage[] {
+  const payload =
+    typeof entry.payload === 'object' && entry.payload !== null
+      ? (entry.payload as Record<string, unknown>)
+      : null;
+  if (!payload) {
+    return [];
+  }
+
+  const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp : undefined;
+  const payloadType = typeof payload.type === 'string' ? payload.type : null;
+
+  if (payloadType === 'message') {
+    const role = typeof payload.role === 'string' ? payload.role : null;
+    const content = extractCodexContent(payload.content);
+    if (!content) {
+      return [];
+    }
+
+    if (role === 'user') {
+      return [{ type: 'human', content: content.slice(0, MSG_TEXT_TRUNCATE), timestamp }];
+    }
+    if (role === 'assistant') {
+      return [{ type: 'assistant', content: content.slice(0, MSG_TEXT_TRUNCATE), timestamp }];
+    }
+    return [];
+  }
+
+  if (payloadType === 'function_call') {
+    const toolName = typeof payload.name === 'string' ? payload.name : 'tool';
+    const rawArguments =
+      typeof payload.arguments === 'string'
+        ? payload.arguments
+        : JSON.stringify(payload.arguments ?? '', null, 2);
+    return [
+      {
+        type: 'tool_use',
+        content: rawArguments.slice(0, TOOL_CONTENT_TRUNCATE),
+        toolName,
+        toolId: typeof payload.call_id === 'string' ? payload.call_id : undefined,
+        timestamp,
+      },
+    ];
+  }
+
+  if (payloadType === 'function_call_output') {
+    const rawOutput =
+      typeof payload.output === 'string'
+        ? payload.output
+        : JSON.stringify(payload.output ?? '', null, 2);
+    return [
+      {
+        type: 'tool_result',
+        content: rawOutput.slice(0, TOOL_CONTENT_TRUNCATE),
+        toolId: typeof payload.call_id === 'string' ? payload.call_id : undefined,
+        timestamp,
+      },
+    ];
+  }
+
+  if (payloadType === 'reasoning') {
+    const content = extractCodexContent(payload.summary) || extractCodexContent(payload.content);
+    return content
+      ? [{ type: 'thinking', content: content.slice(0, MSG_TEXT_TRUNCATE), timestamp }]
+      : [];
+  }
+
+  return [];
+}
+
+function extractCodexContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content.trim();
+  }
+
+  if (!Array.isArray(content)) {
+    return '';
+  }
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (typeof block === 'string') {
+      const text = block.trim();
+      if (text) {
+        parts.push(text);
+      }
+      continue;
+    }
+
+    if (typeof block !== 'object' || block === null) {
+      continue;
+    }
+
+    const value = block as Record<string, unknown>;
+    for (const key of ['text', 'content', 'input_text', 'output_text', 'summary_text']) {
+      const candidate = value[key];
+      if (typeof candidate === 'string' && candidate.trim()) {
+        parts.push(candidate.trim());
+        break;
+      }
+    }
+  }
+
+  return parts.join('\n');
 }
 
 // ---------------------------------------------------------------------------
