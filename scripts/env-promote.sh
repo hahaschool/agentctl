@@ -320,6 +320,7 @@ BETA_CURRENT_COUNT=0
 SOURCE_MISSING_COUNT="$FS_COUNT"
 BETA_MISSING_COUNT="$FS_COUNT"
 BETA_TERMINAL_MISMATCH=0
+BETA_PREFIX_CURRENT_OVERLAP_COUNT=0
 BETA_MISSING_TAGS=""
 
 while IFS='=' read -r key value; do
@@ -329,6 +330,7 @@ while IFS='=' read -r key value; do
     SOURCE_MISSING_COUNT) SOURCE_MISSING_COUNT="$value" ;;
     BETA_MISSING_COUNT) BETA_MISSING_COUNT="$value" ;;
     BETA_TERMINAL_MISMATCH) BETA_TERMINAL_MISMATCH="$value" ;;
+    BETA_PREFIX_CURRENT_OVERLAP_COUNT) BETA_PREFIX_CURRENT_OVERLAP_COUNT="$value" ;;
     BETA_MISSING_TAGS) BETA_MISSING_TAGS="$value" ;;
   esac
 done < <(
@@ -371,7 +373,10 @@ for count in range(limit, 0, -1):
         beta_current_count = count
         break
 
-terminal_mismatch = 1 if beta_order and beta_current_count == 0 else 0
+historical_prefix = beta_order[:-beta_current_count] if beta_current_count else beta_order
+prefix_current_overlap = [digest for digest in historical_prefix if digest in fs_hashes]
+
+terminal_mismatch = 1 if beta_order and (beta_current_count == 0 or prefix_current_overlap) else 0
 beta_missing = [tag for tag, _, _ in fs_rows[beta_current_count:]]
 
 print(f"SOURCE_CURRENT_COUNT={len(fs_hashes & source_hashes)}")
@@ -379,6 +384,7 @@ print(f"BETA_CURRENT_COUNT={beta_current_count}")
 print(f"SOURCE_MISSING_COUNT={len(source_missing)}")
 print(f"BETA_MISSING_COUNT={len(beta_missing)}")
 print(f"BETA_TERMINAL_MISMATCH={terminal_mismatch}")
+print(f"BETA_PREFIX_CURRENT_OVERLAP_COUNT={len(prefix_current_overlap)}")
 print(f"BETA_MISSING_TAGS={','.join(beta_missing[:10])}")
 PY
 )
@@ -399,6 +405,9 @@ fi
 # beta may have an edited, missing-middle, reordered, or future/ahead migration.
 if [[ "$BETA_TERMINAL_MISMATCH" -gt 0 ]]; then
   log_err "  Beta DB terminal migration sequence does not match the current filesystem chain."
+  if [[ "$BETA_PREFIX_CURRENT_OVERLAP_COUNT" -gt 0 ]]; then
+    log_err "  Found ${BETA_PREFIX_CURRENT_OVERLAP_COUNT} current migration hash(es) before the terminal chain."
+  fi
   log_err "  Investigate manually before promoting."
   trap - ERR
   exit 1
