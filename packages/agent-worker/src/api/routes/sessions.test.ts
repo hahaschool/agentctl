@@ -1196,6 +1196,103 @@ describe('Worker session routes', () => {
       expect(body.messages[1].content).toBe('I will fix the bug now.');
     });
 
+    it('should fall back to Codex JSONL content when Claude JSONL is absent', async () => {
+      const codexSessionId = '019db990-4211-7733-bd2e-19328e14515c';
+      const codexDir = `${FAKE_HOME}/.codex`;
+      const codexArchivedDir = `${codexDir}/archived_sessions`;
+      const codexSessionsDir = `${codexDir}/sessions`;
+      const codexFile = `${codexArchivedDir}/rollout-${codexSessionId}.jsonl`;
+      const lines = [
+        JSON.stringify({
+          type: 'session_meta',
+          payload: { id: codexSessionId, cwd: PROJECT_PATH },
+        }),
+        JSON.stringify({
+          type: 'response_item',
+          timestamp: '2026-04-23T08:58:56.912Z',
+          payload: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: 'Inspect the roadmap' }],
+          },
+        }),
+        JSON.stringify({
+          type: 'response_item',
+          timestamp: '2026-04-23T08:59:05.000Z',
+          payload: {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'I found the next slice.' }],
+          },
+        }),
+      ].join('\n');
+
+      vi.mocked(homedir).mockReturnValue(FAKE_HOME);
+      vi.mocked(existsSync).mockImplementation((p: string | URL) => {
+        const path = String(p);
+        if (path === `${FAKE_HOME}/.claude/projects`) return true;
+        if (path === `${FAKE_HOME}/.claude/projects/${ENCODED_PATH}/${codexSessionId}.jsonl`) {
+          return false;
+        }
+        if (path === codexDir) return true;
+        return false;
+      });
+      vi.mocked(readdirSync).mockImplementation((p: string | URL) => {
+        const path = String(p);
+        if (path === codexArchivedDir) return [`rollout-${codexSessionId}.jsonl`];
+        if (path === codexSessionsDir) return [];
+        return [];
+      });
+      vi.mocked(statSync).mockImplementation((p: string | URL) => {
+        if (String(p) === codexFile) {
+          return {
+            size: lines.length,
+            isDirectory: () => false,
+            isFile: () => true,
+          } as ReturnType<typeof statSync>;
+        }
+        throw new Error(`ENOENT: ${String(p)}`);
+      });
+      vi.mocked(readFileSync).mockImplementation((p: string | URL | number) => {
+        if (String(p) === codexFile) return lines;
+        throw new Error(`ENOENT: ${String(p)}`);
+      });
+
+      const contentBuf = Buffer.from(lines, 'utf-8');
+      vi.mocked(openSync).mockReturnValue(MOCK_FD);
+      vi.mocked(fstatSync).mockReturnValue({
+        size: lines.length,
+        isDirectory: () => false,
+      } as ReturnType<typeof fstatSync>);
+      vi.mocked(readSync).mockImplementation((_fd, buf: Buffer | NodeJS.ArrayBufferView) => {
+        const b = buf instanceof Buffer ? buf : Buffer.from(buf.buffer as ArrayBuffer);
+        contentBuf.copy(b, 0, 0, contentBuf.length);
+        return contentBuf.length;
+      });
+      vi.mocked(closeSync).mockImplementation(() => {});
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/sessions/content/${codexSessionId}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.totalMessages).toBe(2);
+      expect(body.messages).toEqual([
+        {
+          type: 'human',
+          content: 'Inspect the roadmap',
+          timestamp: '2026-04-23T08:58:56.912Z',
+        },
+        {
+          type: 'assistant',
+          content: 'I found the next slice.',
+          timestamp: '2026-04-23T08:59:05.000Z',
+        },
+      ]);
+    });
+
     it('should apply limit parameter', async () => {
       const lines = Array.from({ length: 5 }, (_, i) =>
         JSON.stringify({
@@ -1352,6 +1449,82 @@ describe('parseJsonlEntry', () => {
 
   it('should return empty array when type is missing', () => {
     expect(parseJsonlEntry({ message: { content: 'hi' } })).toEqual([]);
+  });
+
+  // ── Codex response_item entries ────────────────────────────────
+
+  describe('Codex response_item entries', () => {
+    it('should parse Codex user and assistant message payloads', () => {
+      expect(
+        parseJsonlEntry({
+          type: 'response_item',
+          timestamp: '2026-04-23T09:00:00Z',
+          payload: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: 'Fix preview' }],
+          },
+        }),
+      ).toEqual([{ type: 'human', content: 'Fix preview', timestamp: '2026-04-23T09:00:00Z' }]);
+
+      expect(
+        parseJsonlEntry({
+          type: 'response_item',
+          payload: {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Preview fixed' }],
+          },
+        }),
+      ).toEqual([{ type: 'assistant', content: 'Preview fixed' }]);
+    });
+
+    it('should parse Codex function call and output payloads', () => {
+      expect(
+        parseJsonlEntry({
+          type: 'response_item',
+          payload: {
+            type: 'function_call',
+            name: 'exec_command',
+            call_id: 'call-1',
+            arguments: '{"cmd":"pnpm test"}',
+          },
+        }),
+      ).toEqual([
+        {
+          type: 'tool_use',
+          content: '{"cmd":"pnpm test"}',
+          toolName: 'exec_command',
+          toolId: 'call-1',
+        },
+      ]);
+
+      expect(
+        parseJsonlEntry({
+          type: 'response_item',
+          payload: {
+            type: 'function_call_output',
+            call_id: 'call-1',
+            output: 'passed',
+          },
+        }),
+      ).toEqual([{ type: 'tool_result', content: 'passed', toolId: 'call-1' }]);
+    });
+
+    it('should ignore Codex developer messages and encrypted reasoning', () => {
+      expect(
+        parseJsonlEntry({
+          type: 'response_item',
+          payload: { type: 'message', role: 'developer', content: 'internal' },
+        }),
+      ).toEqual([]);
+      expect(
+        parseJsonlEntry({
+          type: 'response_item',
+          payload: { type: 'reasoning', encrypted_content: 'secret' },
+        }),
+      ).toEqual([]);
+    });
   });
 
   // ── Thinking blocks ────────────────────────────────────────────

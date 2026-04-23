@@ -43,7 +43,13 @@ const mockReadSync = vi.mocked(readSync);
 const mockStatSync = vi.mocked(statSync);
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  mockCloseSync.mockReset();
+  mockExistsSync.mockReset();
+  mockOpenSync.mockReset();
+  mockReaddirSync.mockReset();
+  mockReadFileSync.mockReset();
+  mockReadSync.mockReset();
+  mockStatSync.mockReset();
   mockCloseSync.mockImplementation(() => undefined);
   mockOpenSync.mockReturnValue(42);
   mockReadSync.mockImplementation(() => 0);
@@ -708,6 +714,74 @@ describe('discoverLocalSessions', () => {
         projectPath: '/Users/testuser/agentctl',
         summary: 'Fix current Codex session discovery.',
         branch: 'codex/discover-current-sessions',
+        runtime: 'codex',
+      }),
+    );
+  });
+
+  it('discovers large codex sessions without reading the full JSONL into memory', () => {
+    const codexDir = '/Users/testuser/.codex/archived_sessions';
+    const sessionFile = join(codexDir, 'large-codex-session.jsonl');
+    const head = [
+      JSON.stringify({
+        type: 'session_meta',
+        timestamp: '2026-04-20T05:30:00Z',
+        payload: {
+          id: 'codex-large-001',
+          cwd: '/Users/testuser/agentctl',
+          timestamp: '2026-04-20T05:30:00Z',
+          git: { branch: 'codex/large-discovery' },
+        },
+      }),
+      JSON.stringify({
+        type: 'response_item',
+        timestamp: '2026-04-20T05:31:00Z',
+        payload: {
+          role: 'user',
+          content: [{ type: 'input_text', text: 'Fix large Codex discovery memory usage.' }],
+        },
+      }),
+    ].join('\n');
+    const tail = [
+      'partial-line',
+      JSON.stringify({
+        type: 'response_item',
+        timestamp: '2026-04-20T08:00:00Z',
+        payload: { role: 'assistant', content: [{ type: 'output_text', text: 'Done' }] },
+      }),
+    ].join('\n');
+
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (p === codexDir) return true;
+      return false;
+    });
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) return [];
+      if (p === codexDir) return ['large-codex-session.jsonl'];
+      return [];
+    }) as typeof readdirSync);
+    mockStatSync.mockReturnValue({
+      size: 2 * 1024 * 1024,
+    } as ReturnType<typeof statSync>);
+    mockReadSync.mockImplementation((_fd, buffer, offset, length, position) => {
+      const source = position === 0 ? Buffer.from(head) : Buffer.from(tail);
+      const target = buffer as Buffer;
+      const bytes = Math.min(length, source.length);
+      source.copy(target, offset, 0, bytes);
+      return bytes;
+    });
+
+    const sessions = discoverLocalSessions();
+
+    expect(mockReadFileSync).not.toHaveBeenCalledWith(sessionFile, 'utf-8');
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'codex-large-001',
+        summary: 'Fix large Codex discovery memory usage.',
+        lastActivity: '2026-04-20T08:00:00Z',
+        branch: 'codex/large-discovery',
         runtime: 'codex',
       }),
     );
