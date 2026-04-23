@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildUnifiedDiff,
@@ -13,6 +13,7 @@ import {
   type ReviewableMemoryFact,
   resolveClaudeMemoryPath,
   runGenerateMemoryMdDryRun,
+  runGenerateMemoryMdDryRunFromSource,
 } from './generate-memory-md.js';
 
 function createFact(overrides: Partial<ReviewableMemoryFact> = {}): ReviewableMemoryFact {
@@ -65,6 +66,47 @@ describe('parseArgs', () => {
     expect(result.assumeInputReviewed).toBe(false);
     expect(result.maxFacts).toBe(8);
     expect(result.maxFactChars).toBe(140);
+  });
+
+  it('accepts a control-plane API source instead of a JSON file', () => {
+    const result = parseArgs([
+      '--project-path',
+      '/repo/agentctl',
+      '--control-plane-url',
+      'http://127.0.0.1:4111',
+      '--api-token',
+      'token-123',
+      '--api-fetch-limit',
+      '25',
+      '--facts-fetch-timeout-ms',
+      '1500',
+    ]);
+
+    expect(result.factsJsonPath).toBeUndefined();
+    expect(result.controlPlaneUrl).toBe('http://127.0.0.1:4111');
+    expect(result.apiToken).toBe('token-123');
+    expect(result.factsFetchLimit).toBe(25);
+    expect(result.factsFetchTimeoutMs).toBe(1500);
+  });
+
+  it('requires exactly one fact source', () => {
+    expect(() =>
+      parseArgs(['--project-path', '/repo/agentctl', '--facts-json', '/tmp/facts.json']),
+    ).not.toThrow();
+    expect(() =>
+      parseArgs(['--project-path', '/repo/agentctl', '--control-plane-url', 'http://localhost']),
+    ).not.toThrow();
+    expect(() => parseArgs(['--project-path', '/repo/agentctl'])).toThrow(/exactly one/i);
+    expect(() =>
+      parseArgs([
+        '--project-path',
+        '/repo/agentctl',
+        '--facts-json',
+        '/tmp/facts.json',
+        '--control-plane-url',
+        'http://localhost',
+      ]),
+    ).toThrow(/exactly one/i);
   });
 
   it('accepts explicit scope and bounded integer overrides', () => {
@@ -230,6 +272,7 @@ describe('runGenerateMemoryMdDryRun', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -276,6 +319,8 @@ describe('runGenerateMemoryMdDryRun', () => {
       assumeInputReviewed: false,
       maxFacts: 8,
       maxFactChars: 90,
+      factsFetchLimit: 500,
+      factsFetchTimeoutMs: 10_000,
       json: false,
     });
 
@@ -287,6 +332,154 @@ describe('runGenerateMemoryMdDryRun', () => {
     expect(formatMemoryMdDryRun(result)).toContain(
       'Biome is the formatter and lint baseline for touched files.',
     );
+  });
+
+  it('fetches scoped facts from the control-plane API source for dry-run selection', async () => {
+    const projectPath = path.join(tmpDir, 'agentctl');
+    const claudeProjectsDir = path.join(tmpDir, '.claude', 'projects');
+    const reviewedFact = createFact({
+      id: 'api-fact',
+      content: 'Surface A can source reviewed facts from the control-plane memory API.',
+      scope: 'project:agentctl',
+      tags: ['surface-a-reviewed'],
+    });
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: true, facts: [reviewedFact] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runGenerateMemoryMdDryRunFromSource({
+      projectPath,
+      controlPlaneUrl: 'http://127.0.0.1:4111',
+      claudeProjectsDir,
+      scope: 'project:agentctl',
+      assumeInputReviewed: false,
+      maxFacts: 8,
+      maxFactChars: 120,
+      factsFetchLimit: 25,
+      factsFetchTimeoutMs: 1500,
+      json: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestedUrl = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(requestedUrl.href).toBe(
+      'http://127.0.0.1:4111/api/memory/facts?scope=project%3Aagentctl&limit=25&offset=0',
+    );
+    expect(result.selectedFacts.map((fact) => fact.id)).toEqual(['api-fact']);
+    expect(result.proposedContent).toContain(
+      'Surface A can source reviewed facts from the control-plane memory API.',
+    );
+  });
+
+  it('paginates control-plane facts up to the API fetch limit and sends an optional bearer token', async () => {
+    const projectPath = path.join(tmpDir, 'agentctl');
+    const claudeProjectsDir = path.join(tmpDir, '.claude', 'projects');
+    const firstPageFacts = Array.from({ length: 500 }, (_, index) =>
+      createFact({
+        id: `api-fact-${String(index + 1).padStart(3, '0')}`,
+        content: `Reviewed API fact ${index + 1}.`,
+        tags: ['reviewed'],
+      }),
+    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            facts: firstPageFacts,
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            facts: [
+              createFact({
+                id: 'api-fact-3',
+                content: 'Third API fact arrives on the second page.',
+                tags: ['reviewed'],
+              }),
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runGenerateMemoryMdDryRunFromSource({
+      projectPath,
+      controlPlaneUrl: 'http://127.0.0.1:4111',
+      apiToken: 'token-123',
+      claudeProjectsDir,
+      scope: 'project:agentctl',
+      assumeInputReviewed: false,
+      maxFacts: 3,
+      maxFactChars: 120,
+      factsFetchLimit: 501,
+      factsFetchTimeoutMs: 1500,
+      json: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetchMock.mock.calls[0]?.[0])).href).toBe(
+      'http://127.0.0.1:4111/api/memory/facts?scope=project%3Aagentctl&limit=500&offset=0',
+    );
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).href).toBe(
+      'http://127.0.0.1:4111/api/memory/facts?scope=project%3Aagentctl&limit=1&offset=500',
+    );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: { Accept: 'application/json', Authorization: 'Bearer token-123' },
+    });
+    expect(result.totalFacts).toBe(501);
+    expect(result.selectedFacts).toHaveLength(3);
+  });
+
+  it('rejects malformed control-plane API responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ ok: true, rows: [] }), { status: 200 })),
+    );
+
+    await expect(
+      runGenerateMemoryMdDryRunFromSource({
+        projectPath: path.join(tmpDir, 'agentctl'),
+        controlPlaneUrl: 'http://127.0.0.1:4111',
+        claudeProjectsDir: path.join(tmpDir, '.claude', 'projects'),
+        scope: 'project:agentctl',
+        assumeInputReviewed: false,
+        maxFacts: 8,
+        maxFactChars: 120,
+        factsFetchLimit: 25,
+        factsFetchTimeoutMs: 1500,
+        json: false,
+      }),
+    ).rejects.toThrow(/facts array/i);
+  });
+
+  it('rejects non-2xx control-plane API responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ ok: false }), { status: 503 })),
+    );
+
+    await expect(
+      runGenerateMemoryMdDryRunFromSource({
+        projectPath: path.join(tmpDir, 'agentctl'),
+        controlPlaneUrl: 'http://127.0.0.1:4111',
+        claudeProjectsDir: path.join(tmpDir, '.claude', 'projects'),
+        scope: 'project:agentctl',
+        assumeInputReviewed: false,
+        maxFacts: 8,
+        maxFactChars: 120,
+        factsFetchLimit: 25,
+        factsFetchTimeoutMs: 1500,
+        json: false,
+      }),
+    ).rejects.toThrow(/HTTP 503/i);
   });
 });
 
