@@ -108,6 +108,7 @@ import { runSummaryRoutes } from './routes/run-summary.js';
 import { type RuntimeConfigRouteStore, runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionRoutes } from './routes/runtime-sessions.js';
 import { schedulerRoutes } from './routes/scheduler.js';
+import { securityFindingsRoutes } from './routes/security-findings.js';
 import { sessionTakeoverRoutes } from './routes/session-takeover.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -501,6 +502,13 @@ export async function createServer({
       prefix: '/api/audit/replay',
       dbRegistry,
     });
+
+    if (db) {
+      await app.register(securityFindingsRoutes, {
+        prefix: '/api/security',
+        db,
+      });
+    }
   }
 
   // Register LiteLLM router routes only when the client is provided.

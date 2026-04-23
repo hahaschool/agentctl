@@ -1,7 +1,7 @@
 import { ControlPlaneError } from '@agentctl/shared';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createMockLogger } from './routes/test-helpers.js';
+import { createFullMockDbRegistry, createMockLogger } from './routes/test-helpers.js';
 import { createServer } from './server.js';
 
 const logger = createMockLogger();
@@ -376,6 +376,14 @@ describe('conditional route registration', () => {
       });
       expect(response.statusCode).toBe(404);
     });
+
+    it('does not register /api/security/findings routes without db+dbRegistry', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/security/findings',
+      });
+      expect(response.statusCode).toBe(404);
+    });
   });
 
   describe('always-registered routes', () => {
@@ -414,6 +422,36 @@ describe('conditional route registration', () => {
       // Should not be 404 — the route exists even if it returns an error
       // because repeatableJobs is null
       expect(response.statusCode).not.toBe(404);
+    });
+  });
+
+  describe('with db+dbRegistry dependencies', () => {
+    it('registers GET /api/security/findings when db and dbRegistry are provided', async () => {
+      // The security-findings route was built and fully tested in isolation
+      // but was never wired into the production server, so the Security
+      // Findings UI hit a 404. This test locks in the server-level wiring
+      // so the regression cannot happen again.
+      const mockDb = {
+        execute: vi.fn().mockResolvedValue({ rows: [] }),
+      } as never;
+
+      const app = await createServer({
+        logger,
+        db: mockDb,
+        dbRegistry: createFullMockDbRegistry(),
+      });
+      await app.ready();
+
+      try {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/api/security/findings?limit=200',
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ findings: [], total: 0 });
+      } finally {
+        await app.close();
+      }
     });
   });
 
