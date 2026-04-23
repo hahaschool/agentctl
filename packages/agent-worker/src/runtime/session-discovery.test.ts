@@ -42,7 +42,18 @@ const mockReadFileSync = vi.mocked(readFileSync);
 const mockReadSync = vi.mocked(readSync);
 const mockStatSync = vi.mocked(statSync);
 
+const boundedFiles = new Map<string, string>();
+const fdPaths = new Map<number, string>();
+let nextFd = 42;
+
+function mockBoundedFile(path: string, content: string): void {
+  boundedFiles.set(path, content);
+}
+
 beforeEach(() => {
+  boundedFiles.clear();
+  fdPaths.clear();
+  nextFd = 42;
   mockCloseSync.mockReset();
   mockExistsSync.mockReset();
   mockOpenSync.mockReset();
@@ -51,8 +62,38 @@ beforeEach(() => {
   mockReadSync.mockReset();
   mockStatSync.mockReset();
   mockCloseSync.mockImplementation(() => undefined);
-  mockOpenSync.mockReturnValue(42);
-  mockReadSync.mockImplementation(() => 0);
+  mockOpenSync.mockImplementation((path) => {
+    const fd = nextFd++;
+    fdPaths.set(fd, String(path));
+    return fd;
+  });
+  mockReadSync.mockImplementation((fd, buffer, offset, length, position) => {
+    const path = fdPaths.get(fd);
+    const content = path ? boundedFiles.get(path) : undefined;
+    if (content === undefined) {
+      return 0;
+    }
+
+    const source = Buffer.from(content);
+    const start = typeof position === 'number' ? position : 0;
+    if (start >= source.length) {
+      return 0;
+    }
+
+    const bytes = Math.min(length, source.length - start);
+    source.copy(buffer as Buffer, offset, start, start + bytes);
+    return bytes;
+  });
+  mockStatSync.mockImplementation((path) => {
+    const content = boundedFiles.get(String(path));
+    if (content !== undefined) {
+      return {
+        size: Buffer.byteLength(content),
+        mtime: new Date('2026-03-01T00:00:00Z'),
+      } as ReturnType<typeof statSync>;
+    }
+    throw new Error(`ENOENT: ${String(path)}`);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -629,6 +670,10 @@ describe('discoverLocalSessions', () => {
       }
       return '';
     }) as typeof readFileSync);
+    mockBoundedFile(
+      join(codexDir, 'codex-session.jsonl'),
+      String(mockReadFileSync(join(codexDir, 'codex-session.jsonl'))),
+    );
 
     const sessions = discoverLocalSessions();
     expect(sessions).toHaveLength(1);
@@ -705,6 +750,7 @@ describe('discoverLocalSessions', () => {
       }
       return '';
     }) as typeof readFileSync);
+    mockBoundedFile(sessionFile, String(mockReadFileSync(sessionFile)));
 
     const sessions = discoverLocalSessions();
     expect(sessions).toHaveLength(1);
@@ -863,6 +909,10 @@ describe('discoverLocalSessions', () => {
       }
       return '';
     }) as typeof readFileSync);
+    mockBoundedFile(
+      join(codexDir, 'codex-session-structured.jsonl'),
+      String(mockReadFileSync(join(codexDir, 'codex-session-structured.jsonl'))),
+    );
 
     const sessions = discoverLocalSessions();
     expect(sessions).toHaveLength(1);
@@ -939,6 +989,10 @@ describe('discoverLocalSessions', () => {
       }
       return '';
     }) as typeof readFileSync);
+    mockBoundedFile(
+      join(codexDir, 'codex-session-2.jsonl'),
+      String(mockReadFileSync(join(codexDir, 'codex-session-2.jsonl'))),
+    );
 
     const sessions = discoverLocalSessions();
     expect(sessions).toHaveLength(1);

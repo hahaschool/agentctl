@@ -848,43 +848,36 @@ function readCodexSessionSnapshot(
   filePath: string,
   logger?: DiscoveryLogger,
 ): CodexSessionSnapshot {
+  let fileSize: number | null = null;
   try {
     const stats = statSync(filePath);
-    if (typeof stats.size !== 'number' || !Number.isFinite(stats.size)) {
-      throw new Error('Codex session stat did not include a finite size');
+    if (typeof stats.size === 'number' && Number.isFinite(stats.size)) {
+      fileSize = stats.size;
     }
-
-    if (stats.size <= CODEX_SESSION_HEAD_BYTES + CODEX_SESSION_TAIL_BYTES) {
-      const lines = splitJsonlLines(readFileSync(filePath, 'utf-8'));
-      return { headLines: lines, tailLines: lines, totalLineEstimate: null };
-    }
-
-    const headText = readBoundedText(filePath, 0, CODEX_SESSION_HEAD_BYTES, logger);
-    const tailOffset = Math.max(0, stats.size - CODEX_SESSION_TAIL_BYTES);
-    const tailText = readBoundedText(filePath, tailOffset, CODEX_SESSION_TAIL_BYTES, logger);
-
-    const headLines = splitJsonlLines(headText);
-    const rawTailLines = splitJsonlLines(tailText);
-    const tailLines = tailOffset > 0 ? rawTailLines.slice(1) : rawTailLines;
-    const headNewlines = Math.max(1, headText.split('\n').length - 1);
-    const totalLineEstimate = Math.max(
-      headLines.length,
-      Math.round(headNewlines * (stats.size / Math.max(1, CODEX_SESSION_HEAD_BYTES))),
-    );
-
-    return { headLines, tailLines, totalLineEstimate };
   } catch (err) {
-    try {
-      const lines = splitJsonlLines(readFileSync(filePath, 'utf-8'));
-      return { headLines: lines, tailLines: lines, totalLineEstimate: null };
-    } catch {
-      logger?.debug(
-        { error: err instanceof Error ? err.message : String(err), file: filePath },
-        'Skipped unreadable Codex session file',
-      );
-      return { headLines: [], tailLines: [], totalLineEstimate: null };
-    }
+    logger?.debug(
+      { error: err instanceof Error ? err.message : String(err), file: filePath },
+      'Could not stat Codex session file before bounded discovery read',
+    );
   }
+
+  const headText = readBoundedText(filePath, 0, CODEX_SESSION_HEAD_BYTES, logger);
+  const headLines = splitJsonlLines(headText);
+  if (fileSize === null || fileSize <= CODEX_SESSION_HEAD_BYTES) {
+    return { headLines, tailLines: headLines, totalLineEstimate: null };
+  }
+
+  const tailOffset = Math.max(0, fileSize - CODEX_SESSION_TAIL_BYTES);
+  const tailText = readBoundedText(filePath, tailOffset, CODEX_SESSION_TAIL_BYTES, logger);
+  const rawTailLines = splitJsonlLines(tailText);
+  const tailLines = tailOffset > 0 ? rawTailLines.slice(1) : rawTailLines;
+  const headNewlines = Math.max(1, headText.split('\n').length - 1);
+  const totalLineEstimate = Math.max(
+    headLines.length,
+    Math.round(headNewlines * (fileSize / Math.max(1, CODEX_SESSION_HEAD_BYTES))),
+  );
+
+  return { headLines, tailLines, totalLineEstimate };
 }
 
 function collectCodexSessionFiles(
