@@ -12,12 +12,16 @@ export type ReviewableMemoryFact = MemoryFact & {
 
 export type GenerateMemoryMdCliOptions = {
   projectPath: string;
-  factsJsonPath: string;
+  factsJsonPath?: string;
+  controlPlaneUrl?: string;
+  apiToken?: string;
   claudeProjectsDir: string;
   scope: MemoryScope;
   assumeInputReviewed: boolean;
   maxFacts: number;
   maxFactChars: number;
+  factsFetchLimit: number;
+  factsFetchTimeoutMs: number;
   json: boolean;
 };
 
@@ -48,6 +52,9 @@ const GENERATED_BLOCK_START = '<!-- agentctl-memory-md:start -->';
 const GENERATED_BLOCK_END = '<!-- agentctl-memory-md:end -->';
 const DEFAULT_MAX_FACTS = 8;
 const DEFAULT_MAX_FACT_CHARS = 140;
+const DEFAULT_FACTS_FETCH_LIMIT = 500;
+const MAX_FACTS_FETCH_PAGE_SIZE = 500;
+const DEFAULT_FACTS_FETCH_TIMEOUT_MS = 10_000;
 const DEFAULT_CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects');
 
 const ENTITY_PRIORITY: Record<MemoryFact['entity_type'], number> = {
@@ -65,18 +72,22 @@ const ENTITY_PRIORITY: Record<MemoryFact['entity_type'], number> = {
 };
 
 function usage(): string {
-  return `Usage: pnpm tsx scripts/generate-memory-md.ts --project-path <path> --facts-json <path> [options]
+  return `Usage: pnpm tsx scripts/generate-memory-md.ts --project-path <path> (--facts-json <path> | --control-plane-url <url>) [options]
 
 Create a bounded dry-run MEMORY.md proposal for a Claude project path without writing files.
 
 Options:
   --project-path <path>        Absolute or relative project path to materialize.
   --facts-json <path>          JSON file containing MemoryFact rows or { facts: MemoryFact[] }.
+  --control-plane-url <url>    Control-plane base URL to fetch /api/memory/facts from.
+  --api-token <token>          Optional bearer token. Defaults to AGENTCTL_API_TOKEN.
   --scope <scope>              Memory scope to summarize. Default: project:<basename(project-path)>.
   --claude-projects-dir <dir>  Override Claude projects root. Default: ~/.claude/projects.
   --assume-input-reviewed      Treat the input file as already reviewed.
   --max-facts <count>          Max generated bullets. Default: ${DEFAULT_MAX_FACTS}.
   --max-fact-chars <count>     Max characters per generated bullet. Default: ${DEFAULT_MAX_FACT_CHARS}.
+  --api-fetch-limit <count>    Max API facts to fetch. Default: ${DEFAULT_FACTS_FETCH_LIMIT}.
+  --facts-fetch-timeout-ms <ms> API fetch timeout. Default: ${DEFAULT_FACTS_FETCH_TIMEOUT_MS}.
   --json                       Emit the dry-run result as JSON.
   --help, -h                   Show this help text.
 
@@ -87,11 +98,15 @@ or tags including "reviewed" / "surface-a-reviewed".`;
 export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
   let projectPath: string | null = null;
   let factsJsonPath: string | null = null;
+  let controlPlaneUrl: string | null = null;
+  let apiToken: string | null = null;
   let claudeProjectsDir = DEFAULT_CLAUDE_PROJECTS_DIR;
   let scope: MemoryScope | null = null;
   let assumeInputReviewed = false;
   let maxFacts = DEFAULT_MAX_FACTS;
   let maxFactChars = DEFAULT_MAX_FACT_CHARS;
+  let factsFetchLimit = DEFAULT_FACTS_FETCH_LIMIT;
+  let factsFetchTimeoutMs = DEFAULT_FACTS_FETCH_TIMEOUT_MS;
   let json = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -118,6 +133,26 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
         throw new Error('--facts-json requires a value');
       }
       factsJsonPath = path.resolve(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--control-plane-url') {
+      const value = argv[index + 1];
+      if (!value) {
+        throw new Error('--control-plane-url requires a value');
+      }
+      controlPlaneUrl = value;
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--api-token') {
+      const value = argv[index + 1];
+      if (!value) {
+        throw new Error('--api-token requires a value');
+      }
+      apiToken = value;
       index += 1;
       continue;
     }
@@ -162,6 +197,18 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
       continue;
     }
 
+    if (arg === '--api-fetch-limit' || arg === '--facts-fetch-limit') {
+      factsFetchLimit = parsePositiveInteger(argv[index + 1], arg);
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--facts-fetch-timeout-ms') {
+      factsFetchTimeoutMs = parsePositiveInteger(argv[index + 1], '--facts-fetch-timeout-ms');
+      index += 1;
+      continue;
+    }
+
     if (arg === '--json') {
       json = true;
       continue;
@@ -175,18 +222,23 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
   if (!projectPath) {
     throw new Error('--project-path is required');
   }
-  if (!factsJsonPath) {
-    throw new Error('--facts-json is required');
+  if (Number(Boolean(factsJsonPath)) + Number(Boolean(controlPlaneUrl)) !== 1) {
+    throw new Error('Provide exactly one fact source: --facts-json or --control-plane-url');
   }
 
+  const resolvedApiToken = apiToken ?? process.env.AGENTCTL_API_TOKEN;
   return {
     projectPath,
-    factsJsonPath,
+    ...(factsJsonPath ? { factsJsonPath } : {}),
+    ...(controlPlaneUrl ? { controlPlaneUrl } : {}),
+    ...(resolvedApiToken ? { apiToken: resolvedApiToken } : {}),
     claudeProjectsDir,
     scope: scope ?? deriveDefaultScope(projectPath),
     assumeInputReviewed,
     maxFacts,
     maxFactChars,
+    factsFetchLimit,
+    factsFetchTimeoutMs,
     json,
   };
 }
@@ -239,6 +291,69 @@ export function loadFactsJson(filePath: string): ReviewableMemoryFact[] {
   }
 
   throw new Error('--facts-json must contain a JSON array or an object with a facts array');
+}
+
+export async function fetchFactsFromControlPlane(input: {
+  controlPlaneUrl: string;
+  apiToken?: string;
+  scope: MemoryScope;
+  limit: number;
+  timeoutMs: number;
+}): Promise<ReviewableMemoryFact[]> {
+  const facts: ReviewableMemoryFact[] = [];
+
+  while (facts.length < input.limit) {
+    const pageLimit = Math.min(MAX_FACTS_FETCH_PAGE_SIZE, input.limit - facts.length);
+    const page = await fetchFactsPageFromControlPlane({
+      controlPlaneUrl: input.controlPlaneUrl,
+      ...(input.apiToken ? { apiToken: input.apiToken } : {}),
+      scope: input.scope,
+      limit: pageLimit,
+      offset: facts.length,
+      timeoutMs: input.timeoutMs,
+    });
+
+    facts.push(...page);
+    if (page.length < pageLimit) {
+      break;
+    }
+  }
+
+  return facts;
+}
+
+async function fetchFactsPageFromControlPlane(input: {
+  controlPlaneUrl: string;
+  apiToken?: string;
+  scope: MemoryScope;
+  limit: number;
+  offset: number;
+  timeoutMs: number;
+}): Promise<ReviewableMemoryFact[]> {
+  const url = new URL('/api/memory/facts', ensureTrailingSlash(input.controlPlaneUrl));
+  url.searchParams.set('scope', input.scope);
+  url.searchParams.set('limit', String(input.limit));
+  url.searchParams.set('offset', String(input.offset));
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (input.apiToken) {
+    headers.Authorization = `Bearer ${input.apiToken}`;
+  }
+
+  const response = await fetch(url, {
+    headers,
+    signal: AbortSignal.timeout(input.timeoutMs),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch memory facts from control plane: HTTP ${response.status}`);
+  }
+
+  const parsed = (await response.json()) as unknown;
+  if (!isRecord(parsed) || parsed.ok !== true || !Array.isArray(parsed.facts)) {
+    throw new Error('Control-plane memory facts response must contain ok=true and a facts array');
+  }
+
+  return parsed.facts as ReviewableMemoryFact[];
 }
 
 export function selectReviewedFacts(input: {
@@ -391,7 +506,15 @@ export function buildUnifiedDiff(
 
 export function generateMemoryMdDryRun(
   facts: readonly ReviewableMemoryFact[],
-  options: Omit<GenerateMemoryMdCliOptions, 'factsJsonPath' | 'json'> & {
+  options: Omit<
+    GenerateMemoryMdCliOptions,
+    | 'factsJsonPath'
+    | 'controlPlaneUrl'
+    | 'apiToken'
+    | 'factsFetchLimit'
+    | 'factsFetchTimeoutMs'
+    | 'json'
+  > & {
     existingMemoryContent?: string | null;
   },
 ): MemoryMdDryRunResult {
@@ -429,7 +552,41 @@ export function generateMemoryMdDryRun(
 export function runGenerateMemoryMdDryRun(
   options: GenerateMemoryMdCliOptions,
 ): MemoryMdDryRunResult {
+  if (!options.factsJsonPath) {
+    throw new Error(
+      'runGenerateMemoryMdDryRun requires --facts-json; use the async runner for API sources',
+    );
+  }
+
   const facts = loadFactsJson(options.factsJsonPath);
+  const memoryPath = resolveClaudeMemoryPath(options.projectPath, options.claudeProjectsDir);
+  const existingMemoryContent = fs.existsSync(memoryPath)
+    ? fs.readFileSync(memoryPath, 'utf8')
+    : null;
+
+  return generateMemoryMdDryRun(facts, {
+    projectPath: options.projectPath,
+    claudeProjectsDir: options.claudeProjectsDir,
+    scope: options.scope,
+    assumeInputReviewed: options.assumeInputReviewed,
+    maxFacts: options.maxFacts,
+    maxFactChars: options.maxFactChars,
+    existingMemoryContent,
+  });
+}
+
+export async function runGenerateMemoryMdDryRunFromSource(
+  options: GenerateMemoryMdCliOptions,
+): Promise<MemoryMdDryRunResult> {
+  const facts = options.factsJsonPath
+    ? loadFactsJson(options.factsJsonPath)
+    : await fetchFactsFromControlPlane({
+        controlPlaneUrl: requireOption(options.controlPlaneUrl, '--control-plane-url'),
+        ...(options.apiToken ? { apiToken: options.apiToken } : {}),
+        scope: options.scope,
+        limit: options.factsFetchLimit,
+        timeoutMs: options.factsFetchTimeoutMs,
+      });
   const memoryPath = resolveClaudeMemoryPath(options.projectPath, options.claudeProjectsDir);
   const existingMemoryContent = fs.existsSync(memoryPath)
     ? fs.readFileSync(memoryPath, 'utf8')
@@ -475,7 +632,7 @@ export function formatMemoryMdDryRun(result: MemoryMdDryRunResult): string {
 
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
-  const result = runGenerateMemoryMdDryRun(options);
+  const result = await runGenerateMemoryMdDryRunFromSource(options);
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
@@ -505,6 +662,17 @@ function parsePositiveInteger(raw: string | undefined, flagName: string): number
   }
 
   return parsed;
+}
+
+function ensureTrailingSlash(value: string): string {
+  return value.endsWith('/') ? value : `${value}/`;
+}
+
+function requireOption<T>(value: T | null | undefined, flagName: string): T {
+  if (value == null) {
+    throw new Error(`${flagName} is required`);
+  }
+  return value;
 }
 
 function isReviewedFact(fact: ReviewableMemoryFact, assumeInputReviewed: boolean): boolean {
