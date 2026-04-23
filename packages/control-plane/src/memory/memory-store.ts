@@ -52,6 +52,11 @@ export type AddConsolidationItemInput = {
   reason: string;
 };
 
+export type CopyFactSourceSpansInput = {
+  survivorFactId: string;
+  duplicateFactIds: readonly string[];
+};
+
 export type AddEdgeInput = {
   source_fact_id: string;
   target_fact_id: string;
@@ -466,6 +471,48 @@ export class MemoryStore {
       status: row.drawer_archived_at == null ? 'available' : 'archived',
       created_at: toIsoString(row.created_at),
     }));
+  }
+
+  async copyFactSourceSpansToFact(input: CopyFactSourceSpansInput): Promise<number> {
+    const sourceFactIds = [...new Set(input.duplicateFactIds)].filter(
+      (factId) => factId.length > 0 && factId !== input.survivorFactId,
+    );
+    if (sourceFactIds.length === 0) {
+      return 0;
+    }
+
+    const { rows } = await this.pool.query(
+      `SELECT drawer_id, start_offset, end_offset, source_json, created_at
+       FROM memory_fact_sources
+       WHERE fact_id = ANY($1::text[])
+       ORDER BY created_at ASC, drawer_id ASC, start_offset ASC, end_offset ASC`,
+      [sourceFactIds],
+    );
+
+    let copied = 0;
+    for (const row of rows as Array<Record<string, unknown>>) {
+      const result = await this.pool.query(
+        `INSERT INTO memory_fact_sources (
+           id, fact_id, drawer_id, start_offset, end_offset, source_json, created_at
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, $7
+         )
+         ON CONFLICT (fact_id, drawer_id, start_offset, end_offset)
+         DO NOTHING`,
+        [
+          generateMemoryId(),
+          input.survivorFactId,
+          String(row.drawer_id),
+          Number(row.start_offset),
+          Number(row.end_offset),
+          row.source_json ?? {},
+          toIsoString(row.created_at),
+        ],
+      );
+      copied += result.rowCount ?? 0;
+    }
+
+    return copied;
   }
 
   async deleteFact(id: string): Promise<void> {
