@@ -114,9 +114,9 @@ export type AuditSummaryFilters = {
 
 export type AuditSummary = {
   totalActions: number;
-  topTools: { tool: string; count: number }[];
-  topAgents: { agentId: string; count: number }[];
-  errorCount: number;
+  toolBreakdown: Record<string, number>;
+  actionTypeBreakdown: Record<string, number>;
+  avgDurationMs: number | null;
 };
 
 export class DbAgentRegistry {
@@ -881,8 +881,30 @@ export class DbAgentRegistry {
       const totalResult = await totalQuery;
       const totalActions = totalResult[0]?.value ?? 0;
 
-      // Top tools (group by tool_name, order by count desc, limit 10)
-      const toolsQuery = this.db
+      // Action type breakdown (GROUP BY action_type)
+      const actionTypeQuery = this.db
+        .select({
+          actionType: agentActions.actionType,
+          count: count(),
+        })
+        .from(agentActions)
+        .leftJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
+
+      if (whereClause) {
+        actionTypeQuery.where(whereClause);
+      }
+
+      const actionTypeRows = await actionTypeQuery.groupBy(agentActions.actionType);
+
+      const actionTypeBreakdown: Record<string, number> = {};
+      for (const row of actionTypeRows) {
+        if (row.actionType) {
+          actionTypeBreakdown[row.actionType] = row.count;
+        }
+      }
+
+      // Tool breakdown (GROUP BY tool_name, skipping NULL tool names)
+      const toolQuery = this.db
         .select({
           tool: agentActions.toolName,
           count: count(),
@@ -891,65 +913,44 @@ export class DbAgentRegistry {
         .leftJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
 
       if (whereClause) {
-        toolsQuery.where(and(sql`${agentActions.toolName} IS NOT NULL`, whereClause));
+        toolQuery.where(and(sql`${agentActions.toolName} IS NOT NULL`, whereClause));
       } else {
-        toolsQuery.where(sql`${agentActions.toolName} IS NOT NULL`);
+        toolQuery.where(sql`${agentActions.toolName} IS NOT NULL`);
       }
 
-      const toolRows = await toolsQuery
-        .groupBy(agentActions.toolName)
-        .orderBy(desc(count()))
-        .limit(10);
+      const toolRows = await toolQuery.groupBy(agentActions.toolName);
 
-      const topTools = toolRows.map((row) => ({
-        tool: row.tool ?? '',
-        count: row.count,
-      }));
+      const toolBreakdown: Record<string, number> = {};
+      for (const row of toolRows) {
+        if (row.tool) {
+          toolBreakdown[row.tool] = row.count;
+        }
+      }
 
-      // Top agents (group by agent_id via join, order by count desc, limit 10)
-      const agentsQuery = this.db
+      // Average duration (AVG(duration_ms) over rows where duration_ms IS NOT NULL).
+      // Cast to float so the driver returns a number rather than a pg numeric string,
+      // and match PostgreSQL's behaviour of returning NULL when no rows qualify.
+      const durationQuery = this.db
         .select({
-          agentId: agentRuns.agentId,
-          count: count(),
+          avg: sql<number | null>`AVG(${agentActions.durationMs})::float`,
         })
-        .from(agentActions)
-        .innerJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
-
-      if (whereClause) {
-        agentsQuery.where(whereClause);
-      }
-
-      const agentRows = await agentsQuery
-        .groupBy(agentRuns.agentId)
-        .orderBy(desc(count()))
-        .limit(10);
-
-      const topAgents = agentRows.map((row) => ({
-        agentId: row.agentId ?? '',
-        count: row.count,
-      }));
-
-      // Error count (actions where action_type contains 'error' or 'deny')
-      const errorQuery = this.db
-        .select({ value: count() })
         .from(agentActions)
         .leftJoin(agentRuns, eq(agentActions.runId, agentRuns.id));
 
-      const errorCondition = sql`(${agentActions.actionType} = 'error' OR ${agentActions.approvedBy} IS NULL AND ${agentActions.actionType} = 'pre_tool_use')`;
       if (whereClause) {
-        errorQuery.where(and(errorCondition, whereClause));
+        durationQuery.where(and(sql`${agentActions.durationMs} IS NOT NULL`, whereClause));
       } else {
-        errorQuery.where(errorCondition);
+        durationQuery.where(sql`${agentActions.durationMs} IS NOT NULL`);
       }
 
-      const errorResult = await errorQuery;
-      const errorCount = errorResult[0]?.value ?? 0;
+      const durationResult = await durationQuery;
+      const avgDurationMs = durationResult[0]?.avg ?? null;
 
       return {
         totalActions,
-        topTools,
-        topAgents,
-        errorCount,
+        toolBreakdown,
+        actionTypeBreakdown,
+        avgDurationMs,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

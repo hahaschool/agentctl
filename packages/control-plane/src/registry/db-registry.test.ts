@@ -1441,16 +1441,15 @@ describe('DbAgentRegistry', () => {
     /**
      * Helper to create a mock db that sequences multiple awaits:
      *  1. totalActions count
-     *  2. topTools rows
-     *  3. topAgents rows
-     *  4. errorCount
-     * Each await on `.limit()` or the mock itself returns the next value.
+     *  2. actionType breakdown rows
+     *  3. tool breakdown rows
+     *  4. avg duration row
      */
     function createSequencedMockDb(
       totalActions: number,
+      actionTypeRows: { actionType: string | null; count: number }[],
       toolRows: { tool: string | null; count: number }[],
-      agentRows: { agentId: string | null; count: number }[],
-      errorCount: number,
+      avgDurationMs: number | null,
     ): MockDb {
       const db = createMockDb([]);
       let awaitCount = 0;
@@ -1461,11 +1460,11 @@ describe('DbAgentRegistry', () => {
           case 1:
             return Promise.resolve([{ value: totalActions }]);
           case 2:
-            return Promise.resolve(toolRows);
+            return Promise.resolve(actionTypeRows);
           case 3:
-            return Promise.resolve(agentRows);
+            return Promise.resolve(toolRows);
           case 4:
-            return Promise.resolve([{ value: errorCount }]);
+            return Promise.resolve([{ avg: avgDurationMs }]);
           default:
             return Promise.resolve([]);
         }
@@ -1477,7 +1476,7 @@ describe('DbAgentRegistry', () => {
         reject: (e: unknown) => unknown,
       ) => resolveNext().then(resolve, reject);
 
-      db.limit.mockImplementation(() => {
+      db.groupBy.mockImplementation(() => {
         // biome-ignore lint/suspicious/noThenProperty: Drizzle query builders are thenable; mock must replicate this
         const result = { ...db, then: undefined };
         // biome-ignore lint/suspicious/noThenProperty: Drizzle query builders are thenable; mock must replicate this
@@ -1495,39 +1494,39 @@ describe('DbAgentRegistry', () => {
       const db = createSequencedMockDb(
         42,
         [
+          { actionType: 'tool_use', count: 30 },
+          { actionType: 'tool_result', count: 12 },
+        ],
+        [
           { tool: 'Read', count: 20 },
           { tool: 'Write', count: 15 },
         ],
-        [{ agentId: 'agent-1', count: 30 }],
-        5,
+        123.4,
       );
 
       const reg = new DbAgentRegistry(db as unknown as Database, logger);
       const summary = await reg.getAuditSummary({});
 
       expect(summary.totalActions).toBe(42);
-      expect(summary.topTools).toHaveLength(2);
-      expect(summary.topTools[0]).toEqual({ tool: 'Read', count: 20 });
-      expect(summary.topTools[1]).toEqual({ tool: 'Write', count: 15 });
-      expect(summary.topAgents).toHaveLength(1);
-      expect(summary.topAgents[0]).toEqual({ agentId: 'agent-1', count: 30 });
-      expect(summary.errorCount).toBe(5);
+      expect(summary.actionTypeBreakdown).toEqual({ tool_use: 30, tool_result: 12 });
+      expect(summary.toolBreakdown).toEqual({ Read: 20, Write: 15 });
+      expect(summary.avgDurationMs).toBe(123.4);
     });
 
-    it('returns zeros when no data exists', async () => {
-      const db = createSequencedMockDb(0, [], [], 0);
+    it('returns zeros + null avg when no data exists', async () => {
+      const db = createSequencedMockDb(0, [], [], null);
 
       const reg = new DbAgentRegistry(db as unknown as Database, logger);
       const summary = await reg.getAuditSummary({});
 
       expect(summary.totalActions).toBe(0);
-      expect(summary.topTools).toHaveLength(0);
-      expect(summary.topAgents).toHaveLength(0);
-      expect(summary.errorCount).toBe(0);
+      expect(summary.actionTypeBreakdown).toEqual({});
+      expect(summary.toolBreakdown).toEqual({});
+      expect(summary.avgDurationMs).toBeNull();
     });
 
     it('applies agentId filter', async () => {
-      const db = createSequencedMockDb(10, [], [], 0);
+      const db = createSequencedMockDb(10, [], [], null);
 
       const reg = new DbAgentRegistry(db as unknown as Database, logger);
       await reg.getAuditSummary({ agentId: 'agent-1' });
@@ -1537,7 +1536,7 @@ describe('DbAgentRegistry', () => {
     });
 
     it('applies from and to date filters', async () => {
-      const db = createSequencedMockDb(10, [], [], 0);
+      const db = createSequencedMockDb(10, [], [], null);
 
       const reg = new DbAgentRegistry(db as unknown as Database, logger);
       await reg.getAuditSummary({ from: '2025-01-01', to: '2025-12-31' });
@@ -1545,22 +1544,22 @@ describe('DbAgentRegistry', () => {
       expect(db.where).toHaveBeenCalled();
     });
 
-    it('handles null tool names by defaulting to empty string', async () => {
-      const db = createSequencedMockDb(5, [{ tool: null, count: 5 }], [], 0);
+    it('skips breakdown rows with null keys', async () => {
+      // Action type is NOT NULL in the schema, but the LEFT JOIN can still
+      // emit rows with NULL tool names, and tests may simulate either.
+      // Either way, the breakdown should never include a null/empty key.
+      const db = createSequencedMockDb(
+        5,
+        [{ actionType: null, count: 3 }],
+        [{ tool: null, count: 5 }],
+        null,
+      );
 
       const reg = new DbAgentRegistry(db as unknown as Database, logger);
       const summary = await reg.getAuditSummary({});
 
-      expect(summary.topTools[0].tool).toBe('');
-    });
-
-    it('handles null agentId by defaulting to empty string', async () => {
-      const db = createSequencedMockDb(5, [], [{ agentId: null, count: 5 }], 0);
-
-      const reg = new DbAgentRegistry(db as unknown as Database, logger);
-      const summary = await reg.getAuditSummary({});
-
-      expect(summary.topAgents[0].agentId).toBe('');
+      expect(summary.toolBreakdown).toEqual({});
+      expect(summary.actionTypeBreakdown).toEqual({});
     });
 
     it('defaults totalActions to 0 when count result is empty', async () => {

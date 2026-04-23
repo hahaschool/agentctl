@@ -95,9 +95,9 @@ export function createFullMockDbRegistry(
     queryActions: vi.fn().mockResolvedValue({ actions: [], total: 0, hasMore: false }),
     getAuditSummary: vi.fn().mockResolvedValue({
       totalActions: 0,
-      topTools: [],
-      topAgents: [],
-      errorCount: 0,
+      toolBreakdown: {},
+      actionTypeBreakdown: {},
+      avgDurationMs: null,
     }),
     ...overrides,
   } as unknown as DbAgentRegistry;
