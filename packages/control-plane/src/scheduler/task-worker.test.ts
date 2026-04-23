@@ -351,9 +351,9 @@ describe('createTaskWorker()', () => {
   describe('processor — memory injection', () => {
     it('prepends memory context to the prompt when memoryInjector returns context', async () => {
       const registry = createMockRegistry();
-      const memoryInjector = createMockMemoryInjector(
-        '## Relevant Memories\n- User prefers TypeScript',
-      );
+      const memoryContext =
+        '## Relevant Memories\n- User prefers TypeScript\n  Evidence: Prefer strict mode for new services';
+      const memoryInjector = createMockMemoryInjector(memoryContext);
       mockFetchSuccess();
 
       createTaskWorker({
@@ -373,11 +373,11 @@ describe('createTaskWorker()', () => {
       expect(fetchCall).toBeDefined();
       const requestBody = JSON.parse(fetchCall[1]?.body as string) as { prompt: string };
 
-      expect(requestBody.prompt).toMatch(/## Relevant Memories/);
-      expect(requestBody.prompt).toMatch(/Write the auth module/);
-      expect(requestBody.prompt.indexOf('## Relevant Memories')).toBeLessThan(
-        requestBody.prompt.indexOf('Write the auth module'),
+      expect(memoryInjector.buildMemoryContext).toHaveBeenCalledWith(
+        'agent-abc',
+        'Write the auth module',
       );
+      expect(requestBody.prompt).toBe(`${memoryContext}\n\nWrite the auth module`);
     });
 
     it('uses the original prompt unchanged when memoryInjector returns empty string', async () => {

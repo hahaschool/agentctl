@@ -12,6 +12,7 @@ import type {
   MemoryEdge,
   MemoryFact,
   MemoryFactSourcePreview,
+  MemoryInjectionResultMode,
   MemoryReport,
   MemoryScope,
   MemorySearchResult,
@@ -218,7 +219,14 @@ describe('memory types', () => {
       },
       tiers: ['pinned', 'on-demand', 'triggered'],
       pinnedCap: 5,
+      resultMode: 'fact-only',
     });
+  });
+
+  it('supports the planned memory injection result modes', () => {
+    const modes: MemoryInjectionResultMode[] = ['fact-only', 'fact-plus-snippet', 'full-drawer'];
+
+    expect(modes).toEqual(['fact-only', 'fact-plus-snippet', 'full-drawer']);
   });
 
   it('supports pinned and trigger_spec fields on MemoryFact', () => {

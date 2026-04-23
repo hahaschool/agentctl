@@ -270,6 +270,7 @@ export type {
   MemoryFact,
   MemoryFactSourcePreview,
   MemoryFactSourcePreviewStatus,
+  MemoryInjectionResultMode,
   MemoryObservation,
   MemoryReport,
   MemoryReportType,
@@ -286,7 +287,12 @@ export type {
   TriggerContext,
   TriggerSpec,
 } from './memory.js';
-export { DEFAULT_INJECTION_BUDGET, MEMORY_ENTITY_TYPES, MEMORY_RELATION_TYPES } from './memory.js';
+export {
+  DEFAULT_INJECTION_BUDGET,
+  MEMORY_ENTITY_TYPES,
+  MEMORY_INJECTION_RESULT_MODES,
+  MEMORY_RELATION_TYPES,
+} from './memory.js';
 export type {
   AutoUpdateDryRunEvent,
   AutoUpdateLastRun,

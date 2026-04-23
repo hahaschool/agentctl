@@ -7,6 +7,7 @@ import type {
   FeedbackSignal,
   MemoryEdge,
   MemoryFact,
+  MemoryFactSourcePreview,
   MemoryScope,
   MemoryStats,
   RelationType,
@@ -17,6 +18,7 @@ import type { Logger } from 'pino';
 import type { EmbeddingClient } from './embedding-client.js';
 
 const DEFAULT_CONTENT_MODEL = 'text-embedding-3-small';
+const MAX_FACT_QUOTE_PREVIEW_LENGTH = 240;
 
 export type MemoryStoreOptions = {
   pool: Pool;
@@ -155,6 +157,23 @@ function normalizeMemoryName(value: string, field: string): string {
   } catch {
     throw new Error(`Invalid memory ${field}`);
   }
+}
+
+function buildFactQuotePreview(
+  content: string,
+  startOffset: number,
+  endOffset: number,
+): string | null {
+  const normalizedStart = Math.max(0, Math.min(startOffset, content.length));
+  const normalizedEnd = Math.max(normalizedStart, Math.min(endOffset, content.length));
+  const preview = content.slice(normalizedStart, normalizedEnd).trim();
+  if (!preview) {
+    return null;
+  }
+  if (preview.length <= MAX_FACT_QUOTE_PREVIEW_LENGTH) {
+    return preview;
+  }
+  return `${preview.slice(0, MAX_FACT_QUOTE_PREVIEW_LENGTH - 3)}...`;
 }
 
 export class MemoryStore {
@@ -404,6 +423,49 @@ export class MemoryStore {
     );
 
     return (rows as Record<string, unknown>[]).map((row) => this.rowToFact(row));
+  }
+
+  async listFactSourcePreviews(factId: string): Promise<MemoryFactSourcePreview[]> {
+    const { rows } = await this.pool.query(
+      `SELECT
+         mfs.drawer_id,
+         md.scope AS drawer_scope,
+         md.topic AS drawer_topic,
+         md.chunk_index AS drawer_chunk_index,
+         md.source_type AS drawer_source_type,
+         md.source_id AS drawer_source_id,
+         mfs.start_offset,
+         mfs.end_offset,
+         md.content AS drawer_content,
+         md.archived_at AS drawer_archived_at,
+         mfs.created_at
+       FROM memory_fact_sources mfs
+       INNER JOIN memory_drawers md ON md.id = mfs.drawer_id
+       WHERE mfs.fact_id = $1
+       ORDER BY mfs.created_at ASC, mfs.start_offset ASC`,
+      [factId],
+    );
+
+    return (rows as Array<Record<string, unknown>>).map((row) => ({
+      drawer_id: String(row.drawer_id),
+      drawer_scope: row.drawer_scope as MemoryScope,
+      drawer_topic: String(row.drawer_topic),
+      drawer_chunk_index: Number(row.drawer_chunk_index),
+      drawer_source_type: row.drawer_source_type as MemoryFactSourcePreview['drawer_source_type'],
+      drawer_source_id: String(row.drawer_source_id),
+      start_offset: Number(row.start_offset),
+      end_offset: Number(row.end_offset),
+      quote_preview:
+        row.drawer_archived_at == null
+          ? buildFactQuotePreview(
+              String(row.drawer_content ?? ''),
+              Number(row.start_offset),
+              Number(row.end_offset),
+            )
+          : null,
+      status: row.drawer_archived_at == null ? 'available' : 'archived',
+      created_at: toIsoString(row.created_at),
+    }));
   }
 
   async deleteFact(id: string): Promise<void> {

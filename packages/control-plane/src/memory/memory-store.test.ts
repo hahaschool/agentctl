@@ -310,6 +310,76 @@ describe('MemoryStore', () => {
     expect(pool.query).not.toHaveBeenCalled();
   });
 
+  it('lists fact source previews with archived markers', async () => {
+    const createdAt = new Date().toISOString();
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          drawer_id: 'drawer-1',
+          drawer_scope: 'global',
+          drawer_topic: 'tooling',
+          drawer_chunk_index: 0,
+          drawer_source_type: 'manual',
+          drawer_source_id: 'source-1',
+          start_offset: 5,
+          end_offset: 15,
+          drawer_content: '01234abcdefghij67890',
+          drawer_archived_at: null,
+          created_at: createdAt,
+        },
+        {
+          drawer_id: 'drawer-2',
+          drawer_scope: 'global',
+          drawer_topic: 'archived-tooling',
+          drawer_chunk_index: 1,
+          drawer_source_type: 'manual',
+          drawer_source_id: 'source-2',
+          start_offset: 0,
+          end_offset: 10,
+          drawer_content: 'should-not-show',
+          drawer_archived_at: createdAt,
+          created_at: createdAt,
+        },
+      ],
+      rowCount: 2,
+    });
+    const { store } = makeStore({ query });
+
+    const previews = await store.listFactSourcePreviews('fact-1');
+
+    expect(previews).toEqual([
+      {
+        drawer_id: 'drawer-1',
+        drawer_scope: 'global',
+        drawer_topic: 'tooling',
+        drawer_chunk_index: 0,
+        drawer_source_type: 'manual',
+        drawer_source_id: 'source-1',
+        start_offset: 5,
+        end_offset: 15,
+        quote_preview: 'abcdefghij',
+        status: 'available',
+        created_at: createdAt,
+      },
+      {
+        drawer_id: 'drawer-2',
+        drawer_scope: 'global',
+        drawer_topic: 'archived-tooling',
+        drawer_chunk_index: 1,
+        drawer_source_type: 'manual',
+        drawer_source_id: 'source-2',
+        start_offset: 0,
+        end_offset: 10,
+        quote_preview: null,
+        status: 'archived',
+        created_at: createdAt,
+      },
+    ]);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('FROM memory_fact_sources mfs'), [
+      'fact-1',
+    ]);
+  });
+
   it('executes delete, strength update, and invalidation mutations', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
     const { store } = makeStore({ query });

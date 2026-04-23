@@ -1,4 +1,10 @@
-import type { InjectionBudget, TriggerContext } from '@agentctl/shared';
+import type {
+  InjectionBudget,
+  MemoryFact,
+  MemoryFactSourcePreview,
+  MemoryInjectionResultMode,
+  TriggerContext,
+} from '@agentctl/shared';
 import { ControlPlaneError, DEFAULT_INJECTION_BUDGET } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
@@ -8,14 +14,21 @@ import type { MemorySearch } from './memory-search.js';
 import type { MemoryStore } from './memory-store.js';
 
 const DEFAULT_MAX_MEMORIES = 10;
+const DEFAULT_INJECTION_RESULT_MODE = DEFAULT_INJECTION_BUDGET.resultMode;
+const MAX_SNIPPET_FACTS = 3;
+const MAX_SNIPPET_CHARS = 160;
+const MAX_TOTAL_SNIPPET_CHARS = MAX_SNIPPET_FACTS * MAX_SNIPPET_CHARS;
 
 export type MemoryBackend = 'mem0' | 'postgres';
+
+type MemoryStoreLike = Pick<MemoryStore, 'addFact' | 'listFacts'> &
+  Partial<Pick<MemoryStore, 'listFactSourcePreviews'>>;
 
 export type MemoryInjectorOptions = {
   backend?: MemoryBackend;
   mem0Client?: Mem0Client;
   memorySearch?: Pick<MemorySearch, 'search'>;
-  memoryStore?: Pick<MemoryStore, 'addFact' | 'listFacts'>;
+  memoryStore?: MemoryStoreLike;
   maxMemories?: number;
   injectionBudget?: InjectionBudget;
   logger: Logger;
@@ -25,9 +38,10 @@ export class MemoryInjector {
   private readonly backend: MemoryBackend | null;
   private readonly mem0Client: Mem0Client | null;
   private readonly memorySearch: Pick<MemorySearch, 'search'> | null;
-  private readonly memoryStore: Pick<MemoryStore, 'addFact' | 'listFacts'> | null;
+  private readonly memoryStore: MemoryStoreLike | null;
   private readonly maxMemories: number;
   private readonly injectionBudget: InjectionBudget;
+  private readonly resultMode: MemoryInjectionResultMode;
   private readonly logger: Logger;
 
   constructor(options: MemoryInjectorOptions) {
@@ -38,6 +52,7 @@ export class MemoryInjector {
     this.injectionBudget = options.injectionBudget ?? DEFAULT_INJECTION_BUDGET;
     this.logger = options.logger;
     this.backend = this.resolveBackend(options.backend ?? null);
+    this.resultMode = this.resolveResultMode(this.injectionBudget.resultMode);
   }
 
   /**
@@ -54,7 +69,10 @@ export class MemoryInjector {
     taskPrompt: string,
     triggerContext?: TriggerContext,
   ): Promise<string> {
-    this.logger.debug({ agentId, promptLength: taskPrompt.length }, 'Building memory context');
+    this.logger.debug(
+      { agentId, promptLength: taskPrompt.length, resultMode: this.resultMode },
+      'Building memory context',
+    );
 
     if (this.backend === 'postgres') {
       return this.buildPostgresMemoryContext(agentId, taskPrompt, triggerContext);
@@ -168,6 +186,38 @@ export class MemoryInjector {
     return null;
   }
 
+  private resolveResultMode(requestedMode?: MemoryInjectionResultMode): MemoryInjectionResultMode {
+    const resultMode = requestedMode ?? DEFAULT_INJECTION_RESULT_MODE;
+
+    if (resultMode === 'full-drawer') {
+      this.logger.warn(
+        { requestedMode: resultMode },
+        'full-drawer injection mode is not implemented yet - falling back to fact-only',
+      );
+      return DEFAULT_INJECTION_RESULT_MODE;
+    }
+
+    if (resultMode === 'fact-plus-snippet') {
+      if (this.backend !== 'postgres') {
+        this.logger.warn(
+          { requestedMode: resultMode, backend: this.backend },
+          'fact-plus-snippet injection mode requires the postgres backend - falling back to fact-only',
+        );
+        return DEFAULT_INJECTION_RESULT_MODE;
+      }
+
+      if (!this.memoryStore || typeof this.memoryStore.listFactSourcePreviews !== 'function') {
+        this.logger.warn(
+          { requestedMode: resultMode },
+          'fact-plus-snippet injection mode requires fact source preview support - falling back to fact-only',
+        );
+        return DEFAULT_INJECTION_RESULT_MODE;
+      }
+    }
+
+    return resultMode;
+  }
+
   private async buildPostgresMemoryContext(
     agentId: string,
     taskPrompt: string,
@@ -204,7 +254,7 @@ export class MemoryInjector {
         return '';
       }
 
-      const memoryLines = injectionResult.facts.map((fact) => `- ${fact.content}`);
+      const memoryLines = await this.renderMemoryLines(injectionResult.facts);
       const context = `## Relevant Memories\n${memoryLines.join('\n')}`;
 
       this.logger.info(
@@ -213,6 +263,7 @@ export class MemoryInjector {
           memoryCount: injectionResult.facts.length,
           tokenCount: injectionResult.tokenCount,
           tierBreakdown: injectionResult.tierBreakdown,
+          resultMode: this.resultMode,
         },
         'PG memory context built with 3-tier budget',
       );
@@ -269,6 +320,102 @@ export class MemoryInjector {
       }
       this.logger.error({ agentId, err: error }, 'Unexpected error syncing PG memory after run');
     }
+  }
+
+  private async renderMemoryLines(facts: readonly MemoryFact[]): Promise<string[]> {
+    if (this.resultMode === 'fact-plus-snippet') {
+      return this.renderFactPlusSnippetLines(facts);
+    }
+
+    return facts.map((fact) => `- ${fact.content}`);
+  }
+
+  private async renderFactPlusSnippetLines(facts: readonly MemoryFact[]): Promise<string[]> {
+    if (!this.memoryStore || typeof this.memoryStore.listFactSourcePreviews !== 'function') {
+      return facts.map((fact) => `- ${fact.content}`);
+    }
+
+    try {
+      const previewLoader = this.memoryStore.listFactSourcePreviews.bind(this.memoryStore);
+      const snippetCandidates = await Promise.all(
+        facts.slice(0, MAX_SNIPPET_FACTS).map(async (fact) => ({
+          factId: fact.id,
+          snippet: this.selectSnippetForInjection(await previewLoader(fact.id)),
+        })),
+      );
+
+      const snippetsByFactId = new Map(
+        snippetCandidates
+          .filter(
+            (candidate): candidate is { factId: string; snippet: string } =>
+              candidate.snippet !== null,
+          )
+          .map((candidate) => [candidate.factId, candidate.snippet]),
+      );
+
+      let remainingSnippetChars = MAX_TOTAL_SNIPPET_CHARS;
+      const lines: string[] = [];
+
+      for (const fact of facts) {
+        lines.push(`- ${fact.content}`);
+        const snippet = snippetsByFactId.get(fact.id);
+        if (!snippet || remainingSnippetChars <= 0) {
+          continue;
+        }
+
+        const cappedSnippet = this.capSnippetForBudget(snippet, remainingSnippetChars);
+        if (!cappedSnippet) {
+          continue;
+        }
+
+        lines.push(`  Evidence: ${cappedSnippet}`);
+        remainingSnippetChars -= cappedSnippet.length;
+      }
+
+      return lines;
+    } catch (error: unknown) {
+      this.logger.warn(
+        { err: error, resultMode: this.resultMode },
+        'Failed to hydrate evidence snippets for memory injection - falling back to fact-only',
+      );
+      return facts.map((fact) => `- ${fact.content}`);
+    }
+  }
+
+  private selectSnippetForInjection(previews: readonly MemoryFactSourcePreview[]): string | null {
+    const availablePreview = previews.find(
+      (preview) => preview.status === 'available' && preview.quote_preview !== null,
+    );
+    if (!availablePreview?.quote_preview) {
+      return null;
+    }
+
+    return this.normalizeSnippetPreview(availablePreview.quote_preview);
+  }
+
+  private normalizeSnippetPreview(preview: string): string | null {
+    const normalized = preview.replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+      return null;
+    }
+    if (normalized.length <= MAX_SNIPPET_CHARS) {
+      return normalized;
+    }
+    return `${normalized.slice(0, MAX_SNIPPET_CHARS - 3)}...`;
+  }
+
+  private capSnippetForBudget(snippet: string, remainingSnippetChars: number): string | null {
+    const maxSnippetChars = Math.min(MAX_SNIPPET_CHARS, remainingSnippetChars);
+    if (maxSnippetChars <= 0) {
+      return null;
+    }
+    if (snippet.length <= maxSnippetChars) {
+      return snippet;
+    }
+    if (maxSnippetChars <= 3) {
+      return '.'.repeat(maxSnippetChars);
+    }
+    return `${snippet.slice(0, maxSnippetChars - 3)}...`;
   }
 
   private stringMetadata(
