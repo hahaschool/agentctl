@@ -5,9 +5,18 @@
 // Uses CliSessionManager to spawn/stop `claude -p` subprocesses.
 // ---------------------------------------------------------------------------
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  constants as fsConstants,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readSync,
+  statSync,
+} from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, normalize, resolve as resolvePath } from 'node:path';
+import { dirname, join, normalize, relative, resolve as resolvePath, sep } from 'node:path';
 
 import type { AgentEvent, ContentMessage } from '@agentctl/shared';
 import { AgentError, WorkerError } from '@agentctl/shared';
@@ -1591,7 +1600,29 @@ function findSessionContentJsonl(
 }
 
 function getCodexDir(): string {
-  return join(homedir(), '.codex');
+  return process.env.CODEX_HOME ?? join(homedir(), '.codex');
+}
+
+function normalizeCodexProjectPath(projectPath: string): string {
+  let normalizedPath = normalize(projectPath);
+  const segments = normalizedPath.split('/');
+  const worktreesIndex = segments.findIndex((segment, index) => {
+    if (segment !== 'worktrees') {
+      return false;
+    }
+    const parent = segments[index - 1];
+    return parent === '.codex' || parent === '.claude' || parent === 'codex' || parent === 'claude';
+  });
+  if (worktreesIndex >= 1 && worktreesIndex + 2 < segments.length) {
+    normalizedPath = join(homedir(), ...segments.slice(worktreesIndex + 2));
+  }
+
+  const normalizedSegments = normalizedPath.split('/');
+  if (normalizedSegments.at(-2) === '.trees' && normalizedSegments.length > 2) {
+    return normalizedSegments.slice(0, -2).join('/') || '/';
+  }
+
+  return normalizedPath;
 }
 
 function findCodexSessionJsonl(sessionId: string, projectPath?: string): string | null {
@@ -1667,7 +1698,7 @@ function searchForCodexJsonl(
       }
 
       if (stats.isFile() && entry.endsWith('.jsonl') && entry.includes(sessionId)) {
-        if (!projectPath || codexJsonlMatchesProject(entryPath, projectPath)) {
+        if (!projectPath || codexJsonlMatchesProject(entryPath, projectPath, codexDir)) {
           return entryPath;
         }
       }
@@ -1679,9 +1710,33 @@ function searchForCodexJsonl(
   return null;
 }
 
-function codexJsonlMatchesProject(filePath: string, projectPath: string): boolean {
+function readFirstLineAtomic(filePath: string, codexDir: string, maxBytes = 64 * 1024): string {
+  const safe = sanitizePath(filePath, codexDir);
+  const resolvedBase = resolvePath(normalize(codexDir));
+  const relativePath = relative(resolvedBase, safe);
+  if (relativePath.startsWith(`..${sep}`) || relativePath === '..') {
+    throw new Error(`Resolved path "${safe}" is outside the allowed base path`);
+  }
+
+  const fd = openSync(safe, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   try {
-    const firstLine = safeReadFileSync(filePath, getCodexDir()).split('\n')[0];
+    const stats = fstatSync(fd);
+    const bytesToRead = Math.min(maxBytes, stats.size);
+    const buffer = Buffer.alloc(bytesToRead);
+    const bytesRead = readSync(fd, buffer, 0, bytesToRead, 0);
+    return buffer.subarray(0, bytesRead).toString('utf-8').split(/\r?\n/, 1)[0] ?? '';
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function codexJsonlMatchesProject(
+  filePath: string,
+  projectPath: string,
+  codexDir: string,
+): boolean {
+  try {
+    const firstLine = readFirstLineAtomic(filePath, codexDir);
     if (!firstLine?.trim()) {
       return false;
     }
@@ -1690,7 +1745,10 @@ function codexJsonlMatchesProject(filePath: string, projectPath: string): boolea
       parsed && typeof parsed.payload === 'object' && parsed.payload !== null
         ? (parsed.payload as Record<string, unknown>)
         : null;
-    return typeof payload?.cwd === 'string' && payload.cwd === projectPath;
+    return (
+      typeof payload?.cwd === 'string' &&
+      normalizeCodexProjectPath(payload.cwd) === normalizeCodexProjectPath(projectPath)
+    );
   } catch {
     return false;
   }

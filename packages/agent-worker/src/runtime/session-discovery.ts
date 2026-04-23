@@ -718,8 +718,8 @@ export function decodeProjectPath(encoded: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Discover Codex sessions from ~/.codex/archived_sessions/*.jsonl and
- * ~/.codex/sessions/YYYY/MM/DD/*.jsonl.
+ * Discover Codex sessions from CODEX_HOME (or ~/.codex)/archived_sessions/*.jsonl
+ * and CODEX_HOME (or ~/.codex)/sessions/YYYY/MM/DD/*.jsonl.
  *
  * Each Codex session file starts with a `session_meta` line containing:
  * - id (session UUID)
@@ -734,9 +734,10 @@ function discoverCodexSessions(
   discovered: DiscoveredSession[],
   logger?: DiscoveryLogger,
 ): void {
+  const codexHome = getCodexHome();
   const codexRoots = [
-    { path: join(homedir(), '.codex', 'archived_sessions'), maxDepth: 0 },
-    { path: join(homedir(), '.codex', 'sessions'), maxDepth: 4 },
+    { path: join(codexHome, 'archived_sessions'), maxDepth: 0 },
+    { path: join(codexHome, 'sessions'), maxDepth: 4 },
   ];
 
   for (const { path: codexSessionsDir, maxDepth } of codexRoots) {
@@ -844,6 +845,10 @@ function discoverCodexSessions(
   }
 }
 
+function getCodexHome(): string {
+  return process.env.CODEX_HOME ?? join(homedir(), '.codex');
+}
+
 function readCodexSessionSnapshot(
   filePath: string,
   logger?: DiscoveryLogger,
@@ -868,9 +873,12 @@ function readCodexSessionSnapshot(
   }
 
   const tailOffset = Math.max(0, fileSize - CODEX_SESSION_TAIL_BYTES);
+  const tailStartsAtLineBoundary =
+    tailOffset === 0 || readBoundedText(filePath, tailOffset - 1, 1, logger) === '\n';
   const tailText = readBoundedText(filePath, tailOffset, CODEX_SESSION_TAIL_BYTES, logger);
   const rawTailLines = splitJsonlLines(tailText);
-  const tailLines = tailOffset > 0 ? rawTailLines.slice(1) : rawTailLines;
+  const tailLines =
+    tailOffset > 0 && !tailStartsAtLineBoundary ? rawTailLines.slice(1) : rawTailLines;
   const headNewlines = Math.max(1, headText.split('\n').length - 1);
   const totalLineEstimate = Math.max(
     headLines.length,

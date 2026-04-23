@@ -1196,16 +1196,17 @@ describe('Worker session routes', () => {
       expect(body.messages[1].content).toBe('I will fix the bug now.');
     });
 
-    it('should fall back to Codex JSONL content when Claude JSONL is absent', async () => {
+    it('should fall back to Codex JSONL content from CODEX_HOME when Claude JSONL is absent', async () => {
       const codexSessionId = '019db990-4211-7733-bd2e-19328e14515c';
-      const codexDir = `${FAKE_HOME}/.codex`;
+      const previousCodexHome = process.env.CODEX_HOME;
+      const codexDir = `${FAKE_HOME}/custom-codex-home`;
       const codexArchivedDir = `${codexDir}/archived_sessions`;
       const codexSessionsDir = `${codexDir}/sessions`;
       const codexFile = `${codexArchivedDir}/rollout-${codexSessionId}.jsonl`;
       const lines = [
         JSON.stringify({
           type: 'session_meta',
-          payload: { id: codexSessionId, cwd: PROJECT_PATH },
+          payload: { id: codexSessionId, cwd: `${PROJECT_PATH}/.trees/codex-pr740` },
         }),
         JSON.stringify({
           type: 'response_item',
@@ -1227,6 +1228,7 @@ describe('Worker session routes', () => {
         }),
       ].join('\n');
 
+      process.env.CODEX_HOME = codexDir;
       vi.mocked(homedir).mockReturnValue(FAKE_HOME);
       vi.mocked(existsSync).mockImplementation((p: string | URL) => {
         const path = String(p);
@@ -1271,26 +1273,34 @@ describe('Worker session routes', () => {
       });
       vi.mocked(closeSync).mockImplementation(() => {});
 
-      const res = await app.inject({
-        method: 'GET',
-        url: `/api/sessions/content/${codexSessionId}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
-      });
+      try {
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/sessions/content/${codexSessionId}?projectPath=${encodeURIComponent(PROJECT_PATH)}`,
+        });
 
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.totalMessages).toBe(2);
-      expect(body.messages).toEqual([
-        {
-          type: 'human',
-          content: 'Inspect the roadmap',
-          timestamp: '2026-04-23T08:58:56.912Z',
-        },
-        {
-          type: 'assistant',
-          content: 'I found the next slice.',
-          timestamp: '2026-04-23T08:59:05.000Z',
-        },
-      ]);
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.totalMessages).toBe(2);
+        expect(body.messages).toEqual([
+          {
+            type: 'human',
+            content: 'Inspect the roadmap',
+            timestamp: '2026-04-23T08:58:56.912Z',
+          },
+          {
+            type: 'assistant',
+            content: 'I found the next slice.',
+            timestamp: '2026-04-23T08:59:05.000Z',
+          },
+        ]);
+      } finally {
+        if (previousCodexHome === undefined) {
+          delete process.env.CODEX_HOME;
+        } else {
+          process.env.CODEX_HOME = previousCodexHome;
+        }
+      }
     });
 
     it('should apply limit parameter', async () => {
