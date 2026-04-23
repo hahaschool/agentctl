@@ -1,13 +1,15 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { EnvVar } from '@agentctl/shared';
+import type { EnvVar, MemoryInjectionResultMode } from '@agentctl/shared';
 import {
   createDispatchVerificationConfig,
+  DEFAULT_INJECTION_BUDGET,
   dispatchSigningKeyPairFromSecretKey,
   generateDispatchSigningKeyPair,
   isNumericString,
   isValidLogLevel,
+  MEMORY_INJECTION_RESULT_MODES,
   validateEnv,
 } from '@agentctl/shared';
 import { sql } from 'drizzle-orm';
@@ -76,6 +78,12 @@ const CONTROL_PLANE_ENV: EnvVar[] = [
     description: 'LiteLLM proxy URL for multi-provider LLM routing',
   },
   {
+    name: 'MEMORY_INJECTION_RESULT_MODE',
+    default: DEFAULT_INJECTION_BUDGET.resultMode,
+    validate: (value) => MEMORY_INJECTION_RESULT_MODES.includes(value as MemoryInjectionResultMode),
+    description: 'Memory injection result mode: fact-only, fact-plus-snippet, or full-drawer',
+  },
+  {
     name: 'LOG_LEVEL',
     default: 'info',
     validate: isValidLogLevel,
@@ -139,6 +147,8 @@ const DATABASE_URL = env.DATABASE_URL || '';
 const MEM0_URL = env.MEM0_URL || '';
 const MEMORY_BACKEND = env.MEMORY_BACKEND || 'auto';
 const LITELLM_URL = env.LITELLM_URL || '';
+const MEMORY_INJECTION_RESULT_MODE = (env.MEMORY_INJECTION_RESULT_MODE ||
+  DEFAULT_INJECTION_BUDGET.resultMode) as MemoryInjectionResultMode;
 const CONTROL_PLANE_URL = env.CONTROL_PLANE_URL || `http://${HOST}:${PORT}`;
 const WORKER_CONCURRENCY = Number(env.WORKER_CONCURRENCY) || 5;
 const REMOTE_WORKER_PORT = Number(env.WORKER_PORT) || 9000;
@@ -150,6 +160,13 @@ const dispatchSigningKeyPair = env.DISPATCH_SIGNING_SECRET_KEY
 const dispatchVerificationConfig = createDispatchVerificationConfig(
   dispatchSigningKeyPair.publicKey,
 );
+const memoryInjectionBudget =
+  MEMORY_INJECTION_RESULT_MODE === DEFAULT_INJECTION_BUDGET.resultMode
+    ? DEFAULT_INJECTION_BUDGET
+    : {
+        ...DEFAULT_INJECTION_BUDGET,
+        resultMode: MEMORY_INJECTION_RESULT_MODE,
+      };
 
 type DependencyHealthDeps = {
   db?: Database;
@@ -381,12 +398,17 @@ async function main(): Promise<void> {
           backend: 'postgres',
           memorySearch,
           memoryStore,
+          injectionBudget: memoryInjectionBudget,
           logger: logger.child({ component: 'memory-injector' }),
         });
       }
 
       logger.info(
-        { memoryBackend: 'postgres', hasEmbeddings: Boolean(embeddingClient) },
+        {
+          memoryBackend: 'postgres',
+          hasEmbeddings: Boolean(embeddingClient),
+          memoryInjectionResultMode: MEMORY_INJECTION_RESULT_MODE,
+        },
         'PostgreSQL memory backend initialised',
       );
     } else {
@@ -409,9 +431,17 @@ async function main(): Promise<void> {
     memoryInjector = new MemoryInjector({
       backend: 'mem0',
       mem0Client,
+      injectionBudget: memoryInjectionBudget,
       logger: logger.child({ component: 'memory-injector' }),
     });
-    logger.info({ mem0Url: MEM0_URL, memoryBackend: 'mem0' }, 'Mem0 memory backend initialised');
+    logger.info(
+      {
+        mem0Url: MEM0_URL,
+        memoryBackend: 'mem0',
+        memoryInjectionResultMode: MEMORY_INJECTION_RESULT_MODE,
+      },
+      'Mem0 memory backend initialised',
+    );
   } else if (!memoryInjector) {
     logger.info(
       {
@@ -419,6 +449,7 @@ async function main(): Promise<void> {
         hasDatabase: Boolean(db),
         hasLiteLlm: Boolean(LITELLM_URL),
         hasMem0: Boolean(MEM0_URL),
+        memoryInjectionResultMode: MEMORY_INJECTION_RESULT_MODE,
       },
       'No memory backend available — memory injection disabled',
     );

@@ -427,6 +427,10 @@ describe('buildContextBudget', () => {
     it('has pinnedCap of 5', () => {
       expect(DEFAULT_INJECTION_BUDGET.pinnedCap).toBe(5);
     });
+
+    it('defaults to fact-only result mode', () => {
+      expect(DEFAULT_INJECTION_BUDGET.resultMode).toBe('fact-only');
+    });
   });
 
   describe('integration scenario', () => {
