@@ -131,6 +131,23 @@ User: Which sanitizer stage handles transcript dumps?`,
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
+  it('returns 400 when scope contains forbidden characters', async () => {
+    globalThis.fetch = vi.fn();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-search',
+      payload: { query: 'test', scope: '../agentctl' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: 'INVALID_PARAMS',
+      message: 'scope contains forbidden characters',
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it('filters by tags client-side', async () => {
     const fakeFacts = [
       { id: 'fact-1', content: 'relevant', tags: ['typescript'] },

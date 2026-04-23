@@ -7,7 +7,12 @@ import type {
   MemoryFactSourcePreview,
   MemoryScope,
 } from '@agentctl/shared';
-import { querySanitizerLogFields, sanitizeQuery } from '@agentctl/shared';
+import {
+  MEMORY_NAME_MAX_LENGTH,
+  querySanitizerLogFields,
+  sanitizeName,
+  sanitizeQuery,
+} from '@agentctl/shared';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
@@ -27,7 +32,7 @@ const VALID_FEEDBACK_SIGNALS: FeedbackSignal[] = ['used', 'irrelevant', 'outdate
 // fact from bloating the table or UI (8 KB is well above natural summaries)
 // and keep filter queries bounded.
 const MAX_FACT_CONTENT_LENGTH = 8_192;
-const MAX_FACT_FILTER_LENGTH = 128;
+const MAX_FACT_FILTER_LENGTH = MEMORY_NAME_MAX_LENGTH;
 const MAX_FACT_QUERY_LENGTH = 1_024;
 const MAX_FACT_LIMIT = 500;
 const MAX_FACT_SOURCE_SPANS = 32;
@@ -66,9 +71,26 @@ type MemoryFactRoutesOptions = {
 
 const DEFAULT_LIMIT = 50;
 
+const memoryNameSchema = z
+  .string()
+  .min(1)
+  .max(MAX_FACT_FILTER_LENGTH)
+  .refine(
+    (value) => {
+      try {
+        sanitizeName(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'memory name contains forbidden characters' },
+  )
+  .transform((value) => sanitizeName(value));
+
 const factSourceSpanBodySchema = z
   .object({
-    drawerId: z.string().min(1).max(MAX_FACT_FILTER_LENGTH),
+    drawerId: memoryNameSchema,
     startOffset: z.number().int().min(0),
     endOffset: z.number().int().min(0),
     sourceJson: z.record(z.unknown()).optional(),
@@ -85,7 +107,7 @@ const factSourceSpanBodySchema = z
 
 const createFactBodySchema = z.object({
   content: z.string().min(1).max(MAX_FACT_CONTENT_LENGTH),
-  scope: z.string().min(1).max(MAX_FACT_FILTER_LENGTH),
+  scope: memoryNameSchema,
   entityType: z.string().min(1).max(MAX_FACT_FILTER_LENGTH),
   confidence: z.number().min(0).max(1).optional(),
   source: z.record(z.unknown()).optional(),
@@ -93,7 +115,7 @@ const createFactBodySchema = z.object({
 });
 
 const updateFactBodySchema = z.object({
-  scope: z.string().min(1).max(MAX_FACT_FILTER_LENGTH).optional(),
+  scope: memoryNameSchema.optional(),
   content: z.string().min(1).max(MAX_FACT_CONTENT_LENGTH).optional(),
   entityType: z.string().min(1).max(MAX_FACT_FILTER_LENGTH).optional(),
   confidence: z.number().min(0).max(1).optional(),
@@ -113,11 +135,11 @@ const drawerLimitSchema = z
 
 const listFactsQuerySchema = z.object({
   q: z.string().max(MAX_FACT_QUERY_LENGTH).optional(),
-  scope: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
+  scope: memoryNameSchema.optional(),
   entityType: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
-  sessionId: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
-  agentId: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
-  machineId: z.string().max(MAX_FACT_FILTER_LENGTH).optional(),
+  sessionId: memoryNameSchema.optional(),
+  agentId: memoryNameSchema.optional(),
+  machineId: memoryNameSchema.optional(),
   minConfidence: z.string().max(32).optional(),
   limit: z.string().max(16).optional(),
   offset: z.string().max(16).optional(),

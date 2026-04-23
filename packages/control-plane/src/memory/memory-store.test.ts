@@ -160,6 +160,49 @@ describe('MemoryStore', () => {
     expect(pool.query).toHaveBeenCalledTimes(3);
   });
 
+  it('rejects unsafe fact scopes before writing', async () => {
+    const { store, pool } = makeStore();
+
+    await expect(
+      store.addFact({
+        scope: '../global' as MemoryScope,
+        content: 'Some fact',
+        entity_type: 'pattern' as EntityType,
+        source: {
+          session_id: null,
+          agent_id: null,
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+      }),
+    ).rejects.toThrow('Invalid memory scope');
+
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsafe fact-source drawer ids before writing', async () => {
+    const { store, pool } = makeStore();
+
+    await expect(
+      store.addFact({
+        scope: 'global' as MemoryScope,
+        content: 'Some fact',
+        entity_type: 'pattern' as EntityType,
+        source: {
+          session_id: null,
+          agent_id: null,
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+        sourceSpans: [{ drawerId: '../drawer', startOffset: 0, endOffset: 5 }],
+      }),
+    ).rejects.toThrow('Invalid memory fact source span drawerId');
+
+    expect(pool.query).toHaveBeenCalledTimes(1);
+  });
+
   it('inserts an edge between two facts (non-contradiction)', async () => {
     const { store, pool } = makeStore({
       query: vi.fn().mockResolvedValue({ rows: [{ id: 'edge-1' }], rowCount: 1 }),
@@ -255,6 +298,16 @@ describe('MemoryStore', () => {
       25,
       0,
     ]);
+  });
+
+  it('rejects unsafe source filters before listing facts', async () => {
+    const { store, pool } = makeStore();
+
+    await expect(store.listFacts({ sessionId: '../session-1' })).rejects.toThrow(
+      'Invalid memory session id',
+    );
+
+    expect(pool.query).not.toHaveBeenCalled();
   });
 
   it('executes delete, strength update, and invalidation mutations', async () => {

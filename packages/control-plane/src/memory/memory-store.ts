@@ -11,9 +11,9 @@ import type {
   MemoryStats,
   RelationType,
 } from '@agentctl/shared';
+import { sanitizeName } from '@agentctl/shared';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
-
 import type { EmbeddingClient } from './embedding-client.js';
 
 const DEFAULT_CONTENT_MODEL = 'text-embedding-3-small';
@@ -142,11 +142,19 @@ function normalizeFactSourceSpan(input: AddFactSourceSpanInput): Required<AddFac
   }
 
   return {
-    drawerId: input.drawerId,
+    drawerId: normalizeMemoryName(input.drawerId, 'fact source span drawerId'),
     startOffset: input.startOffset,
     endOffset: input.endOffset,
     sourceJson: input.sourceJson ?? {},
   };
+}
+
+function normalizeMemoryName(value: string, field: string): string {
+  try {
+    return sanitizeName(value);
+  } catch {
+    throw new Error(`Invalid memory ${field}`);
+  }
 }
 
 export class MemoryStore {
@@ -164,6 +172,7 @@ export class MemoryStore {
     const id = generateMemoryId();
     const now = new Date().toISOString();
     const tags = input.tags ?? [];
+    const scope = normalizeMemoryName(input.scope, 'scope') as MemoryScope;
 
     let embeddingLiteral: string | null = null;
     if (Array.isArray(input.embedding) && input.embedding.length > 0) {
@@ -191,7 +200,7 @@ export class MemoryStore {
        )`,
       [
         id,
-        input.scope,
+        scope,
         input.content,
         embeddingLiteral,
         DEFAULT_CONTENT_MODEL,
@@ -209,7 +218,7 @@ export class MemoryStore {
 
     return {
       id,
-      scope: input.scope,
+      scope,
       content: input.content,
       content_model: DEFAULT_CONTENT_MODEL,
       entity_type: input.entity_type,
@@ -338,13 +347,16 @@ export class MemoryStore {
     const conditions = ['valid_until IS NULL'];
 
     if (input.visibleScopes && input.visibleScopes.length > 0) {
-      const placeholders = input.visibleScopes.map((_, index) => `$${params.length + index + 1}`);
-      params.push(...input.visibleScopes);
+      const visibleScopes = input.visibleScopes.map((scope) =>
+        normalizeMemoryName(scope, 'visible scope'),
+      );
+      const placeholders = visibleScopes.map((_, index) => `$${params.length + index + 1}`);
+      params.push(...visibleScopes);
       conditions.push(`scope IN (${placeholders.join(', ')})`);
     }
 
     if (input.scope) {
-      params.push(input.scope);
+      params.push(normalizeMemoryName(input.scope, 'scope'));
       conditions.push(`scope = $${params.length}`);
     }
 
@@ -354,17 +366,17 @@ export class MemoryStore {
     }
 
     if (input.sessionId) {
-      params.push(input.sessionId);
+      params.push(normalizeMemoryName(input.sessionId, 'session id'));
       conditions.push(`source_json->>'session_id' = $${params.length}`);
     }
 
     if (input.agentId) {
-      params.push(input.agentId);
+      params.push(normalizeMemoryName(input.agentId, 'agent id'));
       conditions.push(`source_json->>'agent_id' = $${params.length}`);
     }
 
     if (input.machineId) {
-      params.push(input.machineId);
+      params.push(normalizeMemoryName(input.machineId, 'machine id'));
       conditions.push(`source_json->>'machine_id' = $${params.length}`);
     }
 
@@ -414,7 +426,7 @@ export class MemoryStore {
     const assignments: string[] = [];
 
     if (input.scope) {
-      params.push(input.scope);
+      params.push(normalizeMemoryName(input.scope, 'scope'));
       assignments.push(`scope = $${params.length}`);
     }
 
