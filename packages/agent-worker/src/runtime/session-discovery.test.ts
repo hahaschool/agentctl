@@ -833,6 +833,69 @@ describe('discoverLocalSessions', () => {
     );
   });
 
+  it('keeps the first tail record when a large codex tail starts at a line boundary', () => {
+    const codexDir = '/Users/testuser/.codex/archived_sessions';
+    const sessionSize = 2 * 1024 * 1024;
+    const tailOffset = sessionSize - 64 * 1024;
+    const head = JSON.stringify({
+      type: 'session_meta',
+      timestamp: '2026-04-20T05:30:00Z',
+      payload: {
+        id: 'codex-large-boundary-001',
+        cwd: '/Users/testuser/agentctl',
+        timestamp: '2026-04-20T05:30:00Z',
+        git: { branch: 'codex/large-boundary' },
+      },
+    });
+    const tail = JSON.stringify({
+      type: 'response_item',
+      timestamp: '2026-04-20T09:00:00Z',
+      payload: { role: 'assistant', content: [{ type: 'output_text', text: 'Boundary done' }] },
+    });
+
+    mockExistsSync.mockImplementation((p) => {
+      if (p === claudeDir) return true;
+      if (p === codexDir) return true;
+      return false;
+    });
+    mockReaddirSync.mockImplementation(((p: string) => {
+      if (p === claudeDir) return [];
+      if (p === codexDir) return ['large-boundary.jsonl'];
+      return [];
+    }) as typeof readdirSync);
+    mockStatSync.mockReturnValue({
+      size: sessionSize,
+    } as ReturnType<typeof statSync>);
+    mockReadSync.mockImplementation((_fd, buffer, offset, length, position) => {
+      const target = buffer as Buffer;
+      if (position === 0) {
+        const source = Buffer.from(head);
+        const bytes = Math.min(length, source.length);
+        source.copy(target, offset, 0, bytes);
+        return bytes;
+      }
+      if (position === tailOffset - 1 && length === 1) {
+        target.write('\n', offset, 1, 'utf-8');
+        return 1;
+      }
+      const source = Buffer.from(tail);
+      const bytes = Math.min(length, source.length);
+      source.copy(target, offset, 0, bytes);
+      return bytes;
+    });
+
+    const sessions = discoverLocalSessions();
+
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'codex-large-boundary-001',
+        lastActivity: '2026-04-20T09:00:00Z',
+        branch: 'codex/large-boundary',
+      }),
+    );
+  });
+
   it('prefers the goal task over AGENTS and system-prompt preamble in Codex user content', () => {
     const codexDir = '/Users/testuser/.codex/archived_sessions';
 
