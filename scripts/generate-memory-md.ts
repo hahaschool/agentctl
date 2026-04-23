@@ -221,6 +221,7 @@ export function resolveClaudeMemoryPath(
   return path.join(
     path.resolve(claudeProjectsDir),
     encodeClaudeProjectPath(projectPath),
+    'memory',
     'MEMORY.md',
   );
 }

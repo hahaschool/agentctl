@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   buildUnifiedDiff,
+  encodeClaudeProjectPath,
   formatMemoryMdDryRun,
   generateMemoryMdDryRun,
   parseArgs,
@@ -230,6 +231,15 @@ describe('runGenerateMemoryMdDryRun', () => {
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('resolves Claude project memory inside the nested memory directory', () => {
+    const projectPath = path.join(tmpDir, 'agentctl');
+    const claudeProjectsDir = path.join(tmpDir, '.claude', 'projects');
+
+    expect(resolveClaudeMemoryPath(projectPath, claudeProjectsDir)).toBe(
+      path.join(claudeProjectsDir, encodeClaudeProjectPath(projectPath), 'memory', 'MEMORY.md'),
+    );
   });
 
   it('loads facts from disk, resolves the Claude MEMORY path, and keeps dry-run output readable', () => {
