@@ -631,19 +631,29 @@ describe('ApiClient', () => {
 
   describe('getAuditSummary()', () => {
     it('sends GET to /api/audit/summary', async () => {
-      const summary = { totalActions: 100, byTool: {}, byActionType: {} };
+      const summary = {
+        totalActions: 100,
+        toolBreakdown: { Read: 70, Write: 30 },
+        actionTypeBreakdown: { tool_use: 60, tool_result: 40 },
+        avgDurationMs: 210.5,
+      };
       mocks.fetch.mockResolvedValueOnce(jsonResponse(summary));
 
       const result = await client.getAuditSummary();
 
       const calledUrl = mocks.fetch.mock.calls[0]?.[0] as string;
       expect(calledUrl).toBe('https://cp.example.com/api/audit/summary');
-      expect(result.totalActions).toBe(100);
+      expect(result).toEqual(summary);
     });
 
     it('includes filter params in query string', async () => {
       mocks.fetch.mockResolvedValueOnce(
-        jsonResponse({ totalActions: 0, byTool: {}, byActionType: {} }),
+        jsonResponse({
+          totalActions: 0,
+          toolBreakdown: {},
+          actionTypeBreakdown: {},
+          avgDurationMs: null,
+        }),
       );
 
       await client.getAuditSummary({ agentId: 'a2', from: '2024-01-01' });

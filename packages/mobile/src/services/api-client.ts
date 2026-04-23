@@ -111,8 +111,9 @@ export type AuditQueryResponse = {
 
 export type AuditSummary = {
   totalActions: number;
-  byTool: Record<string, number>;
-  byActionType: Record<string, number>;
+  toolBreakdown: Record<string, number>;
+  actionTypeBreakdown: Record<string, number>;
+  avgDurationMs: number | null;
 };
 
 export type RuntimeSessionInfo = ManagedSession & {
