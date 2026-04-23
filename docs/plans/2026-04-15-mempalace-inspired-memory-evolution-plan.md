@@ -4,7 +4,7 @@
 
 **Goal:** Upgrade AgentCTL memory from extracted fact recall into source-grounded, measurable, privacy-safe recall with verbatim evidence, bounded injection, temporal provenance, and recovery paths.
 
-**Status sync (2026-04-22):** `main@7b90a605` is current through PR #730. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, workflow-owned gates for `held-out/full` split execution, richer human-readable reporting via By Tag tables plus capped failure examples, and workflow-owned weekly/release automation in `.github/workflows/memory-evals.yml` that stages gitignored fixtures under `tmp/memory-eval/` (PRs #655, #660, #667, #681, #685, #713, #722, #729; current main reporting/gates). Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, dry-run chunk/token/cost/storage estimates, and execute-mode embedding generation/backfill for CLI-written facts with bounded batch/retry behavior (PRs #671, #679, #682, #686, #692, #699, #703, #708, #721; current main follow-up). Phase 3 has provenance schema/write-path groundwork, fact-detail evidence previews/unavailable markers, stable empty provenance detail envelopes for legacy/no-provenance facts, and optional `InjectionBudget.tierTokenCaps` context-budget enforcement (PRs #684, #688, #720, #728, #730). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, raw drawer results under Memory Browser facts, browser-level enrichment coverage, and fact-detail evidence previews in the Memory Browser detail panel (PRs #709, #719, #723, #726, #728). Remaining plan work is private fixture secret provisioning/changelog discipline, richer failure-mode-targeted eval examples, injector result modes/wrapper plumbing, merge-time provenance preservation, Surface A dry-run generation, remaining legacy search/sync compatibility, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
+**Status sync (2026-04-23):** `origin/main@fbf27801` is current through PR #734, and this checkout carries the follow-up fix so Claude project memory resolves under `~/.claude/projects/<encoded>/memory/MEMORY.md`. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, richer human-readable reporting via By Tag tables plus capped failure examples, and workflow-owned weekly/release automation in `.github/workflows/memory-evals.yml` that stages gitignored fixtures under `tmp/memory-eval/` (PRs #655, #660, #667, #681, #685, #713, #722, #729). Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, and dry-run chunk/token/cost/storage estimates (PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 has provenance schema/write-path groundwork, fact-detail evidence previews/unavailable markers, stable empty-provenance detail envelopes for legacy/no-provenance facts, optional `InjectionBudget.tierTokenCaps` context-budget enforcement, and the first script-only Surface A dry-run generator (PRs #684, #688, #720, #728, #730, #734). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, raw drawer results under Memory Browser facts, browser-level enrichment coverage, and fact-detail evidence previews in the Memory Browser detail panel (PRs #709, #719, #723, #726, #728). Adjacent hardening now also includes PR #732 name/path-traversal validation across control-plane and worker memory routes and PR #733's `xmldom`/`uuid` dependency overrides that cleared the 2026-04-23 security alert wave. Remaining plan work is private fixture secret provisioning/changelog discipline, richer failure-mode-targeted eval examples, injector result modes/wrapper plumbing, merge-time provenance preservation, promotion of the current Surface A dry-run bridge from JSON input into the final DB/API-backed approval flow, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
 
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
@@ -714,7 +714,8 @@ Default proposal:
 Surface A bridge:
 
 - `MEMORY.md` should become L0 plus a compact generated L1 section, not a full 5.6 KB always-on blob.
-- Create a generator that reads reviewed Surface B facts and writes a bounded Surface A summary.
+- Local `90577377` adds the first dry-run generator that reads reviewed-fact JSON input and proposes a bounded Surface A summary without writing.
+- Next step is promoting that dry-run bridge from JSON input to the final DB/API-backed reviewed-fact selection and approval flow.
 - Do not auto-edit human-curated lines without a dry-run diff and approval flow.
 
 Mobile constraint:
@@ -860,7 +861,7 @@ targeted examples.
 4. Implement raw-transcript sanitizer and quarantine logic.
 5. Store only sanitized content, sanitized hash, and sanitized embeddings.
 6. Add memory write audit entry kind to existing `AuditLogger`. *(Delivered in PR #679.)*
-7. Apply `sanitizeName()` to scope/entity fields before drawer/fact/edge writes.
+7. Partially delivered in PR #732 for fact/store/search paths: apply `sanitizeName()` to scope/entity fields before drawer/fact/edge writes, then finish the remaining drawer/edge/scopes consistency sweep.
 8. Do not add sync triggers for drawers in this phase.
 
 **Tests:**
@@ -966,7 +967,7 @@ targeted examples.
 
 **Goal:** Link facts to evidence and prevent drawer snippets from exploding prompt tokens.
 
-**Status:** Schema groundwork landed in PR #684: `0031_add_memory_fact_sources_and_versions.sql`, Drizzle schema/journal/schema tests, `memory_fact_sources` offsets, and fact/edge `embedding_version` defaults. PR #688 added the write path: `MemoryStore.addFact` accepts an optional `sourceSpans` array and persists offset-only provenance to `memory_fact_sources`, `POST /api/memory/facts` validates and passes through `sourceSpans`, and unit tests cover valid/invalid drawer offsets for both the store and the route. PR #720 added the optional `InjectionBudget.tierTokenCaps` contract and context-budget enforcement while leaving default behavior unchanged. PR #728 completed the first read path by adding additive fact-detail source previews/quote previews plus archived/unavailable markers to `GET /api/memory/facts/:id` and the Memory Browser detail panel. PR #730 hardened legacy no-provenance detail responses by keeping `sourcePreviews: []` stable when facts have no provenance rows or preview lookup fails. The smallest open Phase 3 slice is now injector wrapper plumbing/result modes, followed by merge-time provenance preservation, the bounded Surface A dry-run bridge, and any residual legacy search/sync compatibility.
+**Status:** Schema groundwork landed in PR #684: `0031_add_memory_fact_sources_and_versions.sql`, Drizzle schema/journal/schema tests, `memory_fact_sources` offsets, and fact/edge `embedding_version` defaults. PR #688 added the write path: `MemoryStore.addFact` accepts an optional `sourceSpans` array and persists offset-only provenance to `memory_fact_sources`, `POST /api/memory/facts` validates and passes through `sourceSpans`, and unit tests cover valid/invalid drawer offsets for both the store and the route. PR #720 added the optional `InjectionBudget.tierTokenCaps` contract and context-budget enforcement while leaving default behavior unchanged. PR #728 completed the first read path by adding additive fact-detail source previews/quote previews plus archived/unavailable markers to `GET /api/memory/facts/:id` and the Memory Browser detail panel. PR #730 hardened legacy no-provenance detail behavior by keeping `sourcePreviews: []` stable when provenance rows are absent or preview lookup degrades. PR #734 adds the first script-only Surface A dry-run generator around `scripts/generate-memory-md.ts`, and this follow-up fixes the Claude project memory target path. The next open Phase 3 work is injector wrapper plumbing/result modes, merge-time provenance preservation, and promoting the current dry-run bridge from JSON input to the final DB/API-backed approval flow.
 
 **Files:**
 
@@ -991,7 +992,7 @@ targeted examples.
 5. Include drawer evidence in contradiction review UI and maintenance reports.
 6. Partially delivered: extend `InjectionBudget` with `tierTokenCaps`; result modes and injector wrapper plumbing remain open. *(PR #720)*
 7. Keep default injection `fact-only` until eval and UI are ready.
-8. Add Surface A generator dry-run: create bounded L0/L1 `MEMORY.md` proposal from reviewed facts without overwriting human-curated content.
+8. Delivered locally in `90577377`: add a Surface A generator dry-run that creates a bounded L0/L1 `MEMORY.md` proposal from reviewed facts without overwriting human-curated content. Remaining bridge work is DB/API-backed reviewed-fact selection plus the final approval/write flow.
 
 **Tests:**
 
@@ -999,7 +1000,7 @@ targeted examples.
 - Fact deletion cascades provenance.
 - Drawer deletion/archive leaves fact visible with unavailable source marker.
 - Quote preview is sanitized at read time.
-- Context-budget enforcement respects per-tier token caps; injector wrapper plumbing and snippet evidence caps remain open.
+- Context-budget enforcement respects per-tier token caps; bounded snippet evidence caps now exist locally, while full-drawer treatment and deeper additive-budget accounting remain open.
 - Surface A generator produces deterministic dry-run diff.
 - Existing facts without provenance still render and inject.
 
@@ -1289,7 +1290,7 @@ Add env vars through the existing centralized config path used by control-plane/
 5. **PR E: Provenance + Injection Budget**
    - PR #684 added `0031`, fact-source schema links, and embedding-version defaults.
    - PR #728 added the first fact-detail read path (source previews, quote previews, archived/unavailable markers).
-   - Remaining: legacy no-provenance behavior, injector budget/result modes and wrapper plumbing, merge-time provenance preservation, and Surface A dry-run generator.
+   - Remaining: injector budget/result modes and wrapper plumbing, merge-time provenance preservation, and promotion of the current Surface A dry-run generator from JSON input to the final DB/API-backed approval flow.
 
 6. **PR F: Drawer-Aware Search**
    - PR #677 delivered the three-stage query sanitizer for existing memory search paths.
