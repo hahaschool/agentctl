@@ -6,7 +6,7 @@ Roadmap tracker: [33.11 Fleet Rollout & Peer Auto-Update — Wire build provenan
 
 Every GHCR image that `build-images.yml` publishes also ships a signed
 [SLSA build-provenance attestation](https://slsa.dev/spec/v1.0/provenance)
-produced by [`actions/attest-build-provenance@v2`](https://github.com/actions/attest-build-provenance).
+produced by [`actions/attest-build-provenance@v4.1.0`](https://github.com/actions/attest-build-provenance).
 The attestation is:
 
 - **Keyed by the pushed image digest** (not the mutable tag), so it pins an

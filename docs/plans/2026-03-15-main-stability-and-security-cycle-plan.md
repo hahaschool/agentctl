@@ -47,6 +47,15 @@
 > post-#663 main CI, Security Audit, and Build & Publish passed. Beta/dev CD
 > workflows were not changed.
 
+> Follow-up sync (2026-04-23): after PR #738 landed on `main@9013a908`, CI
+> `24826875928`, Security Audit `24826875919`, and Build & Publish Docker
+> Images `24826875913` all passed, with 0 open code-scanning, Dependabot, or
+> secret-scanning alerts. Docker publish still emitted a nonblocking Node.js 20
+> deprecation annotation from `actions/attest-build-provenance@v2`; this
+> follow-up upgrades the attestation action to the Node 24-backed `v4.1.0`
+> without changing GHCR image tags, scanner behavior, or deploy-fleet
+> verification semantics.
+
 ---
 
 ### Task 1: Reproduce Current Control-Plane CI Failures — Completed on `main`
