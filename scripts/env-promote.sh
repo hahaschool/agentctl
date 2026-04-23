@@ -289,22 +289,22 @@ if [[ -z "$FS_MIGRATIONS" || -z "$FS_METADATA" ]]; then
 fi
 
 FS_COUNT=$(echo "$FS_MIGRATIONS" | wc -l | tr -d ' ')
-FS_MAX_WHEN=$(echo "$FS_METADATA" | awk -F'|' 'BEGIN { max = 0 } { if ($2 > max) max = $2 } END { print max }')
 
 # Query the Drizzle migrations table. drizzle-orm v0.45 stores applied migrations
 # as (id SERIAL, hash TEXT, created_at BIGINT) in the "drizzle" schema — there is
 # NO "tag" column, so the previous `SELECT tag FROM __drizzle_migrations` query
 # silently returned 0 rows and the parity check always reported 0/0.
 #
-# Compare current filesystem hashes instead of total tracker row counts. Some
-# beta/dev DBs contain historical tracker rows from branches whose migration
-# files were later rewritten. Those rows are not dangerous if all current
-# filesystem hashes are present and no unknown row is newer than the journal.
+# Compare the current filesystem migration chain instead of total tracker row
+# counts. Some beta/dev DBs contain historical tracker rows from branches whose
+# migration files were later rewritten. Those rows are tolerated only as a
+# leading prefix; the terminal tracker sequence must be the current chain or a
+# clean prefix of it.
 FROM_APPLIED=$(psql "$FROM_DB_URL" -t -A -c \
-  "SELECT hash || '|' || created_at FROM drizzle.__drizzle_migrations ORDER BY created_at;" 2>/dev/null || echo "")
+  "SELECT hash || '|' || created_at FROM drizzle.__drizzle_migrations ORDER BY created_at, id;" 2>/dev/null || echo "")
 
 BETA_APPLIED=$(psql "$BETA_DB_URL" -t -A -c \
-  "SELECT hash || '|' || created_at FROM drizzle.__drizzle_migrations ORDER BY created_at;" 2>/dev/null || echo "")
+  "SELECT hash || '|' || created_at FROM drizzle.__drizzle_migrations ORDER BY created_at, id;" 2>/dev/null || echo "")
 
 FROM_COUNT=0
 BETA_COUNT=0
@@ -319,7 +319,7 @@ SOURCE_CURRENT_COUNT=0
 BETA_CURRENT_COUNT=0
 SOURCE_MISSING_COUNT="$FS_COUNT"
 BETA_MISSING_COUNT="$FS_COUNT"
-BETA_AHEAD_COUNT=0
+BETA_TERMINAL_MISMATCH=0
 BETA_MISSING_TAGS=""
 
 while IFS='=' read -r key value; do
@@ -328,14 +328,13 @@ while IFS='=' read -r key value; do
     BETA_CURRENT_COUNT) BETA_CURRENT_COUNT="$value" ;;
     SOURCE_MISSING_COUNT) SOURCE_MISSING_COUNT="$value" ;;
     BETA_MISSING_COUNT) BETA_MISSING_COUNT="$value" ;;
-    BETA_AHEAD_COUNT) BETA_AHEAD_COUNT="$value" ;;
+    BETA_TERMINAL_MISMATCH) BETA_TERMINAL_MISMATCH="$value" ;;
     BETA_MISSING_TAGS) BETA_MISSING_TAGS="$value" ;;
   esac
 done < <(
   FS_METADATA="$FS_METADATA" \
   FROM_APPLIED="$FROM_APPLIED" \
   BETA_APPLIED="$BETA_APPLIED" \
-  FS_MAX_WHEN="$FS_MAX_WHEN" \
   python3 - <<'PY'
 import os
 
@@ -345,7 +344,7 @@ for line in os.environ.get("FS_METADATA", "").splitlines():
     fs_rows.append((tag, int(when), digest))
 
 fs_hashes = {digest for _, _, digest in fs_rows}
-fs_max_when = int(os.environ.get("FS_MAX_WHEN") or 0)
+fs_order = [digest for _, _, digest in fs_rows]
 
 def parse_applied(name: str) -> list[tuple[str, int]]:
     rows = []
@@ -359,21 +358,27 @@ def parse_applied(name: str) -> list[tuple[str, int]]:
 source_rows = parse_applied("FROM_APPLIED")
 beta_rows = parse_applied("BETA_APPLIED")
 source_hashes = {digest for digest, _ in source_rows}
-beta_hashes = {digest for digest, _ in beta_rows}
+beta_order = [digest for digest, _ in beta_rows]
 
 source_missing = [tag for tag, _, digest in fs_rows if digest not in source_hashes]
-beta_missing = [tag for tag, _, digest in fs_rows if digest not in beta_hashes]
-beta_ahead = [
-    (digest, created_at)
-    for digest, created_at in beta_rows
-    if digest not in fs_hashes and created_at > fs_max_when
-]
+
+# Historical/orphan rows are allowed only as a leading prefix. The terminal
+# beta sequence must be the current migration chain or a clean prefix of it.
+beta_current_count = 0
+limit = min(len(beta_order), len(fs_order))
+for count in range(limit, 0, -1):
+    if beta_order[-count:] == fs_order[:count]:
+        beta_current_count = count
+        break
+
+terminal_mismatch = 1 if beta_order and beta_current_count == 0 else 0
+beta_missing = [tag for tag, _, _ in fs_rows[beta_current_count:]]
 
 print(f"SOURCE_CURRENT_COUNT={len(fs_hashes & source_hashes)}")
-print(f"BETA_CURRENT_COUNT={len(fs_hashes & beta_hashes)}")
+print(f"BETA_CURRENT_COUNT={beta_current_count}")
 print(f"SOURCE_MISSING_COUNT={len(source_missing)}")
 print(f"BETA_MISSING_COUNT={len(beta_missing)}")
-print(f"BETA_AHEAD_COUNT={len(beta_ahead)}")
+print(f"BETA_TERMINAL_MISMATCH={terminal_mismatch}")
 print(f"BETA_MISSING_TAGS={','.join(beta_missing[:10])}")
 PY
 )
@@ -389,10 +394,11 @@ if [[ "$SOURCE_CURRENT_COUNT" -lt "$FS_COUNT" ]]; then
   log_warn "  Continuing — beta will get all filesystem migrations."
 fi
 
-# Check: beta should not have unknown future rows newer than the filesystem
-# journal, which would indicate a real ahead-of-code migration.
-if [[ "$BETA_AHEAD_COUNT" -gt 0 ]]; then
-  log_err "  Beta DB has ${BETA_AHEAD_COUNT} unknown migration row(s) newer than the filesystem journal."
+# Check: beta may have historical/orphan tracker rows only before the current
+# chain. If the terminal sequence is not the current chain or its clean prefix,
+# beta may have an edited, missing-middle, reordered, or future/ahead migration.
+if [[ "$BETA_TERMINAL_MISMATCH" -gt 0 ]]; then
+  log_err "  Beta DB terminal migration sequence does not match the current filesystem chain."
   log_err "  Investigate manually before promoting."
   trap - ERR
   exit 1
