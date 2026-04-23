@@ -108,7 +108,7 @@ jobs:
       # Ref: https://github.com/actions/attest-build-provenance
       - name: Attest build provenance
         id: attest
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4.1.0
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.package }}
           subject-digest: ${{ steps.build.outputs.digest }}
