@@ -2,6 +2,22 @@
 
 All notable changes to AgentCTL are documented in this file.
 
+## [0.8.2] — 2026-04-23
+
+Release hygiene refresh after the beta-only `v0.8.1` tag diverged from `main`.
+This version brings the mainline package metadata back to a releasable version
+and captures the post-0.8.1 stability fixes queued for the next beta promotion.
+
+### Changes
+
+- Fixed Codex Discover/session preview by bounding JSONL discovery, resolving
+  `.codex` content paths, respecting `CODEX_HOME`, preserving tail-read line
+  boundaries, and normalizing worktree-derived project paths.
+- Restored control-plane Security Findings route registration and aligned the
+  Audit summary backend, web, and mobile contracts around `toolBreakdown`,
+  `actionTypeBreakdown`, and `avgDurationMs`.
+- Updated Docker build provenance attestation to the Node 24-backed action and
+  refreshed roadmap/plan status through PR #746.
 
 ## [0.8.0] — 2026-04-20
 
@@ -330,4 +346,3 @@ Force kill, stall detection, permission bypass fix, UX polish
 - 50abe45 feat(web): MCP/skill discovery pickers + override model + SkillsTab (#151)
 - fe6eef6 feat(web): runtime selector integration across all create/edit/filter flows (#150)
 - 2ccfdd7 feat(cp): MCP/skill discover proxies + sync-capabilities endpoint (#149)
-

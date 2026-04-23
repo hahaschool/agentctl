@@ -23,7 +23,7 @@ import { versionCompatQuery } from './queries';
  *
  * @deprecated Prefer `useLocalVersion()` in React components.
  */
-export const LOCAL_APP_VERSION = 'v0.8.0';
+export const LOCAL_APP_VERSION = 'v0.8.2';
 
 /**
  * React hook that returns the live `appVersion` from the local control-plane
