@@ -1305,8 +1305,12 @@ Resolve a consolidation item.
 |----------|--------|----------|------------------------------------------|
 | `action` | string | Yes      | Action taken (e.g. `"merge"`, `"keep"`) |
 | `status` | string | Yes      | New status: `"accepted"` or `"skipped"` |
+| `factIds` | string[] | No | Two explicit fact ids for near-duplicate merge actions; must match the `near-duplicate-<a>-<b>` item id and is useful when ids contain separators |
+| `survivorFactId` | string | No | Fact to preserve when `factIds` is provided; defaults to the first `factIds` entry |
 
-**Response 200** — `{ "ok": true }`
+For accepted near-duplicate merge/accept actions, the backend copies source spans onto the survivor fact before invalidating duplicates.
+
+**Response 200** — `{ "ok": true }`, optionally with a `merge` summary for near-duplicate merges.
 
 ---
 

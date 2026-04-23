@@ -57,6 +57,15 @@ export type CopyFactSourceSpansInput = {
   duplicateFactIds: readonly string[];
 };
 
+export type MergeDuplicateFactsInput = CopyFactSourceSpansInput;
+
+export type MergeDuplicateFactsResult = {
+  survivorFactId: string;
+  duplicateFactIds: string[];
+  copiedSourceSpans: number;
+  invalidatedFacts: number;
+};
+
 export type AddEdgeInput = {
   source_fact_id: string;
   target_fact_id: string;
@@ -513,6 +522,43 @@ export class MemoryStore {
     }
 
     return copied;
+  }
+
+  async mergeDuplicateFactsPreservingSources(
+    input: MergeDuplicateFactsInput,
+  ): Promise<MergeDuplicateFactsResult> {
+    const duplicateFactIds = [...new Set(input.duplicateFactIds)].filter(
+      (factId) => factId.length > 0 && factId !== input.survivorFactId,
+    );
+    if (duplicateFactIds.length === 0) {
+      return {
+        survivorFactId: input.survivorFactId,
+        duplicateFactIds: [],
+        copiedSourceSpans: 0,
+        invalidatedFacts: 0,
+      };
+    }
+
+    const copiedSourceSpans = await this.copyFactSourceSpansToFact({
+      survivorFactId: input.survivorFactId,
+      duplicateFactIds,
+    });
+
+    let invalidatedFacts = 0;
+    for (const duplicateFactId of duplicateFactIds) {
+      const result = await this.pool.query(
+        'UPDATE memory_facts SET valid_until = now() WHERE id = $1 AND valid_until IS NULL',
+        [duplicateFactId],
+      );
+      invalidatedFacts += result.rowCount ?? 0;
+    }
+
+    return {
+      survivorFactId: input.survivorFactId,
+      duplicateFactIds,
+      copiedSourceSpans,
+      invalidatedFacts,
+    };
   }
 
   async deleteFact(id: string): Promise<void> {
