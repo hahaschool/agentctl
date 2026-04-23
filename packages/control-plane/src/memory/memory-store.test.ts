@@ -391,6 +391,82 @@ describe('MemoryStore', () => {
     expect(query).toHaveBeenCalledTimes(3);
   });
 
+  it('copies duplicate fact source spans onto a survivor fact without overwriting existing spans', async () => {
+    const createdAt = '2026-04-22T00:00:00.000Z';
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            drawer_id: 'drawer-1',
+            start_offset: 5,
+            end_offset: 15,
+            source_json: { source: 'duplicate-a' },
+            created_at: createdAt,
+          },
+          {
+            drawer_id: 'drawer-2',
+            start_offset: 0,
+            end_offset: 8,
+            source_json: null,
+            created_at: createdAt,
+          },
+        ],
+        rowCount: 2,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const { store } = makeStore({ query });
+
+    const copied = await store.copyFactSourceSpansToFact({
+      survivorFactId: 'fact-survivor',
+      duplicateFactIds: [
+        'fact-duplicate-a',
+        'fact-duplicate-a',
+        'fact-survivor',
+        'fact-duplicate-b',
+      ],
+    });
+
+    expect(copied).toBe(1);
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[0]?.[0]).toContain('FROM memory_fact_sources');
+    expect(query.mock.calls[0]?.[1]).toEqual([['fact-duplicate-a', 'fact-duplicate-b']]);
+    expect(query.mock.calls[1]?.[0]).toContain('DO NOTHING');
+    expect(query.mock.calls[1]?.[1]).toEqual([
+      expect.any(String),
+      'fact-survivor',
+      'drawer-1',
+      5,
+      15,
+      { source: 'duplicate-a' },
+      createdAt,
+    ]);
+    expect(query.mock.calls[2]?.[1]).toEqual([
+      expect.any(String),
+      'fact-survivor',
+      'drawer-2',
+      0,
+      8,
+      {},
+      createdAt,
+    ]);
+  });
+
+  it('does not query source spans when there are no duplicate fact ids to copy', async () => {
+    const query = vi.fn();
+    const { store } = makeStore({ query });
+
+    await expect(
+      store.copyFactSourceSpansToFact({
+        survivorFactId: 'fact-survivor',
+        duplicateFactIds: ['', 'fact-survivor'],
+      }),
+    ).resolves.toBe(0);
+
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('updates a fact and regenerates embeddings when the content changes', async () => {
     const now = new Date().toISOString();
     const query = vi
