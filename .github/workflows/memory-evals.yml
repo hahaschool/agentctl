@@ -155,6 +155,8 @@ jobs:
           EMBEDDING_API_URL: ${{ secrets.MEMORY_EVAL_EMBEDDING_API_URL }}
           LITELLM_PROXY_URL: ${{ secrets.MEMORY_EVAL_LITELLM_PROXY_URL }}
           LITELLM_URL: ${{ secrets.MEMORY_EVAL_LITELLM_URL }}
+          MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE: 'true'
+          MEMORY_EVAL_FAILURE_MODE_MIN_ROWS: ${{ vars.MEMORY_EVAL_FAILURE_MODE_MIN_ROWS }}
         run: |
           set -euo pipefail
 

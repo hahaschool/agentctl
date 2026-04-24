@@ -108,9 +108,28 @@ describe('memory-eval live mode', () => {
     const output = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
     expect(output).toContain('# Memory Eval (dev, mock ranking)');
     expect(output).toContain('## By Tag');
-    expect(output).toContain('| vocabulary-gap | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |');
+    expect(output).toContain(
+      '| vocabulary-gap | 1 | 1.000 | 1.000 | 1.000 | 1.000 | 0.000 | 0.000 |',
+    );
     expect(output).toContain('## Failure Examples');
     expect(output).toContain('None.');
+    expect(mockPool).not.toHaveBeenCalled();
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
+
+  it('can require fixture failure-mode coverage for private eval runs', async () => {
+    process.env.MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE = 'true';
+    process.env.MEMORY_EVAL_FAILURE_MODE_MIN_ROWS = '2';
+    delete process.env.DATABASE_URL;
+    delete process.env.EMBEDDING_API_URL;
+    delete process.env.LITELLM_PROXY_URL;
+    delete process.env.LITELLM_URL;
+
+    await expect(main(['--fixture', writeFixture(), '--json'])).rejects.toThrow(
+      /MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE|temporal-ambiguity|assistant-reference/,
+    );
+
+    expect(logSpy).not.toHaveBeenCalled();
     expect(mockPool).not.toHaveBeenCalled();
     expect(mockSearch).not.toHaveBeenCalled();
   });
@@ -172,14 +191,7 @@ describe('memory-eval live mode', () => {
       },
     ]);
 
-    await main([
-      '--no-mock',
-      '--fixture',
-      writeFixture(),
-      '--split',
-      'full',
-      '--json',
-    ]);
+    await main(['--no-mock', '--fixture', writeFixture(), '--split', 'full', '--json']);
 
     expect(mockPool).toHaveBeenCalledWith({ connectionString: 'postgres://localhost/agentctl' });
     expect(mockEmbeddingClient).toHaveBeenCalledWith(

@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import type { Logger } from 'pino';
 import { EmbeddingClient } from '../packages/control-plane/src/memory/embedding-client.js';
 import {
+  assertFailureModeCoverage,
   createDeterministicMockRanker,
   formatMemoryEvalReport,
   getDevSet,
@@ -49,6 +50,8 @@ const EMBEDDING_BASE_URL_ENV_KEYS = [
   'LITELLM_PROXY_URL',
   'LITELLM_URL',
 ] as const;
+const REQUIRE_FAILURE_MODE_COVERAGE_ENV = 'MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE';
+const FAILURE_MODE_MIN_ROWS_ENV = 'MEMORY_EVAL_FAILURE_MODE_MIN_ROWS';
 
 function usage(): string {
   return `Usage: pnpm memory:eval [--fixture path] [--split dev|held-out|full] [--json] [--mock|--no-mock]
@@ -203,6 +206,7 @@ export async function runLiveMemoryEval(
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
   const fixture = loadMemoryEvalFixture(options.fixturePath);
+  assertRequiredFailureModeCoverage(fixture.rows, options.fixturePath);
   const rows = selectRows(fixture.rows, options);
   const run = options.mock
     ? await runMemoryEval(rows, createDeterministicMockRanker())
@@ -228,12 +232,49 @@ function readRequiredEnv(env: MemoryEvalEnv, name: string): string {
   return value;
 }
 
+function assertRequiredFailureModeCoverage(
+  rows: readonly MemoryEvalFixtureRow[],
+  fixturePath: string,
+  env: MemoryEvalEnv = process.env,
+): void {
+  if (env[REQUIRE_FAILURE_MODE_COVERAGE_ENV] !== 'true') {
+    return;
+  }
+
+  const minimumPerTag = readOptionalPositiveIntegerEnv(env, FAILURE_MODE_MIN_ROWS_ENV);
+
+  try {
+    assertFailureModeCoverage(rows, {
+      minimumPerTag,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `${REQUIRE_FAILURE_MODE_COVERAGE_ENV}=true rejected fixture ${fixturePath}: ${message}. Add private rows for the missing failure-mode tags or unset ${REQUIRE_FAILURE_MODE_COVERAGE_ENV} for local public-fixture runs.`,
+    );
+  }
+}
+
 function readFirstEnv(env: MemoryEvalEnv, names: readonly string[]): string | null {
   for (const name of names) {
     const value = env[name]?.trim();
     if (value) return value;
   }
   return null;
+}
+
+function readOptionalPositiveIntegerEnv(env: MemoryEvalEnv, name: string): number | undefined {
+  const rawValue = env[name]?.trim();
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const parsedValue = Number(rawValue);
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+
+  return parsedValue;
 }
 
 function createScriptLogger(): Logger {
