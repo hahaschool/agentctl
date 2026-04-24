@@ -64,6 +64,23 @@ describe('GraphTableView', () => {
     expect(screen.getByText('No edges match the current filters.')).toBeDefined();
   });
 
+  it('renders nodes when the graph has no edges yet', () => {
+    const node1 = makeNode({ id: 'node-1', content: 'Imported claude-mem observation' });
+    const node2 = makeNode({
+      id: 'node-2',
+      content: 'Another isolated memory fact',
+      entity_type: 'concept',
+    });
+
+    render(<GraphTableView {...defaultProps} nodes={[node1, node2]} edges={[]} />);
+
+    expect(screen.getByText('Imported claude-mem observation')).toBeDefined();
+    expect(screen.getByText('Another isolated memory fact')).toBeDefined();
+    expect(screen.getByText('2 nodes')).toBeDefined();
+    expect(screen.getByText('0 edges')).toBeDefined();
+    expect(screen.queryByText('No edges match the current filters.')).toBeNull();
+  });
+
   it('renders edges in the table', () => {
     const node1 = makeNode({ id: 'node-1', content: 'Source node content' });
     const node2 = makeNode({

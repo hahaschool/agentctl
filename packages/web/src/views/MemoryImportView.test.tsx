@@ -121,6 +121,15 @@ describe('MemoryImportView', () => {
       expect(jsonlBtn.className).toContain('border-blue-500');
     });
 
+    it('explains that JSONL history import is not wired yet and disables preview', () => {
+      renderView();
+      fireEvent.click(screen.getByTestId('source-jsonl-history'));
+
+      expect(screen.getByText(/JSONL history import is not wired yet/i)).toBeDefined();
+      expect((screen.getByTestId('step1-next') as HTMLButtonElement).disabled).toBe(true);
+      expect(mockPreviewMutate).not.toHaveBeenCalled();
+    });
+
     it('advances to step 2 when preview succeeds', async () => {
       renderView();
       const input = screen.getByTestId('db-path-input');

@@ -203,6 +203,30 @@ describe('MemorySynthesisPage', () => {
     });
   });
 
+  it('renders principle candidates with readable fact previews instead of raw id streams', async () => {
+    let capturedOnSuccess:
+      | ((data: { ok: boolean; result: MemorySynthesisResult }) => void)
+      | undefined;
+    mockMutate.mockImplementation(
+      (
+        _body: unknown,
+        opts: { onSuccess: (data: { ok: boolean; result: MemorySynthesisResult }) => void },
+      ) => {
+        capturedOnSuccess = opts.onSuccess;
+      },
+    );
+
+    render(<MemorySynthesisPage />);
+    fireEvent.click(screen.getByRole('button', { name: /run knowledge synthesis/i }));
+    capturedOnSuccess?.({ ok: true, result: sampleResult });
+
+    await waitFor(() => {
+      expect(screen.getByText('Pref A')).toBeDefined();
+      expect(screen.getByText('Pref B')).toBeDefined();
+      expect(screen.queryByText(/fact-eeee/i)).toBeNull();
+    });
+  });
+
   it('shows the clean-graph state when the result has no issues', async () => {
     let capturedOnSuccess:
       | ((data: { ok: boolean; result: MemorySynthesisResult }) => void)

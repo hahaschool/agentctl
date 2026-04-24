@@ -61,13 +61,13 @@ function totalLintCount(result: MemorySynthesisResult | null): number {
 // FactLink — drill-down anchor for a fact id
 // ---------------------------------------------------------------------------
 
-function FactLink({ factId }: { factId: string }): React.JSX.Element {
+function FactLink({ factId, label }: { factId: string; label?: string }): React.JSX.Element {
   return (
     <Link
       href={factBrowserHref(factId)}
       className="font-mono text-[11px] text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
     >
-      {factId.slice(0, 8)}
+      {label ?? 'Open fact'}
     </Link>
   );
 }
@@ -266,11 +266,16 @@ function SynthesisGroupsSection({
           </div>
           <p className="mt-1.5 text-xs leading-snug text-foreground">{group.proposalHint}</p>
           {group.factIds.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {group.factIds.map((factId) => (
-                <FactLink key={factId} factId={factId} />
+            <ol className="mt-2 space-y-1.5">
+              {group.factIds.map((factId, index) => (
+                <li key={factId} className="flex items-start gap-2 text-xs">
+                  <FactLink factId={factId} label={`Fact ${index + 1}`} />
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                    {truncate(group.factContents[index] ?? 'No preview available', 120)}
+                  </span>
+                </li>
               ))}
-            </div>
+            </ol>
           ) : null}
         </li>
       ))}
