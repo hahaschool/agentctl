@@ -86,7 +86,7 @@ jobs:
               packages/web/*)
                 web=true
                 ;;
-              infra/*|docker-compose*.yml)
+              .github/workflows/*|infra/*|scripts/*|docker-compose*.yml)
                 infra=true
                 ;;
             esac
@@ -206,6 +206,51 @@ jobs:
       # "biome check" + "biome lint --rule-categories" steps.
       - name: Biome check (lint + format + suspicious rules)
         run: npx @biomejs/biome check packages/
+
+  # ---------------------------------------------------------------------------
+  # Workflow static tests — keep deploy/fleet workflow guards exercised without
+  # forcing package builds for docs/workflow-only PRs.
+  # ---------------------------------------------------------------------------
+  workflow-static-tests:
+    name: Workflow static tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: [changes, install]
+    if: >-
+      github.event_name == 'push'
+      || needs.changes.outputs.infra == 'true'
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.PRIMARY_NODE }}
+          cache: pnpm
+
+      - name: Restore node_modules
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            node_modules
+            packages/shared/node_modules
+            packages/control-plane/node_modules
+            packages/agent-worker/node_modules
+            packages/mobile/node_modules
+            packages/web/node_modules
+          key: nm-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            nm-${{ runner.os }}-${{ github.run_id }}-
+
+      - name: Run workflow static tests
+        run: |
+          pnpm --dir packages/shared exec vitest --root ../.. run \
+            scripts/deploy-fleet-workflow.test.ts \
+            scripts/deploy-workflows.test.ts
 
   # ---------------------------------------------------------------------------
   # Build — compile TypeScript once; upload dist/ for the test job.
