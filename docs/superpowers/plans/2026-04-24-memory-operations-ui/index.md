@@ -15,7 +15,7 @@
 | PR | Branch | Type | Bump | Status | Plan |
 |----|--------|------|------|--------|------|
 | **A** | `agent/claude-1/feat/memory-ops-pr-a` | Foundation: migration + shared types + EmbeddingClient additive + credential_kind filter | patch | Landed in PR #783 | [pr-a.md](./pr-a.md) |
-| **B** | `agent/claude-1/feat/memory-ops-pr-b` | Backend: factory + providers route + memory rewiring + MEMORY_OPS_STATUS_MAP | patch | Critical path | [pr-b.md](./pr-b.md) |
+| **B** | `agent/claude-1/feat/memory-ops-pr-b` | Backend: factory + providers route + memory rewiring + MEMORY_OPS_STATUS_MAP | patch | Landed in PR #797 | [pr-b.md](./pr-b.md) |
 | **C** | `agent/claude-1/feat/memory-ops-pr-c` | Frontend: Settings → Memory & Embeddings + ApiError.details | minor | Critical path | [pr-c.md](./pr-c.md) |
 | **D** | `agent/claude-1/feat/memory-ops-pr-d` | Backend: jobs CRUD + BullMQ + SSE + preview endpoint + capabilities | patch | Critical path | [pr-d.md](./pr-d.md) |
 | **E** | `agent/claude-1/feat/memory-ops-pr-e` | Workers: embedding-backfill + drawer-backfill + boot reconciliation | patch | Critical path — 19k backfill | [pr-e.md](./pr-e.md) |
@@ -26,7 +26,7 @@
 
 ## Merge Order
 
-PRs must merge in order A → B → C → D → E → F → G. PR A has landed in PR #783; continue with B next. Each remaining PR has its own branch off `main`. Never branch from another PR's branch.
+PRs must merge in order A → B → C → D → E → F → G. PR A landed in PR #783 and PR B landed in PR #797; continue with C next. Each remaining PR has its own branch off `main`. Never branch from another PR's branch.
 
 After E merges, set `MEMORY_OPS_ENABLED=true` in dev-1 and trigger the 19,226-fact backfill from the API. Verify before F.
 
