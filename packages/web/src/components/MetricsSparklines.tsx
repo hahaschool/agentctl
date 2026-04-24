@@ -12,6 +12,7 @@ import type { MetricsSample } from '../lib/use-metrics-history';
 
 type SparklineCardProps = {
   title: string;
+  gradientId: string;
   data: Array<{ value: number }>;
   formatValue?: (v: number) => string;
 };
@@ -32,7 +33,12 @@ const FILL_OPACITY = 0.15;
 // SparklineCard — a single titled area chart
 // ---------------------------------------------------------------------------
 
-function SparklineCard({ title, data, formatValue }: SparklineCardProps): React.JSX.Element {
+function SparklineCard({
+  title,
+  gradientId,
+  data,
+  formatValue,
+}: SparklineCardProps): React.JSX.Element {
   const latestValue = data.at(-1)?.value ?? 0;
   const displayValue = formatValue ? formatValue(latestValue) : String(latestValue);
 
@@ -67,7 +73,7 @@ function SparklineCard({ title, data, formatValue }: SparklineCardProps): React.
       <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
         <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
           <defs>
-            <linearGradient id={`sparkGrad-${title}`} x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={FILL_COLOR} stopOpacity={FILL_OPACITY * 2} />
               <stop offset="95%" stopColor={FILL_COLOR} stopOpacity={0} />
             </linearGradient>
@@ -77,7 +83,7 @@ function SparklineCard({ title, data, formatValue }: SparklineCardProps): React.
             dataKey="value"
             stroke={FILL_COLOR}
             strokeWidth={1.5}
-            fill={`url(#sparkGrad-${title})`}
+            fill={`url(#${gradientId})`}
             dot={false}
             isAnimationActive={false}
           />
@@ -131,10 +137,19 @@ export function MetricsSparklines({ history }: MetricsSparklinesProps): React.JS
       className={`grid grid-cols-1 ${showHttpChart ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-3 mb-5`}
       data-testid="metrics-sparklines"
     >
-      <SparklineCard title="Active Agents" data={activeAgentsData} />
-      <SparklineCard title="Run Rate" data={runRateData} />
+      <SparklineCard
+        title="Active Agents"
+        gradientId="sparkline-active-agents"
+        data={activeAgentsData}
+      />
+      <SparklineCard title="Run Rate" gradientId="sparkline-run-rate" data={runRateData} />
       {showHttpChart && (
-        <SparklineCard title="Requests/min" data={httpRateData} formatValue={(v) => v.toFixed(0)} />
+        <SparklineCard
+          title="Requests/min"
+          gradientId="sparkline-requests-per-min"
+          data={httpRateData}
+          formatValue={(v) => v.toFixed(0)}
+        />
       )}
     </div>
   );
