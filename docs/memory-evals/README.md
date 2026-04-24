@@ -20,6 +20,9 @@ exists in repo and is committed with score metrics" from
 - **Fixture:** [`../fixtures/memory-eval/agentctl-memory-eval.sample.json`](../fixtures/memory-eval/agentctl-memory-eval.sample.json)
   (sanitized public sample). Any regenerated snapshot records the fixture's
   SHA256 so reproducibility is provable.
+  The public sample keeps one sanitized, focused row for each default
+  failure-mode tag so local smoke runs exercise tag segmentation before private
+  fixtures are staged.
 - **Ranker:** the deterministic mock ranker (seed 42) wrapped to drop all
   drawer candidates. Only `factId` candidates survive, so drawer and vector
   paths are effectively disabled for this baseline.

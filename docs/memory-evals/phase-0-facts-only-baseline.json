@@ -2,16 +2,17 @@
   "schemaVersion": 1,
   "baseline": "facts-only",
   "description": "Phase 0 facts-only baseline for the MemPalace-inspired memory evolution plan. Deterministic mock ranking over the public sample fixture with the drawer and vector retrieval paths disabled. Provides a fixed target for later phases to compare against.",
-  "createdAt": "2026-04-20T18:08:22.589Z",
-  "gitCommit": "c97b61df3c88d0eff56c13ce9b0006abb87ba1f1",
+  "createdAt": "2026-04-24T23:40:35.826Z",
+  "gitCommit": "f80abb0563b193a2de5b32faa17d683ad4b3679f",
   "fixture": {
     "path": "docs/fixtures/memory-eval/agentctl-memory-eval.sample.json",
-    "sha256": "sha256:acd958489196a665e1a9118f48dc5b8de76162342458ae7ddd32ab7bddab773f",
-    "rowCount": 3,
-    "includedRowCount": 3,
+    "sha256": "sha256:531c195cba9d26cc0d9b91ff71344ab6791b01cf7008890c2beb15a22d0bbc15",
+    "rowCount": 5,
+    "includedRowCount": 5,
     "splitSeed": 42,
     "categories": [
       "AgentCTL-internal",
+      "LongMemEval-assistant-reference",
       "LongMemEval-project-memory",
       "LongMemEval-single-session-preference"
     ]
@@ -29,13 +30,23 @@
     "ndcgAt10": 0.7871546029909718,
     "groundingCoverage": 0,
     "drawerOnlyHitRate": 0,
-    "totalRows": 3,
+    "totalRows": 5,
     "p50DurationMs": 0,
     "p95DurationMs": 0,
     "p99DurationMs": 0
   },
   "byCategory": {
     "AgentCTL-internal": {
+      "totalRows": 2,
+      "recallAt5": 0.5,
+      "recallAt10": 0.5,
+      "mrr": 1,
+      "ndcgAt10": 0.7871546029909718,
+      "groundingCoverage": 0,
+      "drawerOnlyHitRate": 0,
+      "p95DurationMs": 0
+    },
+    "LongMemEval-assistant-reference": {
       "totalRows": 1,
       "recallAt5": 0.5,
       "recallAt10": 0.5,
