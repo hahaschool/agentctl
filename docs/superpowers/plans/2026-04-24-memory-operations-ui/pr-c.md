@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Status (2026-04-25):** Landed in PR #806. Follow-up PR #807 persisted saved-provider test success/failure metadata so row-level Test results survive list refreshes and new sessions. Follow-up PR #808 avoided raw upstream error persistence/display, credential-guarded metadata writes, and cleared transient overrides after provider refetch.
+> **Status (2026-04-25):** Landed in PR #806. Follow-up PR #807 persisted saved-provider test success/failure metadata so row-level Test results survive list refreshes and new sessions. Follow-up PR #808 hardened that path by avoiding raw upstream error persistence, guarding metadata writes by credential, returning stale-write 409s, and clearing transient UI status after provider refetch.
 
 **Goal:** Settings UI section for configuring embedding providers. ApiError gains `details` field so all new error codes surface correctly in the UI. Test-before-save flow via `/test-ephemeral`. Provider list shows only `verified:true` catalog entries.
 
