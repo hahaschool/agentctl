@@ -10,9 +10,9 @@
 // Exit:   Always 0 — the CLI must not be blocked regardless of worker status
 //
 // Behaviour:
-//   1. Read and parse stdin JSON within 1s
+//   1. Read and parse stdin JSON within 250ms
 //   2. Extract relevant fields from the hook payload
-//   3. POST to the worker's local HTTP API with a 3s timeout
+//   3. POST to the worker's local HTTP API with a 500ms timeout
 //   4. Write an empty JSON object to stdout
 //   5. Exit 0 unconditionally
 //
@@ -38,10 +38,10 @@ const AGENT_ID = process.env.AGENTCTL_AGENT_ID ?? '';
 const MACHINE_ID = process.env.AGENTCTL_MACHINE_ID ?? '';
 
 /** Max ms to wait for stdin to arrive before giving up. */
-const STDIN_TIMEOUT_MS = 1_000;
+const STDIN_TIMEOUT_MS = 250;
 
 /** Max ms to wait for the worker HTTP response. */
-const WORKER_TIMEOUT_MS = 3_000;
+const WORKER_TIMEOUT_MS = 500;
 
 /** Max number of recent messages to forward to the worker. */
 const MAX_MESSAGES = 20;
@@ -158,7 +158,12 @@ async function main(): Promise<void> {
   process.stdout.write('{}\n');
 }
 
-// Run and always exit 0
-main().finally(() => {
-  process.exit(0);
-});
+// Run and always report success, but do not force process.exit(). Letting the
+// event loop drain avoids truncating stdout when Claude Code reads the hook via a pipe.
+main()
+  .catch(() => {
+    process.stdout.write('{}\n');
+  })
+  .finally(() => {
+    process.exitCode = 0;
+  });
