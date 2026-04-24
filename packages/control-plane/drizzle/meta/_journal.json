@@ -246,6 +246,13 @@
       "when": 1776686460000,
       "tag": "0032_add_memory_drawer_backfill_state",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1745539200000,
+      "tag": "0033_add_memory_ops",
+      "breakpoints": true
     }
   ]
 }

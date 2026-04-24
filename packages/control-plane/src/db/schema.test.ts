@@ -17,6 +17,9 @@ import {
   memoryEdges,
   memoryFactSources,
   memoryFacts,
+  memoryOpsAudit,
+  memoryOpsJobEvents,
+  memoryOpsJobs,
   memoryScopes,
   nativeImportAttempts,
   runHandoffDecisions,
@@ -1847,5 +1850,65 @@ describe('syncNodes peer version columns', () => {
       hasDefault: false,
       primary: false,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Memory Operations tables — migration 0033
+// ---------------------------------------------------------------------------
+
+describe('memoryOpsJobs schema (migration 0033)', () => {
+  it('memoryOpsJobs has correct column names', () => {
+    expect(memoryOpsJobs).toBeDefined();
+    expect(memoryOpsJobs.id).toBeDefined();
+    expect(memoryOpsJobs.cancelRequestedAt).toBeDefined();
+    expect(memoryOpsJobs.executorMachineId).toBeDefined();
+  });
+
+  it('memoryOpsJobs has required non-null columns', () => {
+    const meta = getColumnMeta(memoryOpsJobs);
+    expect(meta.kind?.notNull).toBe(true);
+    expect(meta.status?.notNull).toBe(true);
+    expect(meta.originMachineId?.notNull).toBe(true);
+    expect(meta.executorMachineId?.notNull).toBe(true);
+    expect(meta.createdAt?.notNull).toBe(true);
+  });
+
+  it('memoryOpsJobs nullable result/error columns exist', () => {
+    const meta = getColumnMeta(memoryOpsJobs);
+    expect(meta.result?.notNull).toBe(false);
+    expect(meta.error?.notNull).toBe(false);
+    expect(meta.errorCode?.notNull).toBe(false);
+    expect(meta.credentialId?.notNull).toBe(false);
+  });
+});
+
+describe('memoryOpsJobEvents schema (migration 0033)', () => {
+  it('memoryOpsJobEvents references memoryOpsJobs', () => {
+    expect(memoryOpsJobEvents).toBeDefined();
+    expect(memoryOpsJobEvents.jobId).toBeDefined();
+  });
+
+  it('memoryOpsJobEvents has required columns', () => {
+    const meta = getColumnMeta(memoryOpsJobEvents);
+    expect(meta.eventId?.notNull).toBe(true);
+    expect(meta.jobId?.notNull).toBe(true);
+    expect(meta.eventType?.notNull).toBe(true);
+  });
+});
+
+describe('memoryOpsAudit schema (migration 0033)', () => {
+  it('memoryOpsAudit has actor/action/target columns', () => {
+    expect(memoryOpsAudit).toBeDefined();
+    expect(memoryOpsAudit.actor).toBeDefined();
+    expect(memoryOpsAudit.action).toBeDefined();
+  });
+
+  it('memoryOpsAudit has required non-null columns', () => {
+    const meta = getColumnMeta(memoryOpsAudit);
+    expect(meta.actor?.notNull).toBe(true);
+    expect(meta.action?.notNull).toBe(true);
+    expect(meta.target?.notNull).toBe(true);
+    expect(meta.context?.notNull).toBe(true);
   });
 });

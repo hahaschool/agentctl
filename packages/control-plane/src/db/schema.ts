@@ -1,4 +1,5 @@
 import type { DispatchConfigSnapshot, ExecutionSummary } from '@agentctl/shared';
+import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   bigint,
@@ -452,12 +453,18 @@ export const apiAccounts = pgTable(
     rateLimit: jsonb('rate_limit').default({}),
     isActive: boolean('is_active').default(true),
     metadata: jsonb('metadata').default({}),
+    // NEW: credential_kind distinguishes runtime LLM accounts from embedding accounts.
+    // DEFAULT 'runtime' ensures existing rows automatically satisfy the filter.
+    credentialKind: text('credential_kind').notNull().default('runtime'),
+    credentialLast4: text('credential_last4'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => [
     index('idx_api_accounts_provider').on(table.provider),
     index('idx_api_accounts_is_active').on(table.isActive),
+    index('idx_api_accounts_kind').on(table.credentialKind),
+    // Note: api_accounts_one_active_embedding partial unique index is raw-SQL only (migration 0033)
   ],
 );
 
@@ -584,4 +591,84 @@ export const syncPeerCursors = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.localNodeId, table.remoteNodeId] })],
+);
+
+// ---------------------------------------------------------------------------
+// Memory Operations — Jobs, Events, Audit
+// Migration 0033: memory_ops_jobs (mesh-synced), memory_ops_job_events (local),
+// memory_ops_audit (local)
+// ---------------------------------------------------------------------------
+
+// CAUTION: idx_memory_ops_jobs_kind_scope_status is a raw-SQL expression index
+// defined in migration 0033_add_memory_ops.sql. Never generate a DROP for it.
+export const memoryOpsJobs = pgTable(
+  'memory_ops_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    kind: text('kind').notNull(),
+    status: text('status').notNull(),
+    params: jsonb('params').notNull().default(sql`'{}'::jsonb`),
+    progress: jsonb('progress')
+      .notNull()
+      .default(
+        sql`'{"processed":0,"embedded":0,"failed":0,"total":0,"costUsd":0,"usageEstimated":false}'::jsonb`,
+      ),
+    result: jsonb('result'),
+    error: text('error'),
+    errorCode: text('error_code'),
+    credentialId: uuid('credential_id'),
+    providerKind: text('provider_kind'),
+    providerModel: text('provider_model'),
+    providerHost: text('provider_host'),
+    priceUsdPerMtoken: numeric('price_usd_per_mtoken', { precision: 12, scale: 8 }),
+    originMachineId: text('origin_machine_id').notNull(),
+    executorMachineId: text('executor_machine_id').notNull(),
+    cancelRequestedAt: timestamp('cancel_requested_at', { withTimezone: true }),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    egressConfirmedAt: timestamp('egress_confirmed_at', { withTimezone: true }),
+    egressConfirmedBy: text('egress_confirmed_by'),
+    egressSnapshot: jsonb('egress_snapshot'),
+  },
+  (table) => [
+    index('idx_memory_ops_jobs_status_executor').on(table.status, table.executorMachineId),
+    index('idx_memory_ops_jobs_kind_created').on(table.kind, table.createdAt),
+    // idx_memory_ops_jobs_kind_scope_status — raw-SQL expression index in migration 0033; omitted here intentionally.
+  ],
+);
+
+// LOCAL-ONLY: NOT in TABLE_SYNC_CONFIG.
+export const memoryOpsJobEvents = pgTable(
+  'memory_ops_job_events',
+  {
+    eventId: bigserial('event_id', { mode: 'bigint' }).primaryKey(),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => memoryOpsJobs.id, { onDelete: 'cascade' }),
+    eventType: text('event_type').notNull(),
+    level: text('level'),
+    message: text('message'),
+    progress: jsonb('progress'),
+    payload: jsonb('payload'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('idx_memory_ops_job_events_job').on(table.jobId, table.eventId)],
+);
+
+// LOCAL-ONLY: NOT in TABLE_SYNC_CONFIG.
+export const memoryOpsAudit = pgTable(
+  'memory_ops_audit',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    actor: text('actor').notNull(),
+    action: text('action').notNull(),
+    target: text('target').notNull(),
+    context: jsonb('context').notNull().default(sql`'{}'::jsonb`),
+    timestamp: timestamp('timestamp', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_memory_ops_audit_action_ts').on(table.action, table.timestamp),
+    index('idx_memory_ops_audit_target').on(table.target),
+  ],
 );
