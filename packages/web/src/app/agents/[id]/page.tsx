@@ -3,7 +3,7 @@
 import type { ExecutionSummary } from '@agentctl/shared';
 import { toExecutionSummary } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Copy, Download, Play, Settings } from 'lucide-react';
+import { Copy, Download, Infinity as InfinityIcon, Play, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import type React from 'react';
@@ -56,7 +56,9 @@ import {
   machinesQuery,
   sessionsQuery,
   useStartAgent,
+  useStartAgentLoop,
   useStopAgent,
+  useStopAgentLoop,
   useUpdateAgent,
 } from '@/lib/queries';
 
@@ -78,6 +80,8 @@ function AgentDetailPageContent(): React.JSX.Element {
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
   const updateAgent = useUpdateAgent();
+  const startAgentLoop = useStartAgentLoop();
+  const stopAgentLoop = useStopAgentLoop();
   const toast = useToast();
 
   const [startDialogOpen, setStartDialogOpen] = useState(false);
@@ -85,6 +89,8 @@ function AgentDetailPageContent(): React.JSX.Element {
   const [isStarting, setIsStarting] = useState(false);
   const [systemPromptExpanded, setSystemPromptExpanded] = useState(false);
   const [highlightedRunId, setHighlightedRunId] = useState<string | null>(null);
+  const [loopDialogOpen, setLoopDialogOpen] = useState(false);
+  const [loopPrompt, setLoopPrompt] = useState('');
 
   useHotkeys(
     useMemo(
@@ -190,6 +196,33 @@ function AgentDetailPageContent(): React.JSX.Element {
   const closeStartDialog = (): void => {
     setStartDialogOpen(false);
     setPrompt('');
+  };
+
+  // -- Loop handlers --
+
+  const handleStartLoop = (): void => {
+    const effectivePrompt = loopPrompt.trim();
+    if (!effectivePrompt || startAgentLoop.isPending) return;
+    startAgentLoop.mutate(
+      { id: agentId, prompt: effectivePrompt },
+      {
+        onSuccess: () => {
+          toast.success('Loop started');
+          setLoopPrompt('');
+          setLoopDialogOpen(false);
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : String(err));
+        },
+      },
+    );
+  };
+
+  const handleStopLoop = (): void => {
+    stopAgentLoop.mutate(agentId, {
+      onSuccess: () => toast.success('Loop stopped'),
+      onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+    });
   };
 
   // -- Export & Duplicate handlers --
@@ -309,6 +342,12 @@ function AgentDetailPageContent(): React.JSX.Element {
             {(data.type === 'cron' || data.type === 'heartbeat' || data.type === 'loop') && (
               <AgentHealthBadge agentId={agentId} />
             )}
+            {data.type === 'loop' && (
+              <span className="inline-flex items-center gap-1 font-mono bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-sm border border-blue-500/30 text-[11px]">
+                <InfinityIcon className="h-3 w-3" />
+                Loop
+              </span>
+            )}
             {(data.config?.model as string | undefined) && (
               <span className="font-mono bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded-sm border border-purple-500/30 text-[11px]">
                 {data.config?.model as string}
@@ -367,6 +406,31 @@ function AgentDetailPageContent(): React.JSX.Element {
               <Button size="sm" onClick={() => setStartDialogOpen(true)} disabled={isStarting}>
                 Start
               </Button>
+            )}
+            {data.type === 'loop' && (
+              <>
+                {data.status === 'running' ? (
+                  <ConfirmButton
+                    label={stopAgentLoop.isPending ? 'Stopping Loop...' : 'Stop Loop'}
+                    confirmLabel="Confirm Stop Loop"
+                    onConfirm={handleStopLoop}
+                    disabled={stopAgentLoop.isPending}
+                    className="px-3 py-1.5 text-sm font-medium rounded-md bg-red-900/40 text-red-300 border border-red-800 cursor-pointer hover:bg-red-900/60"
+                    confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
+                  />
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-blue-500/40 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
+                    onClick={() => setLoopDialogOpen(true)}
+                    disabled={startAgentLoop.isPending || data.status === 'starting'}
+                  >
+                    <InfinityIcon className="h-3.5 w-3.5 mr-1.5" />
+                    Start Loop
+                  </Button>
+                )}
+              </>
             )}
             <LastUpdated dataUpdatedAt={agent.dataUpdatedAt} />
             <RefreshButton
@@ -430,6 +494,75 @@ function AgentDetailPageContent(): React.JSX.Element {
               disabled={(!prompt.trim() && !data.config?.defaultPrompt) || isStarting}
             >
               {isStarting ? 'Starting...' : 'Go'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Loop Dialog */}
+      <Dialog
+        open={loopDialogOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            setLoopDialogOpen(true);
+          } else {
+            setLoopDialogOpen(false);
+            setLoopPrompt('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <InfinityIcon className="h-4 w-4 text-blue-500" />
+              Start Loop
+            </DialogTitle>
+            <DialogDescription>
+              The agent will run this prompt on every loop iteration until stopped or a limit is
+              reached.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <textarea
+              value={loopPrompt}
+              onChange={(e) => setLoopPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setLoopDialogOpen(false);
+                  setLoopPrompt('');
+                }
+              }}
+              placeholder="Enter the loop prompt..."
+              aria-label="Loop prompt"
+              disabled={startAgentLoop.isPending}
+              autoFocus
+              rows={4}
+              className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md text-sm outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 resize-none disabled:opacity-50 placeholder:text-muted-foreground"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              The loop will repeat this prompt until you stop it or the agent&apos;s configured
+              iteration/cost/duration limits are reached.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLoopDialogOpen(false);
+                setLoopPrompt('');
+              }}
+              disabled={startAgentLoop.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleStartLoop}
+              disabled={!loopPrompt.trim() || startAgentLoop.isPending}
+              className="bg-blue-600 text-white hover:bg-blue-500"
+            >
+              <InfinityIcon className="h-3.5 w-3.5 mr-1.5" />
+              {startAgentLoop.isPending ? 'Starting...' : 'Start Loop'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -151,4 +151,11 @@ export const agentsApi = {
     }),
   getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/${id}/runs`),
   getAgentHealth: (id: string) => request<AgentHealthResponse>(`/api/agents/${id}/health`),
+  startAgentLoop: (id: string, prompt: string, config?: object) =>
+    request<{ loopId: string }>(`/api/agents/${encodeURIComponent(id)}/loop`, {
+      method: 'POST',
+      body: JSON.stringify({ prompt, config }),
+    }),
+  stopAgentLoop: (id: string) =>
+    request<void>(`/api/agents/${encodeURIComponent(id)}/loop`, { method: 'DELETE' }),
 };
