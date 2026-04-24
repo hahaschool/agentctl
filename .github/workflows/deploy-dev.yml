@@ -93,14 +93,19 @@ jobs:
       # ── Run database migrations ─────────────────────────────────────
       - name: Run database migrations
         run: |
-          ssh dev-target << 'REMOTE_SCRIPT'
+          POSTGRES_PASSWORD_B64="$(printf '%s' "$POSTGRES_PASSWORD" | base64 | tr -d '\n')"
+          ssh dev-target << REMOTE_SCRIPT
             set -euo pipefail
             cd ${{ env.DEPLOY_PATH }}
+
+            POSTGRES_PASSWORD="\$(printf '%s' "$POSTGRES_PASSWORD_B64" | base64 -d)"
+            export POSTGRES_PASSWORD
+            : "\${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required for DB migrations}"
 
             echo "Running drizzle-kit migrations..."
             docker run --rm \
               --network agentctl_backend \
-              -e DATABASE_URL="postgresql://${POSTGRES_USER:-agentctl}:${POSTGRES_PASSWORD}@agentctl-postgres-prod:5432/${POSTGRES_DB:-agentctl}" \
+              -e DATABASE_URL="postgresql://\${POSTGRES_USER:-agentctl}:\${POSTGRES_PASSWORD}@agentctl-postgres-prod:5432/\${POSTGRES_DB:-agentctl}" \
               ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/control-plane:${{ steps.tag.outputs.sha }} \
               npx drizzle-kit migrate
           REMOTE_SCRIPT
