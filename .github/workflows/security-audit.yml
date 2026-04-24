@@ -242,8 +242,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           tags: ${{ matrix.image }}:audit
           load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=security-audit-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=security-audit-${{ matrix.image }},ignore-error=true
 
       - name: Trivy vulnerability scan (SARIF)
         continue-on-error: true
