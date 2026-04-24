@@ -210,7 +210,7 @@ test.describe('Tasks page', () => {
     await expect(page.getByRole('heading', { name: /^tasks$/i })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByRole('link', { name: /^spaces$/i })).toBeVisible();
+    await expect(page.locator('main').getByRole('link', { name: /^spaces$/i })).toBeVisible();
     await expect(page.getByRole('table', { name: /task graphs/i })).toBeVisible();
     await expect(page.getByRole('cell', { name: TASK_GRAPH.name })).toBeVisible();
     await expect(page.getByRole('cell', { name: /^ready$/i })).toBeVisible();
