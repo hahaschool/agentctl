@@ -20,3 +20,7 @@ e264dd50f4793af1302645a40d95be8909d52e67:docs/superpowers/plans/2026-03-28-runti
 1e91b9c8de34169de5ea96242f67a7d01085ff59:docs/superpowers/plans/2026-03-28-runtime-config-visibility.md:generic-api-key:112
 3d217cfae54f441188c6623df30119dea877a2f8:packages/shared/src/redact-mcp.test.ts:generic-api-key:46
 256d4005042251db76d2de905d41acbde9f2f6c8:packages/shared/src/redact-mcp.test.ts:generic-api-key:46
+
+# Memory-ops plan Gate 1 verification snippet uses a named fake-key variable
+# in a curl Bearer header — gitleaks curl-auth-header false positive.
+c930348a4f8942b1db8d711e27a3eda00b141873:docs/superpowers/plans/2026-04-24-memory-operations-ui/index.md:curl-auth-header:62
