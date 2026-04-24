@@ -26,6 +26,10 @@ type DispatchConfigResponse = {
   } | null;
 };
 
+type SessionDetailMockState = {
+  dispatchConfigRequests: number;
+};
+
 const NO_DISPATCH_CONFIG: DispatchConfigResponse = {
   runId: null,
   runCount: 0,
@@ -88,7 +92,11 @@ function createSession() {
 async function interceptSessionDetailApi(
   page: Page,
   dispatchConfig: DispatchConfigResponse,
-): Promise<void> {
+): Promise<SessionDetailMockState> {
+  const state: SessionDetailMockState = {
+    dispatchConfigRequests: 0,
+  };
+
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -106,6 +114,7 @@ async function interceptSessionDetailApi(
       request.method() === 'GET' &&
       url.pathname === `/api/sessions/${SESSION_ID}/dispatch-config`
     ) {
+      state.dispatchConfigRequests += 1;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -151,24 +160,22 @@ async function interceptSessionDetailApi(
       body: JSON.stringify({ error: 'NOT_FOUND', message: 'Not found' }),
     });
   });
+
+  return state;
 }
 
 async function openConfigTab(page: Page, dispatchConfig: DispatchConfigResponse): Promise<void> {
-  await interceptSessionDetailApi(page, dispatchConfig);
+  const state = await interceptSessionDetailApi(page, dispatchConfig);
   await page.goto(`/sessions/${SESSION_ID}`);
 
   await expect(page.getByText(SESSION_MESSAGE)).toBeVisible({ timeout: 15_000 });
-
-  const dispatchConfigResponsePromise = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      response.request().method() === 'GET' &&
-      url.pathname === `/api/sessions/${SESSION_ID}/dispatch-config`
-    );
-  });
+  await expect
+    .poll(() => state.dispatchConfigRequests, {
+      message: 'session detail requests the latest dispatch config',
+    })
+    .toBeGreaterThan(0);
 
   await page.getByRole('button', { name: 'Config', exact: true }).click();
-  await dispatchConfigResponsePromise;
 }
 
 function configSection(page: Page, title: string): Locator {

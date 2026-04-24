@@ -243,7 +243,7 @@ test.describe('Session detail route smoke', () => {
     await expect(page.getByText('Session Detail Auditor')).toBeVisible();
     await expect(page.getByText(ASSISTANT_MESSAGE)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(RUN_EXECUTIVE_SUMMARY)).toBeVisible();
-    await expect(page.getByText(/replay-derived/i)).toBeVisible();
+    await expect(page.getByText(/3 tool calls.*replay-derived/i)).toBeVisible();
     await expect(page.getByText('2 messages')).toBeVisible();
     await expect(page.getByText('gpt-5.4').first()).toBeVisible();
 
