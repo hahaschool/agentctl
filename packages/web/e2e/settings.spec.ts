@@ -409,12 +409,13 @@ test.describe('Settings control center', () => {
 
     const runtimeProfilesSection = page.locator('section#runtime-profiles');
     const codexCard = runtimeProfilesSection.locator('article').filter({
-      has: runtimeProfilesSection.getByRole('heading', { name: 'Codex', exact: true }),
+      hasText: 'OpenAI Codex runtime',
     });
     const saveButton = runtimeProfilesSection.getByRole('button', {
       name: 'Save runtime profiles',
     });
 
+    await expect(codexCard.getByRole('heading', { name: 'Codex', exact: true })).toBeVisible();
     await expect(codexCard.getByText('OpenAI Codex runtime')).toBeVisible();
     await expect(saveButton).toBeDisabled();
 
