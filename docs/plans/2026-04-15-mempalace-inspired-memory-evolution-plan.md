@@ -4,7 +4,7 @@
 
 **Goal:** Upgrade AgentCTL memory from extracted fact recall into source-grounded, measurable, privacy-safe recall with verbatim evidence, bounded injection, temporal provenance, and recovery paths.
 
-**Status sync (2026-04-23):** `origin/main@56b4a598` is current through PR #737. Phase 0 has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, richer human-readable reporting via By Tag tables plus capped failure examples, and workflow-owned weekly/release automation in `.github/workflows/memory-evals.yml` that stages gitignored fixtures under `tmp/memory-eval/` (PRs #655, #660, #667, #681, #685, #713, #722, #729). Phase 1/1.5 has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, and dry-run chunk/token/cost/storage estimates (PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 has provenance schema/write-path groundwork, fact-detail evidence previews/unavailable markers, stable empty-provenance detail envelopes for legacy/no-provenance facts, optional `InjectionBudget.tierTokenCaps` context-budget enforcement, the first script-only Surface A dry-run generator, the corrected Claude project memory target path, bounded injector result modes where PostgreSQL can render `fact-plus-snippet` while `full-drawer` still explicitly falls back to `fact-only`, paged control-plane API fact sourcing for Surface A dry-run proposals, store-level merge-time provenance preservation, and this follow-up branch's API-level near-duplicate consolidation merge wiring (PRs #684, #688, #720, #728, #730, #734, #735, #736, #737, #738). Phase 4 has the `MEMORY_DRAWER_FUSION=true` fact-search surface and both drawer-side and facts-side hardening complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices: drawer search page, fact match-source badges, raw drawer results under Memory Browser facts, browser-level enrichment coverage, and fact-detail evidence previews in the Memory Browser detail panel (PRs #709, #719, #723, #726, #728). Adjacent hardening now also includes PR #732 name/path-traversal validation across control-plane and worker memory routes and PR #733's `xmldom`/`uuid` dependency overrides that cleared the 2026-04-23 security alert wave. Remaining plan work is private fixture secret provisioning/changelog discipline, richer failure-mode-targeted eval examples, true full-drawer behavior and deeper additive budget accounting, promotion of the current Surface A dry-run bridge into the final write-gated approval flow, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
+**Status sync (2026-04-25):** `origin/main@e2fd1b29` is current through PR #792. Phase 0 still has the deterministic eval foundation, planted-needle bench, facts-only baseline, cold-start MCP contracts, opt-in live `pnpm memory:eval --no-mock` wiring, richer human-readable reporting, and workflow-owned weekly/release automation (PRs #655, #660, #667, #681, #685, #713, #722, #729). Phase 1/1.5 still has drawer schema/chunking/sanitization/audit, resumable JSONL and `claude-mem` backfill, fact-source provenance repair, and dry-run chunk/token/cost/storage estimates (PRs #671, #679, #682, #686, #692, #699, #703, #708, #721). Phase 3 now includes provenance schema/write/read paths, stable empty-provenance envelopes, `InjectionBudget.tierTokenCaps`, Surface A dry-run generation/API sourcing, bounded `fact-plus-snippet` result mode, store-level and API-level near-duplicate merge provenance preservation (PRs #684, #688, #720, #728, #730, #734, #735, #736, #737, #738, #748), and nonblocking PreCompact checkpoint capture with timeout/stdout hardening (PRs #776, #784). Phase 4 drawer/fact fusion hardening remains complete (PRs #707, #712, #716, #717). Phase 7 has the first web visibility slices plus Memory Browser drawer/evidence coverage (PRs #709, #719, #723, #726, #728). Adjacent hardening includes memory identifier/path validation and cleared dependency/security alert waves (PRs #732, #733, #777). Basic JSONL history import is wired through the Memory Import UI/API (PR #788), but import dedup/count alignment and large-file streaming bounds remain follow-up work. Remaining plan work is private fixture secret provisioning/changelog discipline, richer failure-mode-targeted eval examples, true full-drawer behavior and deeper additive budget accounting, promotion of the current Surface A dry-run bridge into the final write-gated approval flow, drawer-aware fusion default-on criteria, broader evidence UI, why-this-matched/raw-source filters, Diary/Timeline result treatment, temporal edge fields, and entity canonicalization.
 
 
 **Architecture:** Keep AgentCTL's PostgreSQL-native memory core instead of adopting ChromaDB. Add a sanitized verbatim drawer layer underneath existing `memory_facts`, link extracted facts back to source chunks through offsets, fuse drawer/fact/graph retrieval behind feature flags, and put eval, backfill, audit, injection budgets, and mesh compatibility gates before broad rollout.
@@ -36,7 +36,7 @@
 
 This v1.3 plan supersedes the original PR #584 draft. It incorporates the review blockers before implementation starts:
 
-- Migration numbers `0030`, `0031`, and `0032` have landed on `main`; future migration work must start at `0033` or later after re-confirming the current head. Do not silently reuse occupied numbers.
+- Migration numbers `0030` through `0033` have landed on `main`; future migration work must start at `0034` or later after re-confirming the current head. Do not silently reuse occupied numbers.
 - `wing` / `room` were removed from the schema. Existing `memory_scopes.scope` is the only durable hierarchy. `topic` is an optional room-like label.
 - `content_sha256` is no longer unique. Use it for duplicate scanning only; `(source_type, source_id, chunk_index)` protects deterministic source-local idempotency.
 - Drawer content, hash, snippets, and fact-source offsets are sanitized before storage. `memory_fact_sources` stores offsets, not copied quoted content.
@@ -197,7 +197,7 @@ flowchart LR
 
 ## Data Model Contract
 
-As of the 2026-04-21 checkpoint, `main` includes the MemPalace migrations through `0032_add_memory_drawer_backfill_state.sql`. The historical migration specs below are retained as implementation record; any new migration PR must start at `0033` or later after re-confirming `main` has not advanced.
+As of the 2026-04-25 checkpoint, `main` includes the MemPalace and Memory Ops migrations through `0033_add_memory_ops.sql`. The historical migration specs below are retained as implementation record; any new migration PR must start at `0034` or later after re-confirming `main` has not advanced.
 
 ### `0030_add_memory_drawers.sql`
 
@@ -336,9 +336,9 @@ CREATE TABLE memory_drawer_backfill_state (
 
 Memory write audit entries should be emitted through `AuditLogger` as a new `kind: 'memory_write'` variant with `sessionId`, `agentId`, `machineId` where applicable, `drawerId`, `sourceType`, `scope`, `chunkIndex`, `contentHash`, `redactionStatus`, and `success`. Do not log raw content.
 
-### `0033_add_memory_edge_temporal_fields.sql`
+### Future `memory_edges` temporal fields migration
 
-Only create this migration after the mesh sync contract is reviewed.
+Only create this migration after the mesh sync contract is reviewed, using the next free migration number at the time of implementation.
 
 ```sql
 ALTER TABLE memory_edges
@@ -990,11 +990,11 @@ targeted examples.
 1. Partially delivered: add `memory_fact_sources` and `embedding_version`; `is_diary` and `draft` remain future diary/review-state work.
 2. Extend fact creation with optional drawer offsets, not copied quotes.
 3. Delivered in PR #728: read quote previews from sanitized drawer content at API read time and surface archived/unavailable provenance markers on fact detail.
-4. Delivered through PR #738 and this follow-up branch: store-level helper copies and de-duplicates `memory_fact_sources` spans onto a survivor fact, and accepted near-duplicate consolidation actions call it before invalidating duplicate facts.
+4. Delivered through PRs #738 and #748: store-level helper copies and de-duplicates `memory_fact_sources` spans onto a survivor fact, and accepted near-duplicate consolidation actions call it before invalidating duplicate facts.
 5. Include drawer evidence in contradiction review UI and maintenance reports.
 6. Partially delivered: `InjectionBudget.tierTokenCaps` landed in PR #720, and PR #736 adds `resultMode` plus bounded injector wrapper plumbing for PostgreSQL `fact-plus-snippet`; true `full-drawer` handling and deeper additive budget accounting remain open.
 7. Keep default injection `fact-only` until eval and UI are ready.
-8. Delivered in PRs #734/#735 and this follow-up branch: add a Surface A generator dry-run that creates a bounded L0/L1 `MEMORY.md` proposal from reviewed facts without overwriting human-curated content, point it at the real Claude project memory path, and allow reviewed facts to come from the control-plane API as well as JSON fixtures. Remaining bridge work is the final write-gated approval flow.
+8. Delivered in PRs #734/#735/#737: add a Surface A generator dry-run that creates a bounded L0/L1 `MEMORY.md` proposal from reviewed facts without overwriting human-curated content, point it at the real Claude project memory path, and allow reviewed facts to come from the control-plane API as well as JSON fixtures. Remaining bridge work is the final write-gated approval flow.
 
 **Tests:**
 
@@ -1107,7 +1107,7 @@ targeted examples.
 
 **Files:**
 
-- Create: `packages/control-plane/drizzle/0033_add_memory_edge_temporal_fields.sql`
+- Create: next free `packages/control-plane/drizzle/<NNNN>_add_memory_edge_temporal_fields.sql`
 - Modify: `packages/control-plane/drizzle/0021_mesh_change_log.sql` only if sync payload projection is required.
 - Modify: `packages/shared/src/types/sync.ts` if edge payload schema changes.
 - Create: `packages/control-plane/src/memory/entity-timeline.ts`
@@ -1373,7 +1373,7 @@ Add env vars through the existing centralized config path used by control-plane/
 - [ ] Memory Browser still needs the fuller why-this-matched explanation row, Diary/Timeline result treatment, and raw-source filters.
 - [ ] Injector supports `fact-only` plus a bounded PostgreSQL `fact-plus-snippet` slice, but still needs true `full-drawer` mode and tighter per-tier/additive budget accounting. *(The `InjectionBudget.tierTokenCaps` contract/enforcement landed in PR #720; bounded result-mode plumbing landed in PR #736.)*
 - [ ] Checkpoint capture cannot block an agent run, proven by simulated PG/embedding failure tests.
-- [ ] PreCompact checkpoint hook returns within 2.5 seconds under a stalled queue fixture.
+- [x] PreCompact checkpoint hook returns within 2.5 seconds under a stalled queue fixture. *(PRs #776, #784)*
 - [x] `claude-mem` narrative backfill maps to drawers and atomic facts remain facts. *(PR #692 drawer path, PR #699 observations atomic-fact mapping, PR #703 session-summary atomic-fact mapping, and PR #708 compatibility/span edge-case repair with full-chunk fallback provenance.)*
 - [x] Drawer backfill dry-run reports estimated drawer chunks, embedding tokens, embedding cost, and storage bytes before execute-mode writes. *(PR #721)*
 - [ ] Mesh sync behavior for drawers and temporal edge fields is explicit before any sync payload changes.

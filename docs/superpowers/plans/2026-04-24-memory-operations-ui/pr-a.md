@@ -1,6 +1,8 @@
 # PR A — Foundation: Migration + Shared Types + EmbeddingClient
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Status:** Landed in PR #783 (`4578728f`). Keep this file as the implementation record; continue with PR B from the index.
 
 **Goal:** Database schema for 3 new tables + api_accounts extensions. Shared TypeScript types. Additive EmbeddingClient extension. Filter all existing `api_accounts` reads by `credential_kind='runtime'`. No breaking changes to existing functionality.
 
