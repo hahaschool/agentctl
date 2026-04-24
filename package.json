@@ -44,7 +44,8 @@
       "node-forge": ">=1.4.0",
       "@fastify/static": "9.1.1",
       "smol-toml": ">=1.6.1",
-      "vite": ">=7.3.2"
+      "vite": ">=7.3.2",
+      "postcss": "8.5.10"
     }
   },
   "devDependencies": {
