@@ -59,9 +59,10 @@ All PR plans reference these test utilities. They exist or will be created in PR
 ## Gate 1 (required before PR A merges)
 
 ```bash
+GEMINI_GATE1_FAKE_KEY="fake-key-gate1"
 curl -s -o /dev/null -w "%{http_code}" \
   -X POST https://generativelanguage.googleapis.com/v1beta/openai/embeddings \
-  -H "Authorization: Bearer fake-key-gate1" \
+  -H "Authorization: Bearer ${GEMINI_GATE1_FAKE_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"model":"gemini-embedding-001","input":["test"]}'
 # Must return 401, not 404 or ENOTFOUND
