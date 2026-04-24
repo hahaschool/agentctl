@@ -24,6 +24,7 @@ type CreateHeartbeatJobBody = {
 type MockState = {
   jobs: RepeatableJobInfo[];
   createHeartbeatBodies: CreateHeartbeatJobBody[];
+  clearAllCalls: number;
   deleteAgentIds: string[];
   schedulerConfigured: boolean;
 };
@@ -49,6 +50,7 @@ function makeState(overrides: Partial<MockState> = {}): MockState {
       },
     ],
     createHeartbeatBodies: [],
+    clearAllCalls: 0,
     deleteAgentIds: [],
     schedulerConfigured: true,
     ...overrides,
@@ -117,6 +119,15 @@ async function mountApiMocks(page: Page, state: MockState): Promise<void> {
       ];
 
       await fulfillJson(route, { ok: true });
+      return;
+    }
+
+    if (method === 'DELETE' && pathname === '/api/scheduler/jobs') {
+      expect(url.searchParams.get('confirm')).toBe('true');
+      state.clearAllCalls += 1;
+      const removedCount = state.jobs.length;
+      state.jobs = [];
+      await fulfillJson(route, { ok: true, removedCount });
       return;
     }
 
@@ -195,6 +206,19 @@ test.describe('Scheduler route', () => {
       .toBe('agent-created');
     await expect(page.getByTestId('scheduler-delete-confirm')).toBeHidden();
     await expect(page.getByRole('cell', { name: 'heartbeat:agent-created' })).toBeHidden();
+
+    await page.getByTestId('clear-all-scheduler-jobs').click();
+    await expect(page.getByTestId('scheduler-clear-all-confirm')).toBeVisible();
+    await page.getByTestId('confirm-clear-all-scheduler-jobs').click();
+
+    await expect
+      .poll(() => state.clearAllCalls, {
+        message: 'clear-all request should hit the confirmed scheduler bulk delete endpoint',
+      })
+      .toBe(1);
+    await expect(page.getByTestId('scheduler-clear-all-confirm')).toBeHidden();
+    await expect(page.getByTestId('scheduler-jobs-empty')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Scheduled jobs' })).toBeHidden();
   });
 
   test('renders scheduler-not-configured as informational state without hard error', async ({
