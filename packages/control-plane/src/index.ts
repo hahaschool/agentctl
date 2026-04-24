@@ -29,6 +29,10 @@ import { Mem0Client } from './memory/mem0-client.js';
 import { MemoryInjector } from './memory/memory-injector.js';
 import { MemorySearch } from './memory/memory-search.js';
 import { MemoryStore } from './memory/memory-store.js';
+import { JobEventsRepository } from './memory/ops/job-events-repository.js';
+import { JobsRepository } from './memory/ops/jobs-repository.js';
+import { getMemoryOpsQueue } from './memory/ops/queue.js';
+import { createMemoryOpsWorkerRuntime } from './memory/ops/worker-runtime.js';
 import { MeshConfigProvider } from './mesh/mesh-config-provider.js';
 import { DbAgentRegistry } from './registry/db-registry.js';
 import { LiteLLMClient } from './router/litellm-client.js';
@@ -85,6 +89,28 @@ const CONTROL_PLANE_ENV: EnvVar[] = [
     default: DEFAULT_INJECTION_BUDGET.resultMode,
     validate: (value) => MEMORY_INJECTION_RESULT_MODES.includes(value as MemoryInjectionResultMode),
     description: 'Memory injection result mode: fact-only, fact-plus-snippet, or full-drawer',
+  },
+  {
+    name: 'MEMORY_OPS_ENABLED',
+    default: 'false',
+    validate: (value) => ['true', 'false'].includes(value),
+    description: 'Enable memory operations job submission endpoints',
+  },
+  {
+    name: 'MEMORY_OPS_ENABLED_KINDS',
+    description: 'Comma-separated memory operation kinds enabled for submission',
+  },
+  {
+    name: 'MEMORY_OPS_SIGNING_SECRET',
+    description: 'HMAC secret used for memory operation egress preview tokens',
+  },
+  {
+    name: 'MEMORY_OPS_DRAWER_SOURCE_ROOTS',
+    description: 'Colon-separated allowlist of drawer source roots for preview scans',
+  },
+  {
+    name: 'MEMORY_OPS_MAX_FAIL_RATIO',
+    description: 'Maximum tolerated failed item ratio for memory operation workers',
   },
   {
     name: 'LOG_LEVEL',
@@ -510,6 +536,38 @@ async function main(): Promise<void> {
     }
   }
 
+  // --- Memory operations jobs (DB-backed orchestration, handlers land in PR E) ---
+  let memoryOpsQueue: ReturnType<typeof getMemoryOpsQueue> | null = null;
+  let memoryOpsWorker: ReturnType<typeof createMemoryOpsWorkerRuntime> | null = null;
+  if (db && pgPool && redisConnection) {
+    try {
+      memoryOpsQueue = getMemoryOpsQueue(redisConnection);
+      const jobsRepository = new JobsRepository(pgPool);
+      const eventsRepository = new JobEventsRepository(pgPool);
+      const reconcile = await jobsRepository.bootReconcile(machineId, memoryOpsQueue);
+      memoryOpsWorker = createMemoryOpsWorkerRuntime({
+        connection: redisConnection,
+        jobsRepository,
+        eventsRepository,
+        logger: logger.child({ component: 'memory-ops-worker' }),
+      });
+      logger.info({ reconcile }, 'Memory operations queue and worker runtime started');
+    } catch (err) {
+      try {
+        if (memoryOpsWorker) await memoryOpsWorker.close();
+        if (memoryOpsQueue) await memoryOpsQueue.close();
+      } catch (closeErr) {
+        logger.debug({ err: closeErr }, 'Error closing partial memory operations startup');
+      }
+      memoryOpsQueue = null;
+      memoryOpsWorker = null;
+      logger.debug(
+        { err },
+        'Memory operations worker not started (memory ops tables may not exist)',
+      );
+    }
+  }
+
   // --- Sync protocol loops (pull changes from reachable peers) ---
   let syncLoops: { stop: () => void } | null = null;
   if (db) {
@@ -588,6 +646,7 @@ async function main(): Promise<void> {
     memorySearch,
     memoryStore,
     embeddingClientResolver,
+    memoryOpsQueue,
     memoryInjector: memoryInjector ?? null,
     pgPool,
     workerPort: REMOTE_WORKER_PORT,
@@ -656,6 +715,13 @@ async function main(): Promise<void> {
       if (syncQueue) await syncQueue.close();
     } catch (err: unknown) {
       logger.error({ err }, 'Error closing sync maintenance worker/queue');
+    }
+
+    try {
+      if (memoryOpsWorker) await memoryOpsWorker.close();
+      if (memoryOpsQueue) await memoryOpsQueue.close();
+    } catch (err: unknown) {
+      logger.error({ err }, 'Error closing memory operations worker/queue');
     }
 
     try {

@@ -11,6 +11,8 @@ const DEFAULT_AUDIT_RETENTION_DAYS = 90;
 const DEFAULT_RUN_RETENTION_DAYS = 30;
 const DEFAULT_DELIVERY_RETENTION_DAYS = 14;
 const DEFAULT_CHECKPOINT_RETENTION_DAYS = 7;
+const DEFAULT_MEMORY_OPS_EVENT_RETENTION_DAYS = 14;
+const DEFAULT_MEMORY_OPS_AUDIT_RETENTION_DAYS = 90;
 const DEFAULT_MAX_STORAGE_MB = 1000;
 const DEFAULT_BATCH_SIZE = 1000;
 
@@ -23,6 +25,8 @@ export type LogRetentionConfig = {
   runRetentionDays: number;
   deliveryRetentionDays: number;
   checkpointRetentionDays: number;
+  memoryOpsEventRetentionDays: number;
+  memoryOpsAuditRetentionDays: number;
   maxStorageMb: number;
   dryRun: boolean;
   batchSize: number;
@@ -39,6 +43,8 @@ export type RetentionSummary = {
   agentRuns: TableRetentionInfo;
   webhookDeliveries: TableRetentionInfo;
   checkpoints: TableRetentionInfo;
+  memoryOpsJobEvents: TableRetentionInfo;
+  memoryOpsAudit: TableRetentionInfo;
 };
 
 export type CleanupResult = {
@@ -46,6 +52,8 @@ export type CleanupResult = {
   agentRunsDeleted: number;
   webhookDeliveriesDeleted: number;
   checkpointsDeleted: number;
+  memoryOpsJobEventsDeleted: number;
+  memoryOpsAuditDeleted: number;
   dryRun: boolean;
   executedAt: Date;
 };
@@ -55,6 +63,8 @@ export type StorageEstimate = {
   agentRunsMb: number;
   webhookDeliveriesMb: number;
   checkpointsMb: number;
+  memoryOpsJobEventsMb: number;
+  memoryOpsAuditMb: number;
   totalMb: number;
 };
 
@@ -68,6 +78,10 @@ function validateConfig(config: Partial<LogRetentionConfig>): LogRetentionConfig
   const deliveryRetentionDays = config.deliveryRetentionDays ?? DEFAULT_DELIVERY_RETENTION_DAYS;
   const checkpointRetentionDays =
     config.checkpointRetentionDays ?? DEFAULT_CHECKPOINT_RETENTION_DAYS;
+  const memoryOpsEventRetentionDays =
+    config.memoryOpsEventRetentionDays ?? DEFAULT_MEMORY_OPS_EVENT_RETENTION_DAYS;
+  const memoryOpsAuditRetentionDays =
+    config.memoryOpsAuditRetentionDays ?? DEFAULT_MEMORY_OPS_AUDIT_RETENTION_DAYS;
   const maxStorageMb = config.maxStorageMb ?? DEFAULT_MAX_STORAGE_MB;
   const batchSize = config.batchSize ?? DEFAULT_BATCH_SIZE;
   const dryRun = config.dryRun ?? false;
@@ -104,6 +118,22 @@ function validateConfig(config: Partial<LogRetentionConfig>): LogRetentionConfig
     );
   }
 
+  if (memoryOpsEventRetentionDays < 0) {
+    throw new ControlPlaneError(
+      'INVALID_RETENTION_CONFIG',
+      'memoryOpsEventRetentionDays must be non-negative',
+      { memoryOpsEventRetentionDays },
+    );
+  }
+
+  if (memoryOpsAuditRetentionDays < 0) {
+    throw new ControlPlaneError(
+      'INVALID_RETENTION_CONFIG',
+      'memoryOpsAuditRetentionDays must be non-negative',
+      { memoryOpsAuditRetentionDays },
+    );
+  }
+
   if (maxStorageMb <= 0) {
     throw new ControlPlaneError('INVALID_RETENTION_CONFIG', 'maxStorageMb must be positive', {
       maxStorageMb,
@@ -121,6 +151,8 @@ function validateConfig(config: Partial<LogRetentionConfig>): LogRetentionConfig
     runRetentionDays,
     deliveryRetentionDays,
     checkpointRetentionDays,
+    memoryOpsEventRetentionDays,
+    memoryOpsAuditRetentionDays,
     maxStorageMb,
     dryRun,
     batchSize,
@@ -150,6 +182,8 @@ export function createLogRetentionManager(
   cleanupAgentRuns: (before: Date) => Promise<{ deleted: number }>;
   cleanupWebhookDeliveries: (before: Date) => Promise<{ deleted: number }>;
   cleanupCheckpoints: (before: Date) => Promise<{ deleted: number }>;
+  cleanupMemoryOpsJobEvents: (before: Date) => Promise<{ deleted: number }>;
+  cleanupMemoryOpsAudit: (before: Date) => Promise<{ deleted: number }>;
   runFullCleanup: () => Promise<CleanupResult>;
   estimateStorageUsage: () => Promise<StorageEstimate>;
 } {
@@ -165,6 +199,8 @@ export function createLogRetentionManager(
       const runCutoff = cutoffDate(config.runRetentionDays);
       const deliveryCutoff = cutoffDate(config.deliveryRetentionDays);
       const checkpointCutoff = cutoffDate(config.checkpointRetentionDays);
+      const memoryOpsEventCutoff = cutoffDate(config.memoryOpsEventRetentionDays);
+      const memoryOpsAuditCutoff = cutoffDate(config.memoryOpsAuditRetentionDays);
 
       // Audit actions
       const auditTotalResult = await db.execute(
@@ -233,6 +269,56 @@ export function createLogRetentionManager(
         ?.oldest;
       const checkpointOldest = checkpointOldestRaw ? new Date(checkpointOldestRaw) : null;
 
+      // Memory ops job events
+      const memoryOpsEventTotalResult = await db.execute(
+        sql`SELECT COUNT(*)::int AS count FROM memory_ops_job_events`,
+      );
+      const memoryOpsEventTotal =
+        (memoryOpsEventTotalResult.rows[0] as { count: number })?.count ?? 0;
+
+      const memoryOpsEventDeleteResult = await db.execute(
+        sql`SELECT COUNT(*)::int AS count FROM memory_ops_job_events WHERE created_at < ${memoryOpsEventCutoff}`,
+      );
+      const memoryOpsEventToDelete =
+        (memoryOpsEventDeleteResult.rows[0] as { count: number })?.count ?? 0;
+
+      const memoryOpsEventOldestResult = await db.execute(
+        sql`SELECT MIN(created_at) AS oldest FROM memory_ops_job_events`,
+      );
+      const memoryOpsEventOldestRaw = (
+        memoryOpsEventOldestResult.rows[0] as {
+          oldest: string | null;
+        }
+      )?.oldest;
+      const memoryOpsEventOldest = memoryOpsEventOldestRaw
+        ? new Date(memoryOpsEventOldestRaw)
+        : null;
+
+      // Memory ops audit
+      const memoryOpsAuditTotalResult = await db.execute(
+        sql`SELECT COUNT(*)::int AS count FROM memory_ops_audit`,
+      );
+      const memoryOpsAuditTotal =
+        (memoryOpsAuditTotalResult.rows[0] as { count: number })?.count ?? 0;
+
+      const memoryOpsAuditDeleteResult = await db.execute(
+        sql`SELECT COUNT(*)::int AS count FROM memory_ops_audit WHERE timestamp < ${memoryOpsAuditCutoff}`,
+      );
+      const memoryOpsAuditToDelete =
+        (memoryOpsAuditDeleteResult.rows[0] as { count: number })?.count ?? 0;
+
+      const memoryOpsAuditOldestResult = await db.execute(
+        sql`SELECT MIN(timestamp) AS oldest FROM memory_ops_audit`,
+      );
+      const memoryOpsAuditOldestRaw = (
+        memoryOpsAuditOldestResult.rows[0] as {
+          oldest: string | null;
+        }
+      )?.oldest;
+      const memoryOpsAuditOldest = memoryOpsAuditOldestRaw
+        ? new Date(memoryOpsAuditOldestRaw)
+        : null;
+
       return {
         auditActions: { total: auditTotal, toDelete: auditToDelete, oldestDate: auditOldest },
         agentRuns: { total: runTotal, toDelete: runToDelete, oldestDate: runOldest },
@@ -245,6 +331,16 @@ export function createLogRetentionManager(
           total: checkpointTotal,
           toDelete: checkpointToDelete,
           oldestDate: checkpointOldest,
+        },
+        memoryOpsJobEvents: {
+          total: memoryOpsEventTotal,
+          toDelete: memoryOpsEventToDelete,
+          oldestDate: memoryOpsEventOldest,
+        },
+        memoryOpsAudit: {
+          total: memoryOpsAuditTotal,
+          toDelete: memoryOpsAuditToDelete,
+          oldestDate: memoryOpsAuditOldest,
         },
       };
     } catch (err) {
@@ -431,6 +527,88 @@ export function createLogRetentionManager(
   }
 
   // -----------------------------------------------------------------------
+  // cleanupMemoryOpsJobEvents
+  // -----------------------------------------------------------------------
+
+  async function cleanupMemoryOpsJobEvents(before: Date): Promise<{ deleted: number }> {
+    try {
+      if (config.dryRun) {
+        const countResult = await db.execute(
+          sql`SELECT COUNT(*)::int AS count FROM memory_ops_job_events WHERE created_at < ${before}`,
+        );
+        const count = (countResult.rows[0] as { count: number })?.count ?? 0;
+        return { deleted: count };
+      }
+
+      let totalDeleted = 0;
+      let batchDeleted: number;
+
+      do {
+        const result = await db.execute(
+          sql`DELETE FROM memory_ops_job_events WHERE event_id IN (
+            SELECT event_id FROM memory_ops_job_events WHERE created_at < ${before} LIMIT ${config.batchSize}
+          )`,
+        );
+        batchDeleted = result.rowCount ?? 0;
+        totalDeleted += batchDeleted;
+      } while (batchDeleted >= config.batchSize);
+
+      return { deleted: totalDeleted };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof ControlPlaneError) {
+        throw err;
+      }
+      throw new ControlPlaneError(
+        'MEMORY_OPS_EVENT_CLEANUP_FAILED',
+        `Failed to clean up memory ops job events: ${message}`,
+        { before: before.toISOString() },
+      );
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // cleanupMemoryOpsAudit
+  // -----------------------------------------------------------------------
+
+  async function cleanupMemoryOpsAudit(before: Date): Promise<{ deleted: number }> {
+    try {
+      if (config.dryRun) {
+        const countResult = await db.execute(
+          sql`SELECT COUNT(*)::int AS count FROM memory_ops_audit WHERE timestamp < ${before}`,
+        );
+        const count = (countResult.rows[0] as { count: number })?.count ?? 0;
+        return { deleted: count };
+      }
+
+      let totalDeleted = 0;
+      let batchDeleted: number;
+
+      do {
+        const result = await db.execute(
+          sql`DELETE FROM memory_ops_audit WHERE id IN (
+            SELECT id FROM memory_ops_audit WHERE timestamp < ${before} LIMIT ${config.batchSize}
+          )`,
+        );
+        batchDeleted = result.rowCount ?? 0;
+        totalDeleted += batchDeleted;
+      } while (batchDeleted >= config.batchSize);
+
+      return { deleted: totalDeleted };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (err instanceof ControlPlaneError) {
+        throw err;
+      }
+      throw new ControlPlaneError(
+        'MEMORY_OPS_AUDIT_CLEANUP_FAILED',
+        `Failed to clean up memory ops audit rows: ${message}`,
+        { before: before.toISOString() },
+      );
+    }
+  }
+
+  // -----------------------------------------------------------------------
   // runFullCleanup
   // -----------------------------------------------------------------------
 
@@ -439,17 +617,23 @@ export function createLogRetentionManager(
     const runCutoff = cutoffDate(config.runRetentionDays);
     const deliveryCutoff = cutoffDate(config.deliveryRetentionDays);
     const checkpointCutoff = cutoffDate(config.checkpointRetentionDays);
+    const memoryOpsEventCutoff = cutoffDate(config.memoryOpsEventRetentionDays);
+    const memoryOpsAuditCutoff = cutoffDate(config.memoryOpsAuditRetentionDays);
 
     const auditResult = await cleanupAuditActions(auditCutoff);
     const runResult = await cleanupAgentRuns(runCutoff);
     const deliveryResult = await cleanupWebhookDeliveries(deliveryCutoff);
     const checkpointResult = await cleanupCheckpoints(checkpointCutoff);
+    const memoryOpsEventResult = await cleanupMemoryOpsJobEvents(memoryOpsEventCutoff);
+    const memoryOpsAuditResult = await cleanupMemoryOpsAudit(memoryOpsAuditCutoff);
 
     return {
       auditActionsDeleted: auditResult.deleted,
       agentRunsDeleted: runResult.deleted,
       webhookDeliveriesDeleted: deliveryResult.deleted,
       checkpointsDeleted: checkpointResult.deleted,
+      memoryOpsJobEventsDeleted: memoryOpsEventResult.deleted,
+      memoryOpsAuditDeleted: memoryOpsAuditResult.deleted,
       dryRun: config.dryRun,
       executedAt: new Date(),
     };
@@ -466,7 +650,14 @@ export function createLogRetentionManager(
           relname AS table_name,
           pg_total_relation_size(quote_ident(relname))::bigint AS size_bytes
         FROM pg_class
-        WHERE relname IN ('agent_actions', 'agent_runs', 'webhook_deliveries', 'loop_checkpoints')
+        WHERE relname IN (
+          'agent_actions',
+          'agent_runs',
+          'webhook_deliveries',
+          'loop_checkpoints',
+          'memory_ops_job_events',
+          'memory_ops_audit'
+        )
           AND relkind = 'r'`,
       );
 
@@ -479,13 +670,23 @@ export function createLogRetentionManager(
       const agentRunsMb = sizeMap.get('agent_runs') ?? 0;
       const webhookDeliveriesMb = sizeMap.get('webhook_deliveries') ?? 0;
       const checkpointsMb = sizeMap.get('loop_checkpoints') ?? 0;
+      const memoryOpsJobEventsMb = sizeMap.get('memory_ops_job_events') ?? 0;
+      const memoryOpsAuditMb = sizeMap.get('memory_ops_audit') ?? 0;
 
       return {
         auditActionsMb,
         agentRunsMb,
         webhookDeliveriesMb,
         checkpointsMb,
-        totalMb: auditActionsMb + agentRunsMb + webhookDeliveriesMb + checkpointsMb,
+        memoryOpsJobEventsMb,
+        memoryOpsAuditMb,
+        totalMb:
+          auditActionsMb +
+          agentRunsMb +
+          webhookDeliveriesMb +
+          checkpointsMb +
+          memoryOpsJobEventsMb +
+          memoryOpsAuditMb,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -506,6 +707,8 @@ export function createLogRetentionManager(
     cleanupAgentRuns,
     cleanupWebhookDeliveries,
     cleanupCheckpoints,
+    cleanupMemoryOpsJobEvents,
+    cleanupMemoryOpsAudit,
     runFullCleanup,
     estimateStorageUsage,
   };

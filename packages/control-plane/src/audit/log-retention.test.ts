@@ -364,13 +364,13 @@ describe('calculateRetention', () => {
     }
   });
 
-  it('makes exactly 12 database queries (3 per table x 4 tables)', async () => {
+  it('makes exactly 18 database queries (3 per table x 6 tables)', async () => {
     const mockDb = createMockDb();
     const manager = createLogRetentionManager(defaultConfig(), mockDb as never);
 
     await manager.calculateRetention();
 
-    expect(mockDb.execute).toHaveBeenCalledTimes(12);
+    expect(mockDb.execute).toHaveBeenCalledTimes(18);
   });
 });
 
@@ -985,6 +985,60 @@ describe('runFullCleanup', () => {
     const manager = createLogRetentionManager(defaultConfig(), mockDb as never);
 
     await expect(manager.runFullCleanup()).rejects.toThrow(ControlPlaneError);
+  });
+});
+
+describe('memory ops retention additions', () => {
+  it('cleans up memory ops event and audit tables during the full cleanup run', async () => {
+    const executedSql: string[] = [];
+    const mockDb = createMockDb(async (query: unknown) => {
+      const { sql: sqlStr } = extractQuery(query);
+      executedSql.push(sqlStr);
+      if (sqlStr.includes('COUNT')) {
+        return { rows: [{ count: 0 }] };
+      }
+      if (sqlStr.includes('DELETE')) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (sqlStr.includes('INSERT INTO agent_actions')) {
+        return { rows: [], rowCount: 1 };
+      }
+      return { rows: [] };
+    });
+    const manager = createLogRetentionManager(defaultConfig(), mockDb as never);
+
+    await manager.runFullCleanup();
+
+    expect(executedSql.some((sql) => sql.includes('memory_ops_job_events'))).toBe(true);
+    expect(executedSql.some((sql) => sql.includes('memory_ops_audit'))).toBe(true);
+  });
+
+  it('includes memory ops tables in storage estimates', async () => {
+    const mockDb = createMockDb(async (query: unknown) => {
+      const { sql: sqlStr } = extractQuery(query);
+      if (sqlStr.includes('pg_total_relation_size')) {
+        return {
+          rows: [
+            { table_name: 'agent_actions', size_bytes: 1024 * 1024 },
+            { table_name: 'agent_runs', size_bytes: 2 * 1024 * 1024 },
+            { table_name: 'webhook_deliveries', size_bytes: 3 * 1024 * 1024 },
+            { table_name: 'loop_checkpoints', size_bytes: 4 * 1024 * 1024 },
+            { table_name: 'memory_ops_job_events', size_bytes: 5 * 1024 * 1024 },
+            { table_name: 'memory_ops_audit', size_bytes: 6 * 1024 * 1024 },
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    const manager = createLogRetentionManager(defaultConfig(), mockDb as never);
+
+    const estimate = await manager.estimateStorageUsage();
+
+    expect(estimate).toMatchObject({
+      memoryOpsJobEventsMb: 5,
+      memoryOpsAuditMb: 6,
+      totalMb: 21,
+    });
   });
 });
 

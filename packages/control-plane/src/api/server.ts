@@ -34,6 +34,7 @@ import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MemorySearch } from '../memory/memory-search.js';
 import type { MemoryStore } from '../memory/memory-store.js';
+import type { MemoryOpsQueue } from '../memory/ops/queue.js';
 import type { MeshConfigProvider } from '../mesh/mesh-config-provider.js';
 import { ExpoPushDispatcher } from '../notifications/expo-push-dispatcher.js';
 import { MobilePushDeviceStore } from '../notifications/mobile-push-device-store.js';
@@ -88,6 +89,7 @@ import { memoryDrawerRoutes } from './routes/memory-drawers.js';
 import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
 import { memoryFactRoutes } from './routes/memory-facts.js';
 import { memoryImportRoutes } from './routes/memory-import.js';
+import { memoryOpsRoutes } from './routes/memory-ops.js';
 import { memoryProvidersRoutes } from './routes/memory-providers.js';
 import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
@@ -164,6 +166,7 @@ type CreateServerOptions = {
    */
   embeddingClient?: DrawerEmbeddingClient;
   embeddingClientResolver?: EmbeddingClientResolver;
+  memoryOpsQueue?: MemoryOpsQueue | null;
   memoryInjector?: MemoryInjector | null;
   pgPool?: Pool;
   workerPort?: number;
@@ -208,6 +211,7 @@ export async function createServer({
   memoryStore,
   embeddingClient,
   embeddingClientResolver,
+  memoryOpsQueue = null,
   memoryInjector = null,
   pgPool,
   workerPort = 9000,
@@ -609,6 +613,18 @@ export async function createServer({
       embeddingClient,
       embeddingClientResolver,
     });
+
+    if (db) {
+      await app.register(memoryOpsRoutes, {
+        prefix: '/api/memory/ops',
+        db,
+        pool: pgPool,
+        queue: memoryOpsQueue,
+        encryptionKey: process.env.CREDENTIAL_ENCRYPTION_KEY ?? '',
+        logger,
+        machineId: machineId ?? 'unknown',
+      });
+    }
 
     if (memoryStore) {
       await app.register(knowledgeMaintenanceRoutes, {

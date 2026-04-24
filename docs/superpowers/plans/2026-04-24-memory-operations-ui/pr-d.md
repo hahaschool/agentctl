@@ -4,6 +4,8 @@
 
 **Goal:** All job-orchestration infrastructure: BullMQ queue wired to DB jobs, `JobsRepository` (including cancel + durable state machine), `JobEventsRepository`, SSE streaming, preview endpoint, `/api/memory/ops/capabilities`. Workers are registered but no handlers yet (PR E adds them). `MEMORY_OPS_ENABLED_KINDS` is shipped as empty — no jobs can run yet.
 
+**2026-04-25 implementation status:** Active branch `codex/memory-ops-pr-d` implements this PR D slice from post-#811 `main@d64ae2f2`. The branch adds the backend route, queue/repository/event/SSE/preview/worker-runtime modules, retention for local memory-ops events/audit rows, `.env.example` progressive-unlock defaults, focused unit/route tests, and startup/server wiring without changing dev/beta CD configuration.
+
 **Architecture:** `memory-ops/config.ts` is the single source of truth for feature flags. `memory-ops/jobs-repository.ts` is the only writer to `memory_ops_jobs`. The BullMQ queue is an in-process singleton. Advisory lock + fleet-check SELECT inside DB transaction before INSERT. SSE stream reads from `memory_ops_job_events` using `pg_notify`.
 
 **Prerequisite:** PRs A + B merged. Branch from `main`.
@@ -11,8 +13,8 @@
 **Branch:**
 ```bash
 git fetch origin
-git worktree add .trees/pr-d -b agent/claude-1/feat/memory-ops-pr-d
-cd .trees/pr-d
+git worktree add .trees/codex-memory-ops-pr-d -b codex/memory-ops-pr-d origin/main
+cd .trees/codex-memory-ops-pr-d
 ```
 
 **Tech Stack:** BullMQ, `pg_notify` via `pg` client listen/notify, Zod discriminated union schemas, Fastify SSE (using `reply.raw` with `text/event-stream`).
@@ -1000,7 +1002,7 @@ MEMORY_OPS_ENABLED_KINDS=
 pnpm build && pnpm vitest run && pnpm lint
 git add packages/control-plane/src/memory/ops/ packages/control-plane/src/api/routes/memory-ops.ts packages/control-plane/src/api/server.ts packages/control-plane/src/index.ts packages/control-plane/src/audit/log-retention.ts .env.example
 git commit -m "feat(memory-ops): PR D — jobs CRUD, BullMQ, SSE, preview endpoint, capabilities route"
-git push origin agent/claude-1/feat/memory-ops-pr-d
+git push origin codex/memory-ops-pr-d
 gh pr create --base main \
   --title "feat(memory-ops): PR D — job orchestration infrastructure" \
   --body "BullMQ queue, JobsRepository (advisory lock + fleet check + cancel state machine), SSE streaming, preview endpoint, capabilities. ENABLED_JOB_KINDS='' — no jobs run yet."
