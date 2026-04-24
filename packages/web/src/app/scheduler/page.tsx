@@ -349,11 +349,27 @@ export function SchedulerPage(): React.JSX.Element {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<RepeatableJobInfo | null>(null);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
 
   const deleteMutation = useMutation({
     mutationFn: (agentId: string) => schedulerApi.deleteSchedulerJob(agentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: SCHEDULER_JOBS_QUERY_KEY });
+    },
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: schedulerApi.deleteAllSchedulerJobs,
+    onSuccess: (res) => {
+      toast.success(
+        `${res.removedCount} scheduled job${res.removedCount === 1 ? '' : 's'} removed`,
+      );
+      setClearAllOpen(false);
+      void queryClient.invalidateQueries({ queryKey: SCHEDULER_JOBS_QUERY_KEY });
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err, 'Failed to remove scheduled jobs'));
+      setClearAllOpen(false);
     },
   });
 
@@ -403,6 +419,21 @@ export function SchedulerPage(): React.JSX.Element {
             onClick={() => void jobsQuery.refetch()}
             isFetching={jobsQuery.isFetching && !jobsQuery.isLoading}
           />
+          {jobs.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setClearAllOpen(true)}
+              disabled={clearAllMutation.isPending}
+              data-testid="clear-all-scheduler-jobs"
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20',
+                'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-red-500/10',
+              )}
+            >
+              {clearAllMutation.isPending ? 'Removing…' : 'Remove all'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setDialogOpen(true)}
@@ -572,6 +603,46 @@ export function SchedulerPage(): React.JSX.Element {
                 className="px-3 py-1.5 rounded-md text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
               >
                 {deleteMutation.isPending ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {clearAllOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="scheduler-clear-all-title"
+          data-testid="scheduler-clear-all-confirm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div className="w-full max-w-sm rounded-md border border-border bg-card shadow-xl p-5">
+            <h2 id="scheduler-clear-all-title" className="text-sm font-semibold text-foreground">
+              Remove all scheduled jobs?
+            </h2>
+            <p className="mt-2 text-xs text-muted-foreground">
+              This removes all {jobs.length} repeatable scheduler job
+              {jobs.length === 1 ? '' : 's'} from the control plane. Running agent sessions are not
+              stopped.
+            </p>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setClearAllOpen(false)}
+                disabled={clearAllMutation.isPending}
+                className="px-3 py-1.5 rounded-md border border-border bg-muted text-xs text-foreground hover:bg-accent/10 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => clearAllMutation.mutate()}
+                disabled={clearAllMutation.isPending}
+                data-testid="confirm-clear-all-scheduler-jobs"
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+              >
+                {clearAllMutation.isPending ? 'Removing…' : 'Remove all'}
               </button>
             </div>
           </div>

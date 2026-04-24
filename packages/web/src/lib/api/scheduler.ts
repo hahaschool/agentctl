@@ -33,6 +33,7 @@ export type CreateCronJobInput = {
 
 export type CreateJobResponse = { ok: true };
 export type DeleteJobResponse = { ok: true; key: string; removedCount?: number };
+export type DeleteAllJobsResponse = { ok: true; removedCount: number };
 
 export const SCHEDULER_NOT_CONFIGURED_CODE = 'SCHEDULER_NOT_CONFIGURED';
 
@@ -62,6 +63,11 @@ export const schedulerApi = {
 
   deleteSchedulerJob: (agentId: string): Promise<DeleteJobResponse> =>
     request<DeleteJobResponse>(`/api/scheduler/jobs/${encodeURIComponent(agentId)}`, {
+      method: 'DELETE',
+    }),
+
+  deleteAllSchedulerJobs: (): Promise<DeleteAllJobsResponse> =>
+    request<DeleteAllJobsResponse>('/api/scheduler/jobs?confirm=true', {
       method: 'DELETE',
     }),
 };

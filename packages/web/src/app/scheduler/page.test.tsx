@@ -6,13 +6,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockCreateCronJob, mockCreateHeartbeatJob, mockDeleteSchedulerJob, mockListJobs } =
-  vi.hoisted(() => ({
-    mockCreateCronJob: vi.fn(),
-    mockCreateHeartbeatJob: vi.fn(),
-    mockDeleteSchedulerJob: vi.fn(),
-    mockListJobs: vi.fn(),
-  }));
+const {
+  mockCreateCronJob,
+  mockCreateHeartbeatJob,
+  mockDeleteAllSchedulerJobs,
+  mockDeleteSchedulerJob,
+  mockListJobs,
+} = vi.hoisted(() => ({
+  mockCreateCronJob: vi.fn(),
+  mockCreateHeartbeatJob: vi.fn(),
+  mockDeleteAllSchedulerJobs: vi.fn(),
+  mockDeleteSchedulerJob: vi.fn(),
+  mockListJobs: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Module boundary mocks
@@ -56,6 +62,7 @@ vi.mock('@/lib/api/scheduler', async () => {
       listSchedulerJobs: mockListJobs,
       createSchedulerHeartbeatJob: mockCreateHeartbeatJob,
       createSchedulerCronJob: mockCreateCronJob,
+      deleteAllSchedulerJobs: mockDeleteAllSchedulerJobs,
       deleteSchedulerJob: mockDeleteSchedulerJob,
     },
   };
@@ -85,6 +92,7 @@ describe('SchedulerPage', () => {
     mockListJobs.mockResolvedValue([]);
     mockCreateHeartbeatJob.mockResolvedValue({ ok: true });
     mockCreateCronJob.mockResolvedValue({ ok: true });
+    mockDeleteAllSchedulerJobs.mockResolvedValue({ ok: true, removedCount: 2 });
     mockDeleteSchedulerJob.mockResolvedValue({ ok: true, key: 'agent-1', removedCount: 1 });
   });
 
@@ -154,6 +162,39 @@ describe('SchedulerPage', () => {
 
     await waitFor(() => {
       expect(mockDeleteSchedulerJob).toHaveBeenCalledWith('agent-1');
+    });
+  });
+
+  it('removes all scheduled jobs after confirmation', async () => {
+    mockListJobs.mockResolvedValue([
+      {
+        key: 'heartbeat:agent-1',
+        name: 'agentctl-heartbeat',
+        pattern: null,
+        every: '60000',
+        next: 1_765_000_000_000,
+      },
+      {
+        key: 'cron:agent-2',
+        name: 'agentctl-cron',
+        pattern: '*/15 * * * *',
+        every: null,
+        next: 1_765_000_060_000,
+      },
+    ]);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('heartbeat:agent-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('clear-all-scheduler-jobs'));
+    expect(screen.getByTestId('scheduler-clear-all-confirm')).toBeDefined();
+    fireEvent.click(screen.getByTestId('confirm-clear-all-scheduler-jobs'));
+
+    await waitFor(() => {
+      expect(mockDeleteAllSchedulerJobs).toHaveBeenCalledTimes(1);
     });
   });
 });
