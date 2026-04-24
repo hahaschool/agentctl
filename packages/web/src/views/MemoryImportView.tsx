@@ -156,6 +156,13 @@ function Step1SourceDetection({
         />
       </div>
 
+      {source === 'jsonl-history' && (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          JSONL history import is not wired yet. Use claude-mem import for now; roadmap now tracks
+          JSONL as a remaining delivery gap instead of a completed feature.
+        </div>
+      )}
+
       {error && (
         <div
           className="flex items-center gap-2 text-sm text-destructive"
@@ -169,7 +176,7 @@ function Step1SourceDetection({
       <button
         type="button"
         onClick={onNext}
-        disabled={!dbPath.trim() || loading}
+        disabled={!dbPath.trim() || loading || source !== 'claude-mem'}
         className="flex items-center gap-2 px-4 py-2 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         data-testid="step1-next"
       >
@@ -273,9 +280,9 @@ function Step2PreviewMapping({ dbPath, preview, onBack, onNext }: Step2Props) {
                 Recent observations
               </h3>
               <div className="space-y-1">
-                {preview.sampleTitles.map((title, i) => (
+                {preview.sampleTitles.map((title) => (
                   <div
-                    key={`sample-${i}`}
+                    key={title}
                     className="text-xs text-muted-foreground font-mono truncate px-2 py-1 bg-muted/30 rounded"
                   >
                     {title}
@@ -528,6 +535,10 @@ export function MemoryImportView() {
 
   async function handlePreview() {
     setPreviewError(null);
+    if (source !== 'claude-mem') {
+      setPreviewError('JSONL history import is not wired yet.');
+      return;
+    }
     try {
       const result = await previewImport.mutateAsync({ source, dbPath });
       if (result.ok) {

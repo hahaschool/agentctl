@@ -195,7 +195,8 @@ export function MemoryReportsView(): React.JSX.Element {
       <div>
         <h1 className="text-lg font-semibold">Memory Reports</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Generate LLM-powered summaries of your agent memory data.
+          Generate deterministic summaries of your agent memory data from stored facts and graph
+          statistics.
         </p>
       </div>
 
