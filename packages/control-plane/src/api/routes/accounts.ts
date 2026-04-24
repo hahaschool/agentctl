@@ -1,6 +1,6 @@
 import { ACCOUNT_PROVIDERS } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
@@ -89,7 +89,11 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
     // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
     // codeql[js/missing-rate-limiting]
     async (_request, reply) => {
-      const rows = await db.select().from(apiAccounts).orderBy(apiAccounts.priority);
+      const rows = await db
+        .select()
+        .from(apiAccounts)
+        .where(eq(apiAccounts.credentialKind, 'runtime'))
+        .orderBy(apiAccounts.priority);
       const masked = rows.map((r) => {
         let credentialMasked = '(decryption failed)';
         try {
@@ -124,7 +128,10 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
   // ---------------------------------------------------------------------------
 
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
-    const [row] = await db.select().from(apiAccounts).where(eq(apiAccounts.id, request.params.id));
+    const [row] = await db
+      .select()
+      .from(apiAccounts)
+      .where(and(eq(apiAccounts.id, request.params.id), eq(apiAccounts.credentialKind, 'runtime')));
     if (!row) {
       return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
     }
@@ -295,7 +302,9 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       const [updated] = await db
         .update(apiAccounts)
         .set(updates)
-        .where(eq(apiAccounts.id, request.params.id))
+        .where(
+          and(eq(apiAccounts.id, request.params.id), eq(apiAccounts.credentialKind, 'runtime')),
+        )
         .returning();
       if (!updated) {
         return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
@@ -354,7 +363,10 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
         );
       }
 
-      const [deleted] = await db.delete(apiAccounts).where(eq(apiAccounts.id, id)).returning();
+      const [deleted] = await db
+        .delete(apiAccounts)
+        .where(and(eq(apiAccounts.id, id), eq(apiAccounts.credentialKind, 'runtime')))
+        .returning();
       if (!deleted) {
         return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
       }
@@ -376,7 +388,9 @@ export const accountRoutes: FastifyPluginAsync<AccountRoutesOptions> = async (ap
       const [row] = await db
         .select()
         .from(apiAccounts)
-        .where(eq(apiAccounts.id, request.params.id));
+        .where(
+          and(eq(apiAccounts.id, request.params.id), eq(apiAccounts.credentialKind, 'runtime')),
+        );
       if (!row) {
         return reply.code(404).send({ error: 'ACCOUNT_NOT_FOUND', message: 'Account not found' });
       }

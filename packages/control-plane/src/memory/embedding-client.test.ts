@@ -160,3 +160,141 @@ describe('EmbeddingClient', () => {
     expect(sleep).toHaveBeenNthCalledWith(2, 400);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Additive extension tests (PR A: apiKey, extraBody, embeddingsPath, embedBatchWithUsage)
+// ---------------------------------------------------------------------------
+
+describe('EmbeddingClient additive extensions', () => {
+  const silentLogger = createMockLogger();
+
+  it('uses Authorization: Bearer header when apiKey provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: Array(1536).fill(0.1), index: 0 }],
+        usage: { prompt_tokens: 10, total_tokens: 10 },
+        model: 'text-embedding-3-small',
+      }),
+    });
+    const client = new EmbeddingClient({
+      baseUrl: 'https://api.openai.com',
+      model: 'text-embedding-3-small',
+      apiKey: 'sk-test-1234',
+      logger: silentLogger,
+      fetch: fetchMock,
+    });
+    await client.embedBatch(['hello']);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer sk-test-1234' }),
+      }),
+    );
+  });
+
+  it('does not set Authorization header when no apiKey', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: Array(1536).fill(0.1), index: 0 }],
+        usage: { prompt_tokens: 5, total_tokens: 5 },
+        model: 'text-embedding-3-small',
+      }),
+    });
+    const client = new EmbeddingClient({
+      baseUrl: 'http://localhost:11434',
+      model: 'text-embedding-3-small',
+      logger: silentLogger,
+      fetch: fetchMock,
+    });
+    await client.embedBatch(['hello']);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it('embedBatchWithUsage returns vectors and promptTokens', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: Array(1536).fill(0.5), index: 0 }],
+        usage: { prompt_tokens: 25, total_tokens: 25 },
+        model: 'text-embedding-3-small',
+      }),
+    });
+    const client = new EmbeddingClient({
+      baseUrl: 'https://api.openai.com',
+      model: 'text-embedding-3-small',
+      logger: silentLogger,
+      fetch: fetchMock,
+    });
+    const result = await client.embedBatchWithUsage(['world']);
+    expect(result.vectors).toHaveLength(1);
+    expect(result.usage.promptTokens).toBe(25);
+    expect(result.model).toBe('text-embedding-3-small');
+  });
+
+  it('merges extraBody after base body without overriding model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: Array(1536).fill(0.1), index: 0 }],
+        usage: { prompt_tokens: 5, total_tokens: 5 },
+        model: 'gemini-embedding-001',
+      }),
+    });
+    const client = new EmbeddingClient({
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      model: 'gemini-embedding-001',
+      embeddingsPath: '/embeddings',
+      extraBody: { output_dimensionality: 1536, model: 'SHOULD_NOT_OVERRIDE' },
+      logger: silentLogger,
+      fetch: fetchMock,
+    });
+    await client.embedBatch(['test']);
+    const [callUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(callUrl).toBe('https://generativelanguage.googleapis.com/v1beta/openai/embeddings');
+    expect(body.model).toBe('gemini-embedding-001'); // not overridden by extraBody
+    expect(body.output_dimensionality).toBe(1536);
+  });
+
+  it('uses custom embeddingsPath when provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ embedding: [0.1, 0.2], index: 0 }],
+        usage: { prompt_tokens: 1, total_tokens: 1 },
+        model: 'custom-model',
+      }),
+    });
+    const client = new EmbeddingClient({
+      baseUrl: 'http://custom-host',
+      model: 'custom-model',
+      embeddingsPath: '/custom/embeddings',
+      logger: silentLogger,
+      fetch: fetchMock,
+    });
+    await client.embedBatch(['hi']);
+    const [callUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(callUrl).toBe('http://custom-host/custom/embeddings');
+  });
+
+  it('embedBatchWithUsage throws ControlPlaneError on non-ok response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'Unauthorized',
+    });
+    const client = new EmbeddingClient({
+      baseUrl: 'https://api.openai.com',
+      model: 'text-embedding-3-small',
+      logger: silentLogger,
+      fetch: fetchMock,
+    });
+    await expect(client.embedBatchWithUsage(['test'])).rejects.toMatchObject({
+      code: 'EMBEDDING_API_ERROR',
+    });
+  });
+});

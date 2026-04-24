@@ -11,7 +11,7 @@ import {
   signDispatchPayload,
 } from '@agentctl/shared';
 import { type ConnectionOptions, type Job, Worker } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Logger } from 'pino';
 
 import type { Database } from '../db/index.js';
@@ -301,7 +301,7 @@ export function createTaskWorker({
             const [account] = await db
               .select()
               .from(apiAccounts)
-              .where(eq(apiAccounts.id, accountId));
+              .where(and(eq(apiAccounts.id, accountId), eq(apiAccounts.credentialKind, 'runtime')));
 
             if (account) {
               accountCredential = decryptCredential(

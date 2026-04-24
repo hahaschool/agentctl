@@ -177,6 +177,9 @@ export const TABLE_SYNC_CONFIG: Record<string, TableSyncType> = {
   memory_scopes: 'mutable', // PK = 'scope' (not 'id')
   memory_facts: 'mutable',
   memory_edges: 'mutable',
+  memory_ops_jobs: 'mutable', // mesh-synced: status/progress/result updates replicate
+  // memory_ops_job_events: intentionally absent — LOCAL-ONLY
+  // memory_ops_audit: intentionally absent — LOCAL-ONLY
   // Local-only (not synced)
   machine_runtime_state: 'local-only',
   api_accounts: 'local-only', // encrypted credentials must not auto-replicate

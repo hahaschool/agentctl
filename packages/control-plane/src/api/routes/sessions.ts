@@ -595,7 +595,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         const [account] = await db
           .select()
           .from(apiAccounts)
-          .where(eq(apiAccounts.id, resolvedAccountId));
+          .where(
+            and(eq(apiAccounts.id, resolvedAccountId), eq(apiAccounts.credentialKind, 'runtime')),
+          );
 
         if (account) {
           accountCredential = decryptCredential(
@@ -776,7 +778,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         const [account] = await db
           .select()
           .from(apiAccounts)
-          .where(eq(apiAccounts.id, session.accountId));
+          .where(
+            and(eq(apiAccounts.id, session.accountId), eq(apiAccounts.credentialKind, 'runtime')),
+          );
 
         if (account) {
           accountCredential = decryptCredential(
@@ -989,7 +993,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         const [account] = await db
           .select()
           .from(apiAccounts)
-          .where(eq(apiAccounts.id, resolvedAccountId));
+          .where(
+            and(eq(apiAccounts.id, resolvedAccountId), eq(apiAccounts.credentialKind, 'runtime')),
+          );
 
         if (account) {
           accountCredential = decryptCredential(
@@ -1166,7 +1172,9 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
         const [account] = await db
           .select()
           .from(apiAccounts)
-          .where(eq(apiAccounts.id, session.accountId));
+          .where(
+            and(eq(apiAccounts.id, session.accountId), eq(apiAccounts.credentialKind, 'runtime')),
+          );
 
         if (account) {
           accountCredential = decryptCredential(
@@ -1593,11 +1601,11 @@ export const sessionRoutes: FastifyPluginAsync<SessionRoutesOptions> = async (ap
           const policy = (policySetting?.value as { value?: string })?.value ?? 'none';
 
           if (policy === 'priority' || policy === 'round_robin') {
-            // Get all active accounts sorted by priority
+            // Get all active runtime accounts sorted by priority
             const activeAccounts = await db
               .select()
               .from(apiAccounts)
-              .where(eq(apiAccounts.isActive, true))
+              .where(and(eq(apiAccounts.isActive, true), eq(apiAccounts.credentialKind, 'runtime')))
               .orderBy(apiAccounts.priority);
 
             // Find next account after the current one
