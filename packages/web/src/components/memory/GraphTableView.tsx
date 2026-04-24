@@ -132,8 +132,39 @@ export function GraphTableView({
     });
   }, [edges, filters, nodesById]);
 
+  const filteredNodes = useMemo(() => {
+    const q = filters.q.trim().toLowerCase();
+
+    if (filters.relationType) {
+      const linkedNodeIds = new Set<string>();
+      for (const edge of filteredEdges) {
+        linkedNodeIds.add(edge.source_fact_id);
+        linkedNodeIds.add(edge.target_fact_id);
+      }
+      return nodes.filter((node) => linkedNodeIds.has(node.id));
+    }
+
+    return nodes.filter((node) => {
+      if (filters.entityType && node.entity_type !== filters.entityType) {
+        return false;
+      }
+      if (filters.scope && node.scope !== (filters.scope as MemoryScope)) {
+        return false;
+      }
+      if (q && !node.content.toLowerCase().includes(q)) {
+        return false;
+      }
+      return true;
+    });
+  }, [filteredEdges, filters, nodes]);
+
   const hasActiveFilters =
-    filters.relationType !== '' || filters.entityType !== '' || filters.scope !== '';
+    filters.q.trim() !== '' ||
+    filters.relationType !== '' ||
+    filters.entityType !== '' ||
+    filters.scope !== '';
+
+  const showNodeTable = filteredEdges.length === 0 && filteredNodes.length > 0;
 
   const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setFilters((prev) => ({ ...prev, q: event.target.value }));
@@ -243,12 +274,71 @@ export function GraphTableView({
         <span className="ml-auto shrink-0 text-xs text-muted-foreground">
           {filteredEdges.length} edge{filteredEdges.length !== 1 ? 's' : ''}
         </span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {filteredNodes.length} node{filteredNodes.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {/* Table */}
-      {filteredEdges.length === 0 ? (
+      {showNodeTable ? (
+        <div className="overflow-auto">
+          <table className="w-full text-sm" aria-label="Knowledge graph nodes">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="px-4 py-2 font-medium">Fact</th>
+                <th className="px-4 py-2 font-medium">Type</th>
+                <th className="px-4 py-2 font-medium">Scope</th>
+                <th className="px-4 py-2 font-medium">Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredNodes.map((node) => {
+                const isSelected = selectedNodeId === node.id;
+                return (
+                  <tr
+                    key={node.id}
+                    className={cn(
+                      'border-b border-border transition-colors',
+                      isSelected && 'bg-accent/10',
+                    )}
+                  >
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => handleRowClick(node.id)}
+                        className={cn(
+                          'max-w-[520px] truncate text-left font-medium leading-snug',
+                          isSelected && 'text-primary',
+                        )}
+                        aria-label={`Select node ${node.id.slice(0, 8)}`}
+                      >
+                        {node.content}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <EntityTypeBadge entityType={node.entity_type} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs text-muted-foreground">{node.scope}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="w-24">
+                        <ConfidenceBar confidence={node.confidence} />
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : filteredEdges.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
-          <p className="text-sm">No edges match the current filters.</p>
+          <p className="text-sm">
+            {nodes.length > 0
+              ? 'No graph nodes or edges match the current filters.'
+              : 'No edges match the current filters.'}
+          </p>
           {hasActiveFilters ? (
             <Button variant="ghost" size="sm" onClick={handleClearFilters}>
               Clear filters

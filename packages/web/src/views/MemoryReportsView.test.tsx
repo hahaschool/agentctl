@@ -63,6 +63,13 @@ describe('MemoryReportsView', () => {
     expect(screen.getByText('Memory Reports')).toBeDefined();
   });
 
+  it('describes reports as deterministic summaries rather than LLM-powered output', () => {
+    render(<MemoryReportsView />);
+
+    expect(screen.getByText(/Generate deterministic summaries/i)).toBeDefined();
+    expect(screen.queryByText(/LLM-powered/i)).toBeNull();
+  });
+
   it('renders all three report type cards', () => {
     render(<MemoryReportsView />);
 
