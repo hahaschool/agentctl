@@ -484,7 +484,7 @@ test.describe('Task graph detail page (/tasks/[id])', () => {
 
     await expect(page.getByText(/Failed to load task graph/)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(new RegExp(`Task graph ${TASK_GRAPH_ID} not found`))).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Release Orchestration' })).toHaveCount(0);
   });
 
