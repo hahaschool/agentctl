@@ -10,6 +10,7 @@ import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 
 import type { EmbeddingClient } from './embedding-client.js';
+import type { EmbeddingClientResolver } from './embedding-client-factory.js';
 import { chunkMemoryDrawerContent } from './memory-drawer-chunker.js';
 import { hashMemoryDrawerContent, sanitizeMemoryDrawerContent } from './memory-drawer-sanitizer.js';
 import type {
@@ -20,6 +21,7 @@ import type {
 export type MemoryDrawerStoreOptions = {
   pool: Pool;
   embeddingClient?: EmbeddingClient;
+  embeddingClientResolver?: EmbeddingClientResolver;
   auditLogger?: MemoryWriteAuditLogger;
   logger: Logger;
 };
@@ -99,12 +101,14 @@ function rowToDrawer(row: MemoryDrawerRow): MemoryDrawer {
 export class MemoryDrawerStore {
   private readonly pool: Pool;
   private readonly embeddingClient: EmbeddingClient | undefined;
+  private readonly embeddingClientResolver: EmbeddingClientResolver | undefined;
   private readonly auditLogger: MemoryWriteAuditLogger | undefined;
   private readonly logger: Logger;
 
   constructor(options: MemoryDrawerStoreOptions) {
     this.pool = options.pool;
     this.embeddingClient = options.embeddingClient;
+    this.embeddingClientResolver = options.embeddingClientResolver;
     this.auditLogger = options.auditLogger;
     this.logger = options.logger;
   }
@@ -116,12 +120,12 @@ export class MemoryDrawerStore {
     const chunks = chunkMemoryDrawerContent(sanitized.content);
     const sourceJson = redactMemoryWriteMetadata(input.sourceJson ?? {});
     const auditContext = getMemoryWriteAuditContext(input, sourceJson);
-    const embeddings = await this.embedChunks(chunks.map((chunk) => chunk.content));
+    const embeddingResult = await this.embedChunks(chunks.map((chunk) => chunk.content));
     const drawers: MemoryDrawer[] = [];
 
     for (const chunk of chunks) {
       const drawerId = generateMemoryDrawerId();
-      const embedding = embeddings[chunk.chunkIndex];
+      const embedding = embeddingResult.embeddings[chunk.chunkIndex];
       const embeddingLiteral = embedding ? `[${embedding.join(',')}]` : null;
       const contentSha256 = hashMemoryDrawerContent(chunk.content);
       const auditBase = {
@@ -180,7 +184,7 @@ export class MemoryDrawerStore {
             chunk.content,
             contentSha256,
             embeddingLiteral,
-            MEMORY_EMBEDDING_MODEL,
+            embeddingResult.model,
             MEMORY_EMBEDDING_VERSION,
             estimateTokenCount(chunk.content),
             sourceJson,
@@ -219,17 +223,26 @@ export class MemoryDrawerStore {
     };
   }
 
-  private async embedChunks(chunks: string[]): Promise<number[][]> {
-    if (!this.embeddingClient || chunks.length === 0) {
-      return [];
+  private async embedChunks(chunks: string[]): Promise<{ embeddings: number[][]; model: string }> {
+    if (chunks.length === 0) {
+      return { embeddings: [], model: MEMORY_EMBEDDING_MODEL };
     }
 
     try {
-      return await this.embeddingClient.embedBatch(chunks);
+      if (this.embeddingClientResolver) {
+        const resolved = await this.embeddingClientResolver();
+        return { embeddings: await resolved.client.embedBatch(chunks), model: resolved.model };
+      }
+      if (this.embeddingClient) {
+        return {
+          embeddings: await this.embeddingClient.embedBatch(chunks),
+          model: MEMORY_EMBEDDING_MODEL,
+        };
+      }
     } catch (error: unknown) {
       this.logger.warn({ err: error }, 'Failed to generate drawer embeddings');
-      return [];
     }
+    return { embeddings: [], model: MEMORY_EMBEDDING_MODEL };
   }
 
   private async emitMemoryWriteAudit(input: MemoryWriteAuditInput): Promise<void> {

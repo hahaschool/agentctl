@@ -29,6 +29,7 @@ import type { Database } from '../db/index.js';
 import { NotificationRouterStore } from '../intelligence/notification-router-store.js';
 import { RoutingEngine } from '../intelligence/routing-engine.js';
 import { TaskDecomposer } from '../intelligence/task-decomposer.js';
+import type { EmbeddingClientResolver } from '../memory/embedding-client-factory.js';
 import type { Mem0Client } from '../memory/mem0-client.js';
 import type { MemoryInjector } from '../memory/memory-injector.js';
 import type { MemorySearch } from '../memory/memory-search.js';
@@ -87,6 +88,7 @@ import { memoryDrawerRoutes } from './routes/memory-drawers.js';
 import { memoryEdgeRoutes, memoryGraphRoutes } from './routes/memory-edges.js';
 import { memoryFactRoutes } from './routes/memory-facts.js';
 import { memoryImportRoutes } from './routes/memory-import.js';
+import { memoryProvidersRoutes } from './routes/memory-providers.js';
 import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
@@ -161,6 +163,7 @@ type CreateServerOptions = {
    * stubs don't need to construct the full production client.
    */
   embeddingClient?: DrawerEmbeddingClient;
+  embeddingClientResolver?: EmbeddingClientResolver;
   memoryInjector?: MemoryInjector | null;
   pgPool?: Pool;
   workerPort?: number;
@@ -204,6 +207,7 @@ export async function createServer({
   memorySearch,
   memoryStore,
   embeddingClient,
+  embeddingClientResolver,
   memoryInjector = null,
   pgPool,
   workerPort = 9000,
@@ -532,6 +536,7 @@ export async function createServer({
       // request. Both embeddingClient + pgPool are required to activate the
       // additive `drawerResults` envelope field.
       embeddingClient,
+      embeddingClientResolver,
       drawerFusionEnabled: process.env.MEMORY_DRAWER_FUSION === 'true',
       logger,
     });
@@ -602,6 +607,7 @@ export async function createServer({
       pool: pgPool,
       logger,
       embeddingClient,
+      embeddingClientResolver,
     });
 
     if (memoryStore) {
@@ -840,6 +846,16 @@ export async function createServer({
         db,
         encryptionKey,
       });
+
+      if (pgPool) {
+        await app.register(memoryProvidersRoutes, {
+          prefix: '/api/memory/providers',
+          db,
+          pool: pgPool,
+          encryptionKey,
+          logger,
+        });
+      }
     } else {
       logger.warn(
         'CREDENTIAL_ENCRYPTION_KEY is not set — account management routes are disabled. ' +
@@ -1194,7 +1210,38 @@ function createFallbackRunHandoffDecisionStore(): Pick<
   };
 }
 
+const MEMORY_OPS_STATUS_MAP = new Map<string, number>([
+  ['VALIDATION_ERROR', 422],
+  ['EMBEDDING_NO_PROVIDER', 409],
+  ['PROVIDER_AUTH_FAILED', 401],
+  ['RATE_LIMITED', 429],
+  ['EMBEDDING_CREDENTIAL_DECRYPT_FAILED', 500],
+  ['EMBEDDING_CREDENTIAL_NOT_FOUND', 404],
+  ['PROVIDER_HAS_ACTIVE_JOBS', 409],
+  ['PROVIDER_NOT_FOUND', 404],
+  ['JOB_NOT_FOUND', 404],
+  ['JOB_NOT_CANCELLABLE', 409],
+  ['REMOTE_PEER_JOB', 403],
+  ['CONCURRENT_JOB_REQUEST', 409],
+  ['JOB_ALREADY_RUNNING', 409],
+  ['DUPLICATE_ACTIVE_EMBEDDING', 409],
+  ['EGRESS_NOT_CONFIRMED', 400],
+  ['EGRESS_SNAPSHOT_STALE', 400],
+  ['FEATURE_DISABLED', 400],
+  ['JOB_KIND_NOT_ENABLED', 400],
+  ['MODEL_MISMATCH', 409],
+  ['MIXED_MODEL_BLOCKED', 409],
+  ['INVALID_ACCOUNT_KIND', 422],
+  ['QUEUE_ENQUEUE_FAILED', 500],
+  ['SIGNING_SECRET_MISSING', 503],
+  ['CATALOG_INVALID', 500],
+]);
+
 function controlPlaneErrorToStatus(code: string): number {
+  const memoryOpsStatus = MEMORY_OPS_STATUS_MAP.get(code);
+  if (memoryOpsStatus !== undefined) {
+    return memoryOpsStatus;
+  }
   if (code.endsWith('_NOT_FOUND')) {
     return 404;
   }

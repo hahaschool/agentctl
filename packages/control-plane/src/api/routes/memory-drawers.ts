@@ -40,6 +40,7 @@ import {
   fuseRankedMatches,
   keywordSearch,
   MemoryDrawerSearchDbError,
+  type MemoryDrawerSearchDeps,
   vectorSearch,
 } from '../../memory/memory-drawer-search.js';
 
@@ -53,6 +54,7 @@ export type MemoryDrawerRoutesOptions = {
   pool: Pool;
   logger: Logger;
   embeddingClient?: DrawerEmbeddingClient;
+  embeddingClientResolver?: MemoryDrawerSearchDeps['embeddingClientResolver'];
 };
 
 const DEFAULT_LIMIT = 10;
@@ -70,7 +72,7 @@ export const memoryDrawerRoutes: FastifyPluginAsync<MemoryDrawerRoutesOptions> =
   app,
   opts,
 ) => {
-  const { pool, logger, embeddingClient } = opts;
+  const { pool, logger, embeddingClient, embeddingClientResolver } = opts;
 
   app.get<{ Querystring: { q?: string; scope?: string; limit?: string } }>(
     '/search',
@@ -124,9 +126,18 @@ export const memoryDrawerRoutes: FastifyPluginAsync<MemoryDrawerRoutesOptions> =
           keywordSearch(pool, sanitized.query, scope, candidateLimit, logger, {
             degradeOnSqlError: false,
           }),
-          vectorSearch(pool, sanitized.query, scope, candidateLimit, embeddingClient, logger, {
-            degradeOnSqlError: false,
-          }),
+          vectorSearch(
+            pool,
+            sanitized.query,
+            scope,
+            candidateLimit,
+            embeddingClient,
+            embeddingClientResolver,
+            logger,
+            {
+              degradeOnSqlError: false,
+            },
+          ),
         ]);
       } catch (error) {
         // Surface total DB failure as 5xx instead of returning `{ ok: true,

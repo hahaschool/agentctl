@@ -68,6 +68,48 @@ describe('MemoryStore', () => {
     expect(result.source.agent_id).toBe('agent-1');
   });
 
+  it('writes resolved provider model to content_model when using an embedding resolver', async () => {
+    const pool = createMockPool();
+    pool.query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const embedding = createMockEmbedding();
+    const store = new MemoryStore({
+      pool: pool as never,
+      embeddingClientResolver: async () => ({
+        client: embedding,
+        model: 'gemini-embedding-001',
+        providerKind: 'gemini',
+        providerHost: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        priceUsdPerMtoken: 0.15,
+        credentialId: 'provider-1',
+      }),
+      logger,
+    });
+
+    const result = await store.addFact({
+      scope: 'global' as MemoryScope,
+      content: 'Use provider-specific embedding metadata',
+      entity_type: 'decision' as EntityType,
+      source: {
+        session_id: null,
+        agent_id: 'agent-1',
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      } satisfies FactSource,
+    });
+
+    expect(result.content_model).toBe('gemini-embedding-001');
+    expect(pool.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('INSERT INTO memory_facts'),
+      expect.arrayContaining(['gemini-embedding-001']),
+    );
+  });
+
   it('links a new fact to supporting drawer offsets when source spans are provided', async () => {
     const query = vi
       .fn()

@@ -50,6 +50,7 @@ export type MemoryDrawerSearchDeps = {
   pool: Pool;
   logger: Logger;
   embeddingClient?: DrawerEmbeddingClient;
+  embeddingClientResolver?: () => Promise<{ client: DrawerEmbeddingClient; model: string }>;
   /**
    * When `false`, any SQL failure on either path is rethrown as a
    * {@link MemoryDrawerSearchDbError} so the caller can return 5xx. Defaults
@@ -115,6 +116,7 @@ export async function searchMemoryDrawers(
       scope,
       candidateLimit,
       deps.embeddingClient,
+      deps.embeddingClientResolver,
       deps.logger,
       options,
     ),
@@ -206,16 +208,26 @@ export async function vectorSearch(
   scope: string | null,
   limit: number,
   embeddingClient: DrawerEmbeddingClient | undefined,
+  embeddingClientResolver:
+    | (() => Promise<{ client: DrawerEmbeddingClient; model: string }>)
+    | undefined,
   logger: Logger,
   options: SearchFailureOptions = {},
 ): Promise<RankedDrawerMatch[]> {
-  if (!embeddingClient) {
+  if (!embeddingClient && !embeddingClientResolver) {
     return [];
   }
 
   let embedding: number[];
+  let embeddingModel = 'text-embedding-3-small';
   try {
-    embedding = await embeddingClient.embed(query);
+    const resolved = embeddingClientResolver ? await embeddingClientResolver() : null;
+    const client = resolved?.client ?? embeddingClient;
+    if (!client) {
+      return [];
+    }
+    embeddingModel = resolved?.model ?? embeddingModel;
+    embedding = await client.embed(query);
   } catch (error: unknown) {
     logger.warn({ err: error }, 'Drawer vector search skipped — embedding generation failed');
     return [];
@@ -225,8 +237,8 @@ export async function vectorSearch(
   }
 
   const vectorLiteral = `[${embedding.join(',')}]`;
-  const params: unknown[] = [vectorLiteral];
-  const conditions = ['archived_at IS NULL', 'embedding IS NOT NULL'];
+  const params: unknown[] = [vectorLiteral, embeddingModel];
+  const conditions = ['archived_at IS NULL', 'embedding IS NOT NULL', 'embedding_model = $2'];
 
   if (scope) {
     params.push(scope);

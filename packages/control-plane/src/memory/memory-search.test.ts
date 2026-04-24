@@ -118,6 +118,49 @@ describe('MemorySearch', () => {
     expect(results[0]?.score).toBeGreaterThan(0);
   });
 
+  it('filters vector search by the resolved embedding model only', async () => {
+    const vectorRow = makeFakeFactRow({
+      id: 'fact-vec',
+      rank: 1,
+      content_model: 'gemini-embedding-001',
+    });
+    const callIndex = { current: 0 };
+    const pool = {
+      query: vi.fn().mockImplementation(() => {
+        const rows = [[vectorRow], [], [], []][callIndex.current] ?? [];
+        callIndex.current += 1;
+        return Promise.resolve({ rows, rowCount: rows.length });
+      }),
+    };
+    const embedding = createMockEmbedding();
+    const search = new MemorySearch({
+      pool: pool as never,
+      embeddingClientResolver: async () => ({
+        client: embedding,
+        model: 'gemini-embedding-001',
+        providerKind: 'gemini',
+        providerHost: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        priceUsdPerMtoken: 0.15,
+        credentialId: 'provider-1',
+      }),
+      logger,
+    });
+
+    await search.search({
+      query: 'provider-specific vector search',
+      visibleScopes: ['global'],
+      limit: 10,
+    });
+
+    const vectorSql = String(pool.query.mock.calls[0]?.[0]);
+    const vectorParams = pool.query.mock.calls[0]?.[1] as unknown[];
+    expect(vectorSql).toContain('content_model = $2');
+    expect(vectorParams[1]).toBe('gemini-embedding-001');
+
+    const bm25Sql = String(pool.query.mock.calls[1]?.[0]);
+    expect(bm25Sql).not.toContain('content_model =');
+  });
+
   it('sanitizes contaminated query prefixes before embedding and retrieval', async () => {
     const vectorRow = makeFakeFactRow({ id: 'fact-vec', rank: 1 });
     const { search, embedding } = makeSearch([[vectorRow], [], [], []]);

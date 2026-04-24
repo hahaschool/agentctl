@@ -11,6 +11,7 @@ import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 
 import type { EmbeddingClient } from './embedding-client.js';
+import type { EmbeddingClientResolver } from './embedding-client-factory.js';
 
 const RRF_K = 60;
 const DEFAULT_LIMIT = 10;
@@ -19,7 +20,8 @@ const DEFAULT_STRENGTH_THRESHOLD = 0.05;
 
 export type MemorySearchOptions = {
   pool: Pool;
-  embeddingClient: EmbeddingClient;
+  embeddingClient?: EmbeddingClient;
+  embeddingClientResolver?: EmbeddingClientResolver;
   logger: Logger;
 };
 
@@ -89,12 +91,14 @@ function buildScopeCondition(
 
 export class MemorySearch {
   private readonly pool: Pool;
-  private readonly embeddingClient: EmbeddingClient;
+  private readonly embeddingClient: EmbeddingClient | undefined;
+  private readonly embeddingClientResolver: EmbeddingClientResolver | undefined;
   private readonly logger: Logger;
 
   constructor(options: MemorySearchOptions) {
     this.pool = options.pool;
     this.embeddingClient = options.embeddingClient;
+    this.embeddingClientResolver = options.embeddingClientResolver;
     this.logger = options.logger;
   }
 
@@ -236,15 +240,25 @@ export class MemorySearch {
     entityType?: EntityType,
   ): Promise<RankedFact[]> {
     let queryEmbedding: number[];
+    let queryModel: string;
     try {
-      queryEmbedding = await this.embeddingClient.embed(query);
+      const resolved = await this.resolveEmbeddingClientForSearch();
+      if (!resolved) {
+        return [];
+      }
+      queryModel = resolved.model;
+      queryEmbedding = await resolved.client.embed(query);
     } catch (error: unknown) {
       this.logger.warn({ err: error }, 'Vector search skipped because embedding generation failed');
       return [];
     }
 
-    const scopeCondition = buildScopeCondition(scopes, 2);
-    const params: unknown[] = [`[${queryEmbedding.join(',')}]`, ...scopeCondition.params];
+    const scopeCondition = buildScopeCondition(scopes, 3);
+    const params: unknown[] = [
+      `[${queryEmbedding.join(',')}]`,
+      queryModel,
+      ...scopeCondition.params,
+    ];
     let sql = `
       SELECT id, scope, content, content_model, entity_type,
              confidence::real, strength::real, source_json,
@@ -254,7 +268,8 @@ export class MemorySearch {
       FROM memory_facts
       WHERE valid_until IS NULL
         AND strength > ${DEFAULT_STRENGTH_THRESHOLD}
-        AND embedding IS NOT NULL${scopeCondition.clause}`;
+        AND embedding IS NOT NULL
+        AND content_model = $2${scopeCondition.clause}`;
 
     if (entityType) {
       sql += ` AND entity_type = $${params.length + 1}`;
@@ -269,6 +284,18 @@ export class MemorySearch {
       fact: this.rowToFact(row),
       rank: Number(row.rank),
     }));
+  }
+
+  private async resolveEmbeddingClientForSearch(): Promise<
+    { client: EmbeddingClient; model: string } | undefined
+  > {
+    if (this.embeddingClientResolver) {
+      return this.embeddingClientResolver();
+    }
+    if (!this.embeddingClient) {
+      return undefined;
+    }
+    return { client: this.embeddingClient, model: 'text-embedding-3-small' };
   }
 
   private async bm25Search(
