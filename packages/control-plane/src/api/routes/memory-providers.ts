@@ -9,7 +9,7 @@ import {
   validateCatalog,
 } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyPluginAsync, preHandlerHookHandler } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import type { Logger } from 'pino';
 import { ZodError, z } from 'zod';
@@ -177,18 +177,20 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
     });
   });
 
+  const sendProviderList: preHandlerHookHandler = async (_request, reply) => {
+    const rows = await listProviderRows(opts.pool);
+    return reply.send({ providers: rows.map(rowToProvider) });
+  };
+
   // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
   // codeql[js/missing-rate-limiting]
   app.get(
     '/',
     {
       config: { rateLimit: providerFastifyRateLimit },
-      preHandler: [app.rateLimit(providerFastifyRateLimit)],
+      preHandler: [app.rateLimit(providerFastifyRateLimit), sendProviderList],
     },
-    async () => {
-      const rows = await listProviderRows(opts.pool);
-      return { providers: rows.map(rowToProvider) };
-    },
+    async () => undefined,
   );
 
   // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
