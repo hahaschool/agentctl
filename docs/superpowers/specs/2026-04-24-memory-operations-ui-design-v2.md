@@ -1,9 +1,14 @@
-# Memory Operations UI — v2 Design (second rewrite)
+# Memory Operations UI — v2 Design (SUPERSEDED)
 
-> **Status:** awaiting adversarial review.
-> **Supersedes:** `2026-04-24-memory-operations-ui-design-v1.md` (v1, rejected — see [Reviewer 1 round 2](../reviews/2026-04-24-memory-operations-ui-design-v1-strict-review.md), [Reviewer 2 round 2](../reviews/2026-04-24-memory-operations-ui-design-v1-strict-review-round-2.md)).
-> **Fix checklist:** `/tmp/memory-ops-v2-reviewer-checklist.md` — all 74 reviewer items dispositioned; Appendix B maps each item to its resolution section here.
-> **Verified facts anchor:** `/tmp/memory-ops-v2-facts.md` — codebase scan with `file:line` for every claim. Every assertion below is traceable.
+> **⚠️ STATUS: SUPERSEDED by v3.** Round-3 reviewers ([Reviewer 1](../reviews/2026-04-24-memory-operations-ui-design-v2-strict-review.md), [Reviewer 2](../reviews/2026-04-24-memory-operations-ui-design-v2-strict-review-round-2.md)) flagged 15 unique P0s: advisory lock outside transaction (silent race), executor_machine_id not set at insert (peer steal race), PR F exposes kinds before PR G handlers, cost tracking based on false code facts, `CANCEL_ACCEPTED` on 2xx body, audit to `agent_actions` without reconciling mesh-sync, invalidation bus named but unspecified, `MemoryStore.addFact` hot-path DB-and-decrypt, facts doc item 37 was factually wrong, etc. Reviewer 2 explicitly said "the spine is defensible" — v3 is surgical patches.
+>
+> **Forward link:** `2026-04-24-memory-operations-ui-design-v3.md` (same directory).
+>
+> Historical content below preserved for traceability.
+>
+> **Supersedes:** `2026-04-24-memory-operations-ui-design-v1.md` (v1, also rejected).
+> **Fix checklist (v2-era):** `../reviews/2026-04-24-memory-operations-ui-v2-reviewer-checklist.md`
+> **Verified facts (item 37 corrected 2026-04-24):** `../reviews/2026-04-24-memory-operations-ui-v2-verified-facts.md`
 
 ## 1. Problem
 
