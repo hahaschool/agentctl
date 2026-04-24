@@ -103,6 +103,12 @@ vi.mock('./settings/MeshConfigSection', () => ({
   MeshConfigSection: () => <div data-testid="mesh-config-section">MeshConfigSection</div>,
 }));
 
+vi.mock('./settings/MemoryEmbeddingsSection', () => ({
+  MemoryEmbeddingsSection: () => (
+    <div data-testid="memory-embeddings-section">MemoryEmbeddingsSection</div>
+  ),
+}));
+
 import { SettingsView } from './SettingsView';
 
 function renderSettings() {
@@ -159,6 +165,7 @@ describe('SettingsView', () => {
     expect(within(nav).getByText('Overview')).toBeDefined();
     expect(within(nav).getByText('Runtime Profiles')).toBeDefined();
     expect(within(nav).getByText('Credentials & Access')).toBeDefined();
+    expect(within(nav).getByText('Memory & Embeddings')).toBeDefined();
     expect(within(nav).getByText('Workers & Sync')).toBeDefined();
     expect(within(nav).getByText('Routing & Autonomy')).toBeDefined();
     expect(within(nav).getByText('Appearance & Preferences')).toBeDefined();
@@ -169,6 +176,7 @@ describe('SettingsView', () => {
     expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Runtime Profiles').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Credentials & Access').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Memory & Embeddings').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Workers & Sync').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Routing & Autonomy').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Appearance & Preferences').length).toBeGreaterThan(0);
@@ -179,6 +187,7 @@ describe('SettingsView', () => {
     expect(screen.getByTestId('runtime-profiles-section')).toBeDefined();
     expect(screen.getByTestId('accounts-section')).toBeDefined();
     expect(screen.getByTestId('project-accounts-section')).toBeDefined();
+    expect(screen.getByTestId('memory-embeddings-section')).toBeDefined();
     expect(screen.getByTestId('workers-sync-section')).toBeDefined();
     expect(screen.getByTestId('failover-section')).toBeDefined();
     expect(screen.getByTestId('preferences-section')).toBeDefined();

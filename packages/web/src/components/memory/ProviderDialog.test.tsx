@@ -29,12 +29,6 @@ vi.mock('@/components/ui/input', () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
 }));
 
-vi.mock('@/components/ui/label', () => ({
-  Label: ({ children, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) => (
-    <label {...props}>{children}</label>
-  ),
-}));
-
 vi.mock('@/components/ui/select', () => ({
   Select: ({
     children,

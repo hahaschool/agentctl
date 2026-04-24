@@ -36,7 +36,9 @@ export type ProviderMutationBody = {
   recentTestResult?: RecentProviderTestResult;
 };
 
-export type CreateProviderBody = Required<Pick<ProviderMutationBody, 'name' | 'provider' | 'model' | 'apiKey'>> &
+export type CreateProviderBody = Required<
+  Pick<ProviderMutationBody, 'name' | 'provider' | 'model' | 'apiKey'>
+> &
   Pick<ProviderMutationBody, 'active' | 'recentTestResult'>;
 
 export type TestEphemeralBody = {

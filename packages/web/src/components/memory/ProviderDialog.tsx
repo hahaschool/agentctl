@@ -23,8 +23,8 @@ import {
 } from '@/components/ui/select';
 import {
   ApiError,
-  memoryProvidersApi,
   type CreateProviderBody,
+  memoryProvidersApi,
   type ProviderMutationBody,
   type TestEphemeralResult,
 } from '@/lib/api';
@@ -190,12 +190,8 @@ export function ProviderDialog({
     setSaving(true);
     setSaveError(null);
     try {
-      const body: ProviderDialogSaveBody = {
-        name: name.trim(),
-        provider,
-        model,
-        active,
-        ...(apiKey.trim()
+      const credentialFields =
+        apiKey.trim().length > 0
           ? {
               apiKey,
               recentTestResult: testResult
@@ -205,8 +201,20 @@ export function ProviderDialog({
                   }
                 : undefined,
             }
-          : {}),
-      };
+          : {};
+      const body: ProviderDialogSaveBody = initial
+        ? {
+            name: name.trim(),
+            active,
+            ...credentialFields,
+          }
+        : {
+            name: name.trim(),
+            provider,
+            model,
+            active,
+            ...credentialFields,
+          };
       await onSave(body);
       onOpenChange(false);
     } catch (error) {
@@ -220,7 +228,9 @@ export function ProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{initial ? 'Edit embedding provider' : 'Add embedding provider'}</DialogTitle>
+          <DialogTitle>
+            {initial ? 'Edit embedding provider' : 'Add embedding provider'}
+          </DialogTitle>
           <DialogDescription>
             Configure the local provider used for memory embeddings and backfill jobs.
           </DialogDescription>
