@@ -116,11 +116,14 @@ test.describe('Router config page', () => {
     await expect(page.getByRole('heading', { name: 'LiteLLM Router' })).toBeVisible();
     await expect(page.getByText('Connected')).toBeVisible();
     await expect(page.getByText('42ms')).toBeVisible();
-    await expect(page.getByText('sonnet-fast')).toBeVisible();
-    await expect(page.getByText('bedrock/anthropic.claude-3-5-sonnet')).toBeVisible();
-    await expect(page.getByText('AWS Bedrock')).toBeVisible();
-    await expect(page.getByText('gpt-fallback')).toBeVisible();
-    await expect(page.getByText('OpenAI')).toBeVisible();
+    const sonnetCard = page.locator('div.rounded-md').filter({ hasText: 'sonnet-fast' });
+    await expect(sonnetCard.getByText('sonnet-fast')).toBeVisible();
+    await expect(sonnetCard.getByText('bedrock/anthropic.claude-3-5-sonnet')).toBeVisible();
+    await expect(sonnetCard.getByText('AWS Bedrock')).toBeVisible();
+
+    const fallbackCard = page.locator('div.rounded-md').filter({ hasText: 'gpt-fallback' });
+    await expect(fallbackCard.getByText('gpt-fallback')).toBeVisible();
+    await expect(fallbackCard.getByText('OpenAI')).toBeVisible();
     await expect(page.getByText(/\$0\.000003\/tok in/)).toBeVisible();
     await expect(page.getByText(/\$0\.000015\/tok out/)).toBeVisible();
     await expect(page.getByText('Failover Strategy')).toBeVisible();
@@ -132,7 +135,7 @@ test.describe('Router config page', () => {
 
     await page.goto('/settings/router');
 
-    await expect(page.getByText('Not configured')).toBeVisible();
+    await expect(page.getByText('Not configured', { exact: true })).toBeVisible();
     await expect(page.getByText(/LiteLLM proxy is not configured/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
   });
