@@ -222,4 +222,25 @@ describe('MemoryEmbeddingsSection', () => {
     expect(mockMemoryProvidersApi.testSaved.mock.calls[0]?.[0]).toBe('provider-3');
     expect(screen.getByText(/Test passed.*dim 1536.*90ms/i)).toBeDefined();
   });
+
+  it('refetches providers after saved-provider test failures', async () => {
+    mockMemoryProvidersApi.list.mockResolvedValue({
+      providers: [ACTIVE_PROVIDER],
+    });
+    mockMemoryProvidersApi.testSaved.mockRejectedValue(new Error('Embedding provider test failed'));
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Test OpenAI memory/i })).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Test OpenAI memory/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Embedding provider test failed/i).length).toBeGreaterThan(0);
+    });
+    await waitFor(() => {
+      expect(mockMemoryProvidersApi.list).toHaveBeenCalledTimes(2);
+    });
+  });
 });

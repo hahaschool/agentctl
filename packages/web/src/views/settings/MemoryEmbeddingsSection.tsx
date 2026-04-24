@@ -246,7 +246,6 @@ export function MemoryEmbeddingsSection(): React.JSX.Element {
         ...current,
         [providerId]: result.ok ? { ...result, ok: true } : { ok: false },
       }));
-      void invalidateProviders();
     },
     onError: (error, providerId) => {
       const message = errorText(error, 'Provider test failed');
@@ -255,6 +254,9 @@ export function MemoryEmbeddingsSection(): React.JSX.Element {
         ...current,
         [providerId]: { ok: false, error: message },
       }));
+    },
+    onSettled: () => {
+      void invalidateProviders();
     },
   });
 
