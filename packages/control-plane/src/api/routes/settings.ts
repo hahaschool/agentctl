@@ -1,3 +1,4 @@
+import { ControlPlaneError } from '@agentctl/shared';
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
@@ -78,7 +79,7 @@ export const settingsRoutes: FastifyPluginAsync<SettingsRoutesOptions> = async (
 
     if (defaultAccountId !== undefined && defaultAccountId !== null) {
       const [account] = await db
-        .select({ id: apiAccounts.id })
+        .select({ id: apiAccounts.id, credentialKind: apiAccounts.credentialKind })
         .from(apiAccounts)
         .where(eq(apiAccounts.id, defaultAccountId));
 
@@ -87,6 +88,14 @@ export const settingsRoutes: FastifyPluginAsync<SettingsRoutesOptions> = async (
           error: 'INVALID_ACCOUNT',
           message: `Account '${defaultAccountId}' does not exist`,
         });
+      }
+
+      if (account.credentialKind !== 'runtime') {
+        throw new ControlPlaneError(
+          'INVALID_ACCOUNT_KIND',
+          'defaultAccountId must reference a runtime account, not an embedding account',
+          { expectedKind: 'runtime', actualKind: account.credentialKind },
+        );
       }
     }
 

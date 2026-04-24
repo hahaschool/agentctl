@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import rateLimit from '@fastify/rate-limit';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 
 import type { Database } from '../../db/index.js';
@@ -363,11 +363,11 @@ export const oauthRoutes: FastifyPluginAsync<OAuthRoutesOptions> = async (app, o
         });
       }
 
-      // Look up the account
+      // Look up the account (runtime credentials only)
       const [account] = await db
         .select()
         .from(apiAccounts)
-        .where(eq(apiAccounts.id, accountId))
+        .where(and(eq(apiAccounts.id, accountId), eq(apiAccounts.credentialKind, 'runtime')))
         .limit(1);
 
       if (!account) {
