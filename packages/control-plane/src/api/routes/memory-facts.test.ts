@@ -446,6 +446,7 @@ describe('memory fact routes', () => {
       ok: true,
       fact: makeFact(),
       edges: [makeEdge()],
+      sourcePreviews: [],
     });
     expect(memoryStore.listEdges).toHaveBeenCalledWith({ factId: 'fact-1' });
   });
@@ -547,6 +548,31 @@ describe('memory fact routes', () => {
     vi.mocked(memoryStore.listEdges).mockResolvedValueOnce([edge]);
 
     const detailApp = await createServer({ logger, memorySearch, memoryStore, pgPool });
+    await detailApp.ready();
+
+    const response = await detailApp.inject({
+      method: 'GET',
+      url: '/api/memory/facts/fact-1',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      ok: true,
+      fact,
+      edges: [edge],
+      sourcePreviews: [],
+    });
+
+    await detailApp.close();
+  });
+
+  it('returns an empty provenance array when preview lookup is unavailable', async () => {
+    const fact = makeFact();
+    const edge = makeEdge();
+    vi.mocked(memoryStore.getFact).mockResolvedValueOnce(fact);
+    vi.mocked(memoryStore.listEdges).mockResolvedValueOnce([edge]);
+
+    const detailApp = await createServer({ logger, memorySearch, memoryStore });
     await detailApp.ready();
 
     const response = await detailApp.inject({

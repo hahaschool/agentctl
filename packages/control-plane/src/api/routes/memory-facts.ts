@@ -391,10 +391,10 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
       }
 
       const edges = await memoryStore.listEdges({ factId: request.params.id });
-      let sourcePreviews: MemoryFactSourcePreview[] | undefined = pool ? [] : undefined;
+      const sourcePreviews: MemoryFactSourcePreview[] = [];
       if (pool) {
         try {
-          sourcePreviews = await listFactSourcePreviews(pool, request.params.id);
+          sourcePreviews.push(...(await listFactSourcePreviews(pool, request.params.id)));
         } catch (error: unknown) {
           request.log.warn(
             { err: error, factId: request.params.id },
@@ -407,7 +407,7 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
         ok: true,
         fact,
         edges,
-        ...(sourcePreviews !== undefined ? { sourcePreviews } : {}),
+        sourcePreviews,
       };
     },
   );
