@@ -54,6 +54,7 @@ jobs:
           MEMORY_EVAL_LITELLM_URL: ${{ secrets.MEMORY_EVAL_LITELLM_URL }}
           MEMORY_EVAL_PRIVATE_FIXTURE_JSON_B64: ${{ secrets.MEMORY_EVAL_PRIVATE_FIXTURE_JSON_B64 }}
           MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64: ${{ secrets.MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64 }}
+          MEMORY_EVAL_RELEASE_REQUIRED: ${{ vars.MEMORY_EVAL_RELEASE_REQUIRED }}
         run: |
           set -euo pipefail
 
@@ -65,7 +66,9 @@ jobs:
               ;;
             push)
               split="full"
-              strict="true"
+              if [ "${MEMORY_EVAL_RELEASE_REQUIRED:-false}" = "true" ]; then
+                strict="true"
+              fi
               ;;
             workflow_dispatch)
               split="${INPUT_SPLIT:-held-out}"
@@ -99,6 +102,14 @@ jobs:
               echo
               echo "Split: \`$split\`"
               echo
+              if [ "$EVENT_NAME" = "push" ]; then
+                echo "Release tag enforcement: \`${MEMORY_EVAL_RELEASE_REQUIRED:-false}\`"
+                echo
+                if [ "${MEMORY_EVAL_RELEASE_REQUIRED:-false}" != "true" ]; then
+                  echo "Set repository variable \`MEMORY_EVAL_RELEASE_REQUIRED=true\` after the private fixture and eval secrets are provisioned to make release-tag eval configuration blocking."
+                  echo
+                fi
+              fi
               echo "Missing configuration:"
               for item in "${missing[@]}"; do
                 echo "- \`$item\`"

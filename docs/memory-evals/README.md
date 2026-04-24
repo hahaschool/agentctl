@@ -62,11 +62,15 @@ GitHub Actions now reserves the non-dev splits for a dedicated workflow:
 
 - **Weekly schedule (`schedule`)** runs `held-out` and skips cleanly until the
   required eval secrets are provisioned.
-- **Release tags (`push` on `v*.*.*`)** run `full` and fail fast when the eval
-  environment is not configured, so release-style evidence cannot silently
-  disappear.
+- **Release tags (`push` on `v*.*.*`)** run `full` when the eval environment is
+  configured. Until private fixtures are provisioned, missing configuration
+  skips cleanly by default and writes a job summary. Set repository variable
+  `MEMORY_EVAL_RELEASE_REQUIRED=true` after provisioning to make release-tag
+  eval configuration blocking.
 - **Manual dispatch (`workflow_dispatch`)** lets maintainers choose
-  `held-out` or `full` without re-enabling those splits locally.
+  `held-out` or `full` without re-enabling those splits locally. Manual runs
+  still fail fast on missing configuration so maintainers can validate the gate
+  before enabling release-tag enforcement.
 
 The workflow stages the private fixture into `tmp/memory-eval/agentctl-private.json`
 and optionally writes a gitignored changelog file at
@@ -82,6 +86,12 @@ Required repository secrets:
 Optional repository secret:
 
 - `MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64`
+
+Optional repository variable:
+
+- `MEMORY_EVAL_RELEASE_REQUIRED` — set to `true` only after the private fixture
+  and eval endpoint secrets are provisioned and release tags should be blocked
+  by missing eval configuration.
 
 ### What counts as a change
 
