@@ -57,7 +57,12 @@ export type CopyFactSourceSpansInput = {
   duplicateFactIds: readonly string[];
 };
 
-export type MergeDuplicateFactsInput = CopyFactSourceSpansInput;
+export type MergeDuplicateFactsInput = CopyFactSourceSpansInput & {
+  /** When provided, the survivor fact's content is updated to this value before
+   *  the duplicate facts are invalidated. Allows users to supply a hand-edited
+   *  merged text rather than keeping the survivor fact's original content. */
+  customContent?: string;
+};
 
 export type MergeDuplicateFactsResult = {
   survivorFactId: string;
@@ -537,6 +542,15 @@ export class MemoryStore {
         copiedSourceSpans: 0,
         invalidatedFacts: 0,
       };
+    }
+
+    // Apply custom merged content to the survivor fact when the user has
+    // hand-edited the resolution text before accepting.
+    if (input.customContent !== undefined && input.customContent.trim().length > 0) {
+      await this.pool.query(
+        'UPDATE memory_facts SET content = $2, accessed_at = now() WHERE id = $1 AND valid_until IS NULL',
+        [input.survivorFactId, input.customContent.trim()],
+      );
     }
 
     const copiedSourceSpans = await this.copyFactSourceSpansToFact({

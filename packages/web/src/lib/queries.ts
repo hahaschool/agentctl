@@ -1403,11 +1403,17 @@ export function consolidationQuery(params?: ConsolidationQueryParams) {
 export function useResolveConsolidationItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (variables: { id: string; action: 'accept' | 'skip' | 'delete' }) => {
+    mutationFn: (variables: {
+      id: string;
+      action: 'accept' | 'skip' | 'delete';
+      /** Optional hand-edited merged content (only used when action is 'accept'). */
+      customContent?: string;
+    }) => {
       const statusMap = { accept: 'accepted', skip: 'skipped', delete: 'skipped' } as const;
       return api.resolveConsolidationItem(variables.id, {
         action: variables.action,
         status: statusMap[variables.action],
+        customContent: variables.action === 'accept' ? variables.customContent : undefined,
       });
     },
     onSuccess: () => {

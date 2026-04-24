@@ -56,6 +56,8 @@ type ConsolidationActionBody = {
   status: ConsolidationStatus;
   factIds?: string[];
   survivorFactId?: string;
+  /** Hand-edited merged content to use as the survivor fact's content. */
+  customContent?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -431,6 +433,7 @@ export const memoryConsolidationRoutes: FastifyPluginAsync<
             status: { type: 'string', enum: ['pending', 'accepted', 'skipped'] },
             factIds: { type: 'array', maxItems: 20, items: { type: 'string', maxLength: 256 } },
             survivorFactId: { type: 'string', maxLength: 256 },
+            customContent: { type: 'string', maxLength: 10_000 },
           },
         },
       },
@@ -439,14 +442,20 @@ export const memoryConsolidationRoutes: FastifyPluginAsync<
     },
     async (request) => {
       const { id } = request.params;
-      const { action, status } = request.body;
+      const { action, status, customContent } = request.body;
 
-      logger.info({ id, action, status }, 'Consolidation item resolved');
+      logger.info(
+        { id, action, status, hasCustomContent: customContent !== undefined },
+        'Consolidation item resolved',
+      );
 
       if (status === 'accepted' && (action === 'accept' || action === 'merge')) {
         const mergeTarget = await resolveNearDuplicateMergeTarget(pool, id, request.body);
         if (mergeTarget) {
-          const result = await memoryStore.mergeDuplicateFactsPreservingSources(mergeTarget);
+          const result = await memoryStore.mergeDuplicateFactsPreservingSources({
+            ...mergeTarget,
+            customContent,
+          });
           logger.info({ id, action, status, ...result }, 'Near-duplicate memory facts merged');
           return { ok: true, merge: result };
         }

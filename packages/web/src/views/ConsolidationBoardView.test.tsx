@@ -20,6 +20,13 @@ vi.mock('@tanstack/react-query', () => ({
   queryOptions: (opts: unknown) => opts,
 }));
 
+// Mutable so individual tests can override the returned value.
+let mockResolveConsolidationItem = {
+  mutate: vi.fn(),
+  isPending: false,
+  variables: undefined as { id: string; action: string; customContent?: string } | undefined,
+};
+
 vi.mock('@/lib/queries', () => ({
   consolidationQuery: (params?: unknown) => ({
     queryKey: ['memory', 'consolidation', params],
@@ -36,11 +43,7 @@ vi.mock('@/lib/queries', () => ({
       stats: ['memory', 'stats'],
     },
   },
-  useResolveConsolidationItem: () => ({
-    mutate: vi.fn(),
-    isPending: false,
-    variables: undefined,
-  }),
+  useResolveConsolidationItem: () => mockResolveConsolidationItem,
 }));
 
 import { ConsolidationBoardView } from './ConsolidationBoardView';
@@ -122,6 +125,14 @@ function setupQueries(
 // ---------------------------------------------------------------------------
 
 describe('ConsolidationBoardView', () => {
+  beforeEach(() => {
+    mockResolveConsolidationItem = {
+      mutate: vi.fn(),
+      isPending: false,
+      variables: undefined,
+    };
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -235,5 +246,131 @@ describe('ConsolidationBoardView', () => {
     render(<ConsolidationBoardView />);
 
     expect(screen.getByRole('button', { name: 'Refresh consolidation queue' })).toBeDefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Edit-before-accept dialog tests
+  // ---------------------------------------------------------------------------
+
+  it('opens the edit resolution dialog when Accept is clicked', () => {
+    const item = makeItem({ id: 'item-1', type: 'contradiction' });
+    const fact = makeFact({ id: 'fact-1', content: 'The survivor content' });
+    setupQueries([item], [fact]);
+    render(<ConsolidationBoardView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
+
+    expect(screen.getByText('Edit Resolution Before Accepting')).toBeDefined();
+  });
+
+  it('pre-populates the dialog textarea with the first fact content', () => {
+    const item = makeItem({ id: 'item-1', type: 'contradiction', factIds: ['fact-1'] });
+    const fact = makeFact({ id: 'fact-1', content: 'Pre-populated content here' });
+    setupQueries([item], [fact]);
+    render(<ConsolidationBoardView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
+
+    const textarea = screen.getByLabelText('Merged fact content');
+    expect((textarea as HTMLTextAreaElement).value).toBe('Pre-populated content here');
+  });
+
+  it('pre-populates near-duplicate dialog with both fact contents joined', () => {
+    const item = makeItem({
+      id: 'nd-1',
+      type: 'near-duplicate',
+      factIds: ['fact-a', 'fact-b'],
+    });
+    const factA = makeFact({ id: 'fact-a', content: 'Fact A content' });
+    const factB = makeFact({ id: 'fact-b', content: 'Fact B content' });
+    setupQueries([item], [factA, factB]);
+    render(<ConsolidationBoardView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
+
+    const textarea = screen.getByLabelText('Merged fact content');
+    expect((textarea as HTMLTextAreaElement).value).toContain('Fact A content');
+    expect((textarea as HTMLTextAreaElement).value).toContain('Fact B content');
+  });
+
+  it('allows the user to edit the textarea content', () => {
+    const item = makeItem({ id: 'item-1' });
+    const fact = makeFact({ content: 'Original content' });
+    setupQueries([item], [fact]);
+    render(<ConsolidationBoardView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
+
+    const textarea = screen.getByLabelText('Merged fact content');
+    fireEvent.change(textarea, { target: { value: 'Edited merged content' } });
+
+    expect((textarea as HTMLTextAreaElement).value).toBe('Edited merged content');
+  });
+
+  it('calls mutate with customContent when Confirm Accept is clicked', () => {
+    const mutate = vi.fn();
+    mockResolveConsolidationItem = { ...mockResolveConsolidationItem, mutate };
+
+    const item = makeItem({ id: 'item-42' });
+    const fact = makeFact({ content: 'Initial content' });
+    setupQueries([item], [fact]);
+    render(<ConsolidationBoardView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
+
+    const textarea = screen.getByLabelText('Merged fact content');
+    fireEvent.change(textarea, { target: { value: 'Custom merged text' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm accept' }));
+
+    expect(mutate).toHaveBeenCalledWith(
+      { id: 'item-42', action: 'accept', customContent: 'Custom merged text' },
+      expect.any(Object),
+    );
+  });
+
+  it('dismisses the dialog without calling mutate when Cancel is clicked', () => {
+    const mutate = vi.fn();
+    mockResolveConsolidationItem = { ...mockResolveConsolidationItem, mutate };
+
+    const item = makeItem({ id: 'item-1' });
+    setupQueries([item], [makeFact()]);
+    render(<ConsolidationBoardView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept suggestion' }));
+    expect(screen.getByText('Edit Resolution Before Accepting')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText('Edit Resolution Before Accepting')).toBeNull();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('does not open dialog when Skip is clicked — calls mutate directly', () => {
+    const mutate = vi.fn();
+    mockResolveConsolidationItem = { ...mockResolveConsolidationItem, mutate };
+
+    const item = makeItem({ id: 'item-skip' });
+    setupQueries([item], []);
+    render(<ConsolidationBoardView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+
+    expect(screen.queryByText('Edit Resolution Before Accepting')).toBeNull();
+    expect(mutate).toHaveBeenCalledWith({ id: 'item-skip', action: 'skip' });
+  });
+
+  it('does not open dialog when Delete is clicked — calls mutate directly', () => {
+    const mutate = vi.fn();
+    mockResolveConsolidationItem = { ...mockResolveConsolidationItem, mutate };
+
+    const item = makeItem({ id: 'item-del' });
+    setupQueries([item], []);
+    render(<ConsolidationBoardView />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(screen.queryByText('Edit Resolution Before Accepting')).toBeNull();
+    expect(mutate).toHaveBeenCalledWith({ id: 'item-del', action: 'delete' });
   });
 });
