@@ -1,5 +1,19 @@
-# Memory Operations UI v1 Implementation Plan
+# Memory Operations UI v1 Implementation Plan (SUPERSEDED)
 
+> **⚠️ STATUS: SUPERSEDED — DO NOT IMPLEMENT.**
+>
+> This plan was rejected by two reviewers on 2026-04-24. See:
+> - [Reviewer 1 — strict review](../specs/2026-04-24-memory-operations-ui-spec-plan-strict-review.md)
+> - [Reviewer 2 — batch critique](../reviews/2026-04-24-memory-operations-ui-review.md)
+>
+> **Known critical defects:** 5 hallucinated file paths, a silent LiteLLM breaking change in PR B, unimplemented cost/audit/401-deactivate features, 3146-line single file (violates 800-line project limit), PR F/G degenerated to slogan-level tasks.
+>
+> **Forward link:** The v1 rewrite lives at `docs/superpowers/plans/2026-04-24-memory-operations-ui/index.md` and companion per-PR files.
+>
+> ---
+>
+> Historical content below preserved for traceability.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fill two operator-surface gaps in AgentCTL's memory subsystem — (1) configure embedding providers (OpenAI + Gemini AI Studio) from Settings, and (2) trigger/observe long-running memory jobs (embedding-backfill, drawer-backfill, consolidation, synthesis) from `/memory/operations`. Backfill the user's existing 19,226 facts as the acceptance-level validation.

@@ -1,9 +1,30 @@
-# Memory Operations UI — Design Spec
+# Memory Operations UI — Design Spec (SUPERSEDED)
 
-> **Status:** approved design, awaiting implementation plan (see writing-plans handoff)
-> **Date:** 2026-04-24
+> **⚠️ STATUS: SUPERSEDED — DO NOT IMPLEMENT.**
+>
+> This v0 spec was rejected by two reviewers on 2026-04-24 for factual errors and
+> architectural mistakes. Kept as a reference for the rewrite, not as a plan to execute.
+>
+> **Review artifacts (read these first):**
+> - [Reviewer 1 — strict review, 414 lines, 45 issues](./2026-04-24-memory-operations-ui-spec-plan-strict-review.md)
+> - [Reviewer 2 — batch critique, 570 lines, 1 fatal + 10 blockers](../reviews/2026-04-24-memory-operations-ui-review.md)
+>
+> **Headline problems:**
+> 1. Assumed `api_accounts` mesh-syncs; it is explicitly local-only per `sync.ts:182`.
+> 2. Hallucinated 5+ frontend file paths (`SettingsPage.tsx`, `apiFetch`, `MemoryGraphPage.tsx`, `MemoryConsolidationView.tsx`, `runConsolidation`).
+> 3. Silent LiteLLM breaking change buried in feature PR (`/v1/embeddings` → `/embeddings`).
+> 4. Runtime credential paths not updated to filter embedding-kind rows — would break `accounts.ts`, `sessions.ts`, `task-worker.ts`.
+> 5. Cost, 401-auto-deactivate, audit log, `content_model` handling, batch-UPDATE all promised in spec but absent from plan.
+>
+> **Forward link:** The v1 rewrite lives at `2026-04-24-memory-operations-ui-design-v1.md` (per-machine providers, URL fix as precursor PR, verified file paths, transaction-safe single-active, content_model lock, cost tracking, audit logger wired).
+>
+> ---
+>
+> Historical content below preserved for traceability.
+>
+> **Date:** 2026-04-24 (original, superseded)
 > **Author:** hahaschool + Claude (brainstorming skill)
-> **Supersedes:** nothing; this is the first end-to-end design for memory maintenance UI
+> **Supersedes:** nothing; this was the first (failed) end-to-end design for memory maintenance UI
 > **Related plans:** [2026-04-15 MemPalace memory evolution](../../plans/2026-04-15-mempalace-inspired-memory-evolution-plan.md)
 
 ## Problem
