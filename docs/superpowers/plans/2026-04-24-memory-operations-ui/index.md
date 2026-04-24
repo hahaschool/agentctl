@@ -16,8 +16,8 @@
 |----|--------|------|------|--------|------|
 | **A** | `agent/claude-1/feat/memory-ops-pr-a` | Foundation: migration + shared types + EmbeddingClient additive + credential_kind filter | patch | Landed in PR #783 | [pr-a.md](./pr-a.md) |
 | **B** | `agent/claude-1/feat/memory-ops-pr-b` | Backend: factory + providers route + memory rewiring + MEMORY_OPS_STATUS_MAP | patch | Landed in PR #797 | [pr-b.md](./pr-b.md) |
-| **C** | `agent/claude-1/feat/memory-ops-pr-c` | Frontend: Settings → Memory & Embeddings + ApiError.details | minor | Landed in PR #806; saved-provider test persistence follow-up landed in PR #807; status hardening follow-up landed in PR #808 | [pr-c.md](./pr-c.md) |
-| **D** | `agent/claude-1/feat/memory-ops-pr-d` | Backend: jobs CRUD + BullMQ + SSE + preview endpoint + capabilities | patch | Next critical path slice; branch from post-#809 `main` | [pr-d.md](./pr-d.md) |
+| **C** | `agent/claude-1/feat/memory-ops-pr-c` | Frontend: Settings → Memory & Embeddings + ApiError.details | minor | Landed in PR #806; saved-provider persistence follow-up landed in PR #807 and hardening follow-up landed in PR #808 | [pr-c.md](./pr-c.md) |
+| **D** | `agent/claude-1/feat/memory-ops-pr-d` | Backend: jobs CRUD + BullMQ + SSE + preview endpoint + capabilities | patch | Next critical path slice; branch from post-#810 `main` | [pr-d.md](./pr-d.md) |
 | **E** | `agent/claude-1/feat/memory-ops-pr-e` | Workers: embedding-backfill + drawer-backfill + boot reconciliation | patch | Critical path — 19k backfill | [pr-e.md](./pr-e.md) |
 | **F** | `agent/claude-1/feat/memory-ops-pr-f` | Frontend: /memory/operations page + 8 alerts + egress dialog | minor | Non-critical | [pr-f.md](./pr-f.md) |
 | **G** | `agent/claude-1/feat/memory-ops-pr-g` | Workers: consolidation + synthesis + e2e + Gate 2 + CHANGELOG | patch | Non-critical | [pr-g.md](./pr-g.md) |
@@ -26,7 +26,7 @@
 
 ## Merge Order
 
-PRs must merge in order A → B → C → D → E → F → G. PR A landed in PR #783, PR B landed in PR #797, and PR C landed in PR #806 with PR #807 as the saved-provider test persistence follow-up and PR #808 as the status hardening follow-up. Continue with PR D next from latest `main` after the post-#809 roadmap sync. Each remaining PR has its own branch off `main`. Never branch from another PR's branch.
+PRs must merge in order A → B → C → D → E → F → G. PR A landed in PR #783, PR B landed in PR #797, and PR C landed in PR #806 with PR #807/#808 as saved-provider test persistence and hardening follow-ups. Continue with PR D next from latest `main` after the post-#810 roadmap sync. Each remaining PR has its own branch off `main`. Never branch from another PR's branch.
 
 After E merges, set `MEMORY_OPS_ENABLED=true` in dev-1 and trigger the 19,226-fact backfill from the API. Verify before F.
 
