@@ -2,7 +2,7 @@
 // Mesh sync — peer listing + ping and sync-conflict review/resolution.
 // ---------------------------------------------------------------------------
 
-import { request } from './core';
+import { ApiError, request } from './core';
 
 export type SyncConflictItem = {
   id: string;
@@ -161,6 +161,45 @@ export type UpdateSyncPeerResponse = {
   remoteSyncUrl?: string;
 };
 
+/**
+ * Error body returned by peers running the pre-async (pre-#697) peer-update
+ * route. These peers finish the script synchronously and surface `exitCode`
+ * + `stdoutTail` + `stderrTail` in the body of a non-2xx response. The
+ * generic `ApiError` path would discard those fields; `UpdateSyncPeerFailedError`
+ * preserves them so the UI can render the real failure reason instead of a
+ * terse "exited with code N" toast.
+ */
+export type UpdateSyncPeerLegacyFailure = {
+  error: string;
+  message: string;
+  exitCode: number;
+  stdoutTail: string;
+  stderrTail: string;
+  remoteSyncUrl?: string;
+};
+
+export class UpdateSyncPeerFailedError extends Error {
+  public readonly status: number;
+  public readonly payload: UpdateSyncPeerLegacyFailure;
+  constructor(status: number, payload: UpdateSyncPeerLegacyFailure) {
+    super(payload.message);
+    this.name = 'UpdateSyncPeerFailedError';
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+function isLegacyFailurePayload(
+  body: Record<string, unknown>,
+): body is UpdateSyncPeerLegacyFailure {
+  return (
+    typeof body.message === 'string' &&
+    typeof body.exitCode === 'number' &&
+    typeof body.stdoutTail === 'string' &&
+    typeof body.stderrTail === 'string'
+  );
+}
+
 export type PeerUpdateLogLine = {
   stream: 'stdout' | 'stderr';
   text: string;
@@ -237,11 +276,47 @@ export const syncApi = {
       method: 'POST',
     }),
 
-  updateSyncPeer: (machineId: string) =>
-    request<UpdateSyncPeerResponse>(`/api/sync/peers/${encodeURIComponent(machineId)}/update`, {
+  /**
+   * Custom fetch path (not the generic `request` helper) so we can surface the
+   * full `stdoutTail`/`stderrTail` body that pre-async peers return on failure.
+   * Callers should catch `UpdateSyncPeerFailedError` to render the real tail;
+   * other non-2xx responses still throw the usual `ApiError`.
+   */
+  updateSyncPeer: async (machineId: string): Promise<UpdateSyncPeerResponse> => {
+    const res = await fetch(`/api/sync/peers/${encodeURIComponent(machineId)}/update`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-    }),
+    });
+
+    const text = await res.text();
+    let body: unknown;
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = {};
+    }
+
+    if (res.ok) {
+      return body as UpdateSyncPeerResponse;
+    }
+
+    if (
+      body &&
+      typeof body === 'object' &&
+      isLegacyFailurePayload(body as Record<string, unknown>)
+    ) {
+      throw new UpdateSyncPeerFailedError(res.status, body as UpdateSyncPeerLegacyFailure);
+    }
+
+    const fallback = body as { error?: string; message?: string; hint?: string };
+    throw new ApiError(
+      res.status,
+      fallback.error ?? 'UNKNOWN',
+      fallback.message ?? res.statusText,
+      fallback.hint,
+    );
+  },
 
   /**
    * §33.8 — Retry reverse registration against an existing peer. Returns the
