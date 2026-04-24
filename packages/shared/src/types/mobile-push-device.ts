@@ -1,3 +1,5 @@
+export const DEFAULT_NOTIFICATION_USER_ID = 'local';
+
 export const MOBILE_PUSH_PLATFORMS = ['ios'] as const;
 export type MobilePushPlatform = (typeof MOBILE_PUSH_PLATFORMS)[number];
 

@@ -1,3 +1,5 @@
+import { DEFAULT_NOTIFICATION_USER_ID } from '@agentctl/shared';
+
 import type { ApprovalNotificationRoute } from '../navigation/approval-notification-routing.js';
 import { MobileClientError } from './api-client.js';
 import type { MobilePushDeviceUpsertRequest } from './mobile-push-device-api.js';
@@ -46,7 +48,6 @@ type PushRegistrationServiceConfig = {
   now?: () => Date;
 };
 
-const DEFAULT_OPERATOR_ID = 'mobile-operator';
 const DEFAULT_APP_ID = 'com.agentctl.mobile';
 
 export class PushRegistrationService {
@@ -58,7 +59,7 @@ export class PushRegistrationService {
   constructor(config: PushRegistrationServiceConfig) {
     this.runtime = config.runtime;
     this.upsertDevice = config.upsertDevice;
-    this.operatorId = config.operatorId ?? DEFAULT_OPERATOR_ID;
+    this.operatorId = config.operatorId ?? DEFAULT_NOTIFICATION_USER_ID;
     this.now = config.now ?? (() => new Date());
   }
 

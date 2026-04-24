@@ -1,6 +1,10 @@
 'use client';
 
-import { NOTIFICATION_CHANNELS, NOTIFICATION_PRIORITIES } from '@agentctl/shared';
+import {
+  DEFAULT_NOTIFICATION_USER_ID,
+  NOTIFICATION_CHANNELS,
+  NOTIFICATION_PRIORITIES,
+} from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -44,7 +48,7 @@ const PRIORITY_LABELS: Record<NotificationPriority, string> = {
 
 // Placeholder user id — in production this would come from auth context.
 // The panel falls back to a stable sentinel so the API call has a real userId.
-const CURRENT_USER_ID = 'local';
+const CURRENT_USER_ID = DEFAULT_NOTIFICATION_USER_ID;
 
 // ---------------------------------------------------------------------------
 // Sub-components

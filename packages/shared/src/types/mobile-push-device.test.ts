@@ -10,6 +10,7 @@ import type {
   UpsertMobilePushDeviceResponse,
 } from './mobile-push-device.js';
 import {
+  DEFAULT_NOTIFICATION_USER_ID,
   isMobilePushPlatform,
   isMobilePushProvider,
   MOBILE_PUSH_PLATFORMS,
@@ -19,6 +20,10 @@ import {
 const NOW = '2026-03-19T10:00:00.000Z';
 
 describe('mobile push device types', () => {
+  it('exports the default notification user sentinel shared by web and mobile', () => {
+    expect(DEFAULT_NOTIFICATION_USER_ID).toBe('local');
+  });
+
   it('exports the expected supported platforms', () => {
     const platforms: MobilePushPlatform[] = ['ios'];
     expect(platforms).toEqual(['ios']);

@@ -309,6 +309,7 @@ export type {
   UpsertMobilePushDeviceResponse,
 } from './mobile-push-device.js';
 export {
+  DEFAULT_NOTIFICATION_USER_ID,
   isMobilePushPlatform,
   isMobilePushProvider,
   MOBILE_PUSH_PLATFORMS,

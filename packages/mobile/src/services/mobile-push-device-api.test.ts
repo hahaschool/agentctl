@@ -1,3 +1,4 @@
+import { DEFAULT_NOTIFICATION_USER_ID } from '@agentctl/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiClient } from './api-client.js';
@@ -36,7 +37,7 @@ describe('MobilePushDeviceApi', () => {
 
   it('posts Expo push device upserts to the control plane route', async () => {
     const payload: MobilePushDeviceUpsertRequest = {
-      userId: 'mobile-operator',
+      userId: DEFAULT_NOTIFICATION_USER_ID,
       platform: 'ios',
       provider: 'expo',
       pushToken: 'ExponentPushToken[abc123]',
