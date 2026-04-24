@@ -1,6 +1,6 @@
 import type { MemoryFact } from '@agentctl/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -8,12 +8,14 @@ import { describe, expect, it, vi } from 'vitest';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockMemoryFactsQuery } = vi.hoisted(() => ({
+const { mockMemoryFactQuery, mockMemoryFactsQuery } = vi.hoisted(() => ({
+  mockMemoryFactQuery: vi.fn(),
   mockMemoryFactsQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/queries', () => ({
   memoryFactsQuery: (params: unknown) => mockMemoryFactsQuery(params),
+  memoryFactQuery: (id: string) => mockMemoryFactQuery(id),
 }));
 
 vi.mock('@/components/ui/skeleton', () => ({
@@ -96,7 +98,22 @@ function renderSection(agentId = 'agent-1') {
 // ---------------------------------------------------------------------------
 
 describe('AgentMemorySection', () => {
+  function mockDetailQueryResult() {
+    mockMemoryFactQuery.mockImplementation((factId: string) => ({
+      queryKey: ['memory', 'fact', factId],
+      queryFn: () =>
+        Promise.resolve({
+          ok: true,
+          fact: createFact({ id: factId || 'detail-fallback' }),
+          edges: [],
+          sourcePreviews: [],
+        }),
+      enabled: Boolean(factId),
+    }));
+  }
+
   it('shows loading skeletons while fetching', () => {
+    mockDetailQueryResult();
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { agentId: 'agent-1' }],
       queryFn: () => new Promise(() => {}),
@@ -108,6 +125,7 @@ describe('AgentMemorySection', () => {
   });
 
   it('renders fact count in header when data is loaded', async () => {
+    mockDetailQueryResult();
     const facts = [
       createFact({ id: 'f1', scope: 'global', strength: 0.9 }),
       createFact({ id: 'f2', scope: 'project:agentctl', strength: 0.7 }),
@@ -128,6 +146,7 @@ describe('AgentMemorySection', () => {
   });
 
   it('renders scope distribution when multiple scopes are present', async () => {
+    mockDetailQueryResult();
     const facts = [
       createFact({ id: 'f1', scope: 'global' }),
       createFact({ id: 'f2', scope: 'global' }),
@@ -147,6 +166,7 @@ describe('AgentMemorySection', () => {
   });
 
   it('renders top facts section', async () => {
+    mockDetailQueryResult();
     const facts = [
       createFact({ id: 'f1', strength: 0.95 }),
       createFact({ id: 'f2', strength: 0.6 }),
@@ -165,6 +185,7 @@ describe('AgentMemorySection', () => {
   });
 
   it('shows no-facts message when empty', async () => {
+    mockDetailQueryResult();
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { agentId: 'agent-1' }],
       queryFn: () => Promise.resolve({ ok: true, facts: [], total: 0 }),
@@ -179,6 +200,7 @@ describe('AgentMemorySection', () => {
   });
 
   it('shows error when fetch fails', async () => {
+    mockDetailQueryResult();
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { agentId: 'agent-1' }],
       queryFn: () => Promise.reject(new Error('Server error')),
@@ -193,6 +215,7 @@ describe('AgentMemorySection', () => {
   });
 
   it('shows not-configured notice when route returns 404', async () => {
+    mockDetailQueryResult();
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { agentId: 'agent-1' }],
       queryFn: () => Promise.reject(new Error('Route GET:/api/memory/facts not found')),
@@ -209,6 +232,7 @@ describe('AgentMemorySection', () => {
   });
 
   it('passes agentId to memoryFactsQuery', () => {
+    mockDetailQueryResult();
     const agentId = 'agent-xyz-999';
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { agentId }],
@@ -218,5 +242,52 @@ describe('AgentMemorySection', () => {
     renderSection(agentId);
 
     expect(mockMemoryFactsQuery).toHaveBeenCalledWith({ agentId });
+  });
+
+  it('opens the fact detail sheet with drawer evidence when a top fact is selected', async () => {
+    const fact = createFact({ id: 'f1', content: 'Top fact content', strength: 0.95 });
+    mockMemoryFactsQuery.mockReturnValue({
+      queryKey: ['memory', 'facts', { agentId: 'agent-1' }],
+      queryFn: () => Promise.resolve({ ok: true, facts: [fact], total: 1 }),
+    });
+    mockMemoryFactQuery.mockImplementation((factId: string) => ({
+      queryKey: ['memory', 'fact', factId],
+      queryFn: () =>
+        Promise.resolve({
+          ok: true,
+          fact,
+          edges: [],
+          sourcePreviews: [
+            {
+              drawer_id: 'drawer-1',
+              drawer_scope: 'project:agentctl',
+              drawer_topic: 'release-checklist',
+              drawer_chunk_index: 0,
+              drawer_source_type: 'session-jsonl',
+              drawer_source_id: 'session-1',
+              start_offset: 0,
+              end_offset: 36,
+              quote_preview: 'Keep the rollout note concise and source-linked.',
+              status: 'available',
+              created_at: '2026-03-11T00:00:00.000Z',
+            },
+          ],
+        }),
+      enabled: Boolean(factId),
+    }));
+
+    renderSection();
+
+    const { waitFor } = await import('@testing-library/react');
+    await waitFor(() => {
+      expect(screen.getByText('Top fact content')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Top fact content/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Evidence (1)')).toBeDefined();
+    });
+    expect(screen.getByText('Keep the rollout note concise and source-linked.')).toBeDefined();
   });
 });
