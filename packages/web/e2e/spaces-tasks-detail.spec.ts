@@ -1,4 +1,4 @@
-import { expect, type Page, test } from '@playwright/test';
+import { expect, type Page, type Route, test } from '@playwright/test';
 import type {
   ContextRef,
   CrossSpaceSubscription,
@@ -17,16 +17,58 @@ const NOW = '2026-04-14T08:00:00.000Z';
 const SPACE_ID = 'test-space-1';
 const TASK_GRAPH_ID = 'test-task-1';
 
-async function respond(
-  route: import('@playwright/test').Route,
-  status: number,
-  body: unknown,
-): Promise<void> {
+async function respond(route: Route, status: number, body: unknown): Promise<void> {
   await route.fulfill({
     status,
     contentType: 'application/json',
     body: JSON.stringify(body),
   });
+}
+
+async function mockAppShellWebSocket(page: Page): Promise<void> {
+  await page.routeWebSocket('ws://localhost:8080/api/ws', (ws) => {
+    ws.onMessage((message) => {
+      const payload =
+        typeof message === 'string'
+          ? (JSON.parse(message) as Record<string, unknown>)
+          : (JSON.parse(message.toString('utf8')) as Record<string, unknown>);
+
+      if (payload.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', timestamp: NOW }));
+      }
+    });
+  });
+}
+
+async function maybeRespondToAppShellApi(
+  route: Route,
+  method: string,
+  pathname: string,
+): Promise<boolean> {
+  if (method === 'GET' && pathname === '/api/sync/conflicts/count') {
+    await respond(route, 200, { count: 0 });
+    return true;
+  }
+  if (method === 'GET' && pathname === '/api/permission-requests') {
+    await respond(route, 200, []);
+    return true;
+  }
+  if (method === 'GET' && pathname === '/api/version-compat') {
+    await respond(route, 200, {
+      appVersion: '0.8.2',
+      gitSha: 'e2e',
+      schemaVersion: 35,
+      minSupportedMobileBuild: 0,
+      minSupportedWebBuild: 0,
+    });
+    return true;
+  }
+
+  return false;
+}
+
+function unexpectedApiRequest(method: string, pathname: string): never {
+  throw new Error(`Unhandled API request in spaces/tasks detail e2e mock: ${method} ${pathname}`);
 }
 
 // ── /spaces/[id] fixtures and mock ──────────────────────────────────────────
@@ -106,6 +148,8 @@ async function mockSpaceApis(
   page: Page,
   opts: { readonly notFound?: boolean } = {},
 ): Promise<SpaceMockState> {
+  await mockAppShellWebSocket(page);
+
   const state: SpaceMockState = {
     createdThreads: [],
     postedEvents: [],
@@ -142,8 +186,8 @@ async function mockSpaceApis(
     const { pathname } = new URL(req.url());
     const method = req.method();
 
-    if (method === 'GET' && pathname === '/api/sync/conflicts/count') {
-      return respond(route, 200, { count: 0 });
+    if (await maybeRespondToAppShellApi(route, method, pathname)) {
+      return;
     }
     if (method === 'GET' && pathname === `/api/spaces/${SPACE_ID}`) {
       return opts.notFound
@@ -198,10 +242,7 @@ async function mockSpaceApis(
       return respond(route, 200, next);
     }
 
-    return respond(route, 404, {
-      error: 'UNEXPECTED_E2E_REQUEST',
-      message: `${method} ${pathname}`,
-    });
+    unexpectedApiRequest(method, pathname);
   });
 
   return state;
@@ -283,6 +324,8 @@ async function mockTaskApis(
   page: Page,
   opts: { readonly notFound?: boolean; readonly emptyGraph?: boolean } = {},
 ): Promise<TaskMockState> {
+  await mockAppShellWebSocket(page);
+
   const state: TaskMockState = { createdRuns: [] };
 
   await page.route('**/api/**', async (route) => {
@@ -290,8 +333,8 @@ async function mockTaskApis(
     const { pathname } = new URL(req.url());
     const method = req.method();
 
-    if (method === 'GET' && pathname === '/api/sync/conflicts/count') {
-      return respond(route, 200, { count: 0 });
+    if (await maybeRespondToAppShellApi(route, method, pathname)) {
+      return;
     }
     if (method === 'GET' && pathname === `/api/task-graphs/${TASK_GRAPH_ID}`) {
       if (opts.notFound) {
@@ -325,10 +368,7 @@ async function mockTaskApis(
       );
     }
 
-    return respond(route, 404, {
-      error: 'UNEXPECTED_E2E_REQUEST',
-      message: `${method} ${pathname}`,
-    });
+    unexpectedApiRequest(method, pathname);
   });
 
   return state;
@@ -484,7 +524,7 @@ test.describe('Task graph detail page (/tasks/[id])', () => {
 
     await expect(page.getByText(/Failed to load task graph/)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(new RegExp(`Task graph ${TASK_GRAPH_ID} not found`))).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Release Orchestration' })).toHaveCount(0);
   });
 
