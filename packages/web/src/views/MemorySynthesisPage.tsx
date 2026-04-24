@@ -21,6 +21,7 @@ import type {
   MemorySynthesisGroup,
   MemorySynthesisNearDuplicate,
   MemorySynthesisOrphanFact,
+  MemorySynthesisPrincipleCandidate,
   MemorySynthesisResult,
   MemorySynthesisStaleFact,
 } from '@/lib/api';
@@ -46,6 +47,10 @@ function truncate(content: string, max = FACT_PREVIEW_LIMIT): string {
 function factBrowserHref(factId: string): string {
   const params = new URLSearchParams({ q: factId });
   return `/memory/browser?${params.toString()}`;
+}
+
+function formatConfidence(confidence: number): string {
+  return `${Math.round(confidence * 100)}% confidence`;
 }
 
 function totalLintCount(result: MemorySynthesisResult | null): number {
@@ -258,15 +263,7 @@ function SynthesisGroupsSection({
           key={group.entityType}
           className="rounded-md border border-border bg-background/40 px-3 py-2"
         >
-          <div className="flex items-center gap-2 text-xs">
-            <Badge variant="outline" className="font-mono">
-              {group.entityType}
-            </Badge>
-            <span className="text-muted-foreground">
-              {group.factIds.length} fact{group.factIds.length === 1 ? '' : 's'}
-            </span>
-          </div>
-          <p className="mt-1.5 text-xs leading-snug text-foreground">{group.proposalHint}</p>
+          <SynthesisCandidateHeader group={group} />
           {group.factIds.length > 0 ? (
             <ol className="mt-2 space-y-1.5">
               {group.factIds.map((factId, index) => (
@@ -282,6 +279,71 @@ function SynthesisGroupsSection({
         </li>
       ))}
     </ul>
+  );
+}
+
+function SynthesisCandidateHeader({ group }: { group: MemorySynthesisGroup }): React.JSX.Element {
+  const candidate = group.principleCandidate;
+  if (!candidate) {
+    return (
+      <>
+        <div className="flex items-center gap-2 text-xs">
+          <Badge variant="outline" className="font-mono">
+            {group.entityType}
+          </Badge>
+          <span className="text-muted-foreground">
+            {group.factIds.length} fact{group.factIds.length === 1 ? '' : 's'}
+          </span>
+        </div>
+        <p className="mt-1.5 text-xs leading-snug text-foreground">{group.proposalHint}</p>
+      </>
+    );
+  }
+
+  return <PrincipleCandidateCard group={group} candidate={candidate} />;
+}
+
+function PrincipleCandidateCard({
+  group,
+  candidate,
+}: {
+  group: MemorySynthesisGroup;
+  candidate: MemorySynthesisPrincipleCandidate;
+}): React.JSX.Element {
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="outline" className="font-mono">
+          {group.entityType}
+        </Badge>
+        <Badge variant="secondary" className="font-mono">
+          {candidate.scope}
+        </Badge>
+        <Badge variant="outline" className="tabular-nums">
+          {formatConfidence(candidate.confidence)}
+        </Badge>
+        <span className="text-muted-foreground">
+          {candidate.evidenceCount} evidence fact{candidate.evidenceCount === 1 ? '' : 's'}
+        </span>
+      </div>
+
+      <p className="mt-2 text-sm font-medium text-foreground">{candidate.title}</p>
+      <p className="mt-1.5 text-xs leading-snug text-muted-foreground">{candidate.summary}</p>
+
+      {candidate.themeKeywords.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {candidate.themeKeywords.map((keyword) => (
+            <Badge key={keyword} variant="outline" className="font-mono text-[10px]">
+              {keyword}
+            </Badge>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-2 rounded-md border border-dashed border-border px-2.5 py-2 text-xs text-foreground">
+        {candidate.actionHint}
+      </div>
+    </>
   );
 }
 
