@@ -27,6 +27,15 @@ type AuditSummary = {
   avgDurationMs: number | null;
 };
 
+type SuspiciousSession = {
+  sessionId: string;
+  agentId: string | null;
+  actionCount: number;
+  firstEventAt: string | null;
+  lastEventAt: string | null;
+  suspiciousReasons: string[];
+};
+
 type AuditListCall = {
   agentId: string | null;
   tool: string | null;
@@ -41,6 +50,7 @@ type AuditSummaryCall = {
 type MockState = {
   actions: AuditAction[];
   summary: AuditSummary;
+  suspiciousSessions: SuspiciousSession[];
   listCalls: AuditListCall[];
   summaryCalls: AuditSummaryCall[];
   listStatus: number;
@@ -76,6 +86,7 @@ function makeState(actions: AuditAction[], summary: AuditSummary): MockState {
   return {
     actions,
     summary,
+    suspiciousSessions: [],
     listCalls: [],
     summaryCalls: [],
     listStatus: 200,
@@ -141,6 +152,11 @@ async function mountApiMocks(page: Page, state: MockState): Promise<void> {
     if (method === 'GET' && pathname === '/api/audit/summary') {
       state.summaryCalls.push({ agentId: searchParams.get('agentId') });
       await fulfillJson(route, state.summary);
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/audit/suspicious') {
+      await fulfillJson(route, state.suspiciousSessions);
       return;
     }
 

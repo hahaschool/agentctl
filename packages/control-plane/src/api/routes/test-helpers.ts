@@ -99,6 +99,7 @@ export function createFullMockDbRegistry(
       actionTypeBreakdown: {},
       avgDurationMs: null,
     }),
+    getSuspiciousSessions: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DbAgentRegistry;
 }

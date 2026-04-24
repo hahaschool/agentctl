@@ -198,4 +198,27 @@ export const auditRoutes: FastifyPluginAsync<AuditRoutesOptions> = async (app, o
       }
     },
   );
+
+  // ---------------------------------------------------------------------------
+  // GET /api/audit/suspicious — fleet-wide suspicious session summary
+  // ---------------------------------------------------------------------------
+
+  app.get(
+    '/suspicious',
+    { schema: { tags: ['audit'], summary: 'Get fleet-wide suspicious session summary' } },
+    async (_request, reply) => {
+      try {
+        const sessions = await dbRegistry.getSuspiciousSessions();
+
+        return sessions;
+      } catch (error: unknown) {
+        if (error instanceof ControlPlaneError) {
+          return reply.code(502).send({ error: error.code, message: error.message });
+        }
+        return reply
+          .code(500)
+          .send({ error: 'SUSPICIOUS_FAILED', message: 'Failed to get suspicious sessions' });
+      }
+    },
+  );
 };
