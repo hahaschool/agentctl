@@ -119,6 +119,15 @@ export type AuditSummary = {
   avgDurationMs: number | null;
 };
 
+export type SuspiciousSession = {
+  sessionId: string;
+  agentId: string | null;
+  actionCount: number;
+  firstEventAt: Date | null;
+  lastEventAt: Date | null;
+  suspiciousReasons: string[];
+};
+
 export class DbAgentRegistry {
   constructor(
     private readonly db: Database,
@@ -958,6 +967,87 @@ export class DbAgentRegistry {
         'AUDIT_SUMMARY_FAILED',
         `Failed to get audit summary: ${message}`,
         { filters },
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Suspicious session detection
+  // ---------------------------------------------------------------------------
+
+  async getSuspiciousSessions(): Promise<SuspiciousSession[]> {
+    try {
+      // Aggregate per-session action counts and timestamps via runId → sessionId join
+      const rows = await this.db
+        .select({
+          sessionId: agentRuns.sessionId,
+          agentId: agentRuns.agentId,
+          actionCount: count(agentActions.id),
+          firstEventAt: sql<Date | null>`MIN(${agentActions.timestamp})`,
+          lastEventAt: sql<Date | null>`MAX(${agentActions.timestamp})`,
+          distinctActionTypes: sql<number>`COUNT(DISTINCT ${agentActions.actionType})`,
+          errorCount: sql<number>`SUM(CASE WHEN ${agentActions.actionType} = 'error' THEN 1 ELSE 0 END)`,
+          longDurationCount: sql<number>`SUM(CASE WHEN ${agentActions.durationMs} > 30000 THEN 1 ELSE 0 END)`,
+          unapprovedToolCount: sql<number>`SUM(CASE WHEN ${agentActions.toolName} IS NOT NULL AND ${agentActions.approvedBy} IS NULL THEN 1 ELSE 0 END)`,
+        })
+        .from(agentActions)
+        .innerJoin(agentRuns, eq(agentActions.runId, agentRuns.id))
+        .where(sql`${agentRuns.sessionId} IS NOT NULL`)
+        .groupBy(agentRuns.sessionId, agentRuns.agentId)
+        .orderBy(sql`COUNT(${agentActions.id}) DESC`)
+        .limit(50);
+
+      const suspicious: SuspiciousSession[] = [];
+
+      for (const row of rows) {
+        if (!row.sessionId) {
+          continue;
+        }
+
+        const reasons: string[] = [];
+
+        const errorCount = Number(row.errorCount ?? 0);
+        const longDurationCount = Number(row.longDurationCount ?? 0);
+        const unapprovedToolCount = Number(row.unapprovedToolCount ?? 0);
+        const actionCount = Number(row.actionCount ?? 0);
+
+        if (errorCount > 0) {
+          reasons.push(`${errorCount} error event${errorCount === 1 ? '' : 's'}`);
+        }
+
+        if (longDurationCount > 0) {
+          reasons.push(
+            `${longDurationCount} long-running tool call${longDurationCount === 1 ? '' : 's'} (>30s)`,
+          );
+        }
+
+        if (unapprovedToolCount > 2) {
+          reasons.push(`${unapprovedToolCount} unapproved tool invocations`);
+        }
+
+        if (actionCount > 500) {
+          reasons.push(`unusually high action count (${actionCount})`);
+        }
+
+        if (reasons.length > 0) {
+          suspicious.push({
+            sessionId: row.sessionId,
+            agentId: row.agentId,
+            actionCount,
+            firstEventAt: row.firstEventAt,
+            lastEventAt: row.lastEventAt,
+            suspiciousReasons: reasons,
+          });
+        }
+      }
+
+      return suspicious;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new ControlPlaneError(
+        'AUDIT_SUSPICIOUS_FAILED',
+        `Failed to get suspicious sessions: ${message}`,
+        {},
       );
     }
   }

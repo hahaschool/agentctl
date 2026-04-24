@@ -121,6 +121,8 @@ export const queryKeys = {
   }) => (params ? (['audit', params] as const) : (['audit'] as const)),
   auditSummary: (params?: { agentId?: string; from?: string; to?: string }) =>
     params ? (['audit-summary', params] as const) : (['audit-summary'] as const),
+  auditReplay: (sessionId: string) => ['audit-replay', sessionId] as const,
+  auditSuspicious: ['audit-suspicious'] as const,
   securityFindings: (params?: SecurityFindingsQueryParams) =>
     params ? (['security-findings', params] as const) : (['security-findings'] as const),
   securityFindingsSummary: ['security-findings', 'summary'] as const,
@@ -572,6 +574,23 @@ export function auditSummaryQuery(params?: { agentId?: string; from?: string; to
   return queryOptions({
     queryKey: queryKeys.auditSummary(params),
     queryFn: () => api.getAuditSummary(params),
+    refetchInterval: getRefetchInterval(),
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function auditSessionReplayQuery(sessionId: string) {
+  return queryOptions({
+    queryKey: queryKeys.auditReplay(sessionId),
+    queryFn: () => api.getSessionReplay(sessionId),
+    enabled: Boolean(sessionId),
+  });
+}
+
+export function auditSuspiciousQuery() {
+  return queryOptions({
+    queryKey: queryKeys.auditSuspicious,
+    queryFn: () => api.getSuspiciousSessions(),
     refetchInterval: getRefetchInterval(),
     refetchOnWindowFocus: true,
   });

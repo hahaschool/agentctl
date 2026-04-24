@@ -8,9 +8,10 @@ import type { AuditAction, AuditSummary } from '@/lib/api';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockAuditQuery, mockAuditSummaryQuery } = vi.hoisted(() => ({
+const { mockAuditQuery, mockAuditSummaryQuery, mockAuditSuspiciousQuery } = vi.hoisted(() => ({
   mockAuditQuery: vi.fn(),
   mockAuditSummaryQuery: vi.fn(),
+  mockAuditSuspiciousQuery: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,12 @@ vi.mock('@/components/LogsAuditActionRow', () => ({
 vi.mock('@/lib/queries', () => ({
   auditQuery: (params?: unknown) => mockAuditQuery(params),
   auditSummaryQuery: (params?: unknown) => mockAuditSummaryQuery(params),
+  auditSuspiciousQuery: () => mockAuditSuspiciousQuery(),
+  auditSessionReplayQuery: (sessionId: unknown) => ({
+    queryKey: ['audit-replay', sessionId],
+    queryFn: vi.fn().mockResolvedValue({ sessionId, agentId: null, events: [], totalEvents: 0 }),
+    enabled: Boolean(sessionId),
+  }),
 }));
 
 // ---------------------------------------------------------------------------
@@ -114,6 +121,13 @@ function setSummary(summary: AuditSummary) {
   });
 }
 
+function setSuspicious() {
+  mockAuditSuspiciousQuery.mockReturnValue({
+    queryKey: ['audit-suspicious'],
+    queryFn: vi.fn().mockResolvedValue([]),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -123,6 +137,7 @@ describe('AuditPage', () => {
     vi.clearAllMocks();
     setActions([makeAction()]);
     setSummary(makeSummary());
+    setSuspicious();
   });
 
   afterEach(() => {

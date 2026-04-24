@@ -2,6 +2,8 @@
 // Security — audit trail queries + security findings.
 // ---------------------------------------------------------------------------
 
+import type { SessionTimeline } from '@agentctl/shared';
+
 import { request } from './core';
 
 export type AuditAction = {
@@ -65,6 +67,18 @@ export type SecurityFindingsSummary = {
   byCategory: Record<string, number>;
 };
 
+/** Re-export for components that import from the api module. */
+export type { SessionTimeline };
+
+export type SuspiciousSession = {
+  sessionId: string;
+  agentId: string | null;
+  actionCount: number;
+  firstEventAt: string | null;
+  lastEventAt: string | null;
+  suspiciousReasons: string[];
+};
+
 export type AcknowledgeFindingInput = {
   acknowledgedBy: string;
   reason?: string;
@@ -117,6 +131,9 @@ export const securityApi = {
     const suffix = qs.toString() ? `?${qs}` : '';
     return request<AuditSummary>(`/api/audit/summary${suffix}`);
   },
+  getSessionReplay: (sessionId: string) =>
+    request<SessionTimeline>(`/api/audit/replay/${encodeURIComponent(sessionId)}`),
+  getSuspiciousSessions: () => request<SuspiciousSession[]>('/api/audit/suspicious'),
   listSecurityFindings: (params?: {
     severity?: SecurityFindingSeverity;
     category?: string;
