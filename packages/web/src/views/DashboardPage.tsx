@@ -23,6 +23,7 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { FetchingBar } from '../components/FetchingBar';
 import { LastUpdated } from '../components/LastUpdated';
 import { LiveTimeAgo } from '../components/LiveTimeAgo';
+import { MetricsSparklines } from '../components/MetricsSparklines';
 import { DashboardMemoryCard } from '../components/memory/DashboardMemoryCard';
 import { PathBadge } from '../components/PathBadge';
 import { RefreshButton } from '../components/RefreshButton';
@@ -45,6 +46,7 @@ import {
   runtimeSessionsQuery,
   sessionsQuery,
 } from '../lib/queries';
+import { useMetricsHistory } from '../lib/use-metrics-history';
 
 function sanitizeSessionSummary(summary: string | null | undefined): string {
   if (!summary) {
@@ -71,6 +73,8 @@ export function DashboardPage(): React.JSX.Element {
   const runtimeSessions = useQuery(runtimeSessionsQuery({ limit: 100 }));
   const runtimeHandoffSummary = useQuery(runtimeHandoffSummaryQuery(100));
   const memoryStats = useQuery({ ...memoryStatsQuery(), retry: false });
+
+  const metricsHistory = useMetricsHistory();
 
   const { status: wsStatus } = useWebSocket();
   const openKeyboardHelp = useCallback(() => {
@@ -446,6 +450,9 @@ export function DashboardPage(): React.JSX.Element {
           </Card>
         </>
       )}
+
+      {/* Metrics sparklines */}
+      <MetricsSparklines history={metricsHistory} />
 
       {/* Memory health card */}
       {memoryStats.isSuccess && memoryStats.data?.stats && (
