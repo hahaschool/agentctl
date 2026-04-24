@@ -29,6 +29,17 @@ const RUNNING_AGENT = {
   createdAt: '2026-04-01T00:00:00Z',
 };
 
+const MACHINE = {
+  id: RUNNING_AGENT.machineId,
+  hostname: 'dev-1',
+  tailscaleIp: '100.64.0.10',
+  os: 'darwin',
+  arch: 'arm64',
+  status: 'online' as const,
+  lastHeartbeat: '2026-04-12T10:00:00Z',
+  createdAt: '2026-04-01T00:00:00Z',
+};
+
 async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
   await route.fulfill({
     status,
@@ -50,8 +61,39 @@ async function interceptApi(
     const url = new URL(request.url());
     const method = request.method();
 
+    if (method === 'GET' && url.pathname === '/api/sync/conflicts/count') {
+      await fulfillJson(route, { count: 0 });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/permission-requests') {
+      await fulfillJson(route, []);
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/health') {
+      await fulfillJson(route, { ok: true, status: 'healthy' });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/version-compat') {
+      await fulfillJson(route, {
+        appVersion: '0.4.0',
+        gitSha: 'test',
+        schemaVersion: 26,
+        minSupportedMobileBuild: 0,
+        minSupportedWebBuild: 0,
+      });
+      return;
+    }
+
     if (method === 'GET' && url.pathname === '/api/agents') {
-      await fulfillJson(route, [RUNNING_AGENT]);
+      await fulfillJson(route, [MACHINE]);
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/agents/list') {
+      await fulfillJson(route, { agents: [RUNNING_AGENT], total: 1, hasMore: false });
       return;
     }
 
@@ -75,11 +117,6 @@ async function interceptApi(
       return;
     }
 
-    if (method === 'GET' && url.pathname === '/api/machines') {
-      await fulfillJson(route, []);
-      return;
-    }
-
     if (method === 'GET' && url.pathname === '/api/settings/accounts') {
       await fulfillJson(route, []);
       return;
@@ -87,6 +124,17 @@ async function interceptApi(
 
     if (method === 'GET' && url.pathname === '/api/sessions') {
       await fulfillJson(route, { sessions: [], total: 0, limit: 100, offset: 0, hasMore: false });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/runtime-sessions') {
+      await fulfillJson(route, { sessions: [], count: 0 });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/memory/facts') {
+      expect(url.searchParams.get('agentId')).toBe(RUNNING_AGENT.id);
+      await fulfillJson(route, { ok: true, facts: [], total: 0 });
       return;
     }
 
@@ -109,9 +157,7 @@ async function interceptApi(
       return;
     }
 
-    // Allow other unrelated endpoints to pass through with empty defaults so
-    // peripheral hooks (memory, mcp, etc.) on /agents don't blow up the page.
-    await fulfillJson(route, []);
+    throw new Error(`Unhandled API request in emergency-stop e2e mock: ${method} ${url.pathname}`);
   });
 }
 
