@@ -6,15 +6,18 @@
 
 export class ApiError extends Error {
   public hint?: string;
+  public details?: Record<string, unknown>;
   constructor(
     public status: number,
     public code: string,
     message: string,
     hint?: string,
+    details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';
     this.hint = hint;
+    this.details = details;
   }
 }
 
@@ -38,7 +41,12 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       (body as Record<string, string>).error ?? 'UNKNOWN',
       (body as Record<string, string>).message ?? res.statusText,
       (body as Record<string, string>).hint,
+      (body as Record<string, unknown>).details as Record<string, unknown> | undefined,
     );
+  }
+
+  if (res.status === 204) {
+    return undefined as T;
   }
 
   return res.json() as Promise<T>;

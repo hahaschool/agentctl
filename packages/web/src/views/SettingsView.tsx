@@ -17,6 +17,7 @@ import { PreferencesSection } from './PreferencesSection';
 import { ProjectAccountsSection } from './ProjectAccountsSection';
 import { RuntimeAccessSection } from './RuntimeAccessSection';
 import { RuntimeConsistencySection } from './RuntimeConsistencySection';
+import { MemoryEmbeddingsSection } from './settings/MemoryEmbeddingsSection';
 import { MeshAutoUpdateSection } from './settings/MeshAutoUpdateSection';
 import { MeshConfigSection } from './settings/MeshConfigSection';
 import { RuntimeProfilesSection } from './settings/RuntimeProfilesSection';
@@ -38,6 +39,11 @@ const SETTINGS_NAV = [
     id: 'credentials-access',
     label: 'Credentials & Access',
     detail: 'Managed credentials plus future worker-discovered local access records.',
+  },
+  {
+    id: 'memory-embeddings',
+    label: 'Memory & Embeddings',
+    detail: 'Local embedding providers for memory search and maintenance jobs.',
   },
   {
     id: 'workers-sync',
@@ -140,6 +146,14 @@ export function SettingsView(): React.JSX.Element {
               <AccountsSection />
               <ProjectAccountsSection />
             </div>
+          </SettingsSection>
+
+          <SettingsSection
+            id="memory-embeddings"
+            title="Memory & Embeddings"
+            description="Configure local embedding provider custody for vector search, memory writes, and maintenance backfills."
+          >
+            <MemoryEmbeddingsSection />
           </SettingsSection>
 
           <SettingsSection

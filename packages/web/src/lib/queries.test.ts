@@ -30,6 +30,7 @@ import {
   memoryFactQuery,
   memoryFactsQuery,
   memoryGraphQuery,
+  memoryProvidersQuery,
   memoryStatsQuery,
   metricsQuery,
   projectAccountsQuery,
@@ -862,6 +863,15 @@ describe('memoryStatsQuery', () => {
 
     expect(options.queryKey).toEqual(queryKeys.memory.stats);
     expect(options.refetchInterval).toBe(60_000);
+  });
+});
+
+describe('memoryProvidersQuery', () => {
+  it('returns queryOptions with the memory providers queryKey', () => {
+    const options = memoryProvidersQuery();
+
+    expect(options.queryKey).toEqual(queryKeys.memory.providers);
+    expect(options.staleTime).toBe(30_000);
   });
 });
 

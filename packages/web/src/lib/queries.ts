@@ -177,6 +177,8 @@ export const queryKeys = {
         ? (['memory', 'consolidation', params] as const)
         : (['memory', 'consolidation'] as const),
     scopes: ['memory', 'scopes'] as const,
+    providers: ['memory', 'providers'] as const,
+    provider: (id: string) => ['memory', 'providers', id] as const,
     importStatus: ['memory', 'import', 'status'] as const,
     drawersSearch: (params: MemoryDrawerSearchRequest) =>
       ['memory', 'drawers', 'search', params] as const,
@@ -803,6 +805,14 @@ export function memoryDecayStatsQuery() {
     queryFn: api.getMemoryDecayStats,
     staleTime: 30_000,
     refetchInterval: 60_000,
+  });
+}
+
+export function memoryProvidersQuery() {
+  return queryOptions({
+    queryKey: queryKeys.memory.providers,
+    queryFn: api.memoryProviders.list,
+    staleTime: 30_000,
   });
 }
 
