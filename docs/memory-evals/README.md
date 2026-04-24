@@ -44,8 +44,11 @@ API, or any network dependency — so it can run in CI on a bare checkout.
 - Local/default use is `pnpm memory:eval --split dev`. This is the only split
   intended for everyday tuning.
 - The default human-readable output prints the aggregate/category summary table,
-  a `By Tag` table, and a capped `Failure Examples` section. Use `--json` if
-  you need the raw run payload instead.
+  a `By Tag` table, and a capped `Failure Examples` section. When
+  `MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE=true`, the report also appends a
+  required-tag coverage table so workflow summaries/artifacts show the private
+  fixture gate state explicitly. Use `--json` if you need the raw run payload
+  instead.
 - `--split held-out` is reserved for workflow-owned eval jobs and requires
   `MEMORY_EVAL_ALLOW_HELD_OUT=true`.
 - `--split full` is reserved for release-style eval jobs and requires
@@ -82,6 +85,9 @@ and optionally writes a gitignored changelog file at
 `tmp/memory-eval/fixtures/CHANGELOG.md`.
 It also enables `MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE=true` so sparse
 private fixtures fail fast instead of silently weakening eval coverage.
+The captured report is appended to the job summary and uploaded as an artifact
+even when the eval step fails, so missing-tag coverage details stay visible in
+CI without re-running the job locally.
 
 Required repository secrets:
 

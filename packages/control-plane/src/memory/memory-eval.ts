@@ -101,6 +101,21 @@ export type MemoryEvalSummary = {
   byTag: Record<string, MemoryEvalSegmentSummary>;
 };
 
+export type MemoryEvalFailureModeCoverageTagSummary = {
+  tag: string;
+  totalRows: number;
+  requiredRows: number;
+  missingRows: number;
+  meetsMinimum: boolean;
+};
+
+export type MemoryEvalFailureModeCoverageSummary = {
+  totalIncludedRows: number;
+  requiredRowsPerTag: number;
+  tags: MemoryEvalFailureModeCoverageTagSummary[];
+  missingTags: string[];
+};
+
 export type MemoryEvalRun = {
   rowResults: MemoryEvalRowResult[];
   summary: MemoryEvalSummary;
@@ -203,23 +218,55 @@ export function assertFailureModeCoverage(
     minimumPerTag?: number;
   } = {},
 ): void {
-  const requiredTags = options.requiredTags ?? DEFAULT_FAILURE_MODE_TAGS;
+  const coverage = summarizeFailureModeCoverage(rows, options);
+  if (coverage.missingTags.length > 0) {
+    const missingDetails = coverage.tags
+      .filter((tag) => !tag.meetsMinimum)
+      .map((tag) => `${tag.tag} (${tag.totalRows}/${tag.requiredRows})`);
+    throw new Error(
+      `Memory eval fixture coverage is below ${coverage.requiredRowsPerTag} rows for tags: ${missingDetails.join(', ')}. Current required-tag counts: ${formatFailureModeCoverageCounts(coverage)}`,
+    );
+  }
+}
+
+export function summarizeFailureModeCoverage(
+  rows: readonly MemoryEvalFixtureRow[],
+  options: {
+    requiredTags?: readonly string[];
+    minimumPerTag?: number;
+  } = {},
+): MemoryEvalFailureModeCoverageSummary {
+  const requiredTags = [...new Set(options.requiredTags ?? DEFAULT_FAILURE_MODE_TAGS)];
   const minimumPerTag = options.minimumPerTag ?? 5;
   const counts = new Map<string, number>();
+  let totalIncludedRows = 0;
 
   for (const row of rows) {
     if (row.excluded) continue;
-    for (const tag of row.tags) {
+    totalIncludedRows += 1;
+    for (const tag of new Set(row.tags)) {
       counts.set(tag, (counts.get(tag) ?? 0) + 1);
     }
   }
 
-  const misses = requiredTags.filter((tag) => (counts.get(tag) ?? 0) < minimumPerTag);
-  if (misses.length > 0) {
-    throw new Error(
-      `Memory eval fixture coverage is below ${minimumPerTag} rows for tags: ${misses.join(', ')}`,
-    );
-  }
+  const tags = requiredTags.map((tag) => {
+    const totalRows = counts.get(tag) ?? 0;
+    const missingRows = Math.max(0, minimumPerTag - totalRows);
+    return {
+      tag,
+      totalRows,
+      requiredRows: minimumPerTag,
+      missingRows,
+      meetsMinimum: missingRows === 0,
+    };
+  });
+
+  return {
+    totalIncludedRows,
+    requiredRowsPerTag: minimumPerTag,
+    tags,
+    missingTags: tags.filter((tag) => !tag.meetsMinimum).map((tag) => tag.tag),
+  };
 }
 
 export function getDevSet(
@@ -399,6 +446,25 @@ export function formatMemoryEvalReport(
       options.failureExampleLimit ?? DEFAULT_MEMORY_EVAL_FAILURE_EXAMPLE_LIMIT,
     ),
   ].join('\n\n');
+}
+
+export function formatFailureModeCoverageMarkdown(
+  coverage: MemoryEvalFailureModeCoverageSummary,
+): string {
+  const rows = coverage.tags.map(
+    (tag) =>
+      `| ${tag.tag} | ${tag.totalRows} | ${tag.requiredRows} | ${tag.meetsMinimum ? 'ok' : `missing ${tag.missingRows}`} |`,
+  );
+
+  return [
+    '## Fixture Failure-Mode Coverage',
+    `Included rows counted: ${coverage.totalIncludedRows}`,
+    `Required rows per tag: ${coverage.requiredRowsPerTag}`,
+    '',
+    '| Tag | Rows | Required | Status |',
+    '| --- | ---: | ---: | --- |',
+    ...rows,
+  ].join('\n');
 }
 
 export async function runMemoryEval(
@@ -996,6 +1062,10 @@ function formatInlineValues(values: readonly string[]): string {
 
 function formatFirstRelevantRank(rank: number | null): string {
   return rank === null ? 'miss' : String(rank);
+}
+
+function formatFailureModeCoverageCounts(coverage: MemoryEvalFailureModeCoverageSummary): string {
+  return coverage.tags.map((tag) => `${tag.tag}=${tag.totalRows}/${tag.requiredRows}`).join(', ');
 }
 
 function average(values: readonly number[]): number {

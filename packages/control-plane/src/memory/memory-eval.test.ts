@@ -7,6 +7,7 @@ import {
   createMemoryPlantedNeedleMockRanker,
   createMemoryPlantedNeedleRows,
   EVAL_SPLIT_SEED,
+  formatFailureModeCoverageMarkdown,
   formatMemoryEvalMarkdown,
   formatMemoryEvalReport,
   getDevSet,
@@ -17,6 +18,7 @@ import {
   resolveMemoryPlantedNeedleBenchConfig,
   runMemoryPlantedNeedleBench,
   scoreMemoryEvalRow,
+  summarizeFailureModeCoverage,
   summarizeMemoryEval,
   toDrawerSourceKey,
 } from './memory-eval.js';
@@ -305,7 +307,90 @@ describe('memory eval fixture hygiene and split helpers', () => {
         requiredTags: ['vocabulary-gap', 'noisy-distractor-rejection'],
         minimumPerTag: 2,
       }),
-    ).toThrow(/noisy-distractor-rejection/);
+    ).toThrow(
+      /noisy-distractor-rejection \(0\/2\).*Current required-tag counts: vocabulary-gap=2\/2, noisy-distractor-rejection=0\/2/,
+    );
+  });
+
+  it('formats a deterministic failure-mode coverage table for workflow-owned fixture runs', () => {
+    const rows = [
+      {
+        ...BASE_ROW,
+        id: 'fixture-vocab-0',
+        expectedFacts: [{ id: 'fact:vocab:0' }],
+        expectedDrawerSources: [],
+        tags: ['vocabulary-gap'],
+      },
+      {
+        ...BASE_ROW,
+        id: 'fixture-vocab-1',
+        expectedFacts: [{ id: 'fact:vocab:1' }],
+        expectedDrawerSources: [],
+        tags: ['vocabulary-gap'],
+      },
+      {
+        ...BASE_ROW,
+        id: 'fixture-temporal-0',
+        expectedFacts: [{ id: 'fact:temporal:0' }],
+        expectedDrawerSources: [],
+        tags: ['temporal-ambiguity'],
+      },
+      {
+        ...BASE_ROW,
+        id: 'fixture-excluded',
+        expectedFacts: [{ id: 'fact:excluded' }],
+        expectedDrawerSources: [],
+        tags: ['temporal-ambiguity'],
+        excluded: true,
+        exclusionReason: 'Moved to changelog',
+      },
+    ];
+
+    const coverage = summarizeFailureModeCoverage(rows, {
+      requiredTags: ['temporal-ambiguity', 'vocabulary-gap', 'assistant-reference'],
+      minimumPerTag: 2,
+    });
+
+    expect(coverage).toEqual({
+      totalIncludedRows: 3,
+      requiredRowsPerTag: 2,
+      missingTags: ['temporal-ambiguity', 'assistant-reference'],
+      tags: [
+        {
+          tag: 'temporal-ambiguity',
+          totalRows: 1,
+          requiredRows: 2,
+          missingRows: 1,
+          meetsMinimum: false,
+        },
+        {
+          tag: 'vocabulary-gap',
+          totalRows: 2,
+          requiredRows: 2,
+          missingRows: 0,
+          meetsMinimum: true,
+        },
+        {
+          tag: 'assistant-reference',
+          totalRows: 0,
+          requiredRows: 2,
+          missingRows: 2,
+          meetsMinimum: false,
+        },
+      ],
+    });
+
+    expect(formatFailureModeCoverageMarkdown(coverage)).toMatchInlineSnapshot(`
+      "## Fixture Failure-Mode Coverage
+      Included rows counted: 3
+      Required rows per tag: 2
+
+      | Tag | Rows | Required | Status |
+      | --- | ---: | ---: | --- |
+      | temporal-ambiguity | 1 | 2 | missing 1 |
+      | vocabulary-gap | 2 | 2 | ok |
+      | assistant-reference | 0 | 2 | missing 2 |"
+    `);
   });
 });
 

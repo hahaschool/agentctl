@@ -6,6 +6,7 @@ import { EmbeddingClient } from '../packages/control-plane/src/memory/embedding-
 import {
   assertFailureModeCoverage,
   createDeterministicMockRanker,
+  formatFailureModeCoverageMarkdown,
   formatMemoryEvalReport,
   getDevSet,
   getFullSet,
@@ -16,6 +17,7 @@ import {
   type MemoryEvalRanker,
   type MemoryEvalRun,
   runMemoryEval,
+  summarizeFailureModeCoverage,
 } from '../packages/control-plane/src/memory/memory-eval.js';
 import { MemorySearch } from '../packages/control-plane/src/memory/memory-search.js';
 import { MEMORY_EMBEDDING_MODEL } from '../packages/shared/src/memory/constants.js';
@@ -206,7 +208,8 @@ export async function runLiveMemoryEval(
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
   const fixture = loadMemoryEvalFixture(options.fixturePath);
-  assertRequiredFailureModeCoverage(fixture.rows, options.fixturePath);
+  const minimumPerTag = readOptionalPositiveIntegerEnv(process.env, FAILURE_MODE_MIN_ROWS_ENV);
+  assertRequiredFailureModeCoverage(fixture.rows, options.fixturePath, minimumPerTag);
   const rows = selectRows(fixture.rows, options);
   const run = options.mock
     ? await runMemoryEval(rows, createDeterministicMockRanker())
@@ -217,11 +220,18 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     return;
   }
 
-  console.log(
+  const sections = [
     `# Memory Eval (${options.split}, ${options.mock ? 'mock ranking' : 'live MemorySearch'})`,
+    formatMemoryEvalReport(run),
+  ];
+  const failureModeCoverageSection = formatRequiredFailureModeCoverageSection(
+    fixture.rows,
+    minimumPerTag,
   );
-  console.log('');
-  console.log(formatMemoryEvalReport(run));
+  if (failureModeCoverageSection) {
+    sections.push(failureModeCoverageSection);
+  }
+  console.log(sections.join('\n\n'));
 }
 
 function readRequiredEnv(env: MemoryEvalEnv, name: string): string {
@@ -235,13 +245,12 @@ function readRequiredEnv(env: MemoryEvalEnv, name: string): string {
 function assertRequiredFailureModeCoverage(
   rows: readonly MemoryEvalFixtureRow[],
   fixturePath: string,
+  minimumPerTag: number | undefined,
   env: MemoryEvalEnv = process.env,
 ): void {
   if (env[REQUIRE_FAILURE_MODE_COVERAGE_ENV] !== 'true') {
     return;
   }
-
-  const minimumPerTag = readOptionalPositiveIntegerEnv(env, FAILURE_MODE_MIN_ROWS_ENV);
 
   try {
     assertFailureModeCoverage(rows, {
@@ -275,6 +284,22 @@ function readOptionalPositiveIntegerEnv(env: MemoryEvalEnv, name: string): numbe
   }
 
   return parsedValue;
+}
+
+function formatRequiredFailureModeCoverageSection(
+  rows: readonly MemoryEvalFixtureRow[],
+  minimumPerTag: number | undefined,
+  env: MemoryEvalEnv = process.env,
+): string | null {
+  if (env[REQUIRE_FAILURE_MODE_COVERAGE_ENV] !== 'true') {
+    return null;
+  }
+
+  return formatFailureModeCoverageMarkdown(
+    summarizeFailureModeCoverage(rows, {
+      minimumPerTag,
+    }),
+  );
 }
 
 function createScriptLogger(): Logger {

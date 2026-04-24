@@ -68,6 +68,76 @@ function writeFixture(): string {
   return fixturePath;
 }
 
+function writeCoverageFixture(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-eval-coverage-'));
+  const fixturePath = path.join(dir, 'fixture.json');
+  fs.writeFileSync(
+    fixturePath,
+    `${JSON.stringify(
+      {
+        version: 1,
+        splitSeed: 42,
+        rows: [
+          {
+            id: 'row-vocabulary-gap',
+            query: 'Which term mapped to the right memory?',
+            category: 'AgentCTL-internal',
+            expectedFacts: [{ id: 'fact:vocabulary-gap', relevance: 3 }],
+            expectedDrawerSources: [],
+            redactedAnswerHints: ['Vocabulary gap fixture row.'],
+            tags: ['vocabulary-gap'],
+            public: true,
+          },
+          {
+            id: 'row-temporal-ambiguity',
+            query: 'Which action happened yesterday?',
+            category: 'AgentCTL-internal',
+            expectedFacts: [{ id: 'fact:temporal-ambiguity', relevance: 3 }],
+            expectedDrawerSources: [],
+            redactedAnswerHints: ['Temporal ambiguity fixture row.'],
+            tags: ['temporal-ambiguity'],
+            public: true,
+          },
+          {
+            id: 'row-assistant-reference',
+            query: 'What did the assistant recommend?',
+            category: 'AgentCTL-internal',
+            expectedFacts: [{ id: 'fact:assistant-reference', relevance: 3 }],
+            expectedDrawerSources: [],
+            redactedAnswerHints: ['Assistant reference fixture row.'],
+            tags: ['assistant-reference'],
+            public: true,
+          },
+          {
+            id: 'row-person-name-underweighting',
+            query: 'Which operator was mentioned by name?',
+            category: 'AgentCTL-internal',
+            expectedFacts: [{ id: 'fact:person-name-underweighting', relevance: 3 }],
+            expectedDrawerSources: [],
+            redactedAnswerHints: ['Person-name underweighting fixture row.'],
+            tags: ['person-name-underweighting'],
+            public: true,
+          },
+          {
+            id: 'row-noisy-distractor-rejection',
+            query: 'Which fact survived the distractor list?',
+            category: 'AgentCTL-internal',
+            expectedFacts: [{ id: 'fact:noisy-distractor-rejection', relevance: 3 }],
+            expectedDrawerSources: [],
+            redactedAnswerHints: ['Noisy distractor rejection fixture row.'],
+            tags: ['noisy-distractor-rejection'],
+            public: true,
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+    'utf8',
+  );
+  return fixturePath;
+}
+
 describe('memory-eval live mode', () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
@@ -126,10 +196,32 @@ describe('memory-eval live mode', () => {
     delete process.env.LITELLM_URL;
 
     await expect(main(['--fixture', writeFixture(), '--json'])).rejects.toThrow(
-      /MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE|temporal-ambiguity|assistant-reference/,
+      /MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE|temporal-ambiguity \(0\/2\)|assistant-reference \(0\/2\)|Current required-tag counts:/,
     );
 
     expect(logSpy).not.toHaveBeenCalled();
+    expect(mockPool).not.toHaveBeenCalled();
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
+
+  it('appends fixture failure-mode coverage details when the workflow gate is enabled', async () => {
+    process.env.MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE = 'true';
+    process.env.MEMORY_EVAL_FAILURE_MODE_MIN_ROWS = '1';
+    delete process.env.DATABASE_URL;
+    delete process.env.EMBEDDING_API_URL;
+    delete process.env.LITELLM_PROXY_URL;
+    delete process.env.LITELLM_URL;
+
+    await main(['--fixture', writeCoverageFixture()]);
+
+    const output = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(output).toContain('# Memory Eval (dev, mock ranking)');
+    expect(output).toContain('## Fixture Failure-Mode Coverage');
+    expect(output).toContain('| vocabulary-gap | 1 | 1 | ok |');
+    expect(output).toContain('| temporal-ambiguity | 1 | 1 | ok |');
+    expect(output).toContain('| assistant-reference | 1 | 1 | ok |');
+    expect(output).toContain('| person-name-underweighting | 1 | 1 | ok |');
+    expect(output).toContain('| noisy-distractor-rejection | 1 | 1 | ok |');
     expect(mockPool).not.toHaveBeenCalled();
     expect(mockSearch).not.toHaveBeenCalled();
   });
