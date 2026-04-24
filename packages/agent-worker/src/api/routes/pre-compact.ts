@@ -11,7 +11,7 @@
 // Architecture:
 //   1. Validate the incoming JSON body manually (matching existing codebase pattern)
 //   2. Return 202 immediately so the CLI can proceed with compaction
-//   3. Kick off an async memory capture job (direct CP API call)
+//   3. Schedule the async memory capture job onto the next tick
 //   4. The async job has a hard 30s timeout — it will never hang forever
 // ---------------------------------------------------------------------------
 
@@ -51,6 +51,8 @@ export type PreCompactRouteOptions = FastifyPluginOptions & {
   controlPlaneUrl: string;
   /** Logger instance. */
   logger: Logger;
+  /** Optional scheduler override for deferred checkpoint capture. */
+  scheduleCapture?: (task: () => void) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -200,6 +202,10 @@ export async function capturePreCompactCheckpoint(
   );
 }
 
+function scheduleDeferredCapture(task: () => void): void {
+  setImmediate(task);
+}
+
 // ---------------------------------------------------------------------------
 // Route plugin
 // ---------------------------------------------------------------------------
@@ -208,7 +214,7 @@ export async function preCompactRoutes(
   app: FastifyInstance,
   opts: PreCompactRouteOptions,
 ): Promise<void> {
-  const { controlPlaneUrl, logger } = opts;
+  const { controlPlaneUrl, logger, scheduleCapture = scheduleDeferredCapture } = opts;
 
   app.post<{ Params: { sessionId: string }; Body: unknown }>(
     '/:sessionId/pre-compact',
@@ -239,13 +245,14 @@ export async function preCompactRoutes(
         'Pre-compact notification received — triggering async checkpoint',
       );
 
-      // Fire-and-forget: return 202 immediately, capture happens asynchronously.
-      // Errors are caught inside capturePreCompactCheckpoint and never propagate.
-      void capturePreCompactCheckpoint(sessionId, body, controlPlaneUrl, log).catch(
-        (err: unknown) => {
-          log.error({ err, sessionId }, 'Unexpected error in pre-compact checkpoint capture');
-        },
-      );
+      // Fire-and-forget: return 202 immediately, then start the checkpoint on the next tick.
+      scheduleCapture(() => {
+        void capturePreCompactCheckpoint(sessionId, body, controlPlaneUrl, log).catch(
+          (err: unknown) => {
+            log.error({ err, sessionId }, 'Unexpected error in pre-compact checkpoint capture');
+          },
+        );
+      });
 
       return reply.status(202).send({ queued: true });
     },
