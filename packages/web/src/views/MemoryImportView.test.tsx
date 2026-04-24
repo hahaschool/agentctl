@@ -86,6 +86,12 @@ describe('MemoryImportView', () => {
       expect(screen.getByText('Memory Import')).toBeDefined();
     });
 
+    it('describes only the currently wired claude-mem import source', () => {
+      renderView();
+      expect(screen.getByText(/Migrate existing memory data from claude-mem/i)).toBeDefined();
+      expect(screen.queryByText(/JSONL conversation history/i)).toBeNull();
+    });
+
     it('renders the source selector buttons', () => {
       renderView();
       expect(screen.getByTestId('source-claude-mem')).toBeDefined();

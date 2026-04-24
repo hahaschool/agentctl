@@ -62,12 +62,14 @@ function totalLintCount(result: MemorySynthesisResult | null): number {
 // ---------------------------------------------------------------------------
 
 function FactLink({ factId, label }: { factId: string; label?: string }): React.JSX.Element {
+  const shortId = factId.slice(0, 8);
   return (
     <Link
       href={factBrowserHref(factId)}
+      aria-label={label ? `${label}: ${shortId}` : shortId}
       className="font-mono text-[11px] text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
     >
-      {label ?? 'Open fact'}
+      {label ?? shortId}
     </Link>
   );
 }
