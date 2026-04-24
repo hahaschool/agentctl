@@ -263,6 +263,44 @@ describe('memoryProvidersRoutes', () => {
     expect(createResponse.json()).toMatchObject({ error: 'VALIDATION_ERROR' });
   });
 
+  it('rejects recent test tokens when the saved provider key only shares the same suffix', async () => {
+    process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
+    embeddingClientMocks.embedBatchWithUsage.mockResolvedValue({
+      vectors: [[0.1, 0.2]],
+      usage: { promptTokens: 1000 },
+      model: 'text-embedding-3-small',
+    });
+    const pool = createMockPool();
+    app = await buildApp(pool);
+
+    const testResponse = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers/test-ephemeral',
+      payload: {
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-tested-1234',
+      },
+    });
+    const signedToken = testResponse.json().signedToken;
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers',
+      payload: {
+        name: 'OpenAI',
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-different-1234',
+        active: false,
+        recentTestResult: { signedToken, apiKey: 'sk-different-1234' },
+      },
+    });
+
+    expect(testResponse.statusCode).toBe(200);
+    expect(createResponse.statusCode).toBe(422);
+    expect(createResponse.json()).toMatchObject({ error: 'VALIDATION_ERROR' });
+  });
+
   it('POST /api/memory/providers rejects unverified catalog entries', async () => {
     const pool = createMockPool();
     app = await buildApp(pool);

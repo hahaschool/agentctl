@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { hostname } from 'node:os';
 
 import {
@@ -29,10 +29,11 @@ const MEMORY_PROVIDER_RATE_LIMIT = {
   max: 20,
   timeWindow: 60_000,
 } as const;
-const recentTestFingerprints = new Map<
+const recentTestCredentials = new Map<
   string,
   {
-    fingerprint: string;
+    encryptedCredential: string;
+    credentialIv: string;
     expiresAt: number;
   }
 >();
@@ -248,7 +249,7 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       const payload: RecentTestPayload = {
         provider: body.provider,
         model: body.model,
-        testId: rememberRecentTestFingerprint(body.apiKey, signingSecret, testedAt),
+        testId: rememberRecentTestCredential(body.apiKey, opts.encryptionKey, testedAt),
         dim,
         ok: true,
         testedAt,
@@ -289,7 +290,13 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
         await checkModelLock(opts.pool, body.model);
       }
 
-      const metadata = buildProviderMetadata(body.provider, body.model, body.recentTestResult);
+      const metadata = buildProviderMetadata(
+        body.provider,
+        body.model,
+        body.apiKey,
+        opts.encryptionKey,
+        body.recentTestResult,
+      );
       const encrypted = encryptCredential(body.apiKey, opts.encryptionKey);
       const row = await insertProvider(opts.pool, {
         name: body.name,
@@ -373,6 +380,8 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
                 body.recentTestResult,
                 existing.provider,
                 parseProviderModel(metadata),
+                body.apiKey,
+                opts.encryptionKey,
               )
             : null;
           metadata.lastTestOk = verified ? true : null;
@@ -639,6 +648,8 @@ async function withTransaction<T>(pool: Pool, fn: (client: PoolClient) => Promis
 function buildProviderMetadata(
   provider: string,
   model: string,
+  apiKey: string,
+  encryptionKey: string,
   recentTestResult?: z.infer<typeof recentTestResultSchema>,
 ): Record<string, unknown> {
   const metadata: Record<string, unknown> = {
@@ -653,7 +664,7 @@ function buildProviderMetadata(
   if (!recentTestResult) {
     return metadata;
   }
-  const verified = verifyRecentTestResult(recentTestResult, provider, model);
+  const verified = verifyRecentTestResult(recentTestResult, provider, model, apiKey, encryptionKey);
   metadata.lastTestOk = true;
   metadata.lastTestedAt = new Date(verified.testedAt).toISOString();
   metadata.dim = verified.dim;
@@ -666,6 +677,8 @@ function verifyRecentTestResult(
   recentTestResult: z.infer<typeof recentTestResultSchema>,
   expectedProvider: string,
   expectedModel: string,
+  expectedApiKey: string,
+  encryptionKey: string,
 ): RecentTestPayload {
   const signingSecret = readSigningSecret();
   if (!signingSecret) {
@@ -696,12 +709,19 @@ function verifyRecentTestResult(
   if (Date.now() - payload.testedAt > TOKEN_TTL_MS) {
     throw invalidRecentTestResult();
   }
-  const remembered = readRecentTestFingerprint(payload.testId);
+  const remembered = readRecentTestCredential(payload.testId);
   if (!remembered) {
     throw invalidRecentTestResult();
   }
-  const fingerprint = fingerprintApiKey(recentTestResult.apiKey, signingSecret);
-  if (!timingSafeEqualHex(fingerprint, remembered.fingerprint)) {
+  const testedCredential = decryptCredential(
+    remembered.encryptedCredential,
+    remembered.credentialIv,
+    encryptionKey,
+  );
+  if (
+    !timingSafeEqualString(testedCredential, recentTestResult.apiKey) ||
+    !timingSafeEqualString(testedCredential, expectedApiKey)
+  ) {
     throw invalidRecentTestResult();
   }
   return payload;
@@ -717,43 +737,42 @@ function invalidRecentTestResult(): ControlPlaneError {
   return new ControlPlaneError('VALIDATION_ERROR', 'recentTestResult is expired or invalid');
 }
 
-function rememberRecentTestFingerprint(
+function rememberRecentTestCredential(
   providerCredential: string,
-  signingSecret: string,
+  encryptionKey: string,
   testedAt: number,
 ): string {
-  cleanupRecentTestFingerprints(testedAt);
+  cleanupRecentTestCredentials(testedAt);
   const testId = randomUUID();
-  recentTestFingerprints.set(testId, {
-    fingerprint: fingerprintApiKey(providerCredential, signingSecret),
+  const encrypted = encryptCredential(providerCredential, encryptionKey);
+  recentTestCredentials.set(testId, {
+    encryptedCredential: encrypted.encrypted,
+    credentialIv: encrypted.iv,
     expiresAt: testedAt + TOKEN_TTL_MS,
   });
   return testId;
 }
 
-function readRecentTestFingerprint(testId: string): { fingerprint: string } | null {
-  const entry = recentTestFingerprints.get(testId);
+function readRecentTestCredential(
+  testId: string,
+): { encryptedCredential: string; credentialIv: string } | null {
+  const entry = recentTestCredentials.get(testId);
   if (!entry) {
     return null;
   }
   if (Date.now() > entry.expiresAt) {
-    recentTestFingerprints.delete(testId);
+    recentTestCredentials.delete(testId);
     return null;
   }
   return entry;
 }
 
-function cleanupRecentTestFingerprints(now: number): void {
-  for (const [testId, entry] of recentTestFingerprints.entries()) {
+function cleanupRecentTestCredentials(now: number): void {
+  for (const [testId, entry] of recentTestCredentials.entries()) {
     if (now > entry.expiresAt) {
-      recentTestFingerprints.delete(testId);
+      recentTestCredentials.delete(testId);
     }
   }
-}
-
-function fingerprintApiKey(providerCredential: string, signingSecret: string): string {
-  const salt = `memory-provider-test:${signingSecret}`;
-  return scryptSync(providerCredential, salt, 32).toString('hex');
 }
 
 function timingSafeEqualHex(left: string, right: string): boolean {
@@ -765,6 +784,15 @@ function timingSafeEqualHex(left: string, right: string): boolean {
   }
   const leftBuffer = Buffer.from(left, 'hex');
   const rightBuffer = Buffer.from(right, 'hex');
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function timingSafeEqualString(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, 'utf8');
+  const rightBuffer = Buffer.from(right, 'utf8');
   if (leftBuffer.length !== rightBuffer.length) {
     return false;
   }
