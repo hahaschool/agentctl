@@ -216,6 +216,18 @@ describe('MemoryImportView', () => {
         expect(screen.getByTestId('progress-bar')).toBeDefined();
       });
     });
+
+    it('shows a visible error when start import fails', async () => {
+      mockStartMutate.mockRejectedValue(new Error('Database not configured for imports'));
+      await goToStep2();
+      fireEvent.click(screen.getByTestId('step2-start'));
+      await waitFor(() => {
+        expect(screen.getByTestId('import-error').textContent).toContain(
+          'Database not configured for imports',
+        );
+      });
+      expect(screen.queryByTestId('progress-bar')).toBeNull();
+    });
   });
 
   // ---------------------------------------------------------------------------

@@ -15,6 +15,20 @@ async function buildApp() {
   return app;
 }
 
+type MockPool = {
+  query: (
+    sql: string,
+    params?: unknown[],
+  ) => Promise<{ rows: Record<string, unknown>[]; rowCount: number }>;
+};
+
+async function buildAppWithPool(pool: MockPool) {
+  const app = Fastify({ logger: false });
+  await app.register(memoryImportRoutes, { prefix: '/api/memory', pool: pool as never });
+  await app.ready();
+  return app;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers for JSONL fixture directories
 // ---------------------------------------------------------------------------
@@ -40,12 +54,36 @@ function makeTempJsonlDir(fileCount: number): string {
   return dir;
 }
 
+function makeTempEmptyJsonlDir(fileCount: number): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-import-empty-files-'));
+  for (let i = 0; i < fileCount; i++) {
+    const sessionId = `session-${i.toString().padStart(4, '0')}`;
+    fs.writeFileSync(path.join(dir, `${sessionId}.jsonl`), '');
+  }
+  return dir;
+}
+
 function removeTempDir(dir: string): void {
   try {
     fs.rmSync(dir, { recursive: true, force: true });
   } catch {
     // best-effort cleanup
   }
+}
+
+async function waitForImportJob(app: Awaited<ReturnType<typeof buildAppWithPool>>) {
+  for (let i = 0; i < 50; i += 1) {
+    const res = await app.inject({ method: 'GET', url: '/api/memory/import/status' });
+    if (res.statusCode === 200) {
+      const body = res.json<{
+        ok: boolean;
+        job: { status: string; imported: number; skipped: number; errors: number };
+      }>();
+      if (body.job.status !== 'running') return body.job;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for import job');
 }
 
 describe('memoryImportRoutes', () => {
@@ -144,8 +182,8 @@ describe('memoryImportRoutes', () => {
         expect(body.ok).toBe(true);
         expect(body.preview).toBeDefined();
         expect(body.preview.totalObservations).toBe(3);
-        // newToImport = total line count (2 lines per file × 3 files = 6)
-        expect(body.preview.newToImport).toBe(6);
+        // newToImport counts importable JSONL session files, not raw JSONL lines.
+        expect(body.preview.newToImport).toBe(3);
         expect(Array.isArray(body.preview.sampleTitles)).toBe(true);
         expect((body.preview.sampleTitles as string[]).length).toBeLessThanOrEqual(5);
       } finally {
@@ -166,6 +204,51 @@ describe('memoryImportRoutes', () => {
         expect(body.ok).toBe(true);
         expect(body.preview.totalObservations).toBe(0);
         expect(body.preview.newToImport).toBe(0);
+      } finally {
+        removeTempDir(dir);
+      }
+    });
+
+    it('counts already imported JSONL sessions by import_source_id', async () => {
+      const dir = makeTempJsonlDir(2);
+      const mockPool: MockPool = {
+        query: async (_sql, params) => {
+          expect(params?.[0]).toEqual(['jsonl-history:session-0000', 'jsonl-history:session-0001']);
+          return { rows: [{ src_id: 'jsonl-history:session-0001' }], rowCount: 1 };
+        },
+      };
+      const appWithPool = await buildAppWithPool(mockPool);
+      try {
+        const res = await appWithPool.inject({
+          method: 'POST',
+          url: '/api/memory/import/preview',
+          payload: { source: 'jsonl-history', dbPath: dir },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = res.json<{ ok: boolean; preview: Record<string, unknown> }>();
+        expect(body.ok).toBe(true);
+        expect(body.preview.totalObservations).toBe(2);
+        expect(body.preview.alreadyImported).toBe(1);
+        expect(body.preview.newToImport).toBe(1);
+      } finally {
+        await appWithPool.close();
+        removeTempDir(dir);
+        resetActiveJobForTest();
+      }
+    });
+
+    it('returns 400 instead of silently capping jsonl-history previews over the file limit', async () => {
+      const dir = makeTempEmptyJsonlDir(1001);
+      try {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/memory/import/preview',
+          payload: { source: 'jsonl-history', dbPath: dir },
+        });
+        expect(res.statusCode).toBe(400);
+        const body = res.json<{ ok: boolean; error: string }>();
+        expect(body.ok).toBe(false);
+        expect(body.error).toContain('Too many JSONL files');
       } finally {
         removeTempDir(dir);
       }
@@ -291,10 +374,7 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
     };
 
     const app = Fastify({ logger: false });
-    await app.register(memoryImportRoutes, {
-      prefix: '/api/memory',
-      pool: mockPool as never,
-    });
+    await app.register(memoryImportRoutes, { prefix: '/api/memory', pool: mockPool as never });
     await app.ready();
 
     try {
@@ -314,33 +394,42 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
   });
 
   it('returns 400 when file count exceeds maximum', async () => {
-    // Create a directory with more than 1000 JSONL files (we override the constant in test
-    // by creating 1001 files in a temp dir).
-    // Actually creating 1001 files is slow; instead create a directory with a file
-    // named to trick our implementation. Since we can't mock the constant in the running
-    // module, we verify the path by using the public API with a real large directory.
-    // For unit-test practicality, skip this test with a note — the boundary is tested
-    // implicitly by the implementation reading walkJsonlFiles with cap+1.
-    // Instead just verify that a valid small directory returns 202:
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-import-mock-pool-'));
-    const lines = [
-      JSON.stringify({
-        type: 'human',
-        message: { role: 'user', content: 'Hello from import test' },
-      }),
-    ];
-    fs.writeFileSync(path.join(dir, 'session-abc.jsonl'), `${lines.join('\n')}\n`);
-
-    const mockPool = {
+    const dir = makeTempEmptyJsonlDir(1001);
+    const mockPool: MockPool = {
       query: async () => ({ rows: [], rowCount: 0 }),
     };
+    const app = await buildAppWithPool(mockPool);
 
-    const app = Fastify({ logger: false });
-    await app.register(memoryImportRoutes, {
-      prefix: '/api/memory',
-      pool: mockPool as never,
-    });
-    await app.ready();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import',
+        payload: { source: 'jsonl-history', dbPath: dir },
+      });
+      expect(res.statusCode).toBe(400);
+      const body = res.json<{ ok: boolean; error: string }>();
+      expect(body.ok).toBe(false);
+      expect(body.error).toContain('Too many JSONL files');
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
+
+  it('skips already imported JSONL sessions before inserting new ones', async () => {
+    const dir = makeTempJsonlDir(2);
+    const insertedRows: unknown[][] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return { rows: [{ src_id: 'jsonl-history:session-0000' }], rowCount: 1 };
+        }
+        insertedRows.push(params ?? []);
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
 
     try {
       const res = await app.inject({
@@ -349,14 +438,52 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
         payload: { source: 'jsonl-history', dbPath: dir },
       });
       expect(res.statusCode).toBe(202);
-      const body = res.json<{ ok: boolean; job: { id: string; status: string } }>();
-      expect(body.ok).toBe(true);
-      expect(body.job.id).toBeTruthy();
-      expect(body.job.status).toBe('running');
+      const job = await waitForImportJob(app);
+      expect(job.status).toBe('completed');
+      expect(job.imported).toBe(1);
+      expect(job.skipped).toBe(1);
+      expect(job.errors).toBe(0);
+      expect(insertedRows).toHaveLength(1);
+      expect(insertedRows[0]?.[9]).toBe('jsonl-history:session-0001');
     } finally {
       await app.close();
       resetActiveJobForTest();
-      fs.rmSync(dir, { recursive: true, force: true });
+      removeTempDir(dir);
+    }
+  });
+
+  it('skips oversized JSONL files without inserting them', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-import-big-jsonl-'));
+    fs.writeFileSync(path.join(dir, 'session-big.jsonl'), Buffer.alloc(5 * 1024 * 1024 + 1));
+    const insertedRows: unknown[][] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return { rows: [], rowCount: 0 };
+        }
+        insertedRows.push(params ?? []);
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import',
+        payload: { source: 'jsonl-history', dbPath: dir },
+      });
+      expect(res.statusCode).toBe(202);
+      const job = await waitForImportJob(app);
+      expect(job.status).toBe('completed');
+      expect(job.imported).toBe(0);
+      expect(job.skipped).toBe(1);
+      expect(job.errors).toBe(0);
+      expect(insertedRows).toHaveLength(0);
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
     }
   });
 });

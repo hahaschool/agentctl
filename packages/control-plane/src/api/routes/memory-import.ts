@@ -27,7 +27,8 @@ const MEMORY_IMPORT_RATE_LIMIT = {
 const BATCH_SIZE = 200;
 
 const JSONL_MAX_FILES = 1000;
-const JSONL_PREVIEW_CAP = 100;
+const JSONL_SAMPLE_LIMIT = 5;
+const JSONL_MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 const OBSERVATION_TYPE_TO_ENTITY: Record<string, EntityType> = {
   decision: 'decision',
@@ -131,6 +132,12 @@ type JsonlMessage = {
   sessionId?: string;
 };
 
+type JsonlContentPreview = {
+  sessionId: string;
+  importSourceId: string;
+  firstContent: string;
+};
+
 function walkJsonlFiles(dir: string, cap: number): string[] {
   const files: string[] = [];
 
@@ -157,51 +164,98 @@ function walkJsonlFiles(dir: string, cap: number): string[] {
   return files;
 }
 
-function countJsonlLines(filePath: string): number {
+function buildJsonlSessionId(filePath: string): string {
+  return path.basename(filePath, '.jsonl');
+}
+
+function buildJsonlImportSourceId(sessionId: string): string {
+  return `jsonl-history:${sessionId}`;
+}
+
+function readBoundedJsonlFile(filePath: string): string | null {
+  let fd: number | null = null;
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return content.split('\n').filter((l) => l.trim().length > 0).length;
+    fd = fs.openSync(filePath, 'r');
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.size > JSONL_MAX_FILE_BYTES) return null;
+    if (stat.size === 0) return '';
+
+    const buffer = Buffer.allocUnsafe(Math.min(stat.size, JSONL_MAX_FILE_BYTES));
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    return buffer.subarray(0, bytesRead).toString('utf-8');
   } catch {
-    return 0;
+    return null;
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // best-effort close
+      }
+    }
   }
 }
 
-function extractFirstUserContent(filePath: string): string {
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let parsed: JsonlMessage;
-      try {
-        parsed = JSON.parse(trimmed) as JsonlMessage;
-      } catch {
-        continue;
-      }
-      const role =
-        parsed.type === 'human'
-          ? 'user'
-          : parsed.type === 'assistant'
-            ? 'assistant'
-            : parsed.message?.role;
-      if (role !== 'user') continue;
-      const msg = parsed.message;
-      if (!msg) continue;
-      let text = '';
-      if (typeof msg.content === 'string') {
-        text = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        text = msg.content
-          .filter((b) => b.type === 'text' && b.text)
-          .map((b) => b.text ?? '')
-          .join('\n');
-      }
-      if (text.trim()) return text.trim().slice(0, 500);
-    }
-  } catch {
-    // return empty on any error
+function extractJsonlContentPreview(filePath: string): JsonlContentPreview {
+  const sessionId = buildJsonlSessionId(filePath);
+  const importSourceId = buildJsonlImportSourceId(sessionId);
+  const content = readBoundedJsonlFile(filePath);
+  if (content === null) {
+    return { sessionId, importSourceId, firstContent: '' };
   }
-  return '';
+
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let parsed: JsonlMessage;
+    try {
+      parsed = JSON.parse(trimmed) as JsonlMessage;
+    } catch {
+      continue;
+    }
+    const role =
+      parsed.type === 'human'
+        ? 'user'
+        : parsed.type === 'assistant'
+          ? 'assistant'
+          : parsed.message?.role;
+    if (role !== 'user') continue;
+    const msg = parsed.message;
+    if (!msg) continue;
+    let text = '';
+    if (typeof msg.content === 'string') {
+      text = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      text = msg.content
+        .filter((b) => b.type === 'text' && b.text)
+        .map((b) => b.text ?? '')
+        .join('\n');
+    }
+    if (text.trim()) {
+      return {
+        sessionId,
+        importSourceId,
+        firstContent: text.trim().slice(0, 500),
+      };
+    }
+  }
+
+  return { sessionId, importSourceId, firstContent: '' };
+}
+
+async function loadExistingImportSourceIds(
+  pool: Pool | null,
+  importSourceIds: string[],
+): Promise<Set<string>> {
+  if (!pool || importSourceIds.length === 0) return new Set();
+
+  const result = await pool.query<{ src_id: string }>(
+    `SELECT source_json->>'import_source_id' AS src_id
+     FROM memory_facts
+     WHERE source_json->>'import_source_id' = ANY($1::text[])`,
+    [importSourceIds],
+  );
+  return new Set(result.rows.map((r) => r.src_id).filter(Boolean));
 }
 
 async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promise<void> {
@@ -218,6 +272,11 @@ async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promi
   }
 
   const total = allFiles.length;
+  const importSourceIds = allFiles.map((filePath) =>
+    buildJsonlImportSourceId(buildJsonlSessionId(filePath)),
+  );
+  const existingIds = await loadExistingImportSourceIds(pool, importSourceIds);
+
   if (activeJob?.id === jobId) {
     activeJob = updateJobStatus(activeJob, { progress: { current: 0, total } });
   }
@@ -230,14 +289,13 @@ async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promi
     if (cancelRequested || !activeJob || activeJob.id !== jobId) break;
 
     const filePath = allFiles[i] as string;
-    const sessionId = path.basename(filePath, '.jsonl');
-    const firstContent = extractFirstUserContent(filePath);
+    const contentPreview = extractJsonlContentPreview(filePath);
+    const { sessionId, importSourceId, firstContent } = contentPreview;
 
-    if (!firstContent) {
+    if (existingIds.has(importSourceId) || !firstContent) {
       skipped++;
     } else {
       const id = generateImportId();
-      const importSourceId = `jsonl-history:${sessionId}`;
       const source: FactSource = {
         session_id: sessionId,
         agent_id: null,
@@ -247,16 +305,19 @@ async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promi
         import_source_id: importSourceId,
       };
       try {
-        await pool.query(
+        const result = await pool.query(
           `INSERT INTO memory_facts (
              id, scope, content, content_model, entity_type,
              confidence, strength, source_json, valid_from, created_at, accessed_at,
              tags
-           ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), NOW(),
-             $9
            )
-           ON CONFLICT DO NOTHING`,
+           SELECT
+             $1, $2, $3, $4, $5, $6, $7, $8::jsonb, NOW(), NOW(), NOW(),
+             $9::text[]
+           WHERE NOT EXISTS (
+             SELECT 1 FROM memory_facts
+             WHERE source_json->>'import_source_id' = $10
+           )`,
           [
             id,
             'global',
@@ -267,9 +328,15 @@ async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promi
             1.0,
             source,
             [`import:jsonl-history`, `session:${sessionId}`],
+            importSourceId,
           ],
         );
-        imported++;
+        if ((result.rowCount ?? 0) > 0) {
+          imported++;
+          existingIds.add(importSourceId);
+        } else {
+          skipped++;
+        }
       } catch {
         errors++;
       }
@@ -550,18 +617,27 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
           return reply.status(400).send({ ok: false, error: `Path is not a directory: ${dbPath}` });
         }
 
-        const files = walkJsonlFiles(resolved, JSONL_PREVIEW_CAP);
-        let lineCount = 0;
-        for (const f of files) {
-          lineCount += countJsonlLines(f);
+        const files = walkJsonlFiles(resolved, JSONL_MAX_FILES + 1);
+        if (files.length > JSONL_MAX_FILES) {
+          return reply.status(400).send({
+            ok: false,
+            error: `Too many JSONL files (${files.length}). Maximum is ${JSONL_MAX_FILES}.`,
+          });
         }
 
-        const sample = files.slice(0, 5).map((f) => path.basename(f));
+        const previews = files.map((f) => extractJsonlContentPreview(f));
+        const importable = previews.filter((p) => p.firstContent);
+        const existingIds = await loadExistingImportSourceIds(
+          pool,
+          importable.map((p) => p.importSourceId),
+        );
+        const alreadyImported = importable.filter((p) => existingIds.has(p.importSourceId)).length;
+        const sample = importable.slice(0, JSONL_SAMPLE_LIMIT).map((p) => `${p.sessionId}.jsonl`);
         const preview: ImportPreview = {
           totalObservations: files.length,
-          byType: { 'jsonl-session': files.length },
-          alreadyImported: 0,
-          newToImport: lineCount,
+          byType: { 'jsonl-session': importable.length },
+          alreadyImported,
+          newToImport: Math.max(0, importable.length - alreadyImported),
           sampleTitles: sample,
         };
 

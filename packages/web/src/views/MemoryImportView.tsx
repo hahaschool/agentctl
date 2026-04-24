@@ -187,6 +187,7 @@ function Step1SourceDetection({
 type Step2Props = {
   dbPath: string;
   preview: ImportPreview | null;
+  error: string | null;
   onBack: () => void;
   onNext: () => void;
 };
@@ -200,7 +201,7 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   change: 'code_artifact',
 };
 
-function Step2PreviewMapping({ dbPath, preview, onBack, onNext }: Step2Props) {
+function Step2PreviewMapping({ dbPath, preview, error, onBack, onNext }: Step2Props) {
   const sampleTitleCounts = new Map<string, number>();
 
   return (
@@ -324,6 +325,16 @@ function Step2PreviewMapping({ dbPath, preview, onBack, onNext }: Step2Props) {
             : `Import ${preview?.newToImport.toLocaleString() ?? ''} observations`}
         </button>
       </div>
+
+      {error && (
+        <div
+          className="flex items-center gap-2 text-sm text-destructive"
+          data-testid="import-error"
+        >
+          <AlertCircle size={14} />
+          <span>{error}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -499,6 +510,7 @@ export function MemoryImportView() {
   const [dbPath, setDbPath] = useState(DEFAULT_PATHS['claude-mem']);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const isPolling = step === 3;
@@ -529,11 +541,22 @@ export function MemoryImportView() {
     setSource(newSource);
     setDbPath(DEFAULT_PATHS[newSource]);
     setPreviewError(null);
+    setImportError(null);
     setPreview(null);
+  }
+
+  function getErrorMessage(err: unknown, fallback: string): string {
+    if (err instanceof Error) {
+      const code = (err as { code?: unknown }).code;
+      if (typeof code === 'string' && code && code !== 'UNKNOWN') return code;
+      return err.message;
+    }
+    return fallback;
   }
 
   async function handlePreview() {
     setPreviewError(null);
+    setImportError(null);
     try {
       const result = await previewImport.mutateAsync({ source, dbPath });
       if (result.ok) {
@@ -543,20 +566,22 @@ export function MemoryImportView() {
         setPreviewError(result.error ?? 'Failed to preview import source');
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to connect to server';
-      setPreviewError(message);
+      setPreviewError(getErrorMessage(err, 'Failed to connect to server'));
     }
   }
 
   async function handleStartImport() {
+    setImportError(null);
     try {
       const result = await startImport.mutateAsync({ source, dbPath });
       if (result.job) {
         setActiveJobId(result.job.id);
         setStep(3);
+      } else {
+        setImportError('Failed to start import');
       }
-    } catch {
-      // error handled by mutation state
+    } catch (err: unknown) {
+      setImportError(getErrorMessage(err, 'Failed to start import'));
     }
   }
 
@@ -572,6 +597,7 @@ export function MemoryImportView() {
     setActiveJobId(null);
     setPreview(null);
     setPreviewError(null);
+    setImportError(null);
   }
 
   return (
@@ -612,6 +638,7 @@ export function MemoryImportView() {
           <Step2PreviewMapping
             dbPath={dbPath}
             preview={preview}
+            error={importError}
             onBack={() => setStep(1)}
             onNext={handleStartImport}
           />
