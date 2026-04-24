@@ -76,6 +76,85 @@ describe('memorySynthesisRoutes', () => {
 
     await scopedApp.close();
   });
+
+  it('surfaces deterministic principle candidate metadata for synthesis groups', async () => {
+    const pool = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              fact_id_a: 'fact-1',
+              fact_id_b: 'fact-2',
+              similarity: 0.88,
+              content_a: 'Small deploy batches keep rollback easy.',
+              content_b: 'Prefer small deploy batches for safer rollback.',
+            },
+          ],
+          rowCount: 1,
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              entity_type: 'decision',
+              fact_ids: ['fact-1', 'fact-2', 'fact-3'],
+              fact_contents: [
+                'Small deploy batches keep rollback easy.',
+                'Prefer small deploy batches for safer rollback.',
+                'Rollback stays safer with small deploy batches.',
+              ],
+              scopes: ['project:agentctl', 'project:agentctl', 'project:agentctl'],
+              fact_count: 3,
+            },
+          ],
+          rowCount: 1,
+        }),
+    };
+    const richApp = Fastify({ logger: false });
+    await richApp.register(memorySynthesisRoutes, {
+      prefix: '/api/memory/synthesis',
+      pool: pool as never,
+      logger,
+    });
+    await richApp.ready();
+
+    try {
+      const response = await richApp.inject({
+        method: 'POST',
+        url: '/api/memory/synthesis',
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as {
+        ok: boolean;
+        result: {
+          synthesisGroups: Array<{
+            principleCandidate?: {
+              title: string;
+              evidenceCount: number;
+              scope: string;
+              actionHint: string;
+              confidence: number;
+            };
+          }>;
+        };
+      };
+      expect(body.ok).toBe(true);
+      expect(body.result.synthesisGroups[0]?.principleCandidate).toMatchObject({
+        title: 'Small deploy batches keep rollback easy',
+        evidenceCount: 3,
+        scope: 'project:agentctl',
+        actionHint:
+          'Draft one reviewed principle for this decision cluster, then link the strongest evidence facts under it.',
+      });
+      expect(body.result.synthesisGroups[0]?.principleCandidate?.confidence).toBeCloseTo(0.68, 2);
+    } finally {
+      await richApp.close();
+    }
+  });
 });
 
 // Rate limiting — synthesis runs parallel DB scans; must bound CPU/IO.

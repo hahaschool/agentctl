@@ -91,14 +91,26 @@ describe('KnowledgeSynthesis', () => {
   });
 
   it('returns synthesis groups for entity types with enough facts', async () => {
+    const nearDupRow = {
+      fact_id_a: 'fact-1',
+      fact_id_b: 'fact-2',
+      similarity: 0.88,
+      content_a: 'Small deploy batches keep rollback easy.',
+      content_b: 'Prefer small deploy batches for safer rollback.',
+    };
     const groupRow = {
       entity_type: 'decision',
       fact_ids: ['fact-1', 'fact-2', 'fact-3'],
-      fact_contents: ['Decision A', 'Decision B', 'Decision C'],
+      fact_contents: [
+        'Small deploy batches keep rollback easy.',
+        'Prefer small deploy batches for safer rollback.',
+        'Rollback stays safer with small deploy batches.',
+      ],
+      scopes: ['project:agentctl', 'project:agentctl', 'project:agentctl'],
       fact_count: 3,
     };
-    // near-dups + stale + orphan empty; synthesis returns 1 group
-    const pool = makePool([[], [], [], [groupRow]]);
+    // near-dups returns 1 row; stale + orphan empty; synthesis returns 1 group
+    const pool = makePool([[nearDupRow], [], [], [groupRow]]);
     const synthesis = new KnowledgeSynthesis({ pool: pool as never, logger });
 
     const result = await synthesis.runSynthesis();
@@ -108,6 +120,23 @@ describe('KnowledgeSynthesis', () => {
     expect(group?.entityType).toBe('decision');
     expect(group?.factIds).toEqual(['fact-1', 'fact-2', 'fact-3']);
     expect(group?.proposalHint).toContain('decision');
+    expect(group?.principleCandidate).toMatchObject({
+      title: 'Small deploy batches keep rollback easy',
+      evidenceCount: 3,
+      scope: 'project:agentctl',
+      actionHint:
+        'Draft one reviewed principle for this decision cluster, then link the strongest evidence facts under it.',
+      signalBreakdown: {
+        nearDuplicatePairs: 1,
+        staleFacts: 0,
+        orphanFacts: 0,
+      },
+    });
+    expect(group?.principleCandidate?.summary).toContain(
+      '3 decision facts suggest the same operating principle.',
+    );
+    expect(group?.principleCandidate?.summary).toMatch(/Recurring themes: .*deploy/i);
+    expect(group?.principleCandidate?.confidence).toBeCloseTo(0.68, 2);
   });
 
   it('filters results by scope when a scope is provided', async () => {

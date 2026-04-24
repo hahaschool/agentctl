@@ -97,6 +97,24 @@ export type MemorySynthesisGroup = {
   factIds: readonly string[];
   factContents: readonly string[];
   proposalHint: string;
+  principleCandidate?: MemorySynthesisPrincipleCandidate;
+};
+
+export type MemorySynthesisPrincipleCandidateSignalBreakdown = {
+  nearDuplicatePairs: number;
+  staleFacts: number;
+  orphanFacts: number;
+};
+
+export type MemorySynthesisPrincipleCandidate = {
+  title: string;
+  summary: string;
+  evidenceCount: number;
+  scope: string;
+  confidence: number;
+  actionHint: string;
+  themeKeywords: readonly string[];
+  signalBreakdown: MemorySynthesisPrincipleCandidateSignalBreakdown;
 };
 
 export type MemorySynthesisLint = {

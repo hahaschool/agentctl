@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -78,6 +78,22 @@ const sampleResult: MemorySynthesisResult = {
       factIds: ['fact-eeee-5555', 'fact-ffff-6666', 'fact-gggg-7777'],
       factContents: ['Pref A', 'Pref B', 'Pref C'],
       proposalHint: 'Consider synthesising 3 preference facts into a higher-level principle',
+      principleCandidate: {
+        title: 'Pref A',
+        summary:
+          '3 preference facts suggest the same operating principle. Recurring themes: pref. Signals: entity-type cluster only.',
+        evidenceCount: 3,
+        scope: 'project:agentctl',
+        confidence: 0.68,
+        actionHint:
+          'Draft one reviewed principle for this preference cluster, then link the strongest evidence facts under it.',
+        themeKeywords: ['pref'],
+        signalBreakdown: {
+          nearDuplicatePairs: 0,
+          staleFacts: 0,
+          orphanFacts: 0,
+        },
+      },
     },
   ],
 };
@@ -95,6 +111,15 @@ function setupDefaultMocks(overrides?: {
     mutate: overrides?.mutate ?? mockMutate,
     isPending: overrides?.isPending ?? false,
     isError: overrides?.isError ?? false,
+  });
+}
+
+function deliverSynthesisResult(
+  onSuccess: ((data: { ok: boolean; result: MemorySynthesisResult }) => void) | undefined,
+  result: MemorySynthesisResult = sampleResult,
+) {
+  act(() => {
+    onSuccess?.({ ok: true, result });
   });
 }
 
@@ -168,7 +193,7 @@ describe('MemorySynthesisPage', () => {
 
     render(<MemorySynthesisPage />);
     fireEvent.click(screen.getByRole('button', { name: /run knowledge synthesis/i }));
-    capturedOnSuccess?.({ ok: true, result: sampleResult });
+    deliverSynthesisResult(capturedOnSuccess);
 
     await waitFor(() => {
       expect(screen.getByText('Near-duplicates')).toBeDefined();
@@ -193,7 +218,7 @@ describe('MemorySynthesisPage', () => {
 
     render(<MemorySynthesisPage />);
     fireEvent.click(screen.getByRole('button', { name: /run knowledge synthesis/i }));
-    capturedOnSuccess?.({ ok: true, result: sampleResult });
+    deliverSynthesisResult(capturedOnSuccess);
 
     await waitFor(() => {
       const links = screen.getAllByRole('link');
@@ -218,10 +243,10 @@ describe('MemorySynthesisPage', () => {
 
     render(<MemorySynthesisPage />);
     fireEvent.click(screen.getByRole('button', { name: /run knowledge synthesis/i }));
-    capturedOnSuccess?.({ ok: true, result: sampleResult });
+    deliverSynthesisResult(capturedOnSuccess);
 
     await waitFor(() => {
-      expect(screen.getByText('Pref A')).toBeDefined();
+      expect(screen.getAllByText('Pref A').length).toBeGreaterThan(0);
       expect(screen.getByText('Pref B')).toBeDefined();
       expect(screen.getByRole('link', { name: /fact-aaa/i })).toBeDefined();
       expect(screen.getByRole('link', { name: /fact-bbb/i })).toBeDefined();
@@ -244,12 +269,40 @@ describe('MemorySynthesisPage', () => {
 
     render(<MemorySynthesisPage />);
     fireEvent.click(screen.getByRole('button', { name: /run knowledge synthesis/i }));
-    capturedOnSuccess?.({ ok: true, result: sampleResult });
+    deliverSynthesisResult(capturedOnSuccess);
 
     await waitFor(() => {
-      expect(screen.getByText('Pref A')).toBeDefined();
+      expect(screen.getAllByText('Pref A').length).toBeGreaterThan(0);
       expect(screen.getByText('Pref B')).toBeDefined();
       expect(screen.queryByText(/fact-eeee/i)).toBeNull();
+    });
+  });
+
+  it('renders deterministic principle metadata when the backend provides it', async () => {
+    let capturedOnSuccess:
+      | ((data: { ok: boolean; result: MemorySynthesisResult }) => void)
+      | undefined;
+    mockMutate.mockImplementation(
+      (
+        _body: unknown,
+        opts: { onSuccess: (data: { ok: boolean; result: MemorySynthesisResult }) => void },
+      ) => {
+        capturedOnSuccess = opts.onSuccess;
+      },
+    );
+
+    render(<MemorySynthesisPage />);
+    fireEvent.click(screen.getByRole('button', { name: /run knowledge synthesis/i }));
+    deliverSynthesisResult(capturedOnSuccess);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Pref A').length).toBeGreaterThan(0);
+      expect(
+        screen.getByText(/3 preference facts suggest the same operating principle/i),
+      ).toBeDefined();
+      expect(screen.getAllByText('project:agentctl').length).toBeGreaterThan(0);
+      expect(screen.getByText('68% confidence')).toBeDefined();
+      expect(screen.getByText(/draft one reviewed principle/i)).toBeDefined();
     });
   });
 
@@ -268,12 +321,9 @@ describe('MemorySynthesisPage', () => {
 
     render(<MemorySynthesisPage />);
     fireEvent.click(screen.getByRole('button', { name: /run knowledge synthesis/i }));
-    capturedOnSuccess?.({
-      ok: true,
-      result: {
-        lint: { nearDuplicates: [], staleFacts: [], orphanFacts: [] },
-        synthesisGroups: [],
-      },
+    deliverSynthesisResult(capturedOnSuccess, {
+      lint: { nearDuplicates: [], staleFacts: [], orphanFacts: [] },
+      synthesisGroups: [],
     });
 
     await waitFor(() => {
