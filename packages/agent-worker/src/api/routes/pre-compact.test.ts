@@ -12,12 +12,16 @@ import { capturePreCompactCheckpoint, preCompactRoutes } from './pre-compact.js'
 const CONTROL_PLANE_URL = 'http://localhost:8080';
 const SESSION_ID = 'session-abc123';
 
-function makeApp(controlPlaneUrl = CONTROL_PLANE_URL): FastifyInstance {
+function makeApp(
+  controlPlaneUrl = CONTROL_PLANE_URL,
+  scheduleCapture?: (task: () => void) => void,
+): FastifyInstance {
   const app = Fastify({ logger: false });
   void app.register(preCompactRoutes, {
     prefix: '/api/sessions',
     controlPlaneUrl,
     logger: createSilentLogger(),
+    scheduleCapture,
   });
   return app;
 }
@@ -37,6 +41,7 @@ describe('preCompactRoutes POST /:sessionId/pre-compact', () => {
   });
 
   afterEach(async () => {
+    await new Promise((resolve) => setImmediate(resolve));
     globalThis.fetch = originalFetch;
     await app.close();
     vi.clearAllMocks();
@@ -179,6 +184,43 @@ describe('preCompactRoutes POST /:sessionId/pre-compact', () => {
     expect(callBody.source.session_id).toBe(SESSION_ID);
     expect(callBody.content).toContain('45000 tokens');
     expect(callBody.content).toContain('user: what is 2+2?');
+  });
+
+  it('defers checkpoint capture until after the 202 response path', async () => {
+    await app.close();
+
+    const scheduledTasks: Array<() => void> = [];
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ ok: true }),
+    });
+    globalThis.fetch = fetchMock;
+
+    app = makeApp(CONTROL_PLANE_URL, (task) => {
+      scheduledTasks.push(task);
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/sessions/${SESSION_ID}/pre-compact`,
+      payload: {
+        agentId: 'agent-1',
+        machineId: 'machine-1',
+        recentMessages: ['user: preserve this'],
+      },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({ queued: true });
+    expect(scheduledTasks).toHaveLength(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    scheduledTasks[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
 
