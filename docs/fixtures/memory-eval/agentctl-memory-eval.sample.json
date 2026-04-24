@@ -5,7 +5,7 @@
   "rows": [
     {
       "id": "sample-longmem-pref-backup-format",
-      "query": "Which backup format did Taylor prefer for the nightly snapshot handoff?",
+      "query": "Which backup archive format did the operator prefer for the nightly snapshot handoff?",
       "category": "LongMemEval-single-session-preference",
       "expectedFacts": [
         {
@@ -22,9 +22,9 @@
         }
       ],
       "redactedAnswerHints": [
-        "Taylor preferred compressed tarballs over folder sync for the nightly snapshot handoff."
+        "The operator preferred compressed tarballs over folder sync for the nightly snapshot handoff."
       ],
-      "tags": ["vocabulary-gap", "assistant-reference"],
+      "tags": ["vocabulary-gap"],
       "public": true
     },
     {
@@ -52,6 +52,54 @@
       "public": true
     },
     {
+      "id": "sample-longmem-assistant-reference",
+      "query": "What safety check did the assistant ask the operator to keep before enabling release evals?",
+      "category": "LongMemEval-assistant-reference",
+      "expectedFacts": [
+        {
+          "id": "fact:sample:assistant-release-eval-check",
+          "relevance": 3
+        }
+      ],
+      "expectedDrawerSources": [
+        {
+          "sourceType": "session-jsonl",
+          "sourceId": "fixture-session-redacted-release-eval",
+          "chunkIndex": 0,
+          "relevance": 2
+        }
+      ],
+      "redactedAnswerHints": [
+        "The assistant asked to keep the release eval gate manual until private fixture secrets were provisioned."
+      ],
+      "tags": ["assistant-reference"],
+      "public": true
+    },
+    {
+      "id": "sample-agentctl-person-name",
+      "query": "Which teammate owned the follow-up for the stale session cleanup note?",
+      "category": "AgentCTL-internal",
+      "expectedFacts": [
+        {
+          "id": "fact:sample:person-owner",
+          "relevance": 3
+        }
+      ],
+      "expectedDrawerSources": [
+        {
+          "sourceType": "manual",
+          "sourceId": "fixture-note-redacted-person-owner",
+          "chunkIndex": 0,
+          "relevance": 2
+        }
+      ],
+      "redactedAnswerHints": [
+        "Morgan owned the stale session cleanup follow-up."
+      ],
+      "tags": ["person-name-underweighting"],
+      "public": true
+    },
+    {
       "id": "sample-agentctl-noisy-distractor",
       "query": "Which worker pool should stay on the smaller concurrency cap despite similar queue names?",
       "category": "AgentCTL-internal",
@@ -72,7 +120,7 @@
       "redactedAnswerHints": [
         "The image-generation worker pool keeps the smaller cap; the similarly named ingest pool does not."
       ],
-      "tags": ["noisy-distractor-rejection", "person-name-underweighting"],
+      "tags": ["noisy-distractor-rejection"],
       "public": true
     }
   ]

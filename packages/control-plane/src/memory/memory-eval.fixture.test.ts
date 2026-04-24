@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertSanitizedMemoryEvalFixture,
   createDeterministicMockRanker,
+  DEFAULT_FAILURE_MODE_TAGS,
   getDevSet,
   loadMemoryEvalFixture,
   runMemoryEval,
@@ -28,9 +29,25 @@ describe('memory eval sample fixture', () => {
     expect(fixture.rows.some((row) => row.category === 'AgentCTL-internal')).toBe(true);
     expect(getDevSet(fixture.rows).map((row) => row.id)).toMatchInlineSnapshot(`
       [
-        "sample-longmem-pref-backup-format",
+        "sample-agentctl-person-name",
       ]
     `);
+  });
+
+  it('keeps one focused public sample row per default failure-mode tag', () => {
+    const fixture = loadMemoryEvalFixture(SAMPLE_FIXTURE_PATH);
+    const focusedTagCounts = new Map<string, number>();
+
+    for (const row of fixture.rows.filter(
+      (row) => row.public && !row.excluded && row.tags.length === 1,
+    )) {
+      const tag = row.tags[0] ?? '';
+      focusedTagCounts.set(tag, (focusedTagCounts.get(tag) ?? 0) + 1);
+    }
+
+    expect(Object.fromEntries([...focusedTagCounts].sort())).toEqual(
+      Object.fromEntries(DEFAULT_FAILURE_MODE_TAGS.map((tag) => [tag, 1]).sort()),
+    );
   });
 
   it('runs deterministic mock ranking against the sample fixture', async () => {
