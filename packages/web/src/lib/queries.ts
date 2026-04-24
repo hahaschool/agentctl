@@ -1,4 +1,4 @@
-import type { MemoryDrawerSearchRequest } from '@agentctl/shared';
+import type { LoopConfig, MemoryDrawerSearchRequest } from '@agentctl/shared';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type {
@@ -902,7 +902,7 @@ export function useEmergencyStopAll() {
 export function useStartAgentLoop() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, prompt, config }: { id: string; prompt: string; config?: object }) =>
+    mutationFn: ({ id, prompt, config }: { id: string; prompt: string; config?: LoopConfig }) =>
       api.startAgentLoop(id, prompt, config),
     onSuccess: (_data, { id }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.agent(id) });
