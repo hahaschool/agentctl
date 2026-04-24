@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { hostname } from 'node:os';
 
 import {
@@ -29,6 +29,13 @@ const MEMORY_PROVIDER_RATE_LIMIT = {
   max: 20,
   timeWindow: 60_000,
 } as const;
+const recentTestFingerprints = new Map<
+  string,
+  {
+    fingerprint: string;
+    expiresAt: number;
+  }
+>();
 
 const providerKindSchema = z.enum(['openai', 'gemini']);
 
@@ -100,6 +107,7 @@ type ProviderRow = {
 type RecentTestPayload = {
   provider: string;
   model: string;
+  testId: string;
   dim: number;
   ok: true;
   testedAt: number;
@@ -133,6 +141,8 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
 
   await app.register(rateLimit, {
     global: false,
+    max: providerRateLimitMax,
+    timeWindow: providerRateLimitWindowMs,
     keyGenerator: (request) =>
       request.ip ??
       (typeof request.headers['x-forwarded-for'] === 'string'
@@ -175,8 +185,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
-    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
-    // codeql[js/missing-rate-limiting]
     async () => {
       const rows = await listProviderRows(opts.pool);
       return { providers: rows.map(rowToProvider) };
@@ -191,8 +199,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
-    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
-    // codeql[js/missing-rate-limiting]
     async (request) => {
       const signingSecret = readSigningSecret();
       if (!signingSecret) {
@@ -236,12 +242,14 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       const latencyMs = Date.now() - startedAt;
       const dim = result.vectors[0]?.length ?? 0;
       const costUsd = (result.usage.promptTokens / 1_000_000) * entry.pricePerMtoken;
+      const testedAt = Date.now();
       const payload: RecentTestPayload = {
         provider: body.provider,
         model: body.model,
+        testId: rememberRecentTestFingerprint(body.apiKey, signingSecret, testedAt),
         dim,
         ok: true,
-        testedAt: Date.now(),
+        testedAt,
         latencyMs,
         costUsd,
       };
@@ -272,8 +280,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
-    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
-    // codeql[js/missing-rate-limiting]
     async (request, reply) => {
       const body = createProviderSchema.parse(request.body);
       if (body.active) {
@@ -281,12 +287,7 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
         await checkModelLock(opts.pool, body.model);
       }
 
-      const metadata = buildProviderMetadata(
-        body.provider,
-        body.model,
-        body.apiKey,
-        body.recentTestResult,
-      );
+      const metadata = buildProviderMetadata(body.provider, body.model, body.recentTestResult);
       const encrypted = encryptCredential(body.apiKey, opts.encryptionKey);
       const row = await insertProvider(opts.pool, {
         name: body.name,
@@ -318,8 +319,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
-    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
-    // codeql[js/missing-rate-limiting]
     async (request) => {
       const providerId = normalizeProviderId(request.params.id);
       const body = patchProviderSchema.parse(request.body);
@@ -372,7 +371,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
                 body.recentTestResult,
                 existing.provider,
                 parseProviderModel(metadata),
-                body.apiKey,
               )
             : null;
           metadata.lastTestOk = verified ? true : null;
@@ -416,8 +414,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
-    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
-    // codeql[js/missing-rate-limiting]
     async (request) => {
       const providerId = normalizeProviderId(request.params.id);
       const signingSecret = readSigningSecret();
@@ -465,8 +461,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
-    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
-    // codeql[js/missing-rate-limiting]
     async (request, reply) => {
       const providerId = normalizeProviderId(request.params.id);
       await assertProviderHasNoActiveJobs(opts.pool, providerId);
@@ -643,7 +637,6 @@ async function withTransaction<T>(pool: Pool, fn: (client: PoolClient) => Promis
 function buildProviderMetadata(
   provider: string,
   model: string,
-  apiKey: string,
   recentTestResult?: z.infer<typeof recentTestResultSchema>,
 ): Record<string, unknown> {
   const metadata: Record<string, unknown> = {
@@ -658,7 +651,7 @@ function buildProviderMetadata(
   if (!recentTestResult) {
     return metadata;
   }
-  const verified = verifyRecentTestResult(recentTestResult, provider, model, apiKey);
+  const verified = verifyRecentTestResult(recentTestResult, provider, model);
   metadata.lastTestOk = true;
   metadata.lastTestedAt = new Date(verified.testedAt).toISOString();
   metadata.dim = verified.dim;
@@ -671,7 +664,6 @@ function verifyRecentTestResult(
   recentTestResult: z.infer<typeof recentTestResultSchema>,
   expectedProvider: string,
   expectedModel: string,
-  expectedApiKey: string,
 ): RecentTestPayload {
   const signingSecret = readSigningSecret();
   if (!signingSecret) {
@@ -702,7 +694,12 @@ function verifyRecentTestResult(
   if (Date.now() - payload.testedAt > TOKEN_TTL_MS) {
     throw invalidRecentTestResult();
   }
-  if (last4(recentTestResult.apiKey) !== last4(expectedApiKey)) {
+  const remembered = readRecentTestFingerprint(payload.testId);
+  if (!remembered) {
+    throw invalidRecentTestResult();
+  }
+  const fingerprint = fingerprintApiKey(recentTestResult.apiKey, signingSecret);
+  if (!timingSafeEqualHex(fingerprint, remembered.fingerprint)) {
     throw invalidRecentTestResult();
   }
   return payload;
@@ -716,6 +713,45 @@ function signRecentTestPayload(payload: RecentTestPayload, signingSecret: string
 
 function invalidRecentTestResult(): ControlPlaneError {
   return new ControlPlaneError('VALIDATION_ERROR', 'recentTestResult is expired or invalid');
+}
+
+function rememberRecentTestFingerprint(
+  providerCredential: string,
+  signingSecret: string,
+  testedAt: number,
+): string {
+  cleanupRecentTestFingerprints(testedAt);
+  const testId = randomUUID();
+  recentTestFingerprints.set(testId, {
+    fingerprint: fingerprintApiKey(providerCredential, signingSecret),
+    expiresAt: testedAt + TOKEN_TTL_MS,
+  });
+  return testId;
+}
+
+function readRecentTestFingerprint(testId: string): { fingerprint: string } | null {
+  const entry = recentTestFingerprints.get(testId);
+  if (!entry) {
+    return null;
+  }
+  if (Date.now() > entry.expiresAt) {
+    recentTestFingerprints.delete(testId);
+    return null;
+  }
+  return entry;
+}
+
+function cleanupRecentTestFingerprints(now: number): void {
+  for (const [testId, entry] of recentTestFingerprints.entries()) {
+    if (now > entry.expiresAt) {
+      recentTestFingerprints.delete(testId);
+    }
+  }
+}
+
+function fingerprintApiKey(providerCredential: string, signingSecret: string): string {
+  const salt = `memory-provider-test:${signingSecret}`;
+  return scryptSync(providerCredential, salt, 32).toString('hex');
 }
 
 function timingSafeEqualHex(left: string, right: string): boolean {

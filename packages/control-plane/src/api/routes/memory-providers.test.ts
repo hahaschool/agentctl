@@ -1,5 +1,3 @@
-import { createHmac } from 'node:crypto';
-
 import type { ControlPlaneError } from '@agentctl/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,6 +14,16 @@ vi.mock('../../utils/credential-crypto.js', () => ({
   })),
   decryptCredential: vi.fn((encrypted: string) => encrypted.replace(/^encrypted:/, '')),
   maskCredential: vi.fn((credential: string) => `***${credential.slice(-4)}`),
+}));
+
+const embeddingClientMocks = vi.hoisted(() => ({
+  embedBatchWithUsage: vi.fn(),
+}));
+
+vi.mock('../../memory/embedding-client.js', () => ({
+  EmbeddingClient: vi.fn().mockImplementation(() => ({
+    embedBatchWithUsage: embeddingClientMocks.embedBatchWithUsage,
+  })),
 }));
 
 function createLogger() {
@@ -119,12 +127,6 @@ async function buildApp(pool: ReturnType<typeof createMockPool>): Promise<Fastif
   return app;
 }
 
-function signRecentTestPayload(payload: Record<string, unknown>, signingSecret: string): string {
-  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const signature = createHmac('sha256', signingSecret).update(payloadB64).digest('hex');
-  return `${payloadB64}.${signature}`;
-}
-
 describe('memoryProvidersRoutes', () => {
   const originalSigningSecret = process.env.MEMORY_OPS_SIGNING_SECRET;
   const originalRateLimitMax = process.env.MEMORY_PROVIDER_RATE_LIMIT_MAX;
@@ -142,6 +144,7 @@ describe('memoryProvidersRoutes', () => {
     }
     await app?.close();
     app = undefined;
+    embeddingClientMocks.embedBatchWithUsage.mockReset();
   });
 
   it('GET /api/memory/providers returns embedding providers without secrets', async () => {
@@ -179,6 +182,85 @@ describe('memoryProvidersRoutes', () => {
 
     expect(response.statusCode).toBe(503);
     expect(response.json()).toMatchObject({ error: 'SIGNING_SECRET_MISSING' });
+  });
+
+  it('accepts matching recent test tokens for provider metadata', async () => {
+    process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
+    embeddingClientMocks.embedBatchWithUsage.mockResolvedValue({
+      vectors: [[0.1, 0.2]],
+      usage: { promptTokens: 1000 },
+      model: 'text-embedding-3-small',
+    });
+    const pool = createMockPool();
+    app = await buildApp(pool);
+
+    const testResponse = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers/test-ephemeral',
+      payload: {
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-tested',
+      },
+    });
+    const signedToken = testResponse.json().signedToken;
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers',
+      payload: {
+        name: 'OpenAI',
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-tested',
+        active: false,
+        recentTestResult: { signedToken, apiKey: 'sk-tested' },
+      },
+    });
+
+    expect(testResponse.statusCode).toBe(200);
+    expect(createResponse.statusCode).toBe(201);
+    expect(createResponse.json().provider.metadata).toMatchObject({
+      lastTestOk: true,
+      dim: 2,
+    });
+  });
+
+  it('rejects recent test tokens when the saved provider key differs', async () => {
+    process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
+    embeddingClientMocks.embedBatchWithUsage.mockResolvedValue({
+      vectors: [[0.1, 0.2]],
+      usage: { promptTokens: 1000 },
+      model: 'text-embedding-3-small',
+    });
+    const pool = createMockPool();
+    app = await buildApp(pool);
+
+    const testResponse = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers/test-ephemeral',
+      payload: {
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-tested',
+      },
+    });
+    const signedToken = testResponse.json().signedToken;
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers',
+      payload: {
+        name: 'OpenAI',
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-different',
+        active: false,
+        recentTestResult: { signedToken, apiKey: 'sk-different' },
+      },
+    });
+
+    expect(testResponse.statusCode).toBe(200);
+    expect(createResponse.statusCode).toBe(422);
+    expect(createResponse.json()).toMatchObject({ error: 'VALIDATION_ERROR' });
   });
 
   it('POST /api/memory/providers rejects unverified catalog entries', async () => {
@@ -236,43 +318,6 @@ describe('memoryProvidersRoutes', () => {
       error: 'RATE_LIMITED',
       message: 'Too many memory provider requests',
     });
-  });
-
-  it('rejects recent test tokens that do not match the saved provider key suffix', async () => {
-    process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
-    const pool = createMockPool();
-    app = await buildApp(pool);
-    const signedToken = signRecentTestPayload(
-      {
-        provider: 'openai',
-        model: 'text-embedding-3-small',
-        dim: 1536,
-        ok: true,
-        testedAt: Date.now(),
-        latencyMs: 12,
-        costUsd: 0.000001,
-      },
-      process.env.MEMORY_OPS_SIGNING_SECRET,
-    );
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/memory/providers',
-      payload: {
-        name: 'OpenAI',
-        provider: 'openai',
-        model: 'text-embedding-3-small',
-        apiKey: 'sk-live-other',
-        active: false,
-        recentTestResult: {
-          apiKey: 'sk-live-pass',
-          signedToken,
-        },
-      },
-    });
-
-    expect(response.statusCode).toBe(422);
-    expect(response.json().error).toBe('VALIDATION_ERROR');
   });
 
   it('PATCH active:true deactivates other embedding providers before activating target', async () => {
