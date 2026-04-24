@@ -97,8 +97,9 @@ export function WorkersSyncSection(): React.JSX.Element {
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               {machine.runtimeRows.map((row) => (
-                <div
+                <section
                   key={`${machine.machineId}-${row.runtime}`}
+                  aria-label={`${RUNTIME_LABELS[row.runtime]} runtime status for ${machine.hostname}`}
                   className="rounded-[20px] border border-border/40 bg-muted/25 p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -134,7 +135,7 @@ export function WorkersSyncSection(): React.JSX.Element {
                     Sync status: {row.syncStatus}. Last applied:{' '}
                     {row.lastAppliedAt ? new Date(row.lastAppliedAt).toLocaleString() : 'Never'}.
                   </div>
-                </div>
+                </section>
               ))}
             </div>
           </article>
