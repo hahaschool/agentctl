@@ -1,3 +1,4 @@
+import type { ManagedRuntimeConfig } from '@agentctl/shared';
 import { expect, type Page, type Route, test } from '@playwright/test';
 
 test.describe.configure({ timeout: 60_000 });
@@ -84,19 +85,7 @@ type RuntimeConfigDriftItem = {
 type RuntimeConfigDefaultsMockResponse = {
   version: number;
   hash: string;
-  config: {
-    version: number;
-    instructions: { userGlobal: string; projectTemplate: string };
-    mcpServers: unknown[];
-    skills: unknown[];
-    sandbox: string;
-    approvalPolicy: string;
-    environmentPolicy: { inherit: string[]; set: Record<string, string> };
-    runtimeOverrides: {
-      claudeCode: Record<string, unknown>;
-      codex: Record<string, unknown>;
-    };
-  };
+  config: ManagedRuntimeConfig;
 };
 
 type RuntimeConfigUpdateBody = {
@@ -164,11 +153,13 @@ function makePreferenceState(
 function makeRuntimeConfigDefaults(
   overrides: Partial<RuntimeConfigDefaultsMockResponse['config']['runtimeOverrides']> = {},
 ): RuntimeConfigDefaultsMockResponse {
+  const hash = 'sha256:managed-runtime-config';
   return {
     version: 1,
-    hash: 'sha256:managed-runtime-config',
+    hash,
     config: {
       version: 1,
+      hash,
       instructions: { userGlobal: 'global instructions', projectTemplate: 'project template' },
       mcpServers: [],
       skills: [],
@@ -262,7 +253,8 @@ async function mockSettingsApis(
       const body = (request.postDataJSON() ?? {}) as RuntimeConfigUpdateBody;
       state.updateRuntimeConfigDefaultsCalls.push(body);
       state.runtimeConfigDefaults = {
-        ...state.runtimeConfigDefaults,
+        version: body.config.version,
+        hash: body.config.hash,
         config: body.config,
       };
       await fulfillJson(route, state.runtimeConfigDefaults);
@@ -447,6 +439,9 @@ test.describe('Settings control center', () => {
       switchingPolicy: 'failover_only',
       allowedMachineIds: ['machine-dev-1', 'machine-dev-2'],
     });
+    expect(savedConfig?.hash).toBe('sha256:managed-runtime-config');
+    await expect(saveButton).toBeDisabled();
+    await expect(codexCard.getByText('1 worker selected')).toBeVisible();
   });
 
   test('adds and removes notification preferences without a backend', async ({ page }) => {
