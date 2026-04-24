@@ -389,8 +389,10 @@ test.describe('Space detail page (/spaces/[id])', () => {
     ).toBeVisible();
     await expect(page.getByText('2 members')).toBeVisible();
 
-    // Bridges section — 1 ref, 2 subscriptions, one active + one paused
-    await expect(page.getByText('1 refs')).toBeVisible();
+    // Bridges section — expanded context refs panel + subscriptions
+    await expect(page.getByText('Context Refs')).toBeVisible();
+    await expect(page.getByText('aaaaaaaa → bbbbbbbb')).toBeVisible();
+    await expect(page.getByText('reference')).toBeVisible();
     await expect(page.getByText('2 subscriptions')).toBeVisible();
     await expect(page.getByText('Active', { exact: true })).toBeVisible();
     await expect(page.getByText('Paused', { exact: true })).toBeVisible();
