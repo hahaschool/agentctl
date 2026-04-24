@@ -86,10 +86,10 @@ describe('MemoryImportView', () => {
       expect(screen.getByText('Memory Import')).toBeDefined();
     });
 
-    it('describes only the currently wired claude-mem import source', () => {
+    it('describes the wired claude-mem and JSONL import sources', () => {
       renderView();
       expect(screen.getByText(/Migrate existing memory data from claude-mem/i)).toBeDefined();
-      expect(screen.queryByText(/JSONL conversation history/i)).toBeNull();
+      expect(screen.getByText(/Claude Code JSONL session history/i)).toBeDefined();
     });
 
     it('renders the source selector buttons', () => {
@@ -127,13 +127,20 @@ describe('MemoryImportView', () => {
       expect(jsonlBtn.className).toContain('border-blue-500');
     });
 
-    it('explains that JSONL history import is not wired yet and disables preview', () => {
+    it('previews JSONL history with the selected source and default path', async () => {
       renderView();
       fireEvent.click(screen.getByTestId('source-jsonl-history'));
 
-      expect(screen.getByText(/JSONL history import is not wired yet/i)).toBeDefined();
-      expect((screen.getByTestId('step1-next') as HTMLButtonElement).disabled).toBe(true);
-      expect(mockPreviewMutate).not.toHaveBeenCalled();
+      expect((screen.getByTestId('step1-next') as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(screen.getByTestId('step1-next'));
+
+      await waitFor(() => {
+        expect(mockPreviewMutate).toHaveBeenCalledWith({
+          source: 'jsonl-history',
+          dbPath: '~/.claude/projects/',
+        });
+      });
+      expect(screen.getByTestId('step2-start')).toBeDefined();
     });
 
     it('advances to step 2 when preview succeeds', async () => {
