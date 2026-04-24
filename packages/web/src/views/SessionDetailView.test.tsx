@@ -11,6 +11,8 @@ import type { Session, SessionContentMessage, SessionMetadata } from '@/lib/api'
 const {
   mockSessionQuery,
   mockSessionContentQuery,
+  mockSessionDispatchConfigQuery,
+  mockRunSummaryQuery,
   mockAccountsQuery,
   mockUseDeleteSession,
   mockUseForkSession,
@@ -22,6 +24,8 @@ const {
 } = vi.hoisted(() => ({
   mockSessionQuery: vi.fn(),
   mockSessionContentQuery: vi.fn(),
+  mockSessionDispatchConfigQuery: vi.fn(),
+  mockRunSummaryQuery: vi.fn(),
   mockAccountsQuery: vi.fn(),
   mockUseDeleteSession: vi.fn(),
   mockUseForkSession: vi.fn(),
@@ -230,11 +234,15 @@ vi.mock('@/lib/api', () => ({
 vi.mock('@/lib/queries', () => ({
   sessionQuery: (id: string) => mockSessionQuery(id),
   sessionContentQuery: (...args: unknown[]) => mockSessionContentQuery(...args),
+  sessionDispatchConfigQuery: (id: string) => mockSessionDispatchConfigQuery(id),
+  runSummaryQuery: (id: string) => mockRunSummaryQuery(id),
   accountsQuery: () => mockAccountsQuery(),
   queryKeys: {
     session: (id: string) => ['session', id],
     sessions: () => ['sessions'],
     accounts: ['accounts'],
+    runSummary: (id: string) => ['runs', id, 'summary'],
+    sessionDispatchConfig: (id: string) => ['sessions', id, 'dispatch-config'],
   },
   useDeleteSession: () => mockUseDeleteSession(),
   useForkSession: () => mockUseForkSession(),
@@ -359,6 +367,24 @@ describe('SessionDetailView', () => {
           updatedAt: new Date().toISOString(),
         },
       ]),
+    });
+
+    mockSessionDispatchConfigQuery.mockReturnValue({
+      queryKey: ['sessions', 'ses-123', 'dispatch-config'],
+      queryFn: vi.fn().mockResolvedValue({
+        runId: null,
+        runCount: 0,
+        config: null,
+      }),
+      enabled: true,
+      staleTime: 60_000,
+    });
+
+    mockRunSummaryQuery.mockReturnValue({
+      queryKey: ['runs', '', 'summary'],
+      queryFn: vi.fn().mockResolvedValue(null),
+      enabled: false,
+      staleTime: 60_000,
     });
 
     mockUseDeleteSession.mockReturnValue({
@@ -497,6 +523,53 @@ describe('SessionDetailView', () => {
       expect(
         screen.getByText(/Streaming summary events update the session page immediately\./),
       ).toBeDefined();
+    });
+  });
+
+  it('renders the persisted run summary when no live stream summary exists', async () => {
+    mockSessionDispatchConfigQuery.mockReturnValue({
+      queryKey: ['sessions', 'ses-123', 'dispatch-config'],
+      queryFn: vi.fn().mockResolvedValue({
+        runId: 'run-123',
+        runCount: 1,
+        config: null,
+      }),
+      enabled: true,
+      staleTime: 60_000,
+    });
+
+    mockRunSummaryQuery.mockReturnValue({
+      queryKey: ['runs', 'run-123', 'summary'],
+      queryFn: vi.fn().mockResolvedValue({
+        runId: 'run-123',
+        source: 'fallback',
+        summary: {
+          status: 'success',
+          workCompleted: 'Rendered the replay summary after a page refresh.',
+          executiveSummary: 'Rendered the replay summary after a page refresh.',
+          keyFindings: ['Run summaries survive beyond the SSE connection.'],
+          filesChanged: [],
+          commandsRun: 3,
+          toolUsageBreakdown: { Read: 1, Bash: 1, Edit: 1 },
+          followUps: [],
+          branchName: null,
+          prUrl: null,
+          tokensUsed: { input: 100, output: 40 },
+          costUsd: 0.09,
+          durationMs: 5_000,
+        },
+      }),
+      enabled: true,
+      staleTime: 60_000,
+    });
+
+    renderView();
+
+    await waitFor(() => {
+      expect(screen.getByText('Latest Run Summary')).toBeDefined();
+      expect(screen.getByText('Rendered the replay summary after a page refresh.')).toBeDefined();
+      expect(screen.getByText(/replay-derived/)).toBeDefined();
+      expect(screen.getByText(/Run summaries survive beyond the SSE connection/)).toBeDefined();
     });
   });
 
