@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Filter, Settings } from 'lucide-react';
+import { Filter, Infinity as InfinityIcon, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
@@ -44,12 +44,15 @@ import {
   sessionsQuery,
   useCreateAgent,
   useStartAgent,
+  useStartAgentLoop,
   useStopAgent,
+  useStopAgentLoop,
 } from '../lib/queries';
 
 type AgentSortOrder = 'name' | 'status' | 'lastRun' | 'cost';
 type AgentStatusFilter = 'all' | 'running' | 'registered' | 'stopped' | 'error';
 type StartDialogAgent = { id: string; name: string; defaultPrompt?: string };
+type LoopDialogAgent = { id: string; name: string };
 type AgentTemplateCard = { title: string; description: string };
 
 const FALLBACK_AGENT_TEMPLATES: readonly AgentTemplateCard[] = [
@@ -82,11 +85,15 @@ export function AgentsPage(): React.JSX.Element {
   const createAgent = useCreateAgent();
   const startAgent = useStartAgent();
   const stopAgent = useStopAgent();
+  const startAgentLoop = useStartAgentLoop();
+  const stopAgentLoop = useStopAgentLoop();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [startDialogAgent, setStartDialogAgent] = useState<StartDialogAgent | null>(null);
   const [startPrompt, setStartPrompt] = useState('');
   const [isStarting, setIsStarting] = useState(false);
+  const [loopDialogAgent, setLoopDialogAgent] = useState<LoopDialogAgent | null>(null);
+  const [loopPrompt, setLoopPrompt] = useState('');
 
   useEffect(() => {
     if (searchParams.get('new') !== '1') return;
@@ -232,6 +239,32 @@ export function AgentsPage(): React.JSX.Element {
         },
       },
     );
+  };
+
+  // -- Loop handlers --
+  const handleStartLoop = (): void => {
+    const effectivePrompt = loopPrompt.trim();
+    if (!loopDialogAgent || !effectivePrompt || startAgentLoop.isPending) return;
+    startAgentLoop.mutate(
+      { id: loopDialogAgent.id, prompt: effectivePrompt },
+      {
+        onSuccess: () => {
+          toast.success('Loop started');
+          setLoopPrompt('');
+          setLoopDialogAgent(null);
+        },
+        onError: (err) => {
+          toast.error(err instanceof Error ? err.message : String(err));
+        },
+      },
+    );
+  };
+
+  const handleStopLoop = (agentId: string): void => {
+    stopAgentLoop.mutate(agentId, {
+      onSuccess: () => toast.success('Loop stopped'),
+      onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+    });
   };
 
   // -- Stop all running agents --
@@ -385,6 +418,71 @@ export function AgentsPage(): React.JSX.Element {
               disabled={(!startPrompt.trim() && !startDialogAgent?.defaultPrompt) || isStarting}
             >
               {isStarting ? 'Starting...' : 'Start'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Loop Dialog */}
+      <Dialog
+        open={!!loopDialogAgent}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLoopDialogAgent(null);
+            setLoopPrompt('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <InfinityIcon className="h-4 w-4 text-blue-500" />
+              Start Loop
+            </DialogTitle>
+            <DialogDescription>
+              {loopDialogAgent
+                ? `Start a loop for "${loopDialogAgent.name}". The agent will repeat this prompt until stopped.`
+                : 'Start a loop for this agent.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <textarea
+              value={loopPrompt}
+              onChange={(e) => setLoopPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setLoopDialogAgent(null);
+                  setLoopPrompt('');
+                }
+              }}
+              placeholder="Enter the loop prompt..."
+              aria-label="Loop prompt"
+              disabled={startAgentLoop.isPending}
+              autoFocus
+              rows={4}
+              className="w-full px-3 py-2 bg-background text-foreground border border-border rounded-md text-sm outline-none transition-all duration-200 focus:ring-2 focus:ring-primary/20 focus:border-primary/40 resize-none disabled:opacity-50 placeholder:text-muted-foreground"
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setLoopDialogAgent(null);
+                setLoopPrompt('');
+              }}
+              disabled={startAgentLoop.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleStartLoop}
+              disabled={!loopPrompt.trim() || startAgentLoop.isPending}
+              className="bg-blue-600 text-white hover:bg-blue-500"
+            >
+              <InfinityIcon className="h-3.5 w-3.5 mr-1.5" />
+              {startAgentLoop.isPending ? 'Starting...' : 'Start Loop'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -590,7 +688,14 @@ export function AgentsPage(): React.JSX.Element {
                   >
                     <span className="block truncate">{agent.name}</span>
                   </Link>
-                  <StatusBadge status={agent.status} />
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {agent.type === 'loop' && (
+                      <span className="inline-flex items-center gap-0.5 font-mono bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1 py-0.5 rounded-sm border border-blue-500/30 text-[10px]">
+                        <InfinityIcon className="h-2.5 w-2.5" />
+                      </span>
+                    )}
+                    <StatusBadge status={agent.status} />
+                  </div>
                 </div>
                 <div className="space-y-2 text-xs">
                   <CardInfoRow
@@ -636,7 +741,7 @@ export function AgentsPage(): React.JSX.Element {
                 </div>
               </CardContent>
               <div className="mt-0 border-t border-border px-4 py-2.5">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     type="button"
                     size="sm"
@@ -655,6 +760,35 @@ export function AgentsPage(): React.JSX.Element {
                   >
                     Start
                   </Button>
+                  {agent.type === 'loop' && (
+                    <>
+                      {agent.status === 'running' ? (
+                        <ConfirmButton
+                          label={stopAgentLoop.isPending ? 'Stopping...' : 'Stop Loop'}
+                          confirmLabel="Confirm Stop Loop"
+                          onConfirm={() => handleStopLoop(agent.id)}
+                          disabled={stopAgentLoop.isPending}
+                          className="px-2.5 py-1.5 text-[12px] font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 rounded-md cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/60"
+                          confirmClassName="px-2.5 py-1.5 text-[12px] font-medium bg-red-700 text-white border border-red-600 rounded-md cursor-pointer animate-pulse"
+                        />
+                      ) : (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="border-blue-500/40 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
+                          onClick={() => {
+                            setLoopDialogAgent({ id: agent.id, name: agent.name });
+                            setLoopPrompt('');
+                          }}
+                          disabled={startAgentLoop.isPending || agent.status === 'starting'}
+                        >
+                          <InfinityIcon className="h-3 w-3 mr-1" />
+                          Loop
+                        </Button>
+                      )}
+                    </>
+                  )}
                   <Button asChild size="sm" variant="ghost">
                     <Link
                       href={`/agents/${agent.id}/settings`}

@@ -899,6 +899,29 @@ export function useEmergencyStopAll() {
   });
 }
 
+export function useStartAgentLoop() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, prompt, config }: { id: string; prompt: string; config?: object }) =>
+      api.startAgentLoop(id, prompt, config),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agent(id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+    },
+  });
+}
+
+export function useStopAgentLoop() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.stopAgentLoop(id),
+    onSuccess: (_data, id) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agent(id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents });
+    },
+  });
+}
+
 export function useUpdateAgent() {
   const queryClient = useQueryClient();
   return useMutation({
