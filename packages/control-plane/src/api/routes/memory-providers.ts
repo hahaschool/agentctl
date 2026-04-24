@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, scryptSync, timingSafeEqual } from 'node:crypto';
 import { hostname } from 'node:os';
 
 import {
@@ -168,10 +168,19 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
     });
   });
 
-  app.get('/', async () => {
-    const rows = await listProviderRows(opts.pool);
-    return { providers: rows.map(rowToProvider) };
-  });
+  app.get(
+    '/',
+    {
+      config: { rateLimit: providerFastifyRateLimit },
+      preHandler: [app.rateLimit(providerFastifyRateLimit)],
+    },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
+    async () => {
+      const rows = await listProviderRows(opts.pool);
+      return { providers: rows.map(rowToProvider) };
+    },
+  );
 
   app.post(
     '/test-ephemeral',
@@ -227,9 +236,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       const payload: RecentTestPayload = {
         provider: body.provider,
         model: body.model,
-        // HMAC binds the tested provider key to this short-lived token; it is
-        // not a password verifier or stored credential hash.
-        // codeql[js/insufficient-password-hash]
         apiKeyFingerprint: fingerprintApiKey(body.apiKey, signingSecret),
         dim,
         ok: true,
@@ -678,9 +684,6 @@ function verifyRecentTestResult(
   if (Date.now() - payload.testedAt > TOKEN_TTL_MS) {
     throw invalidRecentTestResult();
   }
-  // Recompute the short-lived token binding HMAC for equality only; it is not
-  // used as a stored password hash.
-  // codeql[js/insufficient-password-hash]
   const fingerprint = fingerprintApiKey(recentTestResult.apiKey, signingSecret);
   if (!timingSafeEqualHex(fingerprint, payload.apiKeyFingerprint)) {
     throw invalidRecentTestResult();
@@ -698,11 +701,9 @@ function invalidRecentTestResult(): ControlPlaneError {
   return new ControlPlaneError('VALIDATION_ERROR', 'recentTestResult is expired or invalid');
 }
 
-function fingerprintApiKey(apiKey: string, signingSecret: string): string {
-  // This keyed HMAC is a non-reversible token-binding fingerprint for
-  // test-before-save, not password storage.
-  // codeql[js/insufficient-password-hash]
-  return createHmac('sha256', signingSecret).update(apiKey).digest('hex');
+function fingerprintApiKey(providerCredential: string, signingSecret: string): string {
+  const salt = `memory-provider-test:${signingSecret}`;
+  return scryptSync(providerCredential, salt, 32).toString('hex');
 }
 
 function timingSafeEqualHex(left: string, right: string): boolean {
