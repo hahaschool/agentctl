@@ -37,6 +37,7 @@ import { memoryStoreRoutes } from './routes/memory-store-route.js';
 import { memoryTraverseRoutes } from './routes/memory-traverse.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { permissionResponseRoutes } from './routes/permission-response.js';
+import { preCompactRoutes } from './routes/pre-compact.js';
 import { runtimeConfigRoutes } from './routes/runtime-config.js';
 import { runtimeSessionsRoutes } from './routes/runtime-sessions.js';
 import { sessionTakeoverRoutes } from './routes/session-takeover.js';
@@ -278,6 +279,16 @@ export async function createWorkerServer({
       terminalManager,
       takeoverManager,
       agentPool,
+      controlPlaneUrl,
+      logger,
+    });
+  }
+
+  // Pre-compact memory checkpoint: registers POST /api/sessions/:sessionId/pre-compact.
+  // Requires controlPlaneUrl to proxy memory fact storage.
+  if (controlPlaneUrl) {
+    await app.register(preCompactRoutes, {
+      prefix: '/api/sessions',
       controlPlaneUrl,
       logger,
     });
