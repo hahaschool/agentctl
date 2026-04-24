@@ -26,6 +26,9 @@ const MEMORY_IMPORT_RATE_LIMIT = {
 
 const BATCH_SIZE = 200;
 
+const JSONL_MAX_FILES = 1000;
+const JSONL_PREVIEW_CAP = 100;
+
 const OBSERVATION_TYPE_TO_ENTITY: Record<string, EntityType> = {
   decision: 'decision',
   bugfix: 'error',
@@ -113,6 +116,185 @@ function buildSource(row: ObservationRow): FactSource {
 
 function mapEntityType(obsType: string): EntityType {
   return OBSERVATION_TYPE_TO_ENTITY[obsType] ?? 'concept';
+}
+
+// ---------------------------------------------------------------------------
+// JSONL history helpers
+// ---------------------------------------------------------------------------
+
+type JsonlMessage = {
+  type?: string;
+  message?: {
+    role?: string;
+    content?: string | Array<{ type: string; text?: string }>;
+  };
+  sessionId?: string;
+};
+
+function walkJsonlFiles(dir: string, cap: number): string[] {
+  const files: string[] = [];
+
+  function walk(current: string): void {
+    if (files.length >= cap) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (files.length >= cap) break;
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  walk(dir);
+  return files;
+}
+
+function countJsonlLines(filePath: string): number {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return content.split('\n').filter((l) => l.trim().length > 0).length;
+  } catch {
+    return 0;
+  }
+}
+
+function extractFirstUserContent(filePath: string): string {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let parsed: JsonlMessage;
+      try {
+        parsed = JSON.parse(trimmed) as JsonlMessage;
+      } catch {
+        continue;
+      }
+      const role =
+        parsed.type === 'human'
+          ? 'user'
+          : parsed.type === 'assistant'
+            ? 'assistant'
+            : parsed.message?.role;
+      if (role !== 'user') continue;
+      const msg = parsed.message;
+      if (!msg) continue;
+      let text = '';
+      if (typeof msg.content === 'string') {
+        text = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        text = msg.content
+          .filter((b) => b.type === 'text' && b.text)
+          .map((b) => b.text ?? '')
+          .join('\n');
+      }
+      if (text.trim()) return text.trim().slice(0, 500);
+    }
+  } catch {
+    // return empty on any error
+  }
+  return '';
+}
+
+async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promise<void> {
+  const allFiles = walkJsonlFiles(dirPath, JSONL_MAX_FILES + 1);
+  if (allFiles.length > JSONL_MAX_FILES) {
+    if (activeJob?.id === jobId) {
+      activeJob = updateJobStatus(activeJob, {
+        status: 'failed',
+        errors: 1,
+        completedAt: new Date().toISOString(),
+      });
+    }
+    return;
+  }
+
+  const total = allFiles.length;
+  if (activeJob?.id === jobId) {
+    activeJob = updateJobStatus(activeJob, { progress: { current: 0, total } });
+  }
+
+  let imported = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  for (let i = 0; i < allFiles.length; i++) {
+    if (cancelRequested || !activeJob || activeJob.id !== jobId) break;
+
+    const filePath = allFiles[i] as string;
+    const sessionId = path.basename(filePath, '.jsonl');
+    const firstContent = extractFirstUserContent(filePath);
+
+    if (!firstContent) {
+      skipped++;
+    } else {
+      const id = generateImportId();
+      const importSourceId = `jsonl-history:${sessionId}`;
+      const source: FactSource = {
+        session_id: sessionId,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'import',
+        import_source_id: importSourceId,
+      };
+      try {
+        await pool.query(
+          `INSERT INTO memory_facts (
+             id, scope, content, content_model, entity_type,
+             confidence, strength, source_json, valid_from, created_at, accessed_at,
+             tags
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW(), NOW(),
+             $9
+           )
+           ON CONFLICT DO NOTHING`,
+          [
+            id,
+            'global',
+            firstContent,
+            'none',
+            'concept' as EntityType,
+            0.6,
+            1.0,
+            source,
+            [`import:jsonl-history`, `session:${sessionId}`],
+          ],
+        );
+        imported++;
+      } catch {
+        errors++;
+      }
+    }
+
+    if (activeJob?.id === jobId) {
+      activeJob = updateJobStatus(activeJob, {
+        progress: { current: i + 1, total },
+        imported,
+        skipped,
+        errors,
+      });
+    }
+  }
+
+  if (activeJob?.id === jobId && activeJob.status === 'running') {
+    activeJob = updateJobStatus(activeJob, {
+      status: 'completed',
+      progress: { current: total, total },
+      imported,
+      skipped,
+      errors,
+      completedAt: new Date().toISOString(),
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +540,34 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
     handler: async (request, reply) => {
       const { source, dbPath } = request.body;
 
+      if (source === 'jsonl-history') {
+        const resolved = expandTilde(dbPath);
+        if (!fs.existsSync(resolved)) {
+          return reply.status(400).send({ ok: false, error: `Directory not found: ${dbPath}` });
+        }
+        const stat = fs.statSync(resolved);
+        if (!stat.isDirectory()) {
+          return reply.status(400).send({ ok: false, error: `Path is not a directory: ${dbPath}` });
+        }
+
+        const files = walkJsonlFiles(resolved, JSONL_PREVIEW_CAP);
+        let lineCount = 0;
+        for (const f of files) {
+          lineCount += countJsonlLines(f);
+        }
+
+        const sample = files.slice(0, 5).map((f) => path.basename(f));
+        const preview: ImportPreview = {
+          totalObservations: files.length,
+          byType: { 'jsonl-session': files.length },
+          alreadyImported: 0,
+          newToImport: lineCount,
+          sampleTitles: sample,
+        };
+
+        return reply.send({ ok: true, preview });
+      }
+
       if (source !== 'claude-mem') {
         return reply
           .status(400)
@@ -448,14 +658,44 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
       }
       const { source, dbPath } = request.body;
 
+      if (!pool) {
+        return reply.status(503).send({ ok: false, error: 'Database not configured for imports' });
+      }
+
+      if (source === 'jsonl-history') {
+        const resolved = expandTilde(dbPath);
+        if (!fs.existsSync(resolved)) {
+          return reply.status(400).send({ ok: false, error: `Directory not found: ${dbPath}` });
+        }
+        const stat = fs.statSync(resolved);
+        if (!stat.isDirectory()) {
+          return reply.status(400).send({ ok: false, error: `Path is not a directory: ${dbPath}` });
+        }
+
+        // Check file count before starting
+        const probe = walkJsonlFiles(resolved, JSONL_MAX_FILES + 1);
+        if (probe.length > JSONL_MAX_FILES) {
+          return reply.status(400).send({
+            ok: false,
+            error: `Too many JSONL files (${probe.length}). Maximum is ${JSONL_MAX_FILES}.`,
+          });
+        }
+
+        cancelRequested = false;
+        activeJob = createJob(source, 0);
+        const jobId = activeJob.id;
+
+        runJsonlImport(pool, resolved, jobId).catch((err) => {
+          app.log.error({ err, jobId }, 'JSONL import job failed');
+        });
+
+        return reply.status(202).send({ ok: true, job: activeJob });
+      }
+
       if (source !== 'claude-mem') {
         return reply
           .status(400)
           .send({ ok: false, error: 'Only claude-mem imports are supported currently' });
-      }
-
-      if (!pool) {
-        return reply.status(503).send({ ok: false, error: 'Database not configured for imports' });
       }
 
       const resolved = expandTilde(dbPath);

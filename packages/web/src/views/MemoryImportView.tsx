@@ -156,13 +156,6 @@ function Step1SourceDetection({
         />
       </div>
 
-      {source === 'jsonl-history' && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-          JSONL history import is not wired yet. Use claude-mem import for now; roadmap tracks JSONL
-          as a remaining delivery gap instead of a completed feature.
-        </div>
-      )}
-
       {error && (
         <div
           className="flex items-center gap-2 text-sm text-destructive"
@@ -176,7 +169,7 @@ function Step1SourceDetection({
       <button
         type="button"
         onClick={onNext}
-        disabled={!dbPath.trim() || loading || source !== 'claude-mem'}
+        disabled={!dbPath.trim() || loading}
         className="flex items-center gap-2 px-4 py-2 rounded-md bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         data-testid="step1-next"
       >
@@ -541,10 +534,6 @@ export function MemoryImportView() {
 
   async function handlePreview() {
     setPreviewError(null);
-    if (source !== 'claude-mem') {
-      setPreviewError('JSONL history import is not wired yet.');
-      return;
-    }
     try {
       const result = await previewImport.mutateAsync({ source, dbPath });
       if (result.ok) {
@@ -591,8 +580,7 @@ export function MemoryImportView() {
       <div>
         <h1 className="text-2xl font-bold">Memory Import</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Migrate existing memory data from claude-mem. JSONL history import is still a tracked
-          follow-up and is disabled until wired.
+          Migrate existing memory data from claude-mem SQLite or Claude Code JSONL session history.
         </p>
       </div>
 
