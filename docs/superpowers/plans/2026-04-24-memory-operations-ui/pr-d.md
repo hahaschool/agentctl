@@ -4,7 +4,7 @@
 
 **Goal:** All job-orchestration infrastructure: BullMQ queue wired to DB jobs, `JobsRepository` (including cancel + durable state machine), `JobEventsRepository`, SSE streaming, preview endpoint, `/api/memory/ops/capabilities`. Workers are registered but no handlers yet (PR E adds them). `MEMORY_OPS_ENABLED_KINDS` is shipped as empty — no jobs can run yet.
 
-**2026-04-25 implementation status:** Active branch `codex/memory-ops-pr-d` implements this PR D slice from post-#811 `main@d64ae2f2`. The branch adds the backend route, queue/repository/event/SSE/preview/worker-runtime modules, retention for local memory-ops events/audit rows, `.env.example` progressive-unlock defaults, focused unit/route tests, and startup/server wiring without changing dev/beta CD configuration.
+**2026-04-25 implementation status:** PR #812 implemented this PR D slice and merged as `b58a798f`. It adds the backend route, queue/repository/event/SSE/preview/worker-runtime modules, retention for local memory-ops events/audit rows, `.env.example` progressive-unlock defaults, focused unit/route tests, and startup/server wiring without changing dev/beta CD configuration.
 
 **Architecture:** `memory-ops/config.ts` is the single source of truth for feature flags. `memory-ops/jobs-repository.ts` is the only writer to `memory_ops_jobs`. The BullMQ queue is an in-process singleton. Advisory lock + fleet-check SELECT inside DB transaction before INSERT. SSE stream reads from `memory_ops_job_events` using `pg_notify`.
 
