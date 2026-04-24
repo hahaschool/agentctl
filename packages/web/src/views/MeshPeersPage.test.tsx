@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SyncPeer } from '@/lib/api';
+import { UpdateSyncPeerFailedError } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -1915,6 +1916,129 @@ describe('MeshPeersPage', () => {
       });
 
       expect(screen.queryByTestId('preflight-status-compatible')).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Peer update — safety floor + legacy failure modal (2026-04 incident).
+  //
+  // Peers running a version below the hardened `peer-update.sh` floor ran the
+  // pre-#697 script that bricked macmini in the 2026-04 incident. Disable the
+  // Update button for those peers and, when an older peer still slips through
+  // and the script fails, render the stdout/stderr tails the pre-async route
+  // returns in the error body — so the operator can actually tell which step
+  // of the script blew up instead of a terse "exited with code N" toast.
+  // -------------------------------------------------------------------------
+  describe('peer update — safety floor + legacy failure surfacing', () => {
+    it('disables the Update button for peers below the safe-floor version', async () => {
+      mockVersionCompatQuery.mockReturnValue({
+        queryKey: ['version-compat'],
+        queryFn: vi.fn().mockResolvedValue({
+          appVersion: 'v0.8.2',
+          gitSha: 'sha',
+          schemaVersion: 27,
+          minSupportedMobileBuild: 1,
+          minSupportedWebBuild: 1,
+        }),
+      });
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'too-old',
+              peerVersion: 'v0.5.6',
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      const button = await screen.findByTestId('update-too-old');
+      expect((button as HTMLButtonElement).disabled).toBe(true);
+      const title = button.getAttribute('title') ?? '';
+      expect(title).toContain('predates the hardened peer-update script');
+      expect(title).toContain('min 0.8.1');
+      expect(title).toContain('manual recovery playbook');
+    });
+
+    it('keeps the Update button enabled for peers at or above the safe floor', async () => {
+      mockVersionCompatQuery.mockReturnValue({
+        queryKey: ['version-compat'],
+        queryFn: vi.fn().mockResolvedValue({
+          appVersion: 'v0.8.2',
+          gitSha: 'sha',
+          schemaVersion: 27,
+          minSupportedMobileBuild: 1,
+          minSupportedWebBuild: 1,
+        }),
+      });
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'safe-floor',
+              peerVersion: 'v0.8.1',
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+
+      renderPage();
+      const button = await screen.findByTestId('update-safe-floor');
+      expect((button as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('opens the legacy-failure modal with stderrTail when the peer returns a pre-async error body', async () => {
+      const legacyFailure = new UpdateSyncPeerFailedError(500, {
+        error: 'PEER_UPDATE_SCRIPT_FAILED',
+        message: 'peer-update script exited with code 1',
+        exitCode: 1,
+        stdoutTail: 'peer-update: starting at abc1234\n',
+        stderrTail:
+          'error: pnpm-lock.yaml is not up to date with packages/control-plane/package.json\n',
+      });
+
+      const mutate = vi.fn((_id: unknown, opts: { onError?: (err: unknown) => void }) => {
+        opts.onError?.(legacyFailure);
+      });
+      mockUseUpdateSyncPeer.mockReturnValue(makeMutationHook({ mutate }));
+
+      mockSyncPeersQuery.mockReturnValue({
+        queryKey: ['sync-peers'],
+        queryFn: vi.fn().mockResolvedValue({
+          peers: [
+            makePeer({
+              machineId: 'macmini',
+              peerVersion: 'v0.8.1',
+            } as Partial<SyncPeer>),
+          ],
+        }),
+      });
+      mockVersionCompatQuery.mockReturnValue({
+        queryKey: ['version-compat'],
+        queryFn: vi.fn().mockResolvedValue({
+          appVersion: 'v0.8.2',
+          gitSha: 'sha',
+          schemaVersion: 27,
+          minSupportedMobileBuild: 1,
+          minSupportedWebBuild: 1,
+        }),
+      });
+
+      renderPage();
+      const button = await screen.findByTestId('update-macmini');
+      fireEvent.click(button);
+      fireEvent.click(await screen.findByTestId('confirm-update-mesh-peer'));
+
+      const modal = await screen.findByTestId('peer-update-failure-modal');
+      expect(modal).toBeDefined();
+      const stderr = screen.getByTestId('peer-update-failure-stderr');
+      expect(stderr.textContent).toContain('pnpm-lock.yaml is not up to date');
+      expect(modal.textContent).toContain('peer-update script exited with code 1');
+      // Toast is NOT used for legacy failures (modal carries the detail instead).
+      expect(mockToastError).not.toHaveBeenCalled();
     });
   });
 });

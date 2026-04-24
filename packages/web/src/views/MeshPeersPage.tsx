@@ -11,6 +11,7 @@ import { FetchingBar } from '@/components/FetchingBar';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
 import type { SyncPeer, SyncPeerCursors, UpsertSyncPeerInput } from '@/lib/api';
+import { UpdateSyncPeerFailedError } from '@/lib/api';
 import type { MeshConfigPreflightResponse } from '@/lib/api/mesh-config';
 import { describeReverseRegistrationError } from '@/lib/mesh-errors';
 import {
@@ -42,6 +43,7 @@ import { cn } from '@/lib/utils';
 import { DiscoverPeersDialog } from './mesh/DiscoverPeersDialog';
 import { MeshHealthSummary } from './mesh/MeshHealthSummary';
 import { MeshVersionBanner } from './mesh/MeshVersionBanner';
+import { PeerUpdateFailureModal } from './mesh/PeerUpdateFailureModal';
 import { PeerUpdateLogModal } from './mesh/PeerUpdateLogModal';
 import { SelfIdentityCard } from './mesh/SelfIdentityCard';
 
@@ -883,9 +885,20 @@ type PeerRowProps = {
 };
 
 /**
- * A peer is "updatable" only when both versions are known and the peer is
- * strictly BEHIND the local version. This prevents downgrades — a node
- * running an older version must not push its version to a newer peer.
+ * Oldest peer version that runs the async (PR #697) `peer-update.sh` with
+ * `drizzle-kit migrate` + post-reload `/health` probe. Peers below this floor
+ * run the legacy synchronous script that bricked macmini in 2026-04, so the
+ * Update button is disabled for them and the operator is pointed at the
+ * manual recovery playbook. See `docs/LESSONS_LEARNED.md` § Fleet Upgrades.
+ */
+export const MIN_SAFE_PEER_UPDATE_VERSION = '0.8.1';
+
+/**
+ * A peer is "updatable" only when both versions are known, the peer is
+ * strictly BEHIND the local version, and the peer is new enough to run the
+ * hardened peer-update script. Below the safe floor, auto-update is refused
+ * so the operator has to follow the recovery playbook instead of risking
+ * another brick (the pre-#697 script skipped migrations + health-probe).
  */
 function canUpdatePeer(peer: SyncPeerWithVersion, localVersion: string): boolean {
   if (peer.isSelf) return false;
@@ -894,7 +907,26 @@ function canUpdatePeer(peer: SyncPeerWithVersion, localVersion: string): boolean
   if (!peerVersion || !localVersion) return false;
   const cmp = compareSemver(peerVersion, localVersion);
   // cmp < 0 means peer is behind local → updatable
-  return cmp !== null && cmp < 0;
+  if (cmp === null || cmp >= 0) return false;
+  const floor = compareSemver(peerVersion, MIN_SAFE_PEER_UPDATE_VERSION);
+  if (floor === null) return false;
+  return floor >= 0;
+}
+
+/** Human-readable reason why Update is disabled for a peer, or null if enabled. */
+function peerUpdateDisabledReason(peer: SyncPeerWithVersion, localVersion: string): string | null {
+  if (peer.isSelf) return 'Cannot update self from this page';
+  if (!peer.syncUrl) return 'Peer has no syncUrl configured';
+  if (!peer.peerVersion) return 'Peer has not reported a version yet';
+  const cmp = compareSemver(peer.peerVersion, localVersion);
+  if (cmp === null) return 'Cannot compare versions';
+  if (cmp === 0) return 'Peer already matches local version';
+  if (cmp > 0) return 'Peer is ahead of this node — update this node instead';
+  const floor = compareSemver(peer.peerVersion, MIN_SAFE_PEER_UPDATE_VERSION);
+  if (floor === null || floor < 0) {
+    return `Peer version ${normaliseVersionDisplay(peer.peerVersion)} predates the hardened peer-update script (min ${MIN_SAFE_PEER_UPDATE_VERSION}). Follow the manual recovery playbook instead.`;
+  }
+  return null;
 }
 
 type ReverseBadgeProps = {
@@ -1229,17 +1261,8 @@ export function MeshPeerRow({
               disabled={!updatable || thisRowIsUpdating}
               data-testid={`update-${peer.machineId}`}
               title={
-                peer.isSelf
-                  ? 'Cannot update self from this page'
-                  : !peer.syncUrl
-                    ? 'Peer has no syncUrl configured'
-                    : !peer.peerVersion
-                      ? 'Peer has not reported a version yet'
-                      : compareSemver(peer.peerVersion, localVersion) === 0
-                        ? 'Peer already matches local version'
-                        : compareSemver(peer.peerVersion, localVersion) === null
-                          ? 'Cannot compare versions'
-                          : `Update peer from ${normaliseVersionDisplay(peer.peerVersion)} to ${normaliseVersionDisplay(localVersion)}`
+                peerUpdateDisabledReason(peer, localVersion) ??
+                `Update peer from ${normaliseVersionDisplay(peer.peerVersion ?? '')} to ${normaliseVersionDisplay(localVersion)}`
               }
               className={cn(
                 'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
@@ -1399,6 +1422,13 @@ export function MeshPeersPage(): React.JSX.Element {
     jobId: string;
     previousVersion: string;
   } | null>(null);
+  const [legacyUpdateFailure, setLegacyUpdateFailure] = useState<{
+    machineId: string;
+    previousVersion: string;
+    exitCode: number;
+    stdoutTail: string;
+    stderrTail: string;
+  } | null>(null);
   const toggleExpand = useCallback((machineId: string) => {
     setExpandedPeerId((prev) => (prev === machineId ? null : machineId));
   }, []);
@@ -1486,7 +1516,20 @@ export function MeshPeersPage(): React.JSX.Element {
         setPendingUpdate(null);
       },
       onError: (err) => {
-        toast.error(errorMessage(err, 'Failed to start peer update'));
+        if (err instanceof UpdateSyncPeerFailedError) {
+          // Pre-#697 peer completed the script synchronously and surfaced
+          // stdout/stderr tails in the error body. Open the failure modal so
+          // the operator can see which step of peer-update.sh actually blew up.
+          setLegacyUpdateFailure({
+            machineId: target.machineId,
+            previousVersion: target.peerVersion ?? 'unknown',
+            exitCode: err.payload.exitCode,
+            stdoutTail: err.payload.stdoutTail,
+            stderrTail: err.payload.stderrTail,
+          });
+        } else {
+          toast.error(errorMessage(err, 'Failed to start peer update'));
+        }
         setPendingUpdate(null);
       },
     });
@@ -1876,6 +1919,21 @@ export function MeshPeersPage(): React.JSX.Element {
           onClose={() => {
             setActiveUpdateJob(null);
             // Refresh peer list to pick up new version
+            void peersData.refetch();
+          }}
+        />
+      )}
+
+      {legacyUpdateFailure && (
+        <PeerUpdateFailureModal
+          machineId={legacyUpdateFailure.machineId}
+          previousVersion={legacyUpdateFailure.previousVersion}
+          localVersion={localVersion}
+          exitCode={legacyUpdateFailure.exitCode}
+          stdoutTail={legacyUpdateFailure.stdoutTail}
+          stderrTail={legacyUpdateFailure.stderrTail}
+          onClose={() => {
+            setLegacyUpdateFailure(null);
             void peersData.refetch();
           }}
         />
