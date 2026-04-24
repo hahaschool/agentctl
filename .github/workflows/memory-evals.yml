@@ -65,7 +65,8 @@ jobs:
               ;;
             push)
               split="full"
-              strict="true"
+              # Release-tag evals become blocking only after the private eval
+              # fixture and embedding/database secrets are configured.
               ;;
             workflow_dispatch)
               split="${INPUT_SPLIT:-held-out}"
@@ -78,7 +79,6 @@ jobs:
           esac
 
           echo "split=$split" >> "$GITHUB_OUTPUT"
-          echo "should_run=true" >> "$GITHUB_OUTPUT"
 
           missing=()
           if [ -z "${MEMORY_EVAL_DATABASE_URL:-}" ]; then
@@ -110,10 +110,12 @@ jobs:
               exit 1
             fi
 
+            echo "::notice title=Memory eval skipped::Private memory eval configuration is not available for this trigger."
             echo "should_run=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          echo "should_run=true" >> "$GITHUB_OUTPUT"
           mkdir -p "$(dirname "$PRIVATE_FIXTURE_PATH")" "$(dirname "$PRIVATE_FIXTURE_CHANGELOG_PATH")"
           printf '%s' "$MEMORY_EVAL_PRIVATE_FIXTURE_JSON_B64" | base64 --decode > "$PRIVATE_FIXTURE_PATH"
           if [ -n "${MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64:-}" ]; then
