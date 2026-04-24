@@ -10,9 +10,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ApiError, type CreateProviderBody, memoryProvidersApi } from '@/lib/api';
+import {
+  ApiError,
+  type CreateProviderBody,
+  memoryProvidersApi,
+  type ProviderTestResult,
+} from '@/lib/api';
 import { memoryProvidersQuery, queryKeys } from '@/lib/queries';
 import { cn } from '@/lib/utils';
+
+type SavedProviderTestState =
+  | (Omit<ProviderTestResult, 'ok'> & { ok: true })
+  | { ok: false; error?: string };
 
 function providerLabel(provider: EmbeddingProvider['provider']): string {
   return provider === 'openai' ? 'OpenAI' : 'Gemini';
@@ -28,11 +37,25 @@ function errorText(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function testStatus(provider: EmbeddingProvider): string {
+function passedTestStatus(result: { dim?: number | null; latencyMs?: number | null }): string {
+  const latency = result.latencyMs ? ` · ${result.latencyMs}ms` : '';
+  const dim = result.dim ? ` · dim ${result.dim}` : '';
+  return `Test passed${dim}${latency}`;
+}
+
+function testFailed(provider: EmbeddingProvider, testResult?: SavedProviderTestState): boolean {
+  return testResult ? testResult.ok === false : provider.metadata.lastTestOk === false;
+}
+
+function testStatus(provider: EmbeddingProvider, testResult?: SavedProviderTestState): string {
+  if (testResult) {
+    if (testResult.ok) {
+      return passedTestStatus(testResult);
+    }
+    return testResult.error ? `Test failed: ${testResult.error}` : 'Test failed';
+  }
   if (provider.metadata.lastTestOk === true) {
-    const latency = provider.metadata.latencyMs ? ` · ${provider.metadata.latencyMs}ms` : '';
-    const dim = provider.metadata.dim ? ` · dim ${provider.metadata.dim}` : '';
-    return `Test passed${dim}${latency}`;
+    return passedTestStatus(provider.metadata);
   }
   if (provider.metadata.lastTestOk === false) {
     return provider.metadata.lastTestError
@@ -44,6 +67,7 @@ function testStatus(provider: EmbeddingProvider): string {
 
 function ProviderRow({
   provider,
+  testResult,
   actionPending,
   onEdit,
   onSetActive,
@@ -51,6 +75,7 @@ function ProviderRow({
   onDelete,
 }: {
   provider: EmbeddingProvider;
+  testResult?: SavedProviderTestState;
   actionPending: boolean;
   onEdit: () => void;
   onSetActive: () => void;
@@ -66,7 +91,7 @@ function ProviderRow({
             {provider.isActive && (
               <Badge className="bg-green-600/10 text-green-700 dark:text-green-300">Active</Badge>
             )}
-            {provider.metadata.lastTestOk === false && (
+            {testFailed(provider, testResult) && (
               <Badge variant="outline" className="border-red-500/30 text-red-700 dark:text-red-300">
                 Test failed
               </Badge>
@@ -80,12 +105,12 @@ function ProviderRow({
           <div
             className={cn(
               'text-xs',
-              provider.metadata.lastTestOk === false
+              testFailed(provider, testResult)
                 ? 'text-red-700 dark:text-red-300'
                 : 'text-muted-foreground',
             )}
           >
-            {testStatus(provider)}
+            {testStatus(provider, testResult)}
           </div>
         </div>
 
@@ -150,6 +175,9 @@ export function MemoryEmbeddingsSection(): React.JSX.Element {
   const [editTarget, setEditTarget] = useState<EmbeddingProvider | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EmbeddingProvider | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [savedTestResults, setSavedTestResults] = useState<Record<string, SavedProviderTestState>>(
+    {},
+  );
 
   const invalidateProviders = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.memory.providers });
@@ -168,8 +196,13 @@ export function MemoryEmbeddingsSection(): React.JSX.Element {
   const updateProvider = useMutation({
     mutationFn: ({ id, body }: { id: string; body: ProviderDialogSaveBody }) =>
       memoryProvidersApi.update(id, body),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setActionError(null);
+      setSavedTestResults((current) => {
+        const next = { ...current };
+        delete next[variables.id];
+        return next;
+      });
       void invalidateProviders();
     },
     onError: (error) => {
@@ -190,9 +223,14 @@ export function MemoryEmbeddingsSection(): React.JSX.Element {
 
   const deleteProvider = useMutation({
     mutationFn: memoryProvidersApi.remove,
-    onSuccess: () => {
+    onSuccess: (_data, providerId) => {
       setActionError(null);
       setDeleteTarget(null);
+      setSavedTestResults((current) => {
+        const next = { ...current };
+        delete next[providerId];
+        return next;
+      });
       void invalidateProviders();
     },
     onError: (error) => {
@@ -202,12 +240,21 @@ export function MemoryEmbeddingsSection(): React.JSX.Element {
 
   const testSavedProvider = useMutation({
     mutationFn: memoryProvidersApi.testSaved,
-    onSuccess: () => {
+    onSuccess: (result, providerId) => {
       setActionError(null);
+      setSavedTestResults((current) => ({
+        ...current,
+        [providerId]: result.ok ? { ...result, ok: true } : { ok: false },
+      }));
       void invalidateProviders();
     },
-    onError: (error) => {
-      setActionError(errorText(error, 'Provider test failed'));
+    onError: (error, providerId) => {
+      const message = errorText(error, 'Provider test failed');
+      setActionError(message);
+      setSavedTestResults((current) => ({
+        ...current,
+        [providerId]: { ok: false, error: message },
+      }));
     },
   });
 
@@ -290,6 +337,7 @@ export function MemoryEmbeddingsSection(): React.JSX.Element {
             <ProviderRow
               key={provider.id}
               provider={provider}
+              testResult={savedTestResults[provider.id]}
               actionPending={anyActionPending}
               onEdit={() => {
                 setEditTarget(provider);

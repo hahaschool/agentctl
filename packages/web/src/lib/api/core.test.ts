@@ -79,11 +79,11 @@ describe('ApiError', () => {
     });
   });
 
-  it('does not parse JSON for 204 responses', async () => {
+  it('does not parse JSON for 204 no-content success responses', async () => {
     const response = makeNoContentResponse();
     vi.mocked(fetch).mockResolvedValue(response);
 
-    await expect(request('/api/no-content')).resolves.toBeUndefined();
+    await expect(request<void>('/api/anything', { method: 'DELETE' })).resolves.toBeUndefined();
     expect(response.json).not.toHaveBeenCalled();
   });
 });

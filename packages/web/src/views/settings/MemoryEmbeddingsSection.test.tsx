@@ -95,6 +95,19 @@ const INACTIVE_PROVIDER = {
   isActive: false,
 };
 
+const STALE_FAILED_PROVIDER = {
+  ...ACTIVE_PROVIDER,
+  id: 'provider-3',
+  name: 'OpenAI stale',
+  apiKeyLast4: '9999',
+  metadata: {
+    ...ACTIVE_PROVIDER.metadata,
+    lastTestOk: false,
+    lastTestError: 'old failure',
+    lastTestedAt: '2026-04-23T00:00:00Z',
+  },
+};
+
 function renderSection() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -189,5 +202,24 @@ describe('MemoryEmbeddingsSection', () => {
       expect(mockMemoryProvidersApi.setActive).toHaveBeenCalled();
     });
     expect(mockMemoryProvidersApi.setActive.mock.calls[0]?.[0]).toBe('provider-2');
+  });
+
+  it('shows saved-provider test results from the transient test response', async () => {
+    mockMemoryProvidersApi.list.mockResolvedValue({
+      providers: [STALE_FAILED_PROVIDER],
+    });
+
+    renderSection();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Test failed: old failure/i)).toBeDefined();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Test OpenAI stale/i }));
+
+    await waitFor(() => {
+      expect(mockMemoryProvidersApi.testSaved).toHaveBeenCalled();
+    });
+    expect(mockMemoryProvidersApi.testSaved.mock.calls[0]?.[0]).toBe('provider-3');
+    expect(screen.getByText(/Test passed.*dim 1536.*90ms/i)).toBeDefined();
   });
 });
