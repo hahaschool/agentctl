@@ -203,6 +203,32 @@ describe('MemorySynthesisPage', () => {
     });
   });
 
+  it('keeps fact links distinguishable while showing principle fact previews', async () => {
+    let capturedOnSuccess:
+      | ((data: { ok: boolean; result: MemorySynthesisResult }) => void)
+      | undefined;
+    mockMutate.mockImplementation(
+      (
+        _body: unknown,
+        opts: { onSuccess: (data: { ok: boolean; result: MemorySynthesisResult }) => void },
+      ) => {
+        capturedOnSuccess = opts.onSuccess;
+      },
+    );
+
+    render(<MemorySynthesisPage />);
+    fireEvent.click(screen.getByRole('button', { name: /run knowledge synthesis/i }));
+    capturedOnSuccess?.({ ok: true, result: sampleResult });
+
+    await waitFor(() => {
+      expect(screen.getByText('Pref A')).toBeDefined();
+      expect(screen.getByText('Pref B')).toBeDefined();
+      expect(screen.getByRole('link', { name: /fact-aaa/i })).toBeDefined();
+      expect(screen.getByRole('link', { name: /fact-bbb/i })).toBeDefined();
+      expect(screen.queryAllByRole('link', { name: 'Open fact' })).toHaveLength(0);
+    });
+  });
+
   it('renders principle candidates with readable fact previews instead of raw id streams', async () => {
     let capturedOnSuccess:
       | ((data: { ok: boolean; result: MemorySynthesisResult }) => void)
