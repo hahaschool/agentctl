@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 import type { ControlPlaneError } from '@agentctl/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -117,6 +119,12 @@ async function buildApp(pool: ReturnType<typeof createMockPool>): Promise<Fastif
   return app;
 }
 
+function signRecentTestPayload(payload: Record<string, unknown>, signingSecret: string): string {
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = createHmac('sha256', signingSecret).update(payloadB64).digest('hex');
+  return `${payloadB64}.${signature}`;
+}
+
 describe('memoryProvidersRoutes', () => {
   const originalSigningSecret = process.env.MEMORY_OPS_SIGNING_SECRET;
   const originalRateLimitMax = process.env.MEMORY_PROVIDER_RATE_LIMIT_MAX;
@@ -228,6 +236,44 @@ describe('memoryProvidersRoutes', () => {
       error: 'RATE_LIMITED',
       message: 'Too many memory provider requests',
     });
+  });
+
+  it('rejects recent test tokens that do not match the saved provider key suffix', async () => {
+    process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
+    const pool = createMockPool();
+    app = await buildApp(pool);
+    const signedToken = signRecentTestPayload(
+      {
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKeyLast4: 'pass',
+        dim: 1536,
+        ok: true,
+        testedAt: Date.now(),
+        latencyMs: 12,
+        costUsd: 0.000001,
+      },
+      process.env.MEMORY_OPS_SIGNING_SECRET,
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers',
+      payload: {
+        name: 'OpenAI',
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-live-other',
+        active: false,
+        recentTestResult: {
+          apiKey: 'sk-live-pass',
+          signedToken,
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json().error).toBe('VALIDATION_ERROR');
   });
 
   it('PATCH active:true deactivates other embedding providers before activating target', async () => {
