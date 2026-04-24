@@ -9,7 +9,7 @@
     "start": "next start --port ${WEB_PORT:-5173}",
     "test": "pnpm --filter @agentctl/shared build && vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:ci": "pnpm --filter @agentctl/shared build && playwright test approvals.spec.ts notification-bell-approvals.spec.ts webhooks.spec.ts webhook-deliveries.spec.ts agent-profiles.spec.ts agent-settings.spec.ts audit.spec.ts machines.spec.ts agents-list.spec.ts scheduler.spec.ts e2e/settings.spec.ts settings-push-devices.spec.ts router-config.spec.ts deployment.spec.ts discover.spec.ts conflicts.spec.ts logs-security-findings.spec.ts security-findings.spec.ts session-detail.spec.ts memory-dashboard.spec.ts session-config.spec.ts memory-index.spec.ts memory-reports.spec.ts memory-graph.spec.ts"
+    "test:e2e:ci": "pnpm --filter @agentctl/shared build && playwright test approvals.spec.ts notification-bell-approvals.spec.ts webhooks.spec.ts webhook-deliveries.spec.ts agent-profiles.spec.ts agent-settings.spec.ts audit.spec.ts machines.spec.ts agents-list.spec.ts scheduler.spec.ts e2e/settings.spec.ts settings-push-devices.spec.ts router-config.spec.ts deployment.spec.ts discover.spec.ts conflicts.spec.ts logs-security-findings.spec.ts security-findings.spec.ts session-detail.spec.ts spaces-tasks-detail.spec.ts memory-dashboard.spec.ts session-config.spec.ts memory-index.spec.ts memory-reports.spec.ts memory-graph.spec.ts"
   },
   "dependencies": {
     "@agentctl/shared": "workspace:*",
