@@ -134,8 +134,30 @@ type MockState = {
 };
 
 const AGENT_ID = 'agent-detail-e2e';
-const NOW = '2026-04-14T09:30:00.000Z';
 const SESSION_ID = 'sess-agent-detail-0001';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isoDaysAgo(
+  daysAgo: number,
+  hours: number,
+  minutes: number,
+  seconds = 0,
+  milliseconds = 0,
+): string {
+  const date = new Date(Date.now() - daysAgo * DAY_MS);
+  date.setHours(hours, minutes, seconds, milliseconds);
+  return date.toISOString();
+}
+
+function addMilliseconds(value: string, milliseconds: number): string {
+  return new Date(Date.parse(value) + milliseconds).toISOString();
+}
+
+const NOW = isoDaysAgo(0, 9, 30);
+const LATEST_RUN_STARTED_AT = isoDaysAgo(0, 9, 0);
+const LATEST_RUN_FINISHED_AT = addMilliseconds(LATEST_RUN_STARTED_AT, 92_000);
+const PREVIOUS_RUN_STARTED_AT = isoDaysAgo(1, 11, 0);
+const PREVIOUS_RUN_FINISHED_AT = addMilliseconds(PREVIOUS_RUN_STARTED_AT, 120_000);
 
 const agent: Agent = {
   id: AGENT_ID,
@@ -176,8 +198,8 @@ const runs: AgentRun[] = [
     tokensIn: 1200,
     tokensOut: 340,
     durationMs: 92_000,
-    startedAt: '2026-04-14T09:00:00.000Z',
-    finishedAt: '2026-04-14T09:01:32.000Z',
+    startedAt: LATEST_RUN_STARTED_AT,
+    finishedAt: LATEST_RUN_FINISHED_AT,
     resultSummary: {
       status: 'success',
       workCompleted: 'Agent detail route coverage rendered successfully.',
@@ -206,8 +228,8 @@ const runs: AgentRun[] = [
     tokensIn: 2000,
     tokensOut: 620,
     durationMs: 120_000,
-    startedAt: '2026-04-13T11:00:00.000Z',
-    finishedAt: '2026-04-13T11:02:00.000Z',
+    startedAt: PREVIOUS_RUN_STARTED_AT,
+    finishedAt: PREVIOUS_RUN_FINISHED_AT,
     resultSummary: {
       status: 'failure',
       workCompleted: 'Earlier audit stopped on a fixture mismatch.',
@@ -238,9 +260,9 @@ const sessions: Session[] = [
     status: 'completed',
     projectPath: agent.projectPath ?? '',
     pid: null,
-    startedAt: '2026-04-14T09:00:00.000Z',
-    lastHeartbeat: '2026-04-14T09:01:30.000Z',
-    endedAt: '2026-04-14T09:01:32.000Z',
+    startedAt: LATEST_RUN_STARTED_AT,
+    lastHeartbeat: addMilliseconds(LATEST_RUN_STARTED_AT, 90_000),
+    endedAt: LATEST_RUN_FINISHED_AT,
     metadata: { costUsd: 0.42 },
     accountId: agent.accountId,
     model: 'gpt-5.4',
