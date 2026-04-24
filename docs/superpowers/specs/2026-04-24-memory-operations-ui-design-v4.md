@@ -1,6 +1,7 @@
 # Memory Operations UI — v4 Design
 
-> **Status:** candidate for implementation.
+> **Status:** SUPERSEDED by [v5](./2026-04-24-memory-operations-ui-design-v5.md). Round-5 reviews found 10 P0s (R1) and 4 P0s (R2); v5 addresses all of them. Do not implement from this version.
+>
 > **v3 → v4 delta:** Round-4 reviews ([R1](../reviews/2026-04-24-memory-operations-ui-design-v3-strict-review.md) — 12 P0, 15 P1, 8 P2; [R2](../reviews/2026-04-24-memory-operations-ui-design-v3-strict-review-round-2.md) — 4 P0, 12 P1, 30 P2) found architectural gaps in cross-peer exclusion, enqueue atomicity, provider-snapshot persistence, drawer search rewiring, search predicate consistency, error-responder coverage, and security. v4 addresses all P0s and P1s; Appendix D is the round-4 disposition log.
 > **Companion files:**
 > - Verified facts (item 37 corrected): `docs/superpowers/reviews/2026-04-24-memory-operations-ui-v2-verified-facts.md`
