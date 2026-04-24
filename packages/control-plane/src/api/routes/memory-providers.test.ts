@@ -246,7 +246,6 @@ describe('memoryProvidersRoutes', () => {
       {
         provider: 'openai',
         model: 'text-embedding-3-small',
-        apiKeyLast4: 'pass',
         dim: 1536,
         ok: true,
         testedAt: Date.now(),

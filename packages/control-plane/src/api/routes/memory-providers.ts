@@ -100,7 +100,6 @@ type ProviderRow = {
 type RecentTestPayload = {
   provider: string;
   model: string;
-  apiKeyLast4: string;
   dim: number;
   ok: true;
   testedAt: number;
@@ -176,6 +175,8 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
     async () => {
       const rows = await listProviderRows(opts.pool);
       return { providers: rows.map(rowToProvider) };
@@ -190,6 +191,8 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
     async (request) => {
       const signingSecret = readSigningSecret();
       if (!signingSecret) {
@@ -236,7 +239,6 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       const payload: RecentTestPayload = {
         provider: body.provider,
         model: body.model,
-        apiKeyLast4: last4(body.apiKey),
         dim,
         ok: true,
         testedAt: Date.now(),
@@ -270,6 +272,8 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
     async (request, reply) => {
       const body = createProviderSchema.parse(request.body);
       if (body.active) {
@@ -314,6 +318,8 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
     async (request) => {
       const providerId = normalizeProviderId(request.params.id);
       const body = patchProviderSchema.parse(request.body);
@@ -410,6 +416,8 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
     async (request) => {
       const providerId = normalizeProviderId(request.params.id);
       const signingSecret = readSigningSecret();
@@ -457,6 +465,8 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       config: { rateLimit: providerFastifyRateLimit },
       preHandler: [app.rateLimit(providerFastifyRateLimit)],
     },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
     async (request, reply) => {
       const providerId = normalizeProviderId(request.params.id);
       await assertProviderHasNoActiveJobs(opts.pool, providerId);
@@ -692,7 +702,7 @@ function verifyRecentTestResult(
   if (Date.now() - payload.testedAt > TOKEN_TTL_MS) {
     throw invalidRecentTestResult();
   }
-  if (payload.apiKeyLast4 !== last4(expectedApiKey)) {
+  if (last4(recentTestResult.apiKey) !== last4(expectedApiKey)) {
     throw invalidRecentTestResult();
   }
   return payload;
