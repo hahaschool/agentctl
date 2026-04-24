@@ -29,6 +29,7 @@ const BATCH_SIZE = 200;
 const JSONL_MAX_FILES = 1000;
 const JSONL_SAMPLE_LIMIT = 5;
 const JSONL_MAX_FILE_BYTES = 5 * 1024 * 1024;
+const JSONL_READ_CHUNK_BYTES = 64 * 1024;
 
 const OBSERVATION_TYPE_TO_ENTITY: Record<string, EntityType> = {
   decision: 'decision',
@@ -177,12 +178,22 @@ function readBoundedJsonlFile(filePath: string): string | null {
   try {
     fd = fs.openSync(filePath, 'r');
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || stat.size > JSONL_MAX_FILE_BYTES) return null;
-    if (stat.size === 0) return '';
+    if (!stat.isFile()) return null;
 
-    const buffer = Buffer.allocUnsafe(Math.min(stat.size, JSONL_MAX_FILE_BYTES));
-    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
-    return buffer.subarray(0, bytesRead).toString('utf-8');
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    while (totalBytes <= JSONL_MAX_FILE_BYTES) {
+      const remainingBytes = JSONL_MAX_FILE_BYTES + 1 - totalBytes;
+      const buffer = Buffer.allocUnsafe(Math.min(JSONL_READ_CHUNK_BYTES, remainingBytes));
+      const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+
+      totalBytes += bytesRead;
+      if (totalBytes > JSONL_MAX_FILE_BYTES) return null;
+      chunks.push(buffer.subarray(0, bytesRead));
+    }
+
+    return Buffer.concat(chunks, totalBytes).toString('utf-8');
   } catch {
     return null;
   } finally {
