@@ -56,6 +56,20 @@ async function mockMemoryImportApis(page: Page, state: ImportMockState): Promise
     const { pathname } = url;
     const method = request.method();
 
+    if (method === 'POST' && pathname === '/api/memory/import/preview') {
+      await fulfillJson(route, {
+        ok: true,
+        preview: {
+          totalObservations: 4,
+          newToImport: 4,
+          alreadyImported: 0,
+          byType: { decision: 2, bugfix: 1, discovery: 1 },
+          sampleTitles: ['Stabilize memory import', 'Preserve rollback posture'],
+        },
+      });
+      return;
+    }
+
     if (method === 'POST' && pathname === '/api/memory/import') {
       const body = (request.postDataJSON() ?? {}) as StartImportBody;
       state.startCalls.push(body);

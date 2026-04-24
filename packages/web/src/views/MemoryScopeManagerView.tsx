@@ -16,7 +16,7 @@ import {
   User,
 } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { EmptyState } from '@/components/EmptyState';
 import {
@@ -448,6 +448,10 @@ function RenameDialog({ state, onClose }: RenameDialogProps): React.JSX.Element 
   const [name, setName] = useState(state?.currentName ?? '');
   const renameScope = useRenameScope();
 
+  useEffect(() => {
+    setName(state?.currentName ?? '');
+  }, [state]);
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
@@ -514,6 +518,10 @@ type MergeDialogProps = {
 function MergeDialog({ state, allScopes, onClose }: MergeDialogProps): React.JSX.Element {
   const mergeScopes = useMergeScopes();
   const [targetId, setTargetId] = useState(state?.targetId ?? '');
+
+  useEffect(() => {
+    setTargetId(state?.targetId ?? '');
+  }, [state]);
 
   const candidates = allScopes.filter((s) => s.id !== state?.sourceId);
 
