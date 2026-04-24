@@ -1,6 +1,7 @@
 # PR B — Backend: Factory + Providers Route + Memory Rewiring
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status:** Landed in PR #797 (`04ade063`). Keep this file as the implementation record; continue with PR C from the index.
 
 **Goal:** The embedding-client factory (`resolveEmbeddingClient`) with DB-backed provider resolution + cache. Full `/api/memory/providers` CRUD (switch-mode activation, test-before-save, signed ephemeral token). All memory runtime calls wired to use the factory. LITELLM_URL embedding fallback removed. `MEMORY_OPS_STATUS_MAP` Map extension to `controlPlaneErrorToStatus()`.
 
@@ -15,7 +16,7 @@ git worktree add .trees/pr-b -b agent/claude-1/feat/memory-ops-pr-b
 cd .trees/pr-b
 ```
 
-**Tech Stack:** Fastify plugins, Node EventEmitter, crypto HMAC (built-in `node:crypto`), Zod `.strict()`, Drizzle ORM, rate-limit plugin.
+**Tech Stack:** Fastify plugins, Node EventEmitter, crypto HMAC for signed opaque tokens, encrypted short-lived test credentials for full-key binding, Zod `.strict()`, Drizzle ORM, rate-limit plugin.
 
 ---
 
