@@ -1,3 +1,4 @@
+import { DEFAULT_NOTIFICATION_USER_ID } from '@agentctl/shared';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MobileClientError } from './api-client.js';
@@ -31,7 +32,7 @@ describe('PushRegistrationService', () => {
       projectId: 'project-123',
       token: 'ExponentPushToken[token-123]',
       payload: {
-        userId: 'mobile-operator',
+        userId: DEFAULT_NOTIFICATION_USER_ID,
         platform: 'ios',
         provider: 'expo',
         pushToken: 'ExponentPushToken[token-123]',
@@ -43,7 +44,7 @@ describe('PushRegistrationService', () => {
     expect(runtime.requestPermissionsAsync).toHaveBeenCalledOnce();
     expect(runtime.getExpoPushTokenAsync).toHaveBeenCalledWith({ projectId: 'project-123' });
     expect(upsertDevice).toHaveBeenCalledWith({
-      userId: 'mobile-operator',
+      userId: DEFAULT_NOTIFICATION_USER_ID,
       platform: 'ios',
       provider: 'expo',
       pushToken: 'ExponentPushToken[token-123]',
@@ -81,7 +82,7 @@ describe('PushRegistrationService', () => {
       status: 'deferred',
       reason: 'endpoint-unavailable',
       payload: {
-        userId: 'mobile-operator',
+        userId: DEFAULT_NOTIFICATION_USER_ID,
         platform: 'ios',
         provider: 'expo',
         pushToken: 'ExponentPushToken[token-123]',

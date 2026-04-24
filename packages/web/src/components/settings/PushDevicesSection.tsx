@@ -1,5 +1,6 @@
 'use client';
 
+import { DEFAULT_NOTIFICATION_USER_ID } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Smartphone, Trash2 } from 'lucide-react';
 import type React from 'react';
@@ -15,7 +16,7 @@ import { cn } from '@/lib/utils';
 // first-class auth context. See settings/NotificationPreferencesPanel.tsx.
 // ---------------------------------------------------------------------------
 
-const CURRENT_USER_ID = 'local';
+const CURRENT_USER_ID = DEFAULT_NOTIFICATION_USER_ID;
 
 const PLATFORM_LABELS: Record<string, string> = {
   ios: 'iOS',

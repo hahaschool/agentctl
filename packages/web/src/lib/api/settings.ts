@@ -173,8 +173,8 @@ export const settingsApi = {
     ),
 
   // Mobile push devices — iOS push notification registrations.
-  // The backend scopes devices by userId; the web UI currently uses the
-  // 'local' sentinel, matching NotificationPreferencesPanel.
+  // The backend scopes devices by userId; web and mobile share
+  // DEFAULT_NOTIFICATION_USER_ID from @agentctl/shared until auth owns it.
   listPushDevices: (userId: string, includeDisabled = false) => {
     const params = new URLSearchParams({ userId });
     if (includeDisabled) params.set('includeDisabled', 'true');
