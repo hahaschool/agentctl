@@ -1,6 +1,6 @@
 # Memory Operations UI — v3 Design (third rewrite)
 
-> **Status:** awaiting round-4 review.
+> **Status:** ⚠️ SUPERSEDED by [v4](./2026-04-24-memory-operations-ui-design-v4.md). Round-4 reviews found 12 P0 blockers; v4 addresses all of them.
 > **v2 → v3 delta:** Both round-3 reviewers flagged v2 as "close, not yet": [Reviewer 1 round 3](../reviews/2026-04-24-memory-operations-ui-design-v2-strict-review.md) (8 P0, 12 P1, 7 P2), [Reviewer 2 round 3](../reviews/2026-04-24-memory-operations-ui-design-v2-strict-review-round-2.md) (7 P0 + §A's 16 kept wins). v3 patches all 15 unique round-3 P0s without altering the architectural spine. Appendix C is the round-3 disposition log.
 > **Companion anchor files in this repo:**
 > - Reviewer checklist: `docs/superpowers/reviews/2026-04-24-memory-operations-ui-v2-reviewer-checklist.md`
