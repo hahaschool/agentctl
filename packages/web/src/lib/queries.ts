@@ -283,6 +283,26 @@ export function taskRunsQuery() {
   });
 }
 
+export function useCreateTaskGraph() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; spaceId?: string }) => api.createTaskGraph(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskGraphs });
+    },
+  });
+}
+
+export function useDeleteTaskGraph() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.deleteTaskGraph(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskGraphs });
+    },
+  });
+}
+
 export function agentsQuery() {
   return queryOptions({
     queryKey: queryKeys.agents,

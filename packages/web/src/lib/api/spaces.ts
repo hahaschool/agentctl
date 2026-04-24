@@ -233,6 +233,15 @@ export const spacesApi = {
       method: 'POST',
     }),
 
+  createTaskGraph: (data: { name: string; spaceId?: string }) =>
+    request<{ graphId: string; name: string }>('/api/task-graphs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteTaskGraph: (id: string) =>
+    request<void>(`/api/task-graphs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
   // Task runs
   listTaskRuns: () => request<TaskRun[]>('/api/task-runs'),
 
