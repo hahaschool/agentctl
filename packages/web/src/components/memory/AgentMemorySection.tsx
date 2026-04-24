@@ -4,12 +4,14 @@ import type { MemoryFact } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import type React from 'react';
+import { useMemo, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { memoryFactsQuery } from '@/lib/queries';
+import { memoryFactQuery, memoryFactsQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 import { ConfidenceBar } from './ConfidenceBar';
 import { EntityTypeBadge } from './EntityTypeBadge';
+import { FactDetailPanel } from './FactDetailPanel';
 
 // ---------------------------------------------------------------------------
 // AgentMemorySection — memory usage summary for an agent detail view
@@ -36,8 +38,26 @@ function buildTopFacts(facts: MemoryFact[]): MemoryFact[] {
 }
 
 export function AgentMemorySection({ agentId }: Props): React.JSX.Element {
+  const [selectedFactId, setSelectedFactId] = useState<string | null>(null);
   const { data, isLoading, error } = useQuery(memoryFactsQuery({ agentId }));
   const facts = data?.facts ?? [];
+  const scopeDistribution = buildScopeDistribution(facts);
+  const topFacts = buildTopFacts(facts);
+  const selectedFactFallback = useMemo(
+    () =>
+      topFacts.find((fact) => fact.id === selectedFactId) ??
+      facts.find((fact) => fact.id === selectedFactId) ??
+      null,
+    [facts, selectedFactId, topFacts],
+  );
+  const detailQuery = useQuery({
+    ...memoryFactQuery(selectedFactId ?? ''),
+    enabled: !!selectedFactId,
+  });
+  const selectedFact = detailQuery.data?.fact ?? selectedFactFallback;
+  const selectedEdges = detailQuery.data?.edges ?? [];
+  const selectedSourcePreviews = detailQuery.data?.sourcePreviews;
+  const maxScopeCount = scopeDistribution[0]?.count ?? 1;
 
   if (isLoading) {
     return (
@@ -72,87 +92,113 @@ export function AgentMemorySection({ agentId }: Props): React.JSX.Element {
     );
   }
 
-  const scopeDistribution = buildScopeDistribution(facts);
-  const topFacts = buildTopFacts(facts);
-  const maxScopeCount = scopeDistribution[0]?.count ?? 1;
-
   return (
-    <div className="space-y-5" data-testid="agent-memory-section">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold text-foreground">
-          Memory{' '}
-          <span className="font-normal text-muted-foreground">
-            ({facts.length} fact{facts.length !== 1 ? 's' : ''})
-          </span>
-        </h3>
-        <Link
-          href={`/memory/browser?agentId=${encodeURIComponent(agentId)}`}
-          className="text-xs text-primary hover:underline no-underline"
-        >
-          Browse all
-        </Link>
-      </div>
-
-      {facts.length === 0 ? (
-        <div className="text-sm text-muted-foreground py-2">
-          No facts recorded for this agent yet.
+    <>
+      <div className="space-y-5" data-testid="agent-memory-section">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-[13px] font-semibold text-foreground">
+            Memory{' '}
+            <span className="font-normal text-muted-foreground">
+              ({facts.length} fact{facts.length !== 1 ? 's' : ''})
+            </span>
+          </h3>
+          <Link
+            href={`/memory/browser?agentId=${encodeURIComponent(agentId)}`}
+            className="text-xs text-primary hover:underline no-underline"
+          >
+            Browse all
+          </Link>
         </div>
-      ) : (
-        <>
-          {/* Scope distribution */}
-          {scopeDistribution.length > 0 && (
-            <div data-testid="agent-memory-scope-distribution">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                Scope Distribution
-              </div>
-              <div className="space-y-1.5">
-                {scopeDistribution.map(({ scope, count }) => (
-                  <div key={scope} className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono text-muted-foreground w-32 truncate shrink-0">
-                      {scope}
-                    </span>
-                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary/60 rounded-full transition-[width]"
-                        style={{ width: `${Math.round((count / maxScopeCount) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-[11px] text-muted-foreground tabular-nums w-6 text-right">
-                      {count}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Top facts */}
-          {topFacts.length > 0 && (
-            <div data-testid="agent-memory-top-facts">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                Top Facts
+        {facts.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-2">
+            No facts recorded for this agent yet.
+          </div>
+        ) : (
+          <>
+            {/* Scope distribution */}
+            {scopeDistribution.length > 0 && (
+              <div data-testid="agent-memory-scope-distribution">
+                <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Scope Distribution
+                </div>
+                <div className="space-y-1.5">
+                  {scopeDistribution.map(({ scope, count }) => (
+                    <div key={scope} className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono text-muted-foreground w-32 truncate shrink-0">
+                        {scope}
+                      </span>
+                      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary/60 rounded-full transition-[width]"
+                          style={{ width: `${Math.round((count / maxScopeCount) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-[11px] text-muted-foreground tabular-nums w-6 text-right">
+                        {count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2">
-                {topFacts.map((fact) => (
-                  <AgentFactRow key={fact.id} fact={fact} />
-                ))}
+            )}
+
+            {/* Top facts */}
+            {topFacts.length > 0 && (
+              <div data-testid="agent-memory-top-facts">
+                <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                  Top Facts
+                </div>
+                <div className="space-y-2">
+                  {topFacts.map((fact) => (
+                    <AgentFactRow
+                      key={fact.id}
+                      fact={fact}
+                      selected={fact.id === selectedFactId}
+                      onSelect={() => setSelectedFactId(fact.id)}
+                    />
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </>
-      )}
-    </div>
+            )}
+          </>
+        )}
+      </div>
+      <FactDetailPanel
+        fact={selectedFact}
+        edges={selectedEdges}
+        sourcePreviews={selectedSourcePreviews}
+        open={selectedFactId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedFactId(null);
+          }
+        }}
+      />
+    </>
   );
 }
 
-function AgentFactRow({ fact }: { fact: MemoryFact }): React.JSX.Element {
+function AgentFactRow({
+  fact,
+  selected,
+  onSelect,
+}: {
+  fact: MemoryFact;
+  selected: boolean;
+  onSelect: () => void;
+}): React.JSX.Element {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onSelect}
       className={cn(
-        'rounded-md border border-border/50 bg-card/50 px-3 py-2 space-y-1.5',
+        'w-full rounded-md border border-border/50 bg-card/50 px-3 py-2 space-y-1.5 text-left',
         'transition-colors hover:border-border/80',
+        selected && 'border-primary/60 bg-accent/10',
       )}
+      data-selected={selected || undefined}
     >
       <div className="flex flex-wrap items-center gap-1.5">
         <EntityTypeBadge entityType={fact.entity_type} className="text-[10px] py-0" />
@@ -164,6 +210,6 @@ function AgentFactRow({ fact }: { fact: MemoryFact }): React.JSX.Element {
       </div>
       <p className="text-xs text-foreground leading-4 line-clamp-2">{fact.content}</p>
       <ConfidenceBar confidence={fact.confidence} className="mt-1" />
-    </div>
+    </button>
   );
 }

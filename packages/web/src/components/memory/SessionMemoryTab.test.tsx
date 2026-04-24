@@ -1,18 +1,20 @@
 import type { MemoryFact } from '@agentctl/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockMemoryFactsQuery } = vi.hoisted(() => ({
+const { mockMemoryFactQuery, mockMemoryFactsQuery } = vi.hoisted(() => ({
+  mockMemoryFactQuery: vi.fn(),
   mockMemoryFactsQuery: vi.fn(),
 }));
 
 vi.mock('@/lib/queries', () => ({
   memoryFactsQuery: (params: unknown) => mockMemoryFactsQuery(params),
+  memoryFactQuery: (id: string) => mockMemoryFactQuery(id),
 }));
 
 vi.mock('@/components/ui/skeleton', () => ({
@@ -89,7 +91,22 @@ function renderTab(sessionId = 'ses-123') {
 // ---------------------------------------------------------------------------
 
 describe('SessionMemoryTab', () => {
+  function mockDetailQueryResult() {
+    mockMemoryFactQuery.mockImplementation((factId: string) => ({
+      queryKey: ['memory', 'fact', factId],
+      queryFn: () =>
+        Promise.resolve({
+          ok: true,
+          fact: createFact({ id: factId || 'detail-fallback' }),
+          edges: [],
+          sourcePreviews: [],
+        }),
+      enabled: Boolean(factId),
+    }));
+  }
+
   it('shows loading skeletons while fetching', () => {
+    mockDetailQueryResult();
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { sessionId: 'ses-123' }],
       queryFn: () => new Promise(() => {}),
@@ -101,6 +118,7 @@ describe('SessionMemoryTab', () => {
   });
 
   it('renders facts when data is loaded', async () => {
+    mockDetailQueryResult();
     const facts = [
       createFact({ id: 'f1', content: 'First decision fact' }),
       createFact({ id: 'f2', content: 'Second principle fact', entity_type: 'principle' }),
@@ -121,6 +139,7 @@ describe('SessionMemoryTab', () => {
   });
 
   it('shows empty state when no facts exist', async () => {
+    mockDetailQueryResult();
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { sessionId: 'ses-123' }],
       queryFn: () => Promise.resolve({ ok: true, facts: [], total: 0 }),
@@ -135,6 +154,7 @@ describe('SessionMemoryTab', () => {
   });
 
   it('shows error message on fetch failure', async () => {
+    mockDetailQueryResult();
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { sessionId: 'ses-123' }],
       queryFn: () => Promise.reject(new Error('Network error')),
@@ -149,6 +169,7 @@ describe('SessionMemoryTab', () => {
   });
 
   it('passes sessionId to memoryFactsQuery', () => {
+    mockDetailQueryResult();
     const sessionId = 'ses-xyz-999';
     mockMemoryFactsQuery.mockReturnValue({
       queryKey: ['memory', 'facts', { sessionId }],
@@ -158,5 +179,52 @@ describe('SessionMemoryTab', () => {
     renderTab(sessionId);
 
     expect(mockMemoryFactsQuery).toHaveBeenCalledWith({ sessionId });
+  });
+
+  it('opens the fact detail sheet with drawer evidence when a fact is selected', async () => {
+    const fact = createFact({ id: 'f1', content: 'First decision fact' });
+    mockMemoryFactsQuery.mockReturnValue({
+      queryKey: ['memory', 'facts', { sessionId: 'ses-123' }],
+      queryFn: () => Promise.resolve({ ok: true, facts: [fact], total: 1 }),
+    });
+    mockMemoryFactQuery.mockImplementation((factId: string) => ({
+      queryKey: ['memory', 'fact', factId],
+      queryFn: () =>
+        Promise.resolve({
+          ok: true,
+          fact,
+          edges: [],
+          sourcePreviews: [
+            {
+              drawer_id: 'drawer-1',
+              drawer_scope: 'project:agentctl',
+              drawer_topic: 'release-checklist',
+              drawer_chunk_index: 0,
+              drawer_source_type: 'session-jsonl',
+              drawer_source_id: 'session-1',
+              start_offset: 0,
+              end_offset: 36,
+              quote_preview: 'Keep the rollout note concise and source-linked.',
+              status: 'available',
+              created_at: '2026-03-11T00:00:00.000Z',
+            },
+          ],
+        }),
+      enabled: Boolean(factId),
+    }));
+
+    renderTab();
+
+    const { waitFor } = await import('@testing-library/react');
+    await waitFor(() => {
+      expect(screen.getByText('First decision fact')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /First decision fact/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Evidence (1)')).toBeDefined();
+    });
+    expect(screen.getByText('Keep the rollout note concise and source-linked.')).toBeDefined();
   });
 });

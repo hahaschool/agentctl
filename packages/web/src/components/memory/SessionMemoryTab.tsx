@@ -3,11 +3,13 @@
 import type { MemoryFact } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
 import type React from 'react';
+import { useMemo, useState } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { memoryFactsQuery } from '@/lib/queries';
+import { memoryFactQuery, memoryFactsQuery } from '@/lib/queries';
 import { ConfidenceBar } from './ConfidenceBar';
 import { EntityTypeBadge } from './EntityTypeBadge';
+import { FactDetailPanel } from './FactDetailPanel';
 
 // ---------------------------------------------------------------------------
 // SessionMemoryTab — memory facts associated with a session
@@ -18,8 +20,20 @@ type Props = {
 };
 
 export function SessionMemoryTab({ sessionId }: Props): React.JSX.Element {
+  const [selectedFactId, setSelectedFactId] = useState<string | null>(null);
   const { data, isLoading, error } = useQuery(memoryFactsQuery({ sessionId }));
   const facts = data?.facts ?? [];
+  const selectedFactFallback = useMemo(
+    () => facts.find((fact) => fact.id === selectedFactId) ?? null,
+    [facts, selectedFactId],
+  );
+  const detailQuery = useQuery({
+    ...memoryFactQuery(selectedFactId ?? ''),
+    enabled: !!selectedFactId,
+  });
+  const selectedFact = detailQuery.data?.fact ?? selectedFactFallback;
+  const selectedEdges = detailQuery.data?.edges ?? [];
+  const selectedSourcePreviews = detailQuery.data?.sourcePreviews;
 
   if (isLoading) {
     return (
@@ -51,23 +65,54 @@ export function SessionMemoryTab({ sessionId }: Props): React.JSX.Element {
   }
 
   return (
-    <div className="space-y-2" data-testid="session-memory-facts">
-      {facts.map((fact) => (
-        <FactRow key={fact.id} fact={fact} />
-      ))}
-    </div>
+    <>
+      <div className="space-y-2" data-testid="session-memory-facts">
+        {facts.map((fact) => (
+          <FactRow
+            key={fact.id}
+            fact={fact}
+            selected={fact.id === selectedFactId}
+            onSelect={() => setSelectedFactId(fact.id)}
+          />
+        ))}
+      </div>
+      <FactDetailPanel
+        fact={selectedFact}
+        edges={selectedEdges}
+        sourcePreviews={selectedSourcePreviews}
+        open={selectedFactId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedFactId(null);
+          }
+        }}
+      />
+    </>
   );
 }
 
-function FactRow({ fact }: { fact: MemoryFact }): React.JSX.Element {
+function FactRow({
+  fact,
+  selected,
+  onSelect,
+}: {
+  fact: MemoryFact;
+  selected: boolean;
+  onSelect: () => void;
+}): React.JSX.Element {
   return (
-    <div className="rounded-md border border-border/50 bg-card/50 px-3 py-2 space-y-1.5">
+    <button
+      type="button"
+      onClick={onSelect}
+      className="w-full rounded-md border border-border/50 bg-card/50 px-3 py-2 text-left transition-colors hover:border-border/80 hover:bg-card data-[selected=true]:border-primary/60 data-[selected=true]:bg-accent/10"
+      data-selected={selected || undefined}
+    >
       <div className="flex flex-wrap items-center gap-1.5">
         <EntityTypeBadge entityType={fact.entity_type} className="text-[10px] py-0" />
         <span className="text-[10px] font-mono text-muted-foreground">{fact.scope}</span>
       </div>
       <p className="text-xs text-foreground leading-4 line-clamp-3">{fact.content}</p>
       <ConfidenceBar confidence={fact.confidence} className="mt-1" />
-    </div>
+    </button>
   );
 }
