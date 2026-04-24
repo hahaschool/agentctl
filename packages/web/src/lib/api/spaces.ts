@@ -66,6 +66,9 @@ export type ResolvedContextRefResponse = {
   hint?: string;
 };
 
+// Temporary local operator identity until auth owns space creation.
+export const DEFAULT_SPACE_CREATED_BY = 'local';
+
 export const spacesApi = {
   // ---------------------------------------------------------------------------
   // Collaboration Spaces
@@ -78,6 +81,7 @@ export const spacesApi = {
     description?: string;
     type?: SpaceType;
     visibility?: SpaceVisibility;
+    createdBy: string;
   }) =>
     request<Space>('/api/spaces', {
       method: 'POST',
