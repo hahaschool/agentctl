@@ -13,6 +13,13 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ConsolidationAction } from '@/components/memory/ConsolidationCard';
 import { ConsolidationCard } from '@/components/memory/ConsolidationCard';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { consolidationQuery, memoryFactsQuery, useResolveConsolidationItem } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +29,14 @@ import { cn } from '@/lib/utils';
 
 type CategoryFilter = 'all' | ConsolidationItemType;
 type SeverityOrder = Record<ConsolidationSeverity, number>;
+
+/** State for the "Edit before accept" dialog. */
+type EditDialogState = {
+  /** ID of the consolidation item being accepted. */
+  itemId: string;
+  /** Editable merged fact text. */
+  content: string;
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -153,11 +168,82 @@ function QueueStats({ items }: { items: readonly ConsolidationItem[] }): React.J
 }
 
 // ---------------------------------------------------------------------------
+// Edit-before-accept dialog
+// ---------------------------------------------------------------------------
+
+function EditResolutionDialog({
+  open,
+  content,
+  isPending,
+  onContentChange,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  content: string;
+  isPending: boolean;
+  onContentChange: (value: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onCancel();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit Resolution Before Accepting</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-2">
+          <label htmlFor="merged-fact-content" className="text-sm font-medium text-foreground">
+            Merged fact content
+          </label>
+          <textarea
+            id="merged-fact-content"
+            value={content}
+            onChange={(e) => onContentChange(e.target.value)}
+            className={cn(
+              'w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2',
+              'text-sm leading-5 text-foreground placeholder:text-muted-foreground',
+              'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+              'resize-y disabled:cursor-not-allowed disabled:opacity-50',
+            )}
+            placeholder="Enter the merged fact content…"
+            disabled={isPending}
+            aria-label="Merged fact content"
+          />
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            onClick={onConfirm}
+            disabled={isPending || content.trim().length === 0}
+            aria-label="Confirm accept"
+          >
+            {isPending ? 'Saving…' : 'Confirm Accept'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main view
 // ---------------------------------------------------------------------------
 
 export function ConsolidationBoardView(): React.JSX.Element {
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+  const [editDialog, setEditDialog] = useState<EditDialogState | null>(null);
 
   const consolidationResult = useQuery(consolidationQuery({ status: 'pending', limit: 100 }));
   const allItems: readonly ConsolidationItem[] = consolidationResult.data?.items ?? [];
@@ -204,15 +290,75 @@ export function ConsolidationBoardView(): React.JSX.Element {
 
   const resolveItem = useResolveConsolidationItem();
 
+  /**
+   * Build the initial merged text to pre-populate the dialog.
+   * For near-duplicate items, concatenate the content of the two facts
+   * with a separator so the user can see and edit both.
+   * For other types, default to the suggestion text.
+   */
+  const buildInitialContent = useCallback(
+    (item: ConsolidationItem): string => {
+      const facts = item.factIds
+        .map((fid) => factsById.get(fid))
+        .filter((f): f is MemoryFact => f !== undefined);
+
+      if (item.type === 'near-duplicate' && facts.length >= 2) {
+        return facts.map((f) => f.content).join('\n\n');
+      }
+
+      const firstFact = facts[0];
+      return firstFact ? firstFact.content : item.suggestion;
+    },
+    [factsById],
+  );
+
   const handleAction = useCallback(
     (id: string, action: ConsolidationAction) => {
+      if (action === 'accept') {
+        // Find the item to get its initial content for the dialog
+        const item = allItems.find((i) => i.id === id);
+        if (item) {
+          setEditDialog({ itemId: id, content: buildInitialContent(item) });
+          return;
+        }
+      }
       resolveItem.mutate({ id, action });
     },
-    [resolveItem],
+    [resolveItem, allItems, buildInitialContent],
   );
+
+  const handleEditConfirm = useCallback(() => {
+    if (!editDialog) return;
+    resolveItem.mutate(
+      { id: editDialog.itemId, action: 'accept', customContent: editDialog.content },
+      {
+        onSettled: () => setEditDialog(null),
+      },
+    );
+  }, [resolveItem, editDialog]);
+
+  const handleEditCancel = useCallback(() => {
+    setEditDialog(null);
+  }, []);
+
+  const handleEditContentChange = useCallback((value: string) => {
+    setEditDialog((prev) => (prev ? { ...prev, content: value } : null));
+  }, []);
+
+  const isDialogPending = resolveItem.isPending && resolveItem.variables?.id === editDialog?.itemId;
 
   return (
     <div className="flex h-full flex-col">
+      {/* Edit-before-accept dialog */}
+      <EditResolutionDialog
+        open={editDialog !== null}
+        content={editDialog?.content ?? ''}
+        isPending={isDialogPending}
+        onContentChange={handleEditContentChange}
+        onConfirm={handleEditConfirm}
+        onCancel={handleEditCancel}
+      />
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2">
         {/* Category filter tabs */}

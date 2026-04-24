@@ -524,6 +524,72 @@ describe('memory-consolidation routes', () => {
       expect(pool.query).not.toHaveBeenCalled();
     });
 
+    it('updates survivor fact content when customContent is provided with a near-duplicate merge', async () => {
+      pool.query
+        // First call: nearDuplicatesQuery (to resolve merge target)
+        .mockResolvedValueOnce({ rows: [makeNearDuplicateRow()], rowCount: 1 })
+        // Second call: UPDATE memory_facts SET content = $2 (customContent)
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+        // Third call: copyFactSourceSpansToFact — SELECT FROM memory_fact_sources
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        // Fourth call: invalidate duplicate
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/consolidation/near-duplicate-fact-1-fact-2/action',
+        payload: {
+          action: 'accept',
+          status: 'accepted',
+          customContent: 'Hand-edited merged content',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.ok).toBe(true);
+
+      // The UPDATE for customContent must be the second query call (after the
+      // nearDuplicatesQuery lookup).
+      const updateCall = pool.query.mock.calls[1];
+      expect(updateCall?.[0]).toContain('UPDATE memory_facts SET content = $2');
+      expect(updateCall?.[1]).toEqual(['fact-1', 'Hand-edited merged content']);
+    });
+
+    it('skips the content UPDATE step when customContent is absent', async () => {
+      pool.query
+        .mockResolvedValueOnce({ rows: [makeNearDuplicateRow()], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/consolidation/near-duplicate-fact-1-fact-2/action',
+        payload: { action: 'accept', status: 'accepted' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      // Only 3 queries: nearDuplicatesQuery + copySourceSpans + invalidate
+      // (no customContent UPDATE)
+      expect(pool.query).toHaveBeenCalledTimes(3);
+      const queryTexts = pool.query.mock.calls.map((c: unknown[]) => c[0] as string);
+      expect(queryTexts.some((q) => q.includes('SET content = $2'))).toBe(false);
+    });
+
+    it('rejects customContent exceeding 10000 characters', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/consolidation/near-duplicate-fact-1-fact-2/action',
+        payload: {
+          action: 'accept',
+          status: 'accepted',
+          customContent: 'x'.repeat(10_001),
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
     it('skips a consolidation item with action=skip and status=skipped', async () => {
       const res = await app.inject({
         method: 'POST',

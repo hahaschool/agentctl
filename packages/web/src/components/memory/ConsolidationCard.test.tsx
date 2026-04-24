@@ -109,7 +109,7 @@ describe('ConsolidationCard', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDefined();
   });
 
-  it('does not render an Edit button (backend does not yet support edit)', () => {
+  it('does not render an inline Edit button (editing is handled via a dialog in the parent view)', () => {
     const onAction = vi.fn();
     render(<ConsolidationCard item={makeItem()} facts={[]} onAction={onAction} />);
 

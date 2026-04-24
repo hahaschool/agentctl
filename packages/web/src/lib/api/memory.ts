@@ -400,6 +400,8 @@ export const memoryApi = {
     body: {
       action: string;
       status: ConsolidationStatus;
+      /** Hand-edited merged content to use as the survivor fact's content. */
+      customContent?: string;
     },
   ) =>
     request<{ ok: boolean }>(`/api/memory/consolidation/${id}/action`, {
