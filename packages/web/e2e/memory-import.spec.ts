@@ -167,7 +167,7 @@ async function mockMemoryImportApis(page: Page, state: ImportMockState): Promise
 }
 
 test.describe('Memory import page', () => {
-  test('keeps JSONL history import disabled until it is wired', async ({ page }) => {
+  test('previews and imports JSONL history', async ({ page }) => {
     const state: ImportMockState = {
       job: makeJob(),
       startCalls: [],
@@ -182,10 +182,35 @@ test.describe('Memory import page', () => {
     await page.getByTestId('source-jsonl-history').click();
     await page.getByTestId('db-path-input').fill('~/.claude/projects/agentctl');
 
-    await expect(page.getByText(/JSONL history import is not wired yet/i)).toBeVisible();
-    await expect(page.getByTestId('step1-next')).toBeDisabled();
-    await expect(page.getByRole('heading', { name: 'Preview field mapping' })).toHaveCount(0);
-    expect(state.startCalls).toEqual([]);
+    await expect(page.getByTestId('step1-next')).toBeEnabled();
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/memory/import/preview') &&
+          response.request().method() === 'POST',
+      ),
+      page.getByTestId('step1-next').click(),
+    ]);
+
+    await expect(page.getByRole('heading', { name: 'Preview import' })).toBeVisible();
+    await expect(page.getByText('Stabilize memory import')).toBeVisible();
+    await expect(page.getByText('Import 4 observations')).toBeVisible();
+
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/memory/import') &&
+          response.request().method() === 'POST',
+      ),
+      page.getByTestId('step2-start').click(),
+    ]);
+
+    await expect(page.getByRole('heading', { name: 'Import complete' })).toBeVisible();
+    await expect(page.getByTestId('imported-count')).toHaveText('42');
+    await expect(page.getByTestId('skipped-count')).toHaveText('3');
+    expect(state.startCalls).toEqual([
+      { source: 'jsonl-history', dbPath: '~/.claude/projects/agentctl' },
+    ]);
   });
 
   test('cancels a running import job from the progress step', async ({ page }) => {

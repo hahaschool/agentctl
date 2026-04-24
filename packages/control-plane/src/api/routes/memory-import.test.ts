@@ -113,7 +113,8 @@ describe('memoryImportRoutes', () => {
     });
 
     it('returns 400 when jsonl-history path is a file, not a directory', async () => {
-      const tmpFile = path.join(os.tmpdir(), `mem-import-file-${Date.now()}.jsonl`);
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-import-file-'));
+      const tmpFile = path.join(dir, 'source.jsonl');
       fs.writeFileSync(tmpFile, '{"type":"human"}\n');
       try {
         const res = await app.inject({
@@ -126,7 +127,7 @@ describe('memoryImportRoutes', () => {
         expect(body.ok).toBe(false);
         expect(body.error).toContain('not a directory');
       } finally {
-        fs.unlinkSync(tmpFile);
+        removeTempDir(dir);
       }
     });
 
