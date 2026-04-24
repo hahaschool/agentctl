@@ -32,6 +32,7 @@ import { MemoryStore } from './memory/memory-store.js';
 import { JobEventsRepository } from './memory/ops/job-events-repository.js';
 import { JobsRepository } from './memory/ops/jobs-repository.js';
 import { getMemoryOpsQueue } from './memory/ops/queue.js';
+import { createMemoryOpsHandlers } from './memory/ops/worker.js';
 import { createMemoryOpsWorkerRuntime } from './memory/ops/worker-runtime.js';
 import { MeshConfigProvider } from './mesh/mesh-config-provider.js';
 import { DbAgentRegistry } from './registry/db-registry.js';
@@ -386,6 +387,7 @@ async function main(): Promise<void> {
   let memoryStore: MemoryStore | undefined;
   let memoryInjector: MemoryInjector | undefined;
   let embeddingClientResolver: EmbeddingClientResolver | undefined;
+  const credentialEncryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY ?? '';
 
   // Raw PG pool — available whenever db is configured, even without LITELLM_URL.
   // Used by import routes that don't need embeddings.
@@ -397,13 +399,12 @@ async function main(): Promise<void> {
 
   if (MEMORY_BACKEND === 'postgres' || (MEMORY_BACKEND === 'auto' && canUsePostgresMemory)) {
     if (db && pgPool) {
-      const encryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY ?? '';
-      if (encryptionKey) {
+      if (credentialEncryptionKey) {
         embeddingClientResolver = () =>
           resolveEmbeddingClient({
             pool: pgPool,
             db,
-            encryptionKey,
+            encryptionKey: credentialEncryptionKey,
             logger: logger.child({ component: 'embedding-client-factory' }),
           });
       } else {
@@ -545,11 +546,20 @@ async function main(): Promise<void> {
       const jobsRepository = new JobsRepository(pgPool);
       const eventsRepository = new JobEventsRepository(pgPool);
       const reconcile = await jobsRepository.bootReconcile(machineId, memoryOpsQueue);
+      const workerLogger = logger.child({ component: 'memory-ops-worker' });
       memoryOpsWorker = createMemoryOpsWorkerRuntime({
         connection: redisConnection,
         jobsRepository,
         eventsRepository,
-        logger: logger.child({ component: 'memory-ops-worker' }),
+        logger: workerLogger,
+        handlers: createMemoryOpsHandlers({
+          pool: pgPool,
+          db,
+          encryptionKey: credentialEncryptionKey,
+          jobsRepository,
+          eventsRepository,
+          logger: workerLogger,
+        }),
       });
       logger.info({ reconcile }, 'Memory operations queue and worker runtime started');
     } catch (err) {
