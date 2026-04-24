@@ -313,10 +313,12 @@ if (embeddingClient) {
   - Other: shows `${first4}...${last4}`
 
 ## 37. settings.ts & api_accounts Reading
-**NOT FOUND**
-- File: `packages/control-plane/src/api/routes/settings.ts` searched
-- No explicit api_accounts reads found
-- **Caller must verify manually if settings.ts interacts with credentials**
+**CORRECTED 2026-04-24 (original entry wrong): settings.ts DOES read api_accounts without a kind filter.**
+- File: `packages/control-plane/src/api/routes/settings.ts:81-83` (verified by live grep)
+- Code: `db.select({ id: apiAccounts.id }).from(apiAccounts).where(eq(apiAccounts.id, defaultAccountId))`
+- **An embedding-kind row can be bound as `default_account_id` → cascades to runtime dispatch**
+- PR A MUST add `AND credential_kind='runtime'` to this WHERE clause
+- Similar risk in `agents.ts:333-419` (PATCH `/api/agents/:agentId` sets arbitrary `accountId` without any api_accounts validation at all)
 
 ## 38. project_account_mappings Table & Kind Filter
 **VERIFIED: Exists, no kind filter yet**
