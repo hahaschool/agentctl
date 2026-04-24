@@ -27,7 +27,13 @@ import type { SessionStreamEvent } from '../hooks/use-session-stream';
 import { useSessionStream } from '../hooks/use-session-stream';
 import { api } from '../lib/api';
 import { formatCost, formatDurationMs, formatNumber } from '../lib/format-utils';
-import { queryKeys, sessionContentQuery, sessionQuery } from '../lib/queries';
+import {
+  queryKeys,
+  runSummaryQuery,
+  sessionContentQuery,
+  sessionDispatchConfigQuery,
+  sessionQuery,
+} from '../lib/queries';
 import { exportSessionAsJson, exportSessionAsMarkdown } from '../lib/session-export';
 
 // ---------------------------------------------------------------------------
@@ -107,11 +113,7 @@ export function SessionDetailView(): React.JSX.Element {
       (s?.status === 'active' || s?.status === 'starting') && autoRefresh ? 2_000 : false,
     refetchOnWindowFocus: true,
   });
-
-  const refetchAll = useCallback(() => {
-    void session.refetch();
-    void content.refetch();
-  }, [session.refetch, content.refetch]);
+  const dispatchConfig = useQuery(sessionDispatchConfigQuery(sessionId));
 
   // SSE streaming — connect when session is active for real-time updates
   const isActive = s?.status === 'active' || s?.status === 'starting';
@@ -230,6 +232,32 @@ export function SessionDetailView(): React.JSX.Element {
 
   // Primary tab — session content vs memory facts
   const [primaryTab, setPrimaryTab] = useState<'session' | 'memory' | 'config'>('session');
+
+  const latestRunId = dispatchConfig.data?.runId ?? '';
+  const persistedRunSummary = useQuery({
+    ...runSummaryQuery(latestRunId),
+    enabled: primaryTab === 'session' && !stream.latestExecutionSummary && !!latestRunId,
+    retry: false,
+  });
+  const executionSummary = stream.latestExecutionSummary ?? persistedRunSummary.data?.summary;
+  const executionSummarySource = stream.latestExecutionSummary
+    ? undefined
+    : persistedRunSummary.data?.source;
+
+  const refetchAll = useCallback(() => {
+    void session.refetch();
+    void content.refetch();
+    void dispatchConfig.refetch();
+    if (latestRunId) {
+      void persistedRunSummary.refetch();
+    }
+  }, [
+    session.refetch,
+    content.refetch,
+    dispatchConfig.refetch,
+    persistedRunSummary.refetch,
+    latestRunId,
+  ]);
 
   // Escape handler ref — SessionHeader populates this to close its menus
   const escapeRef = useRef<() => void>(() => {});
@@ -356,9 +384,9 @@ export function SessionDetailView(): React.JSX.Element {
         </div>
       )}
 
-      {primaryTab === 'session' && stream.latestExecutionSummary && (
+      {primaryTab === 'session' && executionSummary && (
         <div className="px-5 pt-4 shrink-0">
-          <ExecutionSummaryCard summary={stream.latestExecutionSummary} />
+          <ExecutionSummaryCard summary={executionSummary} source={executionSummarySource} />
         </div>
       )}
 
@@ -558,7 +586,13 @@ function ErrorState({ error }: { error: string }): React.JSX.Element {
   );
 }
 
-function ExecutionSummaryCard({ summary }: { summary: ExecutionSummary }): React.JSX.Element {
+function ExecutionSummaryCard({
+  summary,
+  source,
+}: {
+  summary: ExecutionSummary;
+  source?: 'stored' | 'fallback';
+}): React.JSX.Element {
   return (
     <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -567,6 +601,7 @@ function ExecutionSummaryCard({ summary }: { summary: ExecutionSummary }): React
           <div className="text-xs text-muted-foreground">
             {summary.commandsRun} tool call{summary.commandsRun === 1 ? '' : 's'} ·{' '}
             {formatCost(summary.costUsd)} · {formatDurationMs(summary.durationMs)}
+            {source === 'fallback' ? ' · replay-derived' : ''}
           </div>
         </div>
         <StatusBadge status={summary.status} />

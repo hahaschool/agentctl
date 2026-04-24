@@ -1,12 +1,15 @@
 import { expect, type Page, type Route, test } from '@playwright/test';
-import type { MemoryFact } from '@agentctl/shared';
+import type { ExecutionSummary, MemoryFact } from '@agentctl/shared';
 
 const SESSION_ID = 'session-detail-e2e';
 const CLAUDE_SESSION_ID = 'claude-session-detail-e2e';
+const RUN_ID = 'run-session-detail-e2e';
 const MACHINE_ID = 'machine-dev-1';
 const PROJECT_PATH = '/Users/hahaschool/agentctl';
 const NOW = '2026-04-15T09:00:00.000Z';
 const ASSISTANT_MESSAGE = 'Route-level session detail smoke renders assistant output.';
+const RUN_EXECUTIVE_SUMMARY =
+  'Replay-derived session detail summary remains visible after refresh.';
 const MEMORY_FACT = 'Session detail E2E should keep the route smoke thin and backend-independent.';
 
 type ApiAccount = {
@@ -73,6 +76,25 @@ const fact: MemoryFact = {
   tags: ['e2e', 'sessions'],
 };
 
+const runSummary: ExecutionSummary = {
+  status: 'success',
+  workCompleted: RUN_EXECUTIVE_SUMMARY,
+  executiveSummary: RUN_EXECUTIVE_SUMMARY,
+  keyFindings: ['Persisted summaries backfill the live SSE-only card.'],
+  filesChanged: [],
+  commandsRun: 3,
+  toolUsageBreakdown: { Read: 1, Bash: 1, Edit: 1 },
+  followUps: [],
+  branchName: null,
+  prUrl: null,
+  tokensUsed: {
+    input: 1200,
+    output: 340,
+  },
+  costUsd: 0.125,
+  durationMs: 600_000,
+};
+
 async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
   await route.fulfill({
     status,
@@ -104,6 +126,24 @@ async function mockSessionDetailApis(page: Page): Promise<{
 
     if (method === 'GET' && pathname === `/api/sessions/${SESSION_ID}`) {
       await fulfillJson(route, session);
+      return;
+    }
+
+    if (method === 'GET' && pathname === `/api/sessions/${SESSION_ID}/dispatch-config`) {
+      await fulfillJson(route, {
+        runId: RUN_ID,
+        runCount: 1,
+        config: null,
+      });
+      return;
+    }
+
+    if (method === 'GET' && pathname === `/api/runs/${RUN_ID}/summary`) {
+      await fulfillJson(route, {
+        runId: RUN_ID,
+        source: 'fallback',
+        summary: runSummary,
+      });
       return;
     }
 
@@ -202,6 +242,8 @@ test.describe('Session detail route smoke', () => {
     await expect(page.getByLabel('ended: Session ended')).toBeVisible();
     await expect(page.getByText('Session Detail Auditor')).toBeVisible();
     await expect(page.getByText(ASSISTANT_MESSAGE)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(RUN_EXECUTIVE_SUMMARY)).toBeVisible();
+    await expect(page.getByText(/replay-derived/i)).toBeVisible();
     await expect(page.getByText('2 messages')).toBeVisible();
     await expect(page.getByText('gpt-5.4').first()).toBeVisible();
 
