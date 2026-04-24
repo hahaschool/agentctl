@@ -46,6 +46,37 @@ type NotificationPreferenceMockState = {
   preferences: NotificationPreference[];
   setCalls: PreferenceBody[];
   deleteCalls: string[];
+  machines: MockMachine[];
+  runtimeConfigDriftItems: RuntimeConfigDriftItem[];
+  refreshRuntimeConfigCalls: Array<{ machineId?: string }>;
+  onRefreshRuntimeConfig?: (body: { machineId?: string }) => void;
+};
+
+type MockMachine = {
+  id: string;
+  hostname: string;
+  tailscaleIp: string;
+  os: string;
+  arch: string;
+  status: 'online' | 'offline' | 'degraded';
+  lastHeartbeat: string | null;
+  createdAt: string;
+};
+
+type RuntimeConfigDriftItem = {
+  id: string;
+  machineId: string;
+  runtime: 'claude-code' | 'codex';
+  isInstalled: boolean;
+  isAuthenticated: boolean;
+  syncStatus: string;
+  configVersion: number;
+  configHash: string;
+  metadata: { localCredentialCount: number; mirroredCredentialCount: number };
+  lastConfigAppliedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  drifted: boolean;
 };
 
 async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
@@ -87,11 +118,17 @@ function getSectionNavLink(page: Page, sectionId: string) {
 
 function makePreferenceState(
   preferences: NotificationPreference[] = [],
+  overrides: Partial<
+    Pick<NotificationPreferenceMockState, 'machines' | 'runtimeConfigDriftItems'>
+  > = {},
 ): NotificationPreferenceMockState {
   return {
     preferences,
     setCalls: [],
     deleteCalls: [],
+    machines: overrides.machines ?? [],
+    runtimeConfigDriftItems: overrides.runtimeConfigDriftItems ?? [],
+    refreshRuntimeConfigCalls: [],
   };
 }
 
@@ -159,7 +196,21 @@ async function mockSettingsApis(
       return;
     }
     if (method === 'GET' && pathname === '/api/runtime-config/drift') {
-      await fulfillJson(route, { items: [] });
+      await fulfillJson(route, {
+        activeVersion: 1,
+        activeHash: 'sha256:managed-runtime-config',
+        items: state.runtimeConfigDriftItems,
+      });
+      return;
+    }
+    if (method === 'POST' && pathname === '/api/runtime-config/refresh') {
+      const body = (request.postDataJSON() ?? {}) as { machineId?: string };
+      state.refreshRuntimeConfigCalls.push(body);
+      state.onRefreshRuntimeConfig?.(body);
+      await fulfillJson(route, {
+        refreshed: state.runtimeConfigDriftItems.length,
+        items: state.runtimeConfigDriftItems,
+      });
       return;
     }
     if (method === 'GET' && pathname === '/api/settings/accounts') {
@@ -175,7 +226,7 @@ async function mockSettingsApis(
       return;
     }
     if (method === 'GET' && pathname === '/api/agents') {
-      await fulfillJson(route, []);
+      await fulfillJson(route, state.machines);
       return;
     }
 
@@ -308,5 +359,107 @@ test.describe('Settings control center', () => {
     await expect(
       notificationsSection.getByText('No preferences configured. Add one to start receiving notifications.'),
     ).toBeVisible();
+  });
+
+  test('refreshes worker runtime inventory after local access inspection', async ({ page }) => {
+    const machine: MockMachine = {
+      id: 'machine-dev-1',
+      hostname: 'dev-1',
+      tailscaleIp: '100.64.0.11',
+      os: 'darwin',
+      arch: 'arm64',
+      status: 'online',
+      lastHeartbeat: '2026-04-24T05:00:00.000Z',
+      createdAt: '2026-04-20T05:00:00.000Z',
+    };
+    const state = makePreferenceState([], {
+      machines: [machine],
+      runtimeConfigDriftItems: [
+        {
+          id: 'drift-claude',
+          machineId: machine.id,
+          runtime: 'claude-code',
+          isInstalled: true,
+          isAuthenticated: true,
+          syncStatus: 'in-sync',
+          configVersion: 1,
+          configHash: 'sha256:managed-runtime-config',
+          metadata: { localCredentialCount: 1, mirroredCredentialCount: 2 },
+          lastConfigAppliedAt: '2026-04-24T04:58:00.000Z',
+          createdAt: '2026-04-24T04:58:00.000Z',
+          updatedAt: '2026-04-24T04:58:00.000Z',
+          drifted: false,
+        },
+        {
+          id: 'drift-codex',
+          machineId: machine.id,
+          runtime: 'codex',
+          isInstalled: true,
+          isAuthenticated: false,
+          syncStatus: 'drifted',
+          configVersion: 1,
+          configHash: 'sha256:managed-runtime-config',
+          metadata: { localCredentialCount: 0, mirroredCredentialCount: 1 },
+          lastConfigAppliedAt: '2026-04-24T04:58:00.000Z',
+          createdAt: '2026-04-24T04:58:00.000Z',
+          updatedAt: '2026-04-24T04:58:00.000Z',
+          drifted: true,
+        },
+      ],
+    });
+    state.onRefreshRuntimeConfig = (body) => {
+      expect(body).toEqual({ machineId: machine.id });
+      state.runtimeConfigDriftItems = state.runtimeConfigDriftItems.map((item) =>
+        item.machineId === machine.id && item.runtime === 'codex'
+          ? {
+              ...item,
+              isAuthenticated: true,
+              syncStatus: 'in-sync',
+              metadata: { localCredentialCount: 1, mirroredCredentialCount: 1 },
+              drifted: false,
+              updatedAt: '2026-04-24T05:01:00.000Z',
+            }
+          : item,
+      );
+    };
+    await mockSettingsApis(page, state);
+
+    await openSettings(page);
+    await getSectionNavLink(page, 'workers-sync').click();
+
+    const workersSection = page.locator('section#workers-sync');
+    const workerCard = workersSection
+      .locator('article')
+      .filter({ hasText: machine.hostname })
+      .filter({ hasText: machine.id });
+    const codexCard = workerCard.getByRole('region', {
+      name: `Codex runtime status for ${machine.hostname}`,
+    });
+    const codexLocalAccess = codexCard
+      .locator('div[class*="rounded-2xl"]')
+      .filter({ hasText: 'Local access' });
+
+    await expect(workerCard.getByRole('heading', { name: machine.hostname })).toBeVisible();
+    await expect(workerCard.getByText(machine.id, { exact: true })).toBeVisible();
+    await expect(codexCard.getByText('Installed, auth missing', { exact: true })).toBeVisible();
+    await expect(codexCard.getByText('Drifted', { exact: true })).toBeVisible();
+    await expect(codexCard.getByText('Sync status: drifted.', { exact: false })).toBeVisible();
+    await expect(codexLocalAccess).toContainText('0');
+
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/runtime-config/refresh') &&
+          response.request().method() === 'POST',
+      ),
+      workerCard.getByRole('button', { name: 'Inspect local access' }).click(),
+    ]);
+
+    expect(state.refreshRuntimeConfigCalls).toEqual([{ machineId: machine.id }]);
+    await expect(codexCard.getByText('Installed, auth missing', { exact: true })).toHaveCount(0);
+    await expect(codexCard.getByText('Drifted', { exact: true })).toHaveCount(0);
+    await expect(codexCard.getByText('Authenticated', { exact: true })).toBeVisible();
+    await expect(codexCard.getByText('Sync status: in-sync.', { exact: false })).toBeVisible();
+    await expect(codexLocalAccess).toContainText('1');
   });
 });
