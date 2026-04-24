@@ -1,6 +1,13 @@
-# Memory Operations UI — v1 Design (rewrite)
+# Memory Operations UI — v1 Design (SUPERSEDED)
 
-> **Status:** Approved architectural decisions locked; awaiting implementation plan handoff.
+> **⚠️ STATUS: SUPERSEDED — DO NOT IMPLEMENT.**
+>
+> v1 was rejected on second review by both Reviewer 1 (30 issues, 12 P0) and Reviewer 2 (58 issues, 18 P0). See `docs/superpowers/reviews/2026-04-24-memory-operations-ui-design-v1-*`.
+>
+> **Forward link:** `2026-04-24-memory-operations-ui-design-v2.md` — rewrite grounded in codebase facts with every reviewer item dispositioned in Appendix B.
+>
+> Historical content below preserved for traceability.
+>
 > **Supersedes:** `2026-04-24-memory-operations-ui-design.md` (v0, rejected).
 > **Incorporates:** [Reviewer 1 strict review](./2026-04-24-memory-operations-ui-spec-plan-strict-review.md), [Reviewer 2 batch critique](../reviews/2026-04-24-memory-operations-ui-review.md).
 > **Authoritative facts:** all file paths and API signatures in this document are grounded in a 2026-04-24 codebase scan saved at `/tmp/memory-ops-rewrite-facts.md` (scratch). Spot-check with `grep -rn` before starting each PR.
