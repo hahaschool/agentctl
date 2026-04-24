@@ -123,7 +123,7 @@ test.describe('Router config page', () => {
 
     const fallbackCard = page.locator('div.rounded-md').filter({ hasText: 'gpt-fallback' });
     await expect(fallbackCard.getByText('gpt-fallback')).toBeVisible();
-    await expect(fallbackCard.getByText('OpenAI')).toBeVisible();
+    await expect(fallbackCard.getByText('OpenAI', { exact: true })).toBeVisible();
     await expect(page.getByText(/\$0\.000003\/tok in/)).toBeVisible();
     await expect(page.getByText(/\$0\.000015\/tok out/)).toBeVisible();
     await expect(page.getByText('Failover Strategy')).toBeVisible();
