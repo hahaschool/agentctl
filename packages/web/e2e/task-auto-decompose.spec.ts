@@ -8,8 +8,8 @@ import type { TaskDefinition, TaskEdge, TaskGraph } from '@agentctl/shared';
  *   - POST /api/decompose/preview  (dry run — returns result + validationErrors)
  *   - POST /api/decompose          (apply — returns graphId + definitionIdMap)
  *
- * All traffic is mocked via page.route('**'/api/**') — only needs the Next.js
- * dev server on $WEB_PORT.
+ * All API traffic is mocked with a wildcard route — only needs the Next.js dev
+ * server on $WEB_PORT.
  */
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -41,6 +41,12 @@ const DEFINITIONS: readonly TaskDefinition[] = [
 ];
 
 const EDGES: readonly TaskEdge[] = [];
+
+const NEW_GRAPH: TaskGraph = {
+  id: NEW_GRAPH_ID,
+  name: 'Generated PKCE Plan',
+  createdAt: NOW,
+};
 
 type DecomposedTaskDto = {
   tempId: string;
@@ -111,6 +117,25 @@ const RICH_PREVIEW: DecompositionResultDto = {
   estimatedTotalCostUsd: 0.047,
 };
 
+const NEW_DEFINITIONS: readonly TaskDefinition[] = PREVIEW_TASKS.map((task, index) => ({
+  id: `def-new-${task.tempId.replace(/^temp-/, '')}`,
+  graphId: NEW_GRAPH_ID,
+  type: task.type,
+  name: task.name,
+  description: task.description,
+  requiredCapabilities: task.requiredCapabilities,
+  estimatedTokens: task.estimatedTokens,
+  timeoutMs: task.timeoutMs,
+  maxRetryAttempts: 1,
+  retryBackoffMs: 5_000,
+  createdAt: new Date(new Date(NOW).getTime() + index).toISOString(),
+}));
+
+const NEW_EDGES: readonly TaskEdge[] = [
+  { fromDefinition: 'def-new-scaffold', toDefinition: 'def-new-implement', type: 'blocks' },
+  { fromDefinition: 'def-new-implement', toDefinition: 'def-new-review', type: 'blocks' },
+];
+
 type DecomposeRequest = {
   body: { description?: string; spaceId?: string; constraints?: unknown } | null;
 };
@@ -128,7 +153,25 @@ async function fulfillJson(route: Route, body: unknown, status = 200): Promise<v
   await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 }
 
+async function mockAppShellWebSocket(page: Page): Promise<void> {
+  await page.routeWebSocket('ws://localhost:8080/api/ws', (ws) => {
+    ws.onMessage((message) => {
+      const raw = typeof message === 'string' ? message : message.toString('utf8');
+      const payload = JSON.parse(raw) as Record<string, unknown>;
+
+      if (payload.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', timestamp: NOW }));
+      }
+    });
+  });
+}
+
 async function mountMocks(page: Page, state: MockState): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('agentctl:autoRefreshInterval', '0');
+  });
+  await mockAppShellWebSocket(page);
+
   await page.route('**/api/**', async (route) => {
     const request = route.request();
     const { pathname } = new URL(request.url());
@@ -142,9 +185,23 @@ async function mountMocks(page: Page, state: MockState): Promise<void> {
       await fulfillJson(route, []);
       return;
     }
+    if (method === 'GET' && pathname === '/api/version-compat') {
+      await fulfillJson(route, {
+        appVersion: '0.8.2',
+        gitSha: 'e2e',
+        schemaVersion: 35,
+        minSupportedMobileBuild: 0,
+        minSupportedWebBuild: 0,
+      });
+      return;
+    }
 
     if (method === 'GET' && pathname === `/api/task-graphs/${TASK_GRAPH_ID}`) {
       await fulfillJson(route, { ...GRAPH, definitions: DEFINITIONS, edges: EDGES });
+      return;
+    }
+    if (method === 'GET' && pathname === `/api/task-graphs/${NEW_GRAPH_ID}`) {
+      await fulfillJson(route, { ...NEW_GRAPH, definitions: NEW_DEFINITIONS, edges: NEW_EDGES });
       return;
     }
     if (method === 'GET' && pathname === '/api/task-runs') {
@@ -195,8 +252,7 @@ async function mountMocks(page: Page, state: MockState): Promise<void> {
       return;
     }
 
-    // Fall through — the task detail page issues a few other reads we don't care about.
-    await fulfillJson(route, method === 'GET' ? {} : {});
+    throw new Error(`Unhandled API request in task-auto-decompose e2e mock: ${method} ${pathname}`);
   });
 }
 
