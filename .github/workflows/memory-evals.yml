@@ -168,24 +168,37 @@ jobs:
 
           report_path="$RUNNER_TEMP/memory-eval-${{ steps.prep.outputs.split }}.txt"
 
+          set +e
           pnpm memory:eval \
             --no-mock \
             --split "${{ steps.prep.outputs.split }}" \
-            --fixture "$PRIVATE_FIXTURE_PATH" | tee "$report_path"
+            --fixture "$PRIVATE_FIXTURE_PATH" 2>&1 | tee "$report_path"
+          status=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Memory eval failed::See the step summary and uploaded memory-eval artifact for the captured report."
+          fi
+
+          exit "$status"
 
       - name: Append eval summary
-        if: steps.prep.outputs.should_run == 'true'
+        if: always() && steps.prep.outputs.should_run == 'true'
         run: |
           {
             echo "## Memory Eval (${{ steps.prep.outputs.split }})"
             echo
-            echo '```text'
-            cat "$RUNNER_TEMP/memory-eval-${{ steps.prep.outputs.split }}.txt"
-            echo '```'
+            if [ -f "$RUNNER_TEMP/memory-eval-${{ steps.prep.outputs.split }}.txt" ]; then
+              echo '```text'
+              cat "$RUNNER_TEMP/memory-eval-${{ steps.prep.outputs.split }}.txt"
+              echo '```'
+            else
+              echo "No eval report file was produced."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload eval artifact
-        if: steps.prep.outputs.should_run == 'true'
+        if: always() && steps.prep.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: memory-eval-${{ steps.prep.outputs.split }}-${{ github.sha }}
