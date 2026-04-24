@@ -497,6 +497,62 @@ describe('conditional route registration', () => {
       }
     });
   });
+
+  describe('with memory provider dependencies', () => {
+    const originalEncryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY;
+
+    afterEach(() => {
+      process.env.CREDENTIAL_ENCRYPTION_KEY = originalEncryptionKey;
+    });
+
+    it('registers GET /api/memory/providers when db, pgPool, and credential key exist', async () => {
+      process.env.CREDENTIAL_ENCRYPTION_KEY = 'a'.repeat(64);
+      const pool = {
+        query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }),
+      };
+      const app = await createServer({
+        logger,
+        db: {} as never,
+        pgPool: pool as never,
+      });
+      await app.ready();
+
+      try {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/api/memory/providers',
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ providers: [] });
+      } finally {
+        await app.close();
+      }
+    });
+
+    it('maps EMBEDDING_NO_PROVIDER control-plane errors to 409', async () => {
+      const app = await createServer({
+        logger,
+      });
+
+      app.get('/test-embedding-no-provider', async () => {
+        throw new ControlPlaneError('EMBEDDING_NO_PROVIDER', 'No provider');
+      });
+      await app.ready();
+
+      try {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/test-embedding-no-provider',
+        });
+
+        expect(response.statusCode).toBe(409);
+        expect(response.json()).toMatchObject({ error: 'EMBEDDING_NO_PROVIDER' });
+      } finally {
+        await app.close();
+      }
+    });
+  });
 });
 
 // ===========================================================================

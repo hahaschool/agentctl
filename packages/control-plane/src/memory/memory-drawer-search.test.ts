@@ -129,6 +129,31 @@ describe('searchMemoryDrawers helper', () => {
     }
   });
 
+  it('filters drawer vector search by resolved embedding model', async () => {
+    const pool = createMockPool();
+    const embeddingClient: DrawerEmbeddingClient = {
+      embed: vi.fn().mockResolvedValue([0.1, 0.2]),
+    };
+
+    await searchMemoryDrawers(
+      { query: 'drawer model filter', limit: 5 },
+      {
+        pool: pool as never,
+        embeddingClientResolver: async () => ({
+          client: embeddingClient,
+          model: 'gemini-embedding-001',
+        }),
+        logger: createMockLogger(),
+      },
+    );
+
+    const vectorCall = pool.query.mock.calls.find((call) =>
+      String(call[0]).includes('embedding <=>'),
+    );
+    expect(String(vectorCall?.[0])).toContain('embedding_model = $2');
+    expect((vectorCall?.[1] as unknown[])[1]).toBe('gemini-embedding-001');
+  });
+
   it('degrades to keyword-only when embed() throws', async () => {
     const pool = createMockPool();
     const embeddingClient: DrawerEmbeddingClient = {
@@ -235,6 +260,7 @@ describe('keywordSearch + vectorSearch return [] on pool failure', () => {
       null,
       10,
       { embed: vi.fn().mockResolvedValue([0.1]) },
+      undefined,
       logger,
     );
     expect(vector).toEqual([]);
@@ -266,6 +292,7 @@ describe('degradeOnSqlError: false surfaces DB failures to the caller', () => {
         null,
         10,
         { embed: vi.fn().mockResolvedValue([0.1]) },
+        undefined,
         logger,
         { degradeOnSqlError: false },
       ),

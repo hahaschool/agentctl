@@ -16,6 +16,10 @@ import { sanitizeName } from '@agentctl/shared';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import type { EmbeddingClient } from './embedding-client.js';
+import type {
+  EmbeddingClientResolver,
+  ResolvedEmbeddingClient,
+} from './embedding-client-factory.js';
 
 const DEFAULT_CONTENT_MODEL = 'text-embedding-3-small';
 const MAX_FACT_QUOTE_PREVIEW_LENGTH = 240;
@@ -23,6 +27,7 @@ const MAX_FACT_QUOTE_PREVIEW_LENGTH = 240;
 export type MemoryStoreOptions = {
   pool: Pool;
   embeddingClient?: EmbeddingClient;
+  embeddingClientResolver?: EmbeddingClientResolver;
   logger: Logger;
 };
 
@@ -198,11 +203,13 @@ function buildFactQuotePreview(
 export class MemoryStore {
   private readonly pool: Pool;
   private readonly embeddingClient: EmbeddingClient | undefined;
+  private readonly embeddingClientResolver: EmbeddingClientResolver | undefined;
   private readonly logger: Logger;
 
   constructor(options: MemoryStoreOptions) {
     this.pool = options.pool;
     this.embeddingClient = options.embeddingClient;
+    this.embeddingClientResolver = options.embeddingClientResolver;
     this.logger = options.logger;
   }
 
@@ -213,12 +220,17 @@ export class MemoryStore {
     const scope = normalizeMemoryName(input.scope, 'scope') as MemoryScope;
 
     let embeddingLiteral: string | null = null;
+    let contentModel = DEFAULT_CONTENT_MODEL;
     if (Array.isArray(input.embedding) && input.embedding.length > 0) {
       embeddingLiteral = `[${input.embedding.join(',')}]`;
-    } else if (this.embeddingClient) {
+    } else {
       try {
-        const embedding = await this.embeddingClient.embed(input.content);
-        embeddingLiteral = `[${embedding.join(',')}]`;
+        const resolved = await this.resolveEmbeddingClientForWrite();
+        if (resolved) {
+          contentModel = resolved.model;
+          const embedding = await resolved.client.embed(input.content);
+          embeddingLiteral = `[${embedding.join(',')}]`;
+        }
       } catch (error: unknown) {
         this.logger.warn(
           { err: error, factId: id },
@@ -241,7 +253,7 @@ export class MemoryStore {
         scope,
         input.content,
         embeddingLiteral,
-        DEFAULT_CONTENT_MODEL,
+        contentModel,
         input.entity_type,
         input.confidence ?? 0.8,
         1.0,
@@ -258,7 +270,7 @@ export class MemoryStore {
       id,
       scope,
       content: input.content,
-      content_model: DEFAULT_CONTENT_MODEL,
+      content_model: contentModel,
       entity_type: input.entity_type,
       confidence: input.confidence ?? 0.8,
       strength: 1.0,
@@ -604,21 +616,24 @@ export class MemoryStore {
       assignments.push(`content = $${params.length}`);
 
       let embeddingLiteral: string | null = null;
-      if (this.embeddingClient) {
-        try {
-          const embedding = await this.embeddingClient.embed(input.content);
+      let contentModel = DEFAULT_CONTENT_MODEL;
+      try {
+        const resolved = await this.resolveEmbeddingClientForWrite();
+        if (resolved) {
+          contentModel = resolved.model;
+          const embedding = await resolved.client.embed(input.content);
           embeddingLiteral = `[${embedding.join(',')}]`;
-        } catch (error: unknown) {
-          this.logger.warn(
-            { err: error, factId: id },
-            'Failed to regenerate embedding while updating memory fact',
-          );
         }
+      } catch (error: unknown) {
+        this.logger.warn(
+          { err: error, factId: id },
+          'Failed to regenerate embedding while updating memory fact',
+        );
       }
 
       params.push(embeddingLiteral);
       assignments.push(`embedding = $${params.length}::vector`);
-      params.push(DEFAULT_CONTENT_MODEL);
+      params.push(contentModel);
       assignments.push(`content_model = $${params.length}`);
     }
 
@@ -651,6 +666,18 @@ export class MemoryStore {
     );
 
     return this.getFact(id);
+  }
+
+  private async resolveEmbeddingClientForWrite(): Promise<
+    Pick<ResolvedEmbeddingClient, 'client' | 'model'> | undefined
+  > {
+    if (this.embeddingClientResolver) {
+      return this.embeddingClientResolver();
+    }
+    if (!this.embeddingClient) {
+      return undefined;
+    }
+    return { client: this.embeddingClient, model: DEFAULT_CONTENT_MODEL };
   }
 
   async listEdges(input: ListEdgesInput = {}): Promise<MemoryEdge[]> {

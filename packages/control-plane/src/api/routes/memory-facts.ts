@@ -20,6 +20,7 @@ import { z } from 'zod';
 
 import {
   type DrawerEmbeddingClient,
+  type MemoryDrawerSearchDeps,
   searchMemoryDrawers,
 } from '../../memory/memory-drawer-search.js';
 import type { MemorySearch } from '../../memory/memory-search.js';
@@ -63,6 +64,7 @@ type MemoryFactRoutesOptions = {
    * a no-op and behaviour matches the pre-flag envelope.
    */
   embeddingClient?: DrawerEmbeddingClient;
+  embeddingClientResolver?: MemoryDrawerSearchDeps['embeddingClientResolver'];
   /** Resolved once at registration; do NOT read `process.env` per request. */
   drawerFusionEnabled?: boolean;
   /** Logger used for drawer-fusion warnings. Falls back to a stub. */
@@ -188,7 +190,7 @@ const DEFAULT_SOURCE: FactSource = {
 };
 
 export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = async (app, opts) => {
-  const { memorySearch, memoryStore, pool, embeddingClient } = opts;
+  const { memorySearch, memoryStore, pool, embeddingClient, embeddingClientResolver } = opts;
   // Resolve the flag once at registration — never re-read process.env per
   // request. Callers that want to invert the gate pass `drawerFusionEnabled`
   // explicitly; otherwise we fall back to the documented env variable so
@@ -199,7 +201,9 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
   // Only run the fusion pass when every dependency is wired. Keeps the
   // behaviour additive: if embeddings or the pg pool aren't available we
   // silently skip, matching the request contract in the task description.
-  const drawerFusionActive = Boolean(drawerFusionEnabled && embeddingClient && pool);
+  const drawerFusionActive = Boolean(
+    drawerFusionEnabled && pool && (embeddingClient || embeddingClientResolver),
+  );
 
   app.get<{
     Querystring: {
@@ -283,10 +287,11 @@ export const memoryFactRoutes: FastifyPluginAsync<MemoryFactRoutesOptions> = asy
           // and return the fact-only envelope; a rejected drawer query must
           // never 400 the whole fact request.
           const drawerResults =
-            drawerFusionActive && pool && embeddingClient
+            drawerFusionActive && pool && (embeddingClient || embeddingClientResolver)
               ? await runDrawerFusion({
                   pool,
                   embeddingClient,
+                  embeddingClientResolver,
                   logger: fusionLogger,
                   query: q,
                   scope,
@@ -651,7 +656,8 @@ function buildFactQuotePreview(
 
 type RunDrawerFusionInput = {
   pool: Pool;
-  embeddingClient: DrawerEmbeddingClient;
+  embeddingClient?: DrawerEmbeddingClient;
+  embeddingClientResolver?: MemoryDrawerSearchDeps['embeddingClientResolver'];
   logger: Logger;
   query: string;
   scope?: string;
@@ -687,6 +693,7 @@ async function runDrawerFusion(
       {
         pool: input.pool,
         embeddingClient: input.embeddingClient,
+        embeddingClientResolver: input.embeddingClientResolver,
         logger: input.logger,
       },
     );

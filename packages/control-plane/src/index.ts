@@ -21,7 +21,10 @@ import type { Database } from './db/index.js';
 import { createDb } from './db/index.js';
 import { ensureSchemaCompatibility } from './db/schema-compat.js';
 import { createLogger } from './logger.js';
-import { EmbeddingClient } from './memory/embedding-client.js';
+import {
+  type EmbeddingClientResolver,
+  resolveEmbeddingClient,
+} from './memory/embedding-client-factory.js';
 import { Mem0Client } from './memory/mem0-client.js';
 import { MemoryInjector } from './memory/memory-injector.js';
 import { MemorySearch } from './memory/memory-search.js';
@@ -356,11 +359,7 @@ async function main(): Promise<void> {
   let memorySearch: MemorySearch | undefined;
   let memoryStore: MemoryStore | undefined;
   let memoryInjector: MemoryInjector | undefined;
-  // Hoisted so it can flow into createServer → memoryDrawerRoutes for
-  // keyword + vector fusion search. Assigned only when LITELLM_URL is set
-  // below; consumers must tolerate `undefined` (drawer search falls back to
-  // keyword-only).
-  let embeddingClient: EmbeddingClient | undefined;
+  let embeddingClientResolver: EmbeddingClientResolver | undefined;
 
   // Raw PG pool — available whenever db is configured, even without LITELLM_URL.
   // Used by import routes that don't need embeddings.
@@ -372,26 +371,33 @@ async function main(): Promise<void> {
 
   if (MEMORY_BACKEND === 'postgres' || (MEMORY_BACKEND === 'auto' && canUsePostgresMemory)) {
     if (db && pgPool) {
-      // Embedding client is optional — when LITELLM_URL is absent, fact CRUD
-      // still works but without vector embeddings (semantic search disabled).
-      if (LITELLM_URL) {
-        embeddingClient = new EmbeddingClient({
-          baseUrl: LITELLM_URL,
-          model: 'text-embedding-3-small',
-          logger: logger.child({ component: 'embedding-client' }),
-        });
+      const encryptionKey = process.env.CREDENTIAL_ENCRYPTION_KEY ?? '';
+      if (encryptionKey) {
+        embeddingClientResolver = () =>
+          resolveEmbeddingClient({
+            pool: pgPool,
+            db,
+            encryptionKey,
+            logger: logger.child({ component: 'embedding-client-factory' }),
+          });
+      } else {
+        logger.warn(
+          'CREDENTIAL_ENCRYPTION_KEY is not set — memory embeddings are disabled until an embedding provider can be decrypted',
+        );
       }
 
+      // Embedding resolution is optional. Fact CRUD still works without it;
+      // vector paths degrade to keyword/BM25-only when no provider is active.
       memoryStore = new MemoryStore({
         pool: pgPool,
-        embeddingClient,
+        embeddingClientResolver,
         logger: logger.child({ component: 'memory-store' }),
       });
 
-      if (embeddingClient) {
+      if (embeddingClientResolver) {
         memorySearch = new MemorySearch({
           pool: pgPool,
-          embeddingClient,
+          embeddingClientResolver,
           logger: logger.child({ component: 'memory-search' }),
         });
         memoryInjector = new MemoryInjector({
@@ -406,7 +412,7 @@ async function main(): Promise<void> {
       logger.info(
         {
           memoryBackend: 'postgres',
-          hasEmbeddings: Boolean(embeddingClient),
+          hasEmbeddings: Boolean(embeddingClientResolver),
           memoryInjectionResultMode: MEMORY_INJECTION_RESULT_MODE,
         },
         'PostgreSQL memory backend initialised',
@@ -581,7 +587,7 @@ async function main(): Promise<void> {
     mem0Client,
     memorySearch,
     memoryStore,
-    embeddingClient,
+    embeddingClientResolver,
     memoryInjector: memoryInjector ?? null,
     pgPool,
     workerPort: REMOTE_WORKER_PORT,

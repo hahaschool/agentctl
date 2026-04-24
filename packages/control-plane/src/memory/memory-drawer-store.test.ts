@@ -76,6 +76,36 @@ describe('MemoryDrawerStore', () => {
     expect(result.drawers[0]?.contentSha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it('writes resolved provider model to embedding_model when using an embedding resolver', async () => {
+    const pool = createMockPool();
+    const embedding = createMockEmbedding();
+    const store = new MemoryDrawerStore({
+      pool: pool as never,
+      embeddingClientResolver: async () => ({
+        client: embedding,
+        model: 'gemini-embedding-001',
+        providerKind: 'gemini',
+        providerHost: 'https://generativelanguage.googleapis.com/v1beta/openai',
+        priceUsdPerMtoken: 0.15,
+        credentialId: 'provider-1',
+      }),
+      logger: createMockLogger(),
+    });
+
+    await store.writeSource({
+      scope: 'global',
+      sourceType: 'manual',
+      sourceId: 'source-1',
+      content: 'Drawer content that should use the active provider model',
+      syncVisibility: 'local',
+    });
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO memory_drawers'),
+      expect.arrayContaining(['gemini-embedding-001']),
+    );
+  });
+
   it('uses source-local upsert idempotency while allowing duplicate content hashes across sources', async () => {
     const pool = createMockPool();
     const store = new MemoryDrawerStore({
