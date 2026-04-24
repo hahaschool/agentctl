@@ -119,10 +119,19 @@ async function buildApp(pool: ReturnType<typeof createMockPool>): Promise<Fastif
 
 describe('memoryProvidersRoutes', () => {
   const originalSigningSecret = process.env.MEMORY_OPS_SIGNING_SECRET;
+  const originalRateLimitMax = process.env.MEMORY_PROVIDER_RATE_LIMIT_MAX;
+  const originalRateLimitWindow = process.env.MEMORY_PROVIDER_RATE_LIMIT_WINDOW_MS;
   let app: FastifyInstance | undefined;
 
   afterEach(async () => {
     process.env.MEMORY_OPS_SIGNING_SECRET = originalSigningSecret;
+    if (originalRateLimitMax === undefined) delete process.env.MEMORY_PROVIDER_RATE_LIMIT_MAX;
+    else process.env.MEMORY_PROVIDER_RATE_LIMIT_MAX = originalRateLimitMax;
+    if (originalRateLimitWindow === undefined) {
+      delete process.env.MEMORY_PROVIDER_RATE_LIMIT_WINDOW_MS;
+    } else {
+      process.env.MEMORY_PROVIDER_RATE_LIMIT_WINDOW_MS = originalRateLimitWindow;
+    }
     await app?.close();
     app = undefined;
   });
@@ -182,6 +191,43 @@ describe('memoryProvidersRoutes', () => {
 
     expect(response.statusCode).toBe(422);
     expect(response.json().error).toBe('VALIDATION_ERROR');
+  });
+
+  it('rate limits provider credential write routes', async () => {
+    process.env.MEMORY_PROVIDER_RATE_LIMIT_MAX = '1';
+    process.env.MEMORY_PROVIDER_RATE_LIMIT_WINDOW_MS = '60000';
+    const pool = createMockPool();
+    app = await buildApp(pool);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers',
+      payload: {
+        name: 'OpenAI',
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-test-one',
+        active: false,
+      },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers',
+      payload: {
+        name: 'OpenAI 2',
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: 'sk-test-two',
+        active: false,
+      },
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(429);
+    expect(second.json()).toMatchObject({
+      error: 'RATE_LIMITED',
+      message: 'Too many memory provider requests',
+    });
   });
 
   it('PATCH active:true deactivates other embedding providers before activating target', async () => {

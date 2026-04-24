@@ -8,6 +8,7 @@ import {
   type EmbeddingProviderKind,
   validateCatalog,
 } from '@agentctl/shared';
+import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool, PoolClient } from 'pg';
 import type { Logger } from 'pino';
@@ -18,11 +19,16 @@ import { EmbeddingClient } from '../../memory/embedding-client.js';
 import { MemoryOpsAuditLogger } from '../../memory/ops/audit-logger.js';
 import { providerInvalidationBus } from '../../memory/provider-invalidation-bus.js';
 import { decryptCredential, encryptCredential } from '../../utils/credential-crypto.js';
+import { readRateLimitEnv } from '../rate-limit.js';
 
 validateCatalog();
 
 const TOKEN_TTL_MS = 5 * 60 * 1000;
 const SAFE_PROVIDER_ID = /^[0-9a-fA-F-]{36}$/u;
+const MEMORY_PROVIDER_RATE_LIMIT = {
+  max: 20,
+  timeWindow: 60_000,
+} as const;
 
 const providerKindSchema = z.enum(['openai', 'gemini']);
 
@@ -107,8 +113,39 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
   opts,
 ) => {
   const audit = new MemoryOpsAuditLogger(opts.pool);
+  const providerRateLimitMax = readRateLimitEnv(
+    'MEMORY_PROVIDER_RATE_LIMIT_MAX',
+    MEMORY_PROVIDER_RATE_LIMIT.max,
+  );
+  const providerRateLimitWindowMs = readRateLimitEnv(
+    'MEMORY_PROVIDER_RATE_LIMIT_WINDOW_MS',
+    MEMORY_PROVIDER_RATE_LIMIT.timeWindow,
+  );
+  const providerRateLimitError = () => ({
+    statusCode: 429,
+    error: 'RATE_LIMITED',
+    message: 'Too many memory provider requests',
+  });
+  const providerFastifyRateLimit = {
+    max: providerRateLimitMax,
+    timeWindow: providerRateLimitWindowMs,
+    errorResponseBuilder: providerRateLimitError,
+  } as const;
 
-  app.setErrorHandler((error, request, reply) => {
+  await app.register(rateLimit, {
+    global: false,
+    keyGenerator: (request) =>
+      request.ip ??
+      (typeof request.headers['x-forwarded-for'] === 'string'
+        ? request.headers['x-forwarded-for']
+        : 'unknown'),
+    errorResponseBuilder: providerRateLimitError,
+  });
+
+  app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
+    if (error.statusCode === 429) {
+      return reply.code(429).send(providerRateLimitError());
+    }
     if (error instanceof ControlPlaneError) {
       request.log.warn({ err: error, code: error.code }, 'Memory providers route error');
       return reply.code(memoryOpsStatus(error.code)).send({
@@ -136,251 +173,299 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
     return { providers: rows.map(rowToProvider) };
   });
 
-  app.post('/test-ephemeral', async (request) => {
-    const signingSecret = readSigningSecret();
-    if (!signingSecret) {
-      throw new ControlPlaneError(
-        'SIGNING_SECRET_MISSING',
-        'MEMORY_OPS_SIGNING_SECRET is not configured',
-      );
-    }
-    const body = testEphemeralSchema.parse(request.body);
-    const entry = findVerifiedCatalogEntry(body.provider, body.model);
-    if (!entry) {
-      throw new ControlPlaneError('VALIDATION_ERROR', 'provider/model is not verified', {
+  app.post(
+    '/test-ephemeral',
+    {
+      config: { rateLimit: providerFastifyRateLimit },
+      preHandler: [app.rateLimit(providerFastifyRateLimit)],
+    },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
+    async (request) => {
+      const signingSecret = readSigningSecret();
+      if (!signingSecret) {
+        throw new ControlPlaneError(
+          'SIGNING_SECRET_MISSING',
+          'MEMORY_OPS_SIGNING_SECRET is not configured',
+        );
+      }
+      const body = testEphemeralSchema.parse(request.body);
+      const entry = findVerifiedCatalogEntry(body.provider, body.model);
+      if (!entry) {
+        throw new ControlPlaneError('VALIDATION_ERROR', 'provider/model is not verified', {
+          provider: body.provider,
+          model: body.model,
+        });
+      }
+
+      const startedAt = Date.now();
+      const client = new EmbeddingClient({
+        baseUrl: entry.baseUrl,
+        model: entry.model,
+        apiKey: body.apiKey,
+        embeddingsPath: entry.embeddingsPath,
+        extraBody: entry.extraBody,
+        logger: opts.logger.child({ component: 'memory-provider-test', provider: body.provider }),
+      });
+
+      let result: Awaited<ReturnType<EmbeddingClient['embedBatchWithUsage']>>;
+      try {
+        result = await client.embedBatchWithUsage(['ping']);
+      } catch (error) {
+        await audit.write({
+          actor: actorFromRequest(request.headers),
+          action: 'provider.test-failed',
+          target: `${body.provider}/${body.model}`,
+          context: { error: error instanceof Error ? error.message : String(error) },
+        });
+        throw new ControlPlaneError('PROVIDER_AUTH_FAILED', 'Embedding provider test failed');
+      }
+
+      const latencyMs = Date.now() - startedAt;
+      const dim = result.vectors[0]?.length ?? 0;
+      const costUsd = (result.usage.promptTokens / 1_000_000) * entry.pricePerMtoken;
+      const payload: RecentTestPayload = {
         provider: body.provider,
         model: body.model,
-      });
-    }
+        // HMAC binds the tested provider key to this short-lived token; it is
+        // not a password verifier or stored credential hash.
+        // codeql[js/insufficient-password-hash]
+        apiKeyFingerprint: fingerprintApiKey(body.apiKey, signingSecret),
+        dim,
+        ok: true,
+        testedAt: Date.now(),
+        latencyMs,
+        costUsd,
+      };
 
-    const startedAt = Date.now();
-    const client = new EmbeddingClient({
-      baseUrl: entry.baseUrl,
-      model: entry.model,
-      apiKey: body.apiKey,
-      embeddingsPath: entry.embeddingsPath,
-      extraBody: entry.extraBody,
-      logger: opts.logger.child({ component: 'memory-provider-test', provider: body.provider }),
-    });
-
-    let result: Awaited<ReturnType<EmbeddingClient['embedBatchWithUsage']>>;
-    try {
-      result = await client.embedBatchWithUsage(['ping']);
-    } catch (error) {
       await audit.write({
         actor: actorFromRequest(request.headers),
-        action: 'provider.test-failed',
+        action: 'provider.test-ephemeral',
         target: `${body.provider}/${body.model}`,
-        context: { error: error instanceof Error ? error.message : String(error) },
+        context: { dim, latencyMs, costUsd },
       });
-      throw new ControlPlaneError('PROVIDER_AUTH_FAILED', 'Embedding provider test failed');
-    }
 
-    const latencyMs = Date.now() - startedAt;
-    const dim = result.vectors[0]?.length ?? 0;
-    const costUsd = (result.usage.promptTokens / 1_000_000) * entry.pricePerMtoken;
-    const payload: RecentTestPayload = {
-      provider: body.provider,
-      model: body.model,
-      apiKeyFingerprint: fingerprintApiKey(body.apiKey, signingSecret),
-      dim,
-      ok: true,
-      testedAt: Date.now(),
-      latencyMs,
-      costUsd,
-    };
+      return {
+        ok: true,
+        dim,
+        model: result.model,
+        latencyMs,
+        costUsd,
+        signedToken: signRecentTestPayload(payload, signingSecret),
+      };
+    },
+  );
 
-    await audit.write({
-      actor: actorFromRequest(request.headers),
-      action: 'provider.test-ephemeral',
-      target: `${body.provider}/${body.model}`,
-      context: { dim, latencyMs, costUsd },
-    });
-
-    return {
-      ok: true,
-      dim,
-      model: result.model,
-      latencyMs,
-      costUsd,
-      signedToken: signRecentTestPayload(payload, signingSecret),
-    };
-  });
-
-  app.post('/', async (request, reply) => {
-    const body = createProviderSchema.parse(request.body);
-    if (body.active) {
-      await checkNoActiveEmbeddingProvider(opts.pool);
-      await checkModelLock(opts.pool, body.model);
-    }
-
-    const metadata = buildProviderMetadata(body.provider, body.model, body.recentTestResult);
-    const encrypted = encryptCredential(body.apiKey, opts.encryptionKey);
-    const row = await insertProvider(opts.pool, {
-      name: body.name,
-      provider: body.provider,
-      encryptedCredential: encrypted.encrypted,
-      credentialIv: encrypted.iv,
-      apiKeyLast4: last4(body.apiKey),
-      active: body.active,
-      metadata,
-    });
-
-    providerInvalidationBus.emit('provider.changed', body.active ? 'active' : row.id);
-    await audit.write({
-      actor: actorFromRequest(request.headers),
-      action: 'provider.create',
-      target: `${body.provider}/${body.model}`,
-      context: { providerId: row.id, active: body.active },
-    });
-
-    return reply.code(201).send({ provider: rowToProvider(row) });
-  });
-
-  app.patch<{ Params: { id: string } }>('/:id', async (request) => {
-    const providerId = normalizeProviderId(request.params.id);
-    const body = patchProviderSchema.parse(request.body);
-    if (body.active) {
-      await checkModelLockForExistingProvider(opts.pool, providerId);
-    }
-
-    const row = await withTransaction(opts.pool, async (client) => {
+  app.post(
+    '/',
+    {
+      config: { rateLimit: providerFastifyRateLimit },
+      preHandler: [app.rateLimit(providerFastifyRateLimit)],
+    },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
+    async (request, reply) => {
+      const body = createProviderSchema.parse(request.body);
       if (body.active) {
-        await client.query(
-          `UPDATE api_accounts
+        await checkNoActiveEmbeddingProvider(opts.pool);
+        await checkModelLock(opts.pool, body.model);
+      }
+
+      const metadata = buildProviderMetadata(body.provider, body.model, body.recentTestResult);
+      const encrypted = encryptCredential(body.apiKey, opts.encryptionKey);
+      const row = await insertProvider(opts.pool, {
+        name: body.name,
+        provider: body.provider,
+        encryptedCredential: encrypted.encrypted,
+        credentialIv: encrypted.iv,
+        apiKeyLast4: last4(body.apiKey),
+        active: body.active,
+        metadata,
+      });
+
+      providerInvalidationBus.emit('provider.changed', body.active ? 'active' : row.id);
+      await audit.write({
+        actor: actorFromRequest(request.headers),
+        action: 'provider.create',
+        target: `${body.provider}/${body.model}`,
+        context: { providerId: row.id, active: body.active },
+      });
+
+      return reply.code(201).send({ provider: rowToProvider(row) });
+    },
+  );
+
+  app.patch<{ Params: { id: string } }>(
+    '/:id',
+    {
+      config: { rateLimit: providerFastifyRateLimit },
+      preHandler: [app.rateLimit(providerFastifyRateLimit)],
+    },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
+    async (request) => {
+      const providerId = normalizeProviderId(request.params.id);
+      const body = patchProviderSchema.parse(request.body);
+      if (body.active) {
+        await checkModelLockForExistingProvider(opts.pool, providerId);
+      }
+
+      const row = await withTransaction(opts.pool, async (client) => {
+        if (body.active) {
+          await client.query(
+            `UPDATE api_accounts
               SET is_active = false, updated_at = now()
             WHERE credential_kind = 'embedding'
               AND is_active = true
               AND id <> $1`,
-          [providerId],
-        );
-      }
+            [providerId],
+          );
+        }
 
-      const existing = await loadProviderRow(client, providerId);
-      if (!existing) {
-        throw new ControlPlaneError('PROVIDER_NOT_FOUND', 'Embedding provider not found', {
-          providerId,
-        });
-      }
+        const existing = await loadProviderRow(client, providerId);
+        if (!existing) {
+          throw new ControlPlaneError('PROVIDER_NOT_FOUND', 'Embedding provider not found', {
+            providerId,
+          });
+        }
 
-      const updates: string[] = ['updated_at = now()'];
-      const params: unknown[] = [providerId];
-      const metadata = parseMetadata(existing.metadata);
+        const updates: string[] = ['updated_at = now()'];
+        const params: unknown[] = [providerId];
+        const metadata = parseMetadata(existing.metadata);
 
-      if (body.name !== undefined) {
-        params.push(body.name);
-        updates.push(`name = $${params.length}`);
-      }
-      if (body.active !== undefined) {
-        params.push(body.active);
-        updates.push(`is_active = $${params.length}`);
-      }
-      if (body.apiKey !== undefined) {
-        const encrypted = encryptCredential(body.apiKey, opts.encryptionKey);
-        params.push(encrypted.encrypted);
-        updates.push(`credential = $${params.length}`);
-        params.push(encrypted.iv);
-        updates.push(`credential_iv = $${params.length}`);
-        params.push(last4(body.apiKey));
-        updates.push(`credential_last4 = $${params.length}`);
+        if (body.name !== undefined) {
+          params.push(body.name);
+          updates.push(`name = $${params.length}`);
+        }
+        if (body.active !== undefined) {
+          params.push(body.active);
+          updates.push(`is_active = $${params.length}`);
+        }
+        if (body.apiKey !== undefined) {
+          const encrypted = encryptCredential(body.apiKey, opts.encryptionKey);
+          params.push(encrypted.encrypted);
+          updates.push(`credential = $${params.length}`);
+          params.push(encrypted.iv);
+          updates.push(`credential_iv = $${params.length}`);
+          params.push(last4(body.apiKey));
+          updates.push(`credential_last4 = $${params.length}`);
 
-        const verified = body.recentTestResult
-          ? verifyRecentTestResult(
-              body.recentTestResult,
-              existing.provider,
-              parseProviderModel(metadata),
-            )
-          : null;
-        metadata.lastTestOk = verified ? true : null;
-        metadata.lastTestError = null;
-        metadata.lastTestedAt = verified ? new Date(verified.testedAt).toISOString() : null;
-        metadata.dim = verified?.dim ?? null;
-        metadata.latencyMs = verified?.latencyMs ?? null;
-        metadata.costUsd = verified?.costUsd ?? null;
-      }
+          const verified = body.recentTestResult
+            ? verifyRecentTestResult(
+                body.recentTestResult,
+                existing.provider,
+                parseProviderModel(metadata),
+              )
+            : null;
+          metadata.lastTestOk = verified ? true : null;
+          metadata.lastTestError = null;
+          metadata.lastTestedAt = verified ? new Date(verified.testedAt).toISOString() : null;
+          metadata.dim = verified?.dim ?? null;
+          metadata.latencyMs = verified?.latencyMs ?? null;
+          metadata.costUsd = verified?.costUsd ?? null;
+        }
 
-      params.push(JSON.stringify(metadata));
-      updates.push(`metadata = $${params.length}::jsonb`);
+        params.push(JSON.stringify(metadata));
+        updates.push(`metadata = $${params.length}::jsonb`);
 
-      const result = await client.query<ProviderRow>(
-        `UPDATE api_accounts
+        const result = await client.query<ProviderRow>(
+          `UPDATE api_accounts
             SET ${updates.join(', ')}
           WHERE id = $1
             AND credential_kind = 'embedding'
           RETURNING id, name, provider, credential_last4, is_active, metadata, created_at, updated_at`,
-        params,
-      );
-      return requiredRow(result.rows[0], 'PROVIDER_NOT_FOUND', 'Embedding provider not found');
-    });
-
-    providerInvalidationBus.emit('provider.changed', body.active ? 'active' : providerId);
-    await audit.write({
-      actor: actorFromRequest(request.headers),
-      action: body.apiKey ? 'provider.rotate-key' : 'provider.update',
-      target: providerId,
-      context: { active: body.active ?? null, nameUpdated: body.name !== undefined },
-    });
-    return { provider: rowToProvider(row) };
-  });
-
-  app.post<{ Params: { id: string } }>('/:id/test', async (request) => {
-    const providerId = normalizeProviderId(request.params.id);
-    const signingSecret = readSigningSecret();
-    if (!signingSecret) {
-      throw new ControlPlaneError(
-        'SIGNING_SECRET_MISSING',
-        'MEMORY_OPS_SIGNING_SECRET is not configured',
-      );
-    }
-    const row = await loadProviderRow(opts.pool, providerId);
-    if (!row?.credential || !row.credential_iv) {
-      throw new ControlPlaneError('PROVIDER_NOT_FOUND', 'Embedding provider not found', {
-        providerId,
+          params,
+        );
+        return requiredRow(result.rows[0], 'PROVIDER_NOT_FOUND', 'Embedding provider not found');
       });
-    }
-    const metadata = parseMetadata(row.metadata);
-    const model = parseProviderModel(metadata);
-    const entry = findVerifiedCatalogEntry(row.provider as EmbeddingProviderKind, model);
-    if (!entry) {
-      throw new ControlPlaneError('VALIDATION_ERROR', 'provider/model is not verified');
-    }
-    const apiKey = decryptCredential(row.credential, row.credential_iv, opts.encryptionKey);
-    const startedAt = Date.now();
-    const client = new EmbeddingClient({
-      baseUrl: entry.baseUrl,
-      model,
-      apiKey,
-      embeddingsPath: entry.embeddingsPath,
-      extraBody: entry.extraBody,
-      logger: opts.logger.child({ component: 'memory-provider-test', providerId }),
-    });
-    const result = await client.embedBatchWithUsage(['ping']);
-    const latencyMs = Date.now() - startedAt;
-    const dim = result.vectors[0]?.length ?? 0;
-    const costUsd = (result.usage.promptTokens / 1_000_000) * entry.pricePerMtoken;
-    return { ok: true, dim, model: result.model, latencyMs, costUsd };
-  });
 
-  app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
-    const providerId = normalizeProviderId(request.params.id);
-    await assertProviderHasNoActiveJobs(opts.pool, providerId);
-    const result = await opts.pool.query<ProviderRow>(
-      `DELETE FROM api_accounts
+      providerInvalidationBus.emit('provider.changed', body.active ? 'active' : providerId);
+      await audit.write({
+        actor: actorFromRequest(request.headers),
+        action: body.apiKey ? 'provider.rotate-key' : 'provider.update',
+        target: providerId,
+        context: { active: body.active ?? null, nameUpdated: body.name !== undefined },
+      });
+      return { provider: rowToProvider(row) };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/:id/test',
+    {
+      config: { rateLimit: providerFastifyRateLimit },
+      preHandler: [app.rateLimit(providerFastifyRateLimit)],
+    },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
+    async (request) => {
+      const providerId = normalizeProviderId(request.params.id);
+      const signingSecret = readSigningSecret();
+      if (!signingSecret) {
+        throw new ControlPlaneError(
+          'SIGNING_SECRET_MISSING',
+          'MEMORY_OPS_SIGNING_SECRET is not configured',
+        );
+      }
+      const row = await loadProviderRow(opts.pool, providerId);
+      if (!row?.credential || !row.credential_iv) {
+        throw new ControlPlaneError('PROVIDER_NOT_FOUND', 'Embedding provider not found', {
+          providerId,
+        });
+      }
+      const metadata = parseMetadata(row.metadata);
+      const model = parseProviderModel(metadata);
+      const entry = findVerifiedCatalogEntry(row.provider as EmbeddingProviderKind, model);
+      if (!entry) {
+        throw new ControlPlaneError('VALIDATION_ERROR', 'provider/model is not verified');
+      }
+      const apiKey = decryptCredential(row.credential, row.credential_iv, opts.encryptionKey);
+      const startedAt = Date.now();
+      const client = new EmbeddingClient({
+        baseUrl: entry.baseUrl,
+        model,
+        apiKey,
+        embeddingsPath: entry.embeddingsPath,
+        extraBody: entry.extraBody,
+        logger: opts.logger.child({ component: 'memory-provider-test', providerId }),
+      });
+      const result = await client.embedBatchWithUsage(['ping']);
+      const latencyMs = Date.now() - startedAt;
+      const dim = result.vectors[0]?.length ?? 0;
+      const costUsd = (result.usage.promptTokens / 1_000_000) * entry.pricePerMtoken;
+      return { ok: true, dim, model: result.model, latencyMs, costUsd };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/:id',
+    {
+      config: { rateLimit: providerFastifyRateLimit },
+      preHandler: [app.rateLimit(providerFastifyRateLimit)],
+    },
+    // @fastify/rate-limit is registered above; CodeQL only models legacy fastify-rate-limit.
+    // codeql[js/missing-rate-limiting]
+    async (request, reply) => {
+      const providerId = normalizeProviderId(request.params.id);
+      await assertProviderHasNoActiveJobs(opts.pool, providerId);
+      const result = await opts.pool.query<ProviderRow>(
+        `DELETE FROM api_accounts
         WHERE id = $1
           AND credential_kind = 'embedding'
         RETURNING id, name, provider, credential_last4, is_active, metadata, created_at, updated_at`,
-      [providerId],
-    );
-    const row = requiredRow(result.rows[0], 'PROVIDER_NOT_FOUND', 'Embedding provider not found');
-    providerInvalidationBus.emit('provider.changed', row.is_active ? 'active' : providerId);
-    await audit.write({
-      actor: actorFromRequest(request.headers),
-      action: 'provider.delete',
-      target: providerId,
-      context: { provider: row.provider, model: parseProviderModel(parseMetadata(row.metadata)) },
-    });
-    return reply.code(204).send();
-  });
+        [providerId],
+      );
+      const row = requiredRow(result.rows[0], 'PROVIDER_NOT_FOUND', 'Embedding provider not found');
+      providerInvalidationBus.emit('provider.changed', row.is_active ? 'active' : providerId);
+      await audit.write({
+        actor: actorFromRequest(request.headers),
+        action: 'provider.delete',
+        target: providerId,
+        context: { provider: row.provider, model: parseProviderModel(parseMetadata(row.metadata)) },
+      });
+      return reply.code(204).send();
+    },
+  );
 };
 
 async function listProviderRows(pool: Pool): Promise<ProviderRow[]> {
@@ -593,6 +678,9 @@ function verifyRecentTestResult(
   if (Date.now() - payload.testedAt > TOKEN_TTL_MS) {
     throw invalidRecentTestResult();
   }
+  // Recompute the short-lived token binding HMAC for equality only; it is not
+  // used as a stored password hash.
+  // codeql[js/insufficient-password-hash]
   const fingerprint = fingerprintApiKey(recentTestResult.apiKey, signingSecret);
   if (!timingSafeEqualHex(fingerprint, payload.apiKeyFingerprint)) {
     throw invalidRecentTestResult();
@@ -611,6 +699,9 @@ function invalidRecentTestResult(): ControlPlaneError {
 }
 
 function fingerprintApiKey(apiKey: string, signingSecret: string): string {
+  // This keyed HMAC is a non-reversible token-binding fingerprint for
+  // test-before-save, not password storage.
+  // codeql[js/insufficient-password-hash]
   return createHmac('sha256', signingSecret).update(apiKey).digest('hex');
 }
 
