@@ -47,6 +47,8 @@ type NotificationPreferenceMockState = {
   setCalls: PreferenceBody[];
   deleteCalls: string[];
   machines: MockMachine[];
+  runtimeConfigDefaults: RuntimeConfigDefaultsMockResponse;
+  updateRuntimeConfigDefaultsCalls: RuntimeConfigUpdateBody[];
   runtimeConfigDriftItems: RuntimeConfigDriftItem[];
   refreshRuntimeConfigCalls: Array<{ machineId?: string }>;
   onRefreshRuntimeConfig?: (body: { machineId?: string }) => void;
@@ -77,6 +79,28 @@ type RuntimeConfigDriftItem = {
   createdAt: string;
   updatedAt: string;
   drifted: boolean;
+};
+
+type RuntimeConfigDefaultsMockResponse = {
+  version: number;
+  hash: string;
+  config: {
+    version: number;
+    instructions: { userGlobal: string; projectTemplate: string };
+    mcpServers: unknown[];
+    skills: unknown[];
+    sandbox: string;
+    approvalPolicy: string;
+    environmentPolicy: { inherit: string[]; set: Record<string, string> };
+    runtimeOverrides: {
+      claudeCode: Record<string, unknown>;
+      codex: Record<string, unknown>;
+    };
+  };
+};
+
+type RuntimeConfigUpdateBody = {
+  config: RuntimeConfigDefaultsMockResponse['config'];
 };
 
 async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
@@ -119,7 +143,10 @@ function getSectionNavLink(page: Page, sectionId: string) {
 function makePreferenceState(
   preferences: NotificationPreference[] = [],
   overrides: Partial<
-    Pick<NotificationPreferenceMockState, 'machines' | 'runtimeConfigDriftItems'>
+    Pick<
+      NotificationPreferenceMockState,
+      'machines' | 'runtimeConfigDefaults' | 'runtimeConfigDriftItems'
+    >
   > = {},
 ): NotificationPreferenceMockState {
   return {
@@ -127,8 +154,44 @@ function makePreferenceState(
     setCalls: [],
     deleteCalls: [],
     machines: overrides.machines ?? [],
+    runtimeConfigDefaults: overrides.runtimeConfigDefaults ?? makeRuntimeConfigDefaults(),
+    updateRuntimeConfigDefaultsCalls: [],
     runtimeConfigDriftItems: overrides.runtimeConfigDriftItems ?? [],
     refreshRuntimeConfigCalls: [],
+  };
+}
+
+function makeRuntimeConfigDefaults(
+  overrides: Partial<RuntimeConfigDefaultsMockResponse['config']['runtimeOverrides']> = {},
+): RuntimeConfigDefaultsMockResponse {
+  return {
+    version: 1,
+    hash: 'sha256:managed-runtime-config',
+    config: {
+      version: 1,
+      instructions: { userGlobal: 'global instructions', projectTemplate: 'project template' },
+      mcpServers: [],
+      skills: [],
+      sandbox: 'workspace-write',
+      approvalPolicy: 'on-request',
+      environmentPolicy: { inherit: ['PATH'], set: {} },
+      runtimeOverrides: {
+        claudeCode: {
+          model: 'claude-sonnet-4-6',
+          accessStrategy: 'prefer_managed',
+          switchingPolicy: 'failover_only',
+          allowedMachineIds: [],
+          ...overrides.claudeCode,
+        },
+        codex: {
+          model: 'gpt-5-codex',
+          accessStrategy: 'prefer_managed',
+          switchingPolicy: 'failover_only',
+          allowedMachineIds: [],
+          ...overrides.codex,
+        },
+      },
+    },
   };
 }
 
@@ -192,7 +255,17 @@ async function mockSettingsApis(
       return;
     }
     if (method === 'GET' && pathname === '/api/runtime-config/defaults') {
-      await fulfillJson(route, { profiles: [] });
+      await fulfillJson(route, state.runtimeConfigDefaults);
+      return;
+    }
+    if (method === 'PUT' && pathname === '/api/runtime-config/defaults') {
+      const body = (request.postDataJSON() ?? {}) as RuntimeConfigUpdateBody;
+      state.updateRuntimeConfigDefaultsCalls.push(body);
+      state.runtimeConfigDefaults = {
+        ...state.runtimeConfigDefaults,
+        config: body.config,
+      };
+      await fulfillJson(route, state.runtimeConfigDefaults);
       return;
     }
     if (method === 'GET' && pathname === '/api/runtime-config/drift') {
@@ -293,6 +366,86 @@ test.describe('Settings control center', () => {
     await darkButton.click();
     await page.waitForFunction(() => document.documentElement.classList.contains('dark'));
     await expect.poll(() => page.evaluate(() => window.localStorage.getItem('theme'))).toBe('dark');
+  });
+
+  test('saves runtime profile strategy and worker changes without a backend', async ({ page }) => {
+    const machines: MockMachine[] = [
+      {
+        id: 'machine-dev-1',
+        hostname: 'dev-1',
+        tailscaleIp: '100.64.0.11',
+        os: 'darwin',
+        arch: 'arm64',
+        status: 'online',
+        lastHeartbeat: '2026-04-24T05:00:00.000Z',
+        createdAt: '2026-04-20T05:00:00.000Z',
+      },
+      {
+        id: 'machine-dev-2',
+        hostname: 'dev-2',
+        tailscaleIp: '100.64.0.12',
+        os: 'linux',
+        arch: 'arm64',
+        status: 'online',
+        lastHeartbeat: '2026-04-24T05:00:00.000Z',
+        createdAt: '2026-04-20T05:00:00.000Z',
+      },
+    ];
+    const state = makePreferenceState([], {
+      machines,
+      runtimeConfigDefaults: makeRuntimeConfigDefaults({
+        claudeCode: {
+          allowedMachineIds: ['machine-dev-1', 'machine-dev-2'],
+        },
+        codex: {
+          allowedMachineIds: ['machine-dev-1', 'machine-dev-2'],
+        },
+      }),
+    });
+    await mockSettingsApis(page, state);
+
+    await openSettings(page);
+    await getSectionNavLink(page, 'runtime-profiles').click();
+
+    const runtimeProfilesSection = page.locator('section#runtime-profiles');
+    const codexCard = runtimeProfilesSection.locator('article').filter({
+      has: runtimeProfilesSection.getByRole('heading', { name: 'Codex', exact: true }),
+    });
+    const saveButton = runtimeProfilesSection.getByRole('button', {
+      name: 'Save runtime profiles',
+    });
+
+    await expect(codexCard.getByText('OpenAI Codex runtime')).toBeVisible();
+    await expect(saveButton).toBeDisabled();
+
+    await codexCard.getByRole('button', { name: 'Local only', exact: true }).click();
+    await codexCard.getByRole('button', { name: 'Locked', exact: true }).click();
+    await codexCard.getByRole('button', { name: 'machine-dev-2', exact: true }).click();
+
+    await expect(saveButton).toBeEnabled();
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/runtime-config/defaults') &&
+          response.request().method() === 'PUT',
+      ),
+      saveButton.click(),
+    ]);
+
+    expect(state.updateRuntimeConfigDefaultsCalls).toHaveLength(1);
+    const savedConfig = state.updateRuntimeConfigDefaultsCalls[0]?.config;
+    expect(savedConfig?.runtimeOverrides.codex).toMatchObject({
+      model: 'gpt-5-codex',
+      accessStrategy: 'local_only',
+      switchingPolicy: 'locked',
+      allowedMachineIds: ['machine-dev-1'],
+    });
+    expect(savedConfig?.runtimeOverrides.claudeCode).toMatchObject({
+      model: 'claude-sonnet-4-6',
+      accessStrategy: 'prefer_managed',
+      switchingPolicy: 'failover_only',
+      allowedMachineIds: ['machine-dev-1', 'machine-dev-2'],
+    });
   });
 
   test('adds and removes notification preferences without a backend', async ({ page }) => {
