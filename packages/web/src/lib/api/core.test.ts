@@ -11,6 +11,15 @@ function makeFetchResponse(body: unknown, ok = true, status = 200): Response {
   } as unknown as Response;
 }
 
+function makeNoContentResponse(): Response {
+  return {
+    ok: true,
+    status: 204,
+    statusText: 'No Content',
+    json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected end of JSON input')),
+  } as unknown as Response;
+}
+
 describe('ApiError', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
@@ -68,5 +77,13 @@ describe('ApiError', () => {
       code: 'OLD_CODE',
       hint: 'old hint',
     });
+  });
+
+  it('does not parse JSON for 204 responses', async () => {
+    const response = makeNoContentResponse();
+    vi.mocked(fetch).mockResolvedValue(response);
+
+    await expect(request('/api/no-content')).resolves.toBeUndefined();
+    expect(response.json).not.toHaveBeenCalled();
   });
 });

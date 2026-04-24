@@ -11,6 +11,15 @@ function makeFetchResponse(body: unknown, ok = true, status = 200): Response {
   } as unknown as Response;
 }
 
+function makeNoContentResponse(): Response {
+  return {
+    ok: true,
+    status: 204,
+    statusText: 'No Content',
+    json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected end of JSON input')),
+  } as unknown as Response;
+}
+
 function lastFetchCall() {
   const calls = vi.mocked(fetch).mock.calls;
   const call = calls[calls.length - 1];
@@ -146,12 +155,14 @@ describe('memoryProvidersApi', () => {
   });
 
   it('deletes providers by id', async () => {
-    vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true }));
+    const response = makeNoContentResponse();
+    vi.mocked(fetch).mockResolvedValue(response);
 
-    await memoryProvidersApi.remove('provider-1');
+    await expect(memoryProvidersApi.remove('provider-1')).resolves.toBeUndefined();
 
     const [url, init] = lastFetchCall();
     expect(url).toBe('/api/memory/providers/provider-1');
     expect(init?.method).toBe('DELETE');
+    expect(response.json).not.toHaveBeenCalled();
   });
 });

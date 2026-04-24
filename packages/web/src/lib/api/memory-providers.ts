@@ -69,7 +69,7 @@ export const memoryProvidersApi = {
     }),
 
   remove: (id: string) =>
-    request<{ ok: boolean }>(`/api/memory/providers/${id}`, {
+    request<void>(`/api/memory/providers/${id}`, {
       method: 'DELETE',
     }),
 
