@@ -1,6 +1,6 @@
 # Task Auto-Decompose Apply-Failure E2E Plan
 
-Status: Delivered in PR #487 on 2026-04-14
+Status: Delivered in PR #487 on 2026-04-14; CI-gated in PR #768
 Owner: Codex
 Roadmap: §10.5, §20.5
 
@@ -25,6 +25,7 @@ The UI already renders `data-testid="auto-decompose-apply-error"` when the apply
 - `auto-decompose-apply-error` displays the backend message `Could not persist graph`.
 - The proposed preview remains visible and the preview endpoint is not called a second time.
 - Focused Playwright, lint, and diff-check verification passed before PR handoff.
+- PR #768 adds `task-auto-decompose.spec.ts` to the focused web `test:e2e:ci` allowlist.
 
 ## Verification
 
