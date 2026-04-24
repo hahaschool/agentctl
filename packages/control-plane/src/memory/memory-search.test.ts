@@ -187,6 +187,28 @@ User: Which sanitizer stage handles transcript dumps?`,
     ).resolves.toEqual([]);
   });
 
+  it('does not require provenance tables for legacy fact-only search hits', async () => {
+    const vectorRow = makeFakeFactRow({ id: 'fact-legacy', rank: 1 });
+    const { search, pool } = makeSearch([[vectorRow], [], [], []]);
+
+    const results = await search.search({
+      query: 'legacy fact recall',
+      visibleScopes: ['global'],
+      limit: 5,
+    });
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        fact: expect.objectContaining({ id: 'fact-legacy' }),
+        source_path: 'vector',
+      }),
+    ]);
+
+    const sqlStatements = vi.mocked(pool.query).mock.calls.map((call) => String(call[0]));
+    expect(sqlStatements.some((sql) => sql.includes('memory_fact_sources'))).toBe(false);
+    expect(sqlStatements.some((sql) => sql.includes('memory_drawers'))).toBe(false);
+  });
+
   it('filters queries by visible scopes', async () => {
     const { search, pool } = makeSearch([[], [], [], []]);
 
