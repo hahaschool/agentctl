@@ -1,7 +1,8 @@
 'use client';
 
+import type { ContextRef } from '@agentctl/shared';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Globe, Lock, Users } from 'lucide-react';
+import { ChevronRight, Globe, Lock, Plus, Users } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import type React from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -19,6 +20,22 @@ import { RefreshButton } from '@/components/RefreshButton';
 import { useToast } from '@/components/Toast';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   spaceContextRefsQuery,
@@ -26,7 +43,9 @@ import {
   spaceQuery,
   spaceSubscriptionsQuery,
   spaceThreadsQuery,
+  useCreateContextRef,
   useCreateThread,
+  useDeleteContextRef,
   useDeleteSpace,
   usePostEvent,
   useRemoveSpaceMember,
@@ -67,6 +86,291 @@ function VisibilityBadge({ visibility }: { visibility: string }): React.JSX.Elem
       <Icon size={10} />
       {visibility}
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RefModeBadge — colour-coded mode pill
+// ---------------------------------------------------------------------------
+
+const MODE_STYLES: Record<string, string> = {
+  reference: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30',
+  copy: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/30',
+  query: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
+  subscription: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+};
+
+function RefModeBadge({ mode }: { mode: string }): React.JSX.Element {
+  return (
+    <span
+      className={cn(
+        'text-[10px] font-mono px-1.5 py-0.5 rounded-sm border capitalize',
+        MODE_STYLES[mode] ?? 'bg-muted text-muted-foreground border-border',
+      )}
+    >
+      {mode}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AddContextRefDialog
+// ---------------------------------------------------------------------------
+
+type AddContextRefDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  spaceId: string;
+  threads: Array<{ id: string; title?: string | null }>;
+};
+
+const CONTEXT_REF_MODES = ['reference', 'copy', 'query', 'subscription'] as const;
+
+function AddContextRefDialog({
+  open,
+  onOpenChange,
+  spaceId,
+  threads,
+}: AddContextRefDialogProps): React.JSX.Element {
+  const toast = useToast();
+  const createContextRef = useCreateContextRef();
+
+  const [sourceSpaceId, setSourceSpaceId] = useState('');
+  const [targetThreadId, setTargetThreadId] = useState('');
+  const [mode, setMode] = useState<string>('reference');
+
+  const handleSubmit = useCallback(
+    (e: React.FormEvent): void => {
+      e.preventDefault();
+
+      const trimmedSource = sourceSpaceId.trim();
+      if (!trimmedSource) {
+        toast.error('Source space ID is required');
+        return;
+      }
+      if (!targetThreadId) {
+        toast.error('Target thread is required');
+        return;
+      }
+
+      createContextRef.mutate(
+        {
+          spaceId,
+          sourceSpaceId: trimmedSource,
+          targetThreadId,
+          mode,
+          createdBy: 'local',
+        },
+        {
+          onSuccess: () => {
+            toast.success('Context ref created');
+            setSourceSpaceId('');
+            setTargetThreadId('');
+            setMode('reference');
+            onOpenChange(false);
+          },
+          onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+        },
+      );
+    },
+    [spaceId, sourceSpaceId, targetThreadId, mode, createContextRef, toast, onOpenChange],
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm font-semibold">Add Context Ref</DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">Source Space ID</Label>
+            <Input
+              value={sourceSpaceId}
+              onChange={(e) => setSourceSpaceId(e.target.value)}
+              placeholder="uuid of the source space"
+              className="font-mono text-xs h-8"
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">Target Thread</Label>
+            <Select value={targetThreadId} onValueChange={setTargetThreadId}>
+              <SelectTrigger size="sm" className="w-full text-xs">
+                <SelectValue placeholder="Select a thread…" />
+              </SelectTrigger>
+              <SelectContent>
+                {threads.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    No threads in this space
+                  </div>
+                ) : (
+                  threads.map((t) => (
+                    <SelectItem key={t.id} value={t.id} className="text-xs font-mono">
+                      {t.title ?? t.id.slice(0, 12)}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs text-muted-foreground">Mode</Label>
+            <Select value={mode} onValueChange={setMode}>
+              <SelectTrigger size="sm" className="w-full text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONTEXT_REF_MODES.map((m) => (
+                  <SelectItem key={m} value={m} className="text-xs capitalize">
+                    {m}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter showCloseButton>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={createContextRef.isPending}
+              className="bg-blue-500 hover:bg-blue-600 text-white text-xs"
+            >
+              {createContextRef.isPending ? 'Creating…' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ContextRefRow
+// ---------------------------------------------------------------------------
+
+type ContextRefRowProps = {
+  ref_: ContextRef;
+  spaceId: string;
+};
+
+function ContextRefRow({ ref_, spaceId }: ContextRefRowProps): React.JSX.Element {
+  const toast = useToast();
+  const deleteContextRef = useDeleteContextRef();
+
+  const handleDelete = useCallback((): void => {
+    deleteContextRef.mutate(
+      { spaceId, refId: ref_.id },
+      {
+        onSuccess: () => toast.success('Context ref removed'),
+        onError: (err) => toast.error(err instanceof Error ? err.message : String(err)),
+      },
+    );
+  }, [spaceId, ref_.id, deleteContextRef, toast]);
+
+  return (
+    <div className="flex items-center gap-2 rounded border border-border/40 px-2 py-1.5 group">
+      {/* Mode badge */}
+      <RefModeBadge mode={ref_.mode} />
+
+      {/* Source → target */}
+      <span className="flex-1 min-w-0 font-mono text-[11px] text-muted-foreground truncate">
+        {ref_.sourceSpaceId.slice(0, 8)} → {ref_.targetThreadId.slice(0, 8)}
+      </span>
+
+      {/* Timestamp */}
+      <span className="text-[11px] text-muted-foreground shrink-0">
+        <LiveTimeAgo date={ref_.createdAt} />
+      </span>
+
+      {/* Delete */}
+      <ConfirmButton
+        label="×"
+        confirmLabel="rm?"
+        onConfirm={handleDelete}
+        disabled={deleteContextRef.isPending}
+        className="shrink-0 px-1.5 py-0.5 text-[11px] rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+        confirmClassName="shrink-0 px-1.5 py-0.5 text-[11px] rounded text-destructive bg-destructive/10 animate-pulse font-mono"
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ContextRefsPanel — replaces the old minimal preview
+// ---------------------------------------------------------------------------
+
+type ContextRefsPanelProps = {
+  spaceId: string;
+  refs: ContextRef[];
+  isLoading: boolean;
+  hasError: boolean;
+  threads: Array<{ id: string; title?: string | null }>;
+};
+
+function ContextRefsPanel({
+  spaceId,
+  refs,
+  isLoading,
+  hasError,
+  threads,
+}: ContextRefsPanelProps): React.JSX.Element {
+  const [addOpen, setAddOpen] = useState(false);
+
+  return (
+    <div className="rounded-md border border-border/60 p-2.5 flex flex-col gap-2">
+      {/* Panel header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+            Context Refs
+          </span>
+          {refs.length > 0 && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              {refs.length}
+            </Badge>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setAddOpen(true)}
+          className="h-6 px-2 text-[11px] text-blue-500 hover:text-blue-400 hover:bg-blue-500/10"
+        >
+          <Plus size={11} className="mr-1" />
+          Add
+        </Button>
+      </div>
+
+      {/* Content */}
+      {isLoading ? (
+        <div className="space-y-1.5">
+          <Skeleton className="h-7 rounded" />
+          <Skeleton className="h-7 rounded" />
+        </div>
+      ) : hasError ? (
+        <p className="text-xs text-destructive">Failed to load refs.</p>
+      ) : refs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No context refs — add one to bridge spaces.</p>
+      ) : (
+        <div className="max-h-[180px] overflow-y-auto space-y-1.5 pr-0.5">
+          {refs.map((ref) => (
+            <ContextRefRow key={ref.id} ref_={ref} spaceId={spaceId} />
+          ))}
+        </div>
+      )}
+
+      <AddContextRefDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        spaceId={spaceId}
+        threads={threads}
+      />
+    </div>
   );
 }
 
@@ -269,42 +573,19 @@ export default function SpaceDetailPage(): React.JSX.Element {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold">Bridges</h2>
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span>{(contextRefs.data ?? []).length} refs</span>
             <span>{(subscriptions.data ?? []).length} subscriptions</span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          <div className="rounded-md border border-border/60 p-2.5">
-            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-              Context Refs
-            </div>
-            {contextRefs.isLoading ? (
-              <p className="text-xs text-muted-foreground">Loading refs...</p>
-            ) : contextRefs.error ? (
-              <p className="text-xs text-destructive">Failed to load refs.</p>
-            ) : (contextRefs.data ?? []).length === 0 ? (
-              <p className="text-xs text-muted-foreground">No context refs for this space.</p>
-            ) : (
-              <div className="space-y-2">
-                {(contextRefs.data ?? []).slice(0, 5).map((ref) => (
-                  <div key={ref.id} className="rounded border border-border/40 px-2 py-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-mono text-muted-foreground">
-                        {ref.sourceSpaceId.slice(0, 8)} → {ref.targetThreadId.slice(0, 8)}
-                      </span>
-                      <Badge variant="outline" className="capitalize text-[10px] px-1.5 py-0">
-                        {ref.mode}
-                      </Badge>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground mt-1">
-                      Created <LiveTimeAgo date={ref.createdAt} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Context Refs — expanded panel */}
+          <ContextRefsPanel
+            spaceId={spaceId}
+            refs={contextRefs.data ?? []}
+            isLoading={contextRefs.isLoading}
+            hasError={!!contextRefs.error}
+            threads={threads.data ?? []}
+          />
 
           <div className="rounded-md border border-border/60 p-2.5">
             <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
