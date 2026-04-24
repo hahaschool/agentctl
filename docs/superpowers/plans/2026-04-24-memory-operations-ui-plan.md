@@ -1569,6 +1569,8 @@ git worktree remove .trees/memory-ops-pr-b
 
 # PR C — Settings → Memory & Embeddings UI
 
+**Status (2026-04-25):** Landed in PR #806. Follow-up PR #807 persisted saved-provider test success/failure metadata so row-level Test results survive list refreshes and new sessions.
+
 **Worktree:** `.trees/memory-ops-pr-c`
 **Branch:** `agent/claude-1/feat/memory-embeddings-settings`
 **Depends on:** PR B merged
