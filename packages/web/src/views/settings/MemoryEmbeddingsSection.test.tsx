@@ -108,6 +108,31 @@ const STALE_FAILED_PROVIDER = {
   },
 };
 
+const REFRESHED_SUCCESS_PROVIDER = {
+  ...STALE_FAILED_PROVIDER,
+  metadata: {
+    ...STALE_FAILED_PROVIDER.metadata,
+    lastTestOk: true,
+    lastTestError: null,
+    lastTestedAt: '2026-04-25T00:00:00Z',
+    dim: 1536,
+    latencyMs: 90,
+  },
+};
+
+const REFRESHED_FAILED_PROVIDER = {
+  ...ACTIVE_PROVIDER,
+  metadata: {
+    ...ACTIVE_PROVIDER.metadata,
+    lastTestOk: false,
+    lastTestError: 'Embedding provider returned HTTP 401',
+    lastTestedAt: '2026-04-25T00:00:00Z',
+    dim: null,
+    latencyMs: null,
+    costUsd: null,
+  },
+};
+
 function renderSection() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -205,9 +230,13 @@ describe('MemoryEmbeddingsSection', () => {
   });
 
   it('shows saved-provider test results from the transient test response', async () => {
-    mockMemoryProvidersApi.list.mockResolvedValue({
-      providers: [STALE_FAILED_PROVIDER],
-    });
+    mockMemoryProvidersApi.list
+      .mockResolvedValueOnce({
+        providers: [STALE_FAILED_PROVIDER],
+      })
+      .mockResolvedValueOnce({
+        providers: [REFRESHED_SUCCESS_PROVIDER],
+      });
 
     renderSection();
 
@@ -220,13 +249,20 @@ describe('MemoryEmbeddingsSection', () => {
       expect(mockMemoryProvidersApi.testSaved).toHaveBeenCalled();
     });
     expect(mockMemoryProvidersApi.testSaved.mock.calls[0]?.[0]).toBe('provider-3');
-    expect(screen.getByText(/Test passed.*dim 1536.*90ms/i)).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText(/Test passed.*dim 1536.*90ms/i)).toBeDefined();
+    });
+    expect(mockMemoryProvidersApi.list).toHaveBeenCalledTimes(2);
   });
 
-  it('refetches providers after saved-provider test failures', async () => {
-    mockMemoryProvidersApi.list.mockResolvedValue({
-      providers: [ACTIVE_PROVIDER],
-    });
+  it('renders refetched provider metadata after saved-provider test failures', async () => {
+    mockMemoryProvidersApi.list
+      .mockResolvedValueOnce({
+        providers: [ACTIVE_PROVIDER],
+      })
+      .mockResolvedValueOnce({
+        providers: [REFRESHED_FAILED_PROVIDER],
+      });
     mockMemoryProvidersApi.testSaved.mockRejectedValue(new Error('Embedding provider test failed'));
 
     renderSection();
@@ -242,5 +278,6 @@ describe('MemoryEmbeddingsSection', () => {
     await waitFor(() => {
       expect(mockMemoryProvidersApi.list).toHaveBeenCalledTimes(2);
     });
+    expect(screen.getByText(/Test failed: Embedding provider returned HTTP 401/i)).toBeDefined();
   });
 });
