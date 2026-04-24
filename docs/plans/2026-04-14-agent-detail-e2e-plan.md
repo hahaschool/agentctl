@@ -1,7 +1,7 @@
 # Agent Detail E2E Coverage Plan
 
 Date: 2026-04-14
-Status: Delivered in PR #492
+Status: Delivered in PR #492; CI-gated in PR #765
 Owner: Codex lane `agent/codex-492-agent-detail-e2e`
 
 ## Context
@@ -22,7 +22,7 @@ This lane adds focused browser coverage for the existing agent detail route with
 
 - Live control-plane or worker execution.
 - Broad visual redesign of the agent detail page.
-- CI workflow changes or beta/dev CD changes.
+- Beta/dev CD changes.
 
 ## Acceptance
 
@@ -35,5 +35,6 @@ This lane adds focused browser coverage for the existing agent detail route with
 
 - `pnpm --filter @agentctl/shared build`
 - `WEB_PORT=5386 pnpm --filter @agentctl/web exec playwright test e2e/agent-detail.spec.ts`
+- PR #765 adds `agent-detail.spec.ts` to the focused web `test:e2e:ci` allowlist.
 - `git diff --check`
 - `pnpm lint`

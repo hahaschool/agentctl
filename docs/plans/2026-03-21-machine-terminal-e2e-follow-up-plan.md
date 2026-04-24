@@ -8,7 +8,7 @@
 
 **Tech Stack:** Playwright, Next.js App Router, existing web test harness/mocks, Vitest for any supporting component/page hardening.
 
-> Status note: Delivered on `main` via PR #346. `packages/web/e2e/machines-terminal.spec.ts` now covers the machine terminal page shell, a stable connect/render path, and the existing spawn-error path using deterministic HTTP/WebSocket mocks. No machine-terminal page hardening was required, so Task 2 was not needed.
+> Status note: Delivered on `main` via PR #346. `packages/web/e2e/machines-terminal.spec.ts` now covers the machine terminal page shell, a stable connect/render path, and the existing spawn-error path using deterministic HTTP/WebSocket mocks. PR #769 moved the spec into the focused Web E2E CI gate, including additional route/state coverage. No machine-terminal page hardening was required, so Task 2 was not needed.
 
 ---
 

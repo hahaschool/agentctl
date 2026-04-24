@@ -55,6 +55,14 @@
 > follow-up upgrades the attestation action to the Node 24-backed `v4.1.0`
 > without changing GHCR image tags, scanner behavior, or deploy-fleet
 > verification semantics.
+>
+> Follow-up sync (2026-04-24): after PR #769 landed on `main@8efb447f`, CI
+> `24884763401`, Security Audit `24884763363`, and Build & Publish Docker
+> Images `24884763349` all passed, with 0 open code-scanning, Dependabot, or
+> secret-scanning alerts. The focused Web E2E CI lane now runs 30 spec files /
+> 110 executed tests after PR #762 and PRs #765-#769 gated spaces/tasks detail, agent detail,
+> emergency stop, tasks/spaces, task auto-decompose, and machine terminal
+> coverage. Beta/dev CD workflows were not changed by this sync.
 
 ---
 
