@@ -1,4 +1,4 @@
-import type { ControlPlaneError } from '@agentctl/shared';
+import { ControlPlaneError } from '@agentctl/shared';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -401,11 +401,24 @@ describe('memoryProvidersRoutes', () => {
         expect.stringContaining('"lastTestOk":true'),
       ]),
     );
+    const updateCall = pool.query.mock.calls.find(([sql]) =>
+      String(sql).includes('UPDATE api_accounts'),
+    );
+    expect(String(updateCall?.[0])).toContain('credential = $2');
+    expect(updateCall?.[1]).toEqual(
+      expect.arrayContaining(['encrypted:sk-provider', 'iv', expect.stringContaining('"dim":2')]),
+    );
   });
 
-  it('POST /:id/test persists failed test metadata', async () => {
+  it('POST /:id/test persists only safe failed test metadata', async () => {
     process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
-    embeddingClientMocks.embedBatchWithUsage.mockRejectedValue(new Error('invalid api key'));
+    embeddingClientMocks.embedBatchWithUsage.mockRejectedValue(
+      new ControlPlaneError(
+        'EMBEDDING_API_ERROR',
+        'Embedding API returned 401: {"error":"bad key sk-live-secret"}',
+        { status: 401 },
+      ),
+    );
     const pool = createMockPool([makeProviderRow()]);
     app = await buildApp(pool);
 
@@ -423,6 +436,44 @@ describe('memoryProvidersRoutes', () => {
         expect.stringContaining('"lastTestOk":false'),
       ]),
     );
+    const updateCall = pool.query.mock.calls.find(([sql]) =>
+      String(sql).includes('UPDATE api_accounts'),
+    );
+    const updateParams = updateCall?.[1] as unknown[] | undefined;
+    const metadataJson = String(updateParams?.[3]);
+    expect(metadataJson).toContain('"lastTestError":"Embedding provider returned HTTP 401"');
+    expect(metadataJson).not.toContain('sk-live-secret');
+    const auditCall = pool.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO memory_ops_audit'),
+    );
+    expect(JSON.stringify(auditCall?.[1])).toContain('EMBEDDING_API_ERROR');
+    expect(JSON.stringify(auditCall?.[1])).not.toContain('sk-live-secret');
+  });
+
+  it('POST /:id/test rejects stale metadata writes when the provider changed during testing', async () => {
+    process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
+    embeddingClientMocks.embedBatchWithUsage.mockResolvedValue({
+      vectors: [[0.1, 0.2]],
+      usage: { promptTokens: 1000 },
+      model: 'text-embedding-3-small',
+    });
+    const pool = createMockPool([makeProviderRow()]);
+    const originalQuery = pool.query;
+    pool.query = vi.fn().mockImplementation((sql: string, params?: unknown[]) => {
+      if (sql.includes('UPDATE api_accounts') && !sql.includes('RETURNING')) {
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      }
+      return originalQuery(sql, params);
+    });
+    app = await buildApp(pool);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers/11111111-1111-4111-8111-111111111111/test',
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: 'PROVIDER_CHANGED_DURING_TEST' });
   });
 
   it('DELETE returns 409 when active jobs reference the provider', async () => {

@@ -255,8 +255,14 @@ export function MemoryEmbeddingsSection(): React.JSX.Element {
         [providerId]: { ok: false, error: message },
       }));
     },
-    onSettled: () => {
-      void invalidateProviders();
+    onSettled: (_data, _error, providerId) => {
+      void invalidateProviders().then(() => {
+        setSavedTestResults((current) => {
+          const next = { ...current };
+          delete next[providerId];
+          return next;
+        });
+      });
     },
   });
 

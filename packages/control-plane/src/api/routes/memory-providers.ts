@@ -460,32 +460,44 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
       try {
         result = await client.embedBatchWithUsage(['ping']);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        metadata.lastTestOk = false;
-        metadata.lastTestError = message;
-        metadata.lastTestedAt = new Date().toISOString();
-        metadata.dim = null;
-        metadata.latencyMs = null;
-        metadata.costUsd = null;
-        await updateProviderTestMetadata(opts.pool, providerId, metadata);
+        const failure = describeProviderTestFailure(error);
+        await updateProviderTestMetadata(opts.pool, {
+          providerId,
+          expectedCredential: row.credential,
+          expectedCredentialIv: row.credential_iv,
+          testMetadata: {
+            lastTestOk: false,
+            lastTestError: failure.message,
+            lastTestedAt: new Date().toISOString(),
+            dim: null,
+            latencyMs: null,
+            costUsd: null,
+          },
+        });
         await audit.write({
           actor: actorFromRequest(request.headers),
           action: 'provider.test-failed',
           target: providerId,
-          context: { error: message },
+          context: { errorCode: failure.code, status: failure.status ?? null },
         });
         throw new ControlPlaneError('PROVIDER_AUTH_FAILED', 'Embedding provider test failed');
       }
       const latencyMs = Date.now() - startedAt;
       const dim = result.vectors[0]?.length ?? 0;
       const costUsd = (result.usage.promptTokens / 1_000_000) * entry.pricePerMtoken;
-      metadata.lastTestOk = true;
-      metadata.lastTestError = null;
-      metadata.lastTestedAt = new Date().toISOString();
-      metadata.dim = dim;
-      metadata.latencyMs = latencyMs;
-      metadata.costUsd = costUsd;
-      await updateProviderTestMetadata(opts.pool, providerId, metadata);
+      await updateProviderTestMetadata(opts.pool, {
+        providerId,
+        expectedCredential: row.credential,
+        expectedCredentialIv: row.credential_iv,
+        testMetadata: {
+          lastTestOk: true,
+          lastTestError: null,
+          lastTestedAt: new Date().toISOString(),
+          dim,
+          latencyMs,
+          costUsd,
+        },
+      });
       return { ok: true, dim, model: result.model, latencyMs, costUsd };
     },
   );
@@ -645,17 +657,42 @@ async function assertProviderHasNoActiveJobs(pool: Pool, providerId: string): Pr
 
 async function updateProviderTestMetadata(
   pool: Pool,
-  providerId: string,
-  metadata: Record<string, unknown>,
+  input: {
+    providerId: string;
+    expectedCredential: string;
+    expectedCredentialIv: string;
+    testMetadata: {
+      lastTestOk: boolean;
+      lastTestError: string | null;
+      lastTestedAt: string;
+      dim: number | null;
+      latencyMs: number | null;
+      costUsd: number | null;
+    };
+  },
 ): Promise<void> {
-  await pool.query(
+  const result = await pool.query(
     `UPDATE api_accounts
-        SET metadata = $2::jsonb,
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || $4::jsonb,
             updated_at = now()
       WHERE id = $1
-        AND credential_kind = 'embedding'`,
-    [providerId, JSON.stringify(metadata)],
+        AND credential_kind = 'embedding'
+        AND credential = $2
+        AND credential_iv = $3`,
+    [
+      input.providerId,
+      input.expectedCredential,
+      input.expectedCredentialIv,
+      JSON.stringify(input.testMetadata),
+    ],
   );
+  if (!result.rowCount) {
+    throw new ControlPlaneError(
+      'PROVIDER_CHANGED_DURING_TEST',
+      'Embedding provider changed while test was running',
+      { providerId: input.providerId },
+    );
+  }
 }
 
 async function loadProviderRow(client: Pick<Pool | PoolClient, 'query'>, providerId: string) {
@@ -944,6 +981,40 @@ function readSigningSecret(): string {
   return process.env.MEMORY_OPS_SIGNING_SECRET ?? '';
 }
 
+function describeProviderTestFailure(error: unknown): {
+  code: string;
+  message: string;
+  status?: number;
+} {
+  if (error instanceof ControlPlaneError) {
+    const status =
+      typeof error.context?.status === 'number' && Number.isFinite(error.context.status)
+        ? error.context.status
+        : undefined;
+    if (status !== undefined) {
+      return {
+        code: error.code,
+        message: `Embedding provider returned HTTP ${status}`,
+        status,
+      };
+    }
+    if (error.code === 'EMBEDDING_CONNECTION_ERROR') {
+      return {
+        code: error.code,
+        message: 'Could not reach embedding provider',
+      };
+    }
+    return {
+      code: error.code,
+      message: 'Embedding provider test failed',
+    };
+  }
+  return {
+    code: error instanceof Error ? error.name : 'UNKNOWN',
+    message: 'Embedding provider test failed',
+  };
+}
+
 function memoryOpsStatus(code: string): number {
   const status = new Map<string, number>([
     ['VALIDATION_ERROR', 422],
@@ -952,6 +1023,7 @@ function memoryOpsStatus(code: string): number {
     ['MODEL_MISMATCH', 409],
     ['PROVIDER_HAS_ACTIVE_JOBS', 409],
     ['PROVIDER_NOT_FOUND', 404],
+    ['PROVIDER_CHANGED_DURING_TEST', 409],
     ['PROVIDER_AUTH_FAILED', 401],
     ['CATALOG_INVALID', 500],
   ]).get(code);
