@@ -1569,7 +1569,7 @@ git worktree remove .trees/memory-ops-pr-b
 
 # PR C — Settings → Memory & Embeddings UI
 
-**Status (2026-04-25):** Landed in PR #806. Follow-up PR #807 persisted saved-provider test success/failure metadata so row-level Test results survive list refreshes and new sessions.
+**Status (2026-04-25):** Landed in PR #806. Follow-up PR #807 persisted saved-provider test success/failure metadata so row-level Test results survive list refreshes and new sessions. Follow-up PR #808 avoided raw upstream error persistence/display, credential-guarded metadata writes, and cleared transient overrides after provider refetch.
 
 **Worktree:** `.trees/memory-ops-pr-c`
 **Branch:** `agent/claude-1/feat/memory-embeddings-settings`
