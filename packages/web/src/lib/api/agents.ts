@@ -8,6 +8,8 @@ import type {
   AgentStatus,
   AgentType,
   ExecutionSummary,
+  LoopConfig,
+  LoopState,
   MachineCapabilities,
   MachineStatus,
 } from '@agentctl/shared';
@@ -83,6 +85,18 @@ export type AgentRun = {
   retryIndex?: number | null;
 };
 
+export type AgentLoopResponse = {
+  ok: true;
+  agentId: string;
+  loop: LoopState;
+};
+
+export const DEFAULT_AGENT_LOOP_CONFIG: LoopConfig = {
+  mode: 'result-feedback',
+  maxIterations: 10,
+  iterationDelayMs: 1_000,
+};
+
 export const agentsApi = {
   // Machines
   listMachines: () => request<Machine[]>('/api/agents'),
@@ -151,11 +165,11 @@ export const agentsApi = {
     }),
   getAgentRuns: (id: string) => request<AgentRun[]>(`/api/agents/${id}/runs`),
   getAgentHealth: (id: string) => request<AgentHealthResponse>(`/api/agents/${id}/health`),
-  startAgentLoop: (id: string, prompt: string, config?: object) =>
-    request<{ loopId: string }>(`/api/agents/${encodeURIComponent(id)}/loop`, {
+  startAgentLoop: (id: string, prompt: string, config: LoopConfig = DEFAULT_AGENT_LOOP_CONFIG) =>
+    request<AgentLoopResponse>(`/api/agents/${encodeURIComponent(id)}/loop`, {
       method: 'POST',
       body: JSON.stringify({ prompt, config }),
     }),
   stopAgentLoop: (id: string) =>
-    request<void>(`/api/agents/${encodeURIComponent(id)}/loop`, { method: 'DELETE' }),
+    request<AgentLoopResponse>(`/api/agents/${encodeURIComponent(id)}/loop`, { method: 'DELETE' }),
 };
