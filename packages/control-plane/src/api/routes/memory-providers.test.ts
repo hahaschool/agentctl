@@ -378,6 +378,53 @@ describe('memoryProvidersRoutes', () => {
     expect(response.json().provider.isActive).toBe(true);
   });
 
+  it('POST /:id/test persists successful test metadata', async () => {
+    process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
+    embeddingClientMocks.embedBatchWithUsage.mockResolvedValue({
+      vectors: [[0.1, 0.2]],
+      usage: { promptTokens: 1000 },
+      model: 'text-embedding-3-small',
+    });
+    const pool = createMockPool([makeProviderRow()]);
+    app = await buildApp(pool);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers/11111111-1111-4111-8111-111111111111/test',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE api_accounts'),
+      expect.arrayContaining([
+        '11111111-1111-4111-8111-111111111111',
+        expect.stringContaining('"lastTestOk":true'),
+      ]),
+    );
+  });
+
+  it('POST /:id/test persists failed test metadata', async () => {
+    process.env.MEMORY_OPS_SIGNING_SECRET = 'test-signing-secret';
+    embeddingClientMocks.embedBatchWithUsage.mockRejectedValue(new Error('invalid api key'));
+    const pool = createMockPool([makeProviderRow()]);
+    app = await buildApp(pool);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/memory/providers/11111111-1111-4111-8111-111111111111/test',
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: 'PROVIDER_AUTH_FAILED' });
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE api_accounts'),
+      expect.arrayContaining([
+        '11111111-1111-4111-8111-111111111111',
+        expect.stringContaining('"lastTestOk":false'),
+      ]),
+    );
+  });
+
   it('DELETE returns 409 when active jobs reference the provider', async () => {
     const pool = createMockPool();
     pool.query = vi.fn().mockImplementation((sql: string) => {

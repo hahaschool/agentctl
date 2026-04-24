@@ -456,10 +456,36 @@ export const memoryProvidersRoutes: FastifyPluginAsync<MemoryProvidersRouteOptio
         extraBody: entry.extraBody,
         logger: opts.logger.child({ component: 'memory-provider-test', providerId }),
       });
-      const result = await client.embedBatchWithUsage(['ping']);
+      let result: Awaited<ReturnType<EmbeddingClient['embedBatchWithUsage']>>;
+      try {
+        result = await client.embedBatchWithUsage(['ping']);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        metadata.lastTestOk = false;
+        metadata.lastTestError = message;
+        metadata.lastTestedAt = new Date().toISOString();
+        metadata.dim = null;
+        metadata.latencyMs = null;
+        metadata.costUsd = null;
+        await updateProviderTestMetadata(opts.pool, providerId, metadata);
+        await audit.write({
+          actor: actorFromRequest(request.headers),
+          action: 'provider.test-failed',
+          target: providerId,
+          context: { error: message },
+        });
+        throw new ControlPlaneError('PROVIDER_AUTH_FAILED', 'Embedding provider test failed');
+      }
       const latencyMs = Date.now() - startedAt;
       const dim = result.vectors[0]?.length ?? 0;
       const costUsd = (result.usage.promptTokens / 1_000_000) * entry.pricePerMtoken;
+      metadata.lastTestOk = true;
+      metadata.lastTestError = null;
+      metadata.lastTestedAt = new Date().toISOString();
+      metadata.dim = dim;
+      metadata.latencyMs = latencyMs;
+      metadata.costUsd = costUsd;
+      await updateProviderTestMetadata(opts.pool, providerId, metadata);
       return { ok: true, dim, model: result.model, latencyMs, costUsd };
     },
   );
@@ -615,6 +641,21 @@ async function assertProviderHasNoActiveJobs(pool: Pool, providerId: string): Pr
       { providerId },
     );
   }
+}
+
+async function updateProviderTestMetadata(
+  pool: Pool,
+  providerId: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  await pool.query(
+    `UPDATE api_accounts
+        SET metadata = $2::jsonb,
+            updated_at = now()
+      WHERE id = $1
+        AND credential_kind = 'embedding'`,
+    [providerId, JSON.stringify(metadata)],
+  );
 }
 
 async function loadProviderRow(client: Pick<Pool | PoolClient, 'query'>, providerId: string) {
