@@ -6,8 +6,7 @@ import type React from 'react';
 import { useCallback, useState } from 'react';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
-import type { Session } from '@/lib/api';
-import { api } from '@/lib/api';
+import { api, DEFAULT_SPACE_CREATED_BY, type Session } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // SessionSpaceLink
@@ -39,6 +38,7 @@ export function SessionSpaceLink({ session }: SessionSpaceLinkProps): React.JSX.
         description: `Linked from session ${session.id}`,
         type: 'solo',
         visibility: 'private',
+        createdBy: DEFAULT_SPACE_CREATED_BY,
       });
 
       // 2. Create a "Main" thread

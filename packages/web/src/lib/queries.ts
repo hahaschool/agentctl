@@ -17,7 +17,7 @@ import type {
   SpaceVisibility,
   ThreadType,
 } from './api';
-import { api } from './api';
+import { api, DEFAULT_SPACE_CREATED_BY } from './api';
 import { STORAGE_KEYS } from './storage-keys';
 
 type RuntimeSessionsQueryParams = Parameters<typeof api.listRuntimeSessions>[0];
@@ -1566,7 +1566,7 @@ export function useCreateSpace() {
       description?: string;
       type?: SpaceType;
       visibility?: SpaceVisibility;
-    }) => api.createSpace(data),
+    }) => api.createSpace({ ...data, createdBy: DEFAULT_SPACE_CREATED_BY }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.spaces.all });
     },
