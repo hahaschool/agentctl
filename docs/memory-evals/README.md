@@ -50,6 +50,11 @@ API, or any network dependency — so it can run in CI on a bare checkout.
   `MEMORY_EVAL_ALLOW_HELD_OUT=true`.
 - `--split full` is reserved for release-style eval jobs and requires
   `MEMORY_EVAL_ALLOW_FULL_SET=true`.
+- `MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE=true` makes `pnpm memory:eval`
+  fail before execution unless the full fixture contains the default five
+  failure-mode tags with at least five non-excluded rows each. Override the
+  threshold with `MEMORY_EVAL_FAILURE_MODE_MIN_ROWS=<positive integer>` when a
+  workflow-owned private fixture needs a different minimum.
 - Private fixture coverage is intentionally not committed in-repo. Future
   weekly/release jobs should stage the private fixture into a CI-only path
   such as `tmp/memory-eval/` and set the workflow-owned env gate(s) above
@@ -75,6 +80,8 @@ GitHub Actions now reserves the non-dev splits for a dedicated workflow:
 The workflow stages the private fixture into `tmp/memory-eval/agentctl-private.json`
 and optionally writes a gitignored changelog file at
 `tmp/memory-eval/fixtures/CHANGELOG.md`.
+It also enables `MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE=true` so sparse
+private fixtures fail fast instead of silently weakening eval coverage.
 
 Required repository secrets:
 
@@ -92,6 +99,9 @@ Optional repository variable:
 - `MEMORY_EVAL_RELEASE_REQUIRED` — set to `true` only after the private fixture
   and eval endpoint secrets are provisioned and release tags should be blocked
   by missing eval configuration.
+- `MEMORY_EVAL_FAILURE_MODE_MIN_ROWS` — optional override for the private-fixture
+  coverage gate when weekly/release eval jobs need a minimum other than the
+  default five rows per required failure-mode tag.
 
 ### What counts as a change
 
