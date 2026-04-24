@@ -1,4 +1,12 @@
-import { expect, type Locator, test } from '@playwright/test';
+import { expect, type Locator, type Page, type Route, test } from '@playwright/test';
+
+/**
+ * Backend-independent dashboard contrast coverage.
+ *
+ * The dashboard and shared app shell start several queries plus the global
+ * WebSocket before the top actions settle. These mocks make the contrast check
+ * deterministic and fail closed for any new API dependency.
+ */
 
 type ThemeMode = 'light' | 'dark';
 
@@ -8,17 +16,131 @@ type ActionTarget = {
 };
 
 const DASHBOARD_ACTIONS: ActionTarget[] = [
-  { role: 'link', name: 'New Session' },
-  { role: 'link', name: 'View Agents' },
+  { role: 'link', name: 'Create a new agent' },
+  { role: 'link', name: 'Start a new session' },
+  { role: 'link', name: 'Open the logs page' },
+  { role: 'link', name: 'Discover existing sessions' },
   { role: 'button', name: 'Refresh' },
 ];
 
 const MIN_CONTRAST_RATIO = 4.5; // WCAG AA for normal-size text
+const NOW = '2026-04-24T10:30:00.000Z';
 
-async function openDashboardInTheme(
-  page: import('@playwright/test').Page,
-  theme: ThemeMode,
-): Promise<void> {
+async function fulfillJson(route: Route, body: unknown, status = 200): Promise<void> {
+  await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+}
+
+async function mockAppShellWebSocket(page: Page): Promise<void> {
+  await page.routeWebSocket('ws://localhost:8080/api/ws', (ws) => {
+    ws.onMessage((message) => {
+      const raw = typeof message === 'string' ? message : message.toString('utf8');
+      const payload = JSON.parse(raw) as Record<string, unknown>;
+
+      if (payload.type === 'ping') {
+        ws.send(JSON.stringify({ type: 'pong', timestamp: NOW }));
+      }
+    });
+  });
+}
+
+async function mockDashboardApis(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('agentctl:autoRefreshInterval', '0');
+  });
+  await mockAppShellWebSocket(page);
+
+  await page.route('**/health?**', async (route) => {
+    await fulfillJson(route, { status: 'ok', timestamp: NOW });
+  });
+
+  await page.route('**/metrics', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/plain',
+      body: ['agentctl_agents_active 0', 'agentctl_runs_total 0'].join('\n'),
+    });
+  });
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+    const method = request.method();
+
+    if (method === 'GET' && pathname === '/api/sync/conflicts/count') {
+      await fulfillJson(route, { count: 0 });
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/permission-requests') {
+      await fulfillJson(route, []);
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/version-compat') {
+      await fulfillJson(route, {
+        appVersion: '0.8.2',
+        gitSha: 'e2e',
+        schemaVersion: 35,
+        minSupportedMobileBuild: 0,
+        minSupportedWebBuild: 0,
+      });
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/agents') {
+      await fulfillJson(route, []);
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/agents/list') {
+      await fulfillJson(route, { agents: [], total: 0, hasMore: false });
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/sessions') {
+      await fulfillJson(route, { sessions: [], total: 0, limit: 50, offset: 0, hasMore: false });
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/sessions/discover') {
+      await fulfillJson(route, { sessions: [], count: 0, machinesQueried: 0, machinesFailed: 0 });
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/runtime-sessions') {
+      await fulfillJson(route, { sessions: [], count: 0 });
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/runtime-sessions/handoffs/summary') {
+      await fulfillJson(route, {
+        ok: true,
+        limit: 100,
+        summary: {
+          total: 0,
+          succeeded: 0,
+          failed: 0,
+          pending: 0,
+          nativeImportSuccesses: 0,
+          nativeImportFallbacks: 0,
+        },
+      });
+      return;
+    }
+
+    if (method === 'GET' && pathname === '/api/memory/stats') {
+      await fulfillJson(route, { ok: true });
+      return;
+    }
+
+    throw new Error(
+      `Unhandled API request in accessibility contrast e2e mock: ${method} ${pathname}`,
+    );
+  });
+}
+
+async function openDashboardInTheme(page: Page, theme: ThemeMode): Promise<void> {
+  await mockDashboardApis(page);
   await page.addInitScript((preferredTheme: ThemeMode) => {
     window.localStorage.setItem('theme', preferredTheme);
   }, theme);
