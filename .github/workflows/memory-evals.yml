@@ -149,6 +149,43 @@ jobs:
         if: steps.prep.outputs.should_run == 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: Validate private eval fixture
+        if: steps.prep.outputs.should_run == 'true'
+        env:
+          MEMORY_EVAL_FAILURE_MODE_MIN_ROWS: ${{ vars.MEMORY_EVAL_FAILURE_MODE_MIN_ROWS }}
+        run: |
+          set -euo pipefail
+
+          report_path="$RUNNER_TEMP/memory-eval-fixture-check-${{ steps.prep.outputs.split }}.txt"
+          min_rows="${MEMORY_EVAL_FAILURE_MODE_MIN_ROWS:-5}"
+
+          set +e
+          pnpm memory:eval:fixture-check \
+            --fixture "$PRIVATE_FIXTURE_PATH" \
+            --fixture-changelog "$PRIVATE_FIXTURE_CHANGELOG_PATH" \
+            --require-changelog \
+            --min-rows "$min_rows" 2>&1 | tee "$report_path"
+          status=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "## Private Fixture Check (${{ steps.prep.outputs.split }})"
+            echo
+            if [ -f "$report_path" ]; then
+              echo '```text'
+              cat "$report_path"
+              echo '```'
+            else
+              echo "No fixture-check report file was produced."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Private memory eval fixture check failed::See the step summary and uploaded memory-eval artifact for the aggregate fixture-check report."
+          fi
+
+          exit "$status"
+
       - name: Run live memory eval
         if: steps.prep.outputs.should_run == 'true'
         env:
@@ -207,5 +244,6 @@ jobs:
           name: memory-eval-${{ steps.prep.outputs.split }}-${{ github.sha }}
           path: |
             ${{ env.PRIVATE_FIXTURE_CHANGELOG_PATH }}
+            ${{ runner.temp }}/memory-eval-fixture-check-${{ steps.prep.outputs.split }}.txt
             ${{ runner.temp }}/memory-eval-${{ steps.prep.outputs.split }}.txt
           if-no-files-found: ignore
