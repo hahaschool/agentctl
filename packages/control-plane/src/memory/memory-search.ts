@@ -18,6 +18,13 @@ const DEFAULT_LIMIT = 10;
 const DEFAULT_CANDIDATE_LIMIT = 40;
 const DEFAULT_STRENGTH_THRESHOLD = 0.05;
 
+// Rank-bucket boost constants — additive on RRF score, capped at MAX_BOOST
+const BOOST_ENTITY_TYPE = 0.03; // agent or session facts are more relevant in orchestration context
+const BOOST_RECENCY_24H = 0.05; // created within the last 24 hours
+const BOOST_RECENCY_7D = 0.02; // created within the last 7 days (but not < 24h)
+const BOOST_SCOPE_EXACT = 0.02; // fact scope exactly matches the primary visible scope
+const MAX_BOOST = 0.1;
+
 export type MemorySearchOptions = {
   pool: Pool;
   embeddingClient?: EmbeddingClient;
@@ -42,6 +49,9 @@ type FusedCandidate = {
   fact: MemoryFact;
   rrfScore: number;
 };
+
+// RrfCandidate is a public alias so boostScore can be tested without referencing private internals.
+export type RrfCandidate = FusedCandidate;
 
 function toIsoString(value: unknown): string {
   if (value instanceof Date) {
@@ -72,6 +82,50 @@ function parseSource(value: unknown): FactSource {
     turn_index: null,
     extraction_method: 'manual',
   }) as FactSource;
+}
+
+/**
+ * Compute an additive rank-bucket boost for a fused RRF candidate.
+ *
+ * The boost is intentionally small (≤ MAX_BOOST = 0.10) so that it nudges
+ * relevance without overriding text-match quality. Factors:
+ *  - entity_type 'agent' or 'session' (+0.03): most relevant in orchestration
+ *  - created within 24 hours             (+0.05): very fresh knowledge
+ *  - created within 7 days but not 24h   (+0.02): recently added
+ *  - scope exactly matches primary scope  (+0.02): precise context match
+ */
+export function boostScore(
+  candidate: RrfCandidate,
+  input: Pick<SearchInput, 'visibleScopes'>,
+): number {
+  const { fact } = candidate;
+  let boost = 0;
+
+  // Entity-type boost — 'agent' and 'session' may appear in rows even though
+  // they are not yet in the shared EntityType union (DB can hold any string).
+  const entityType = fact.entity_type as string;
+  if (entityType === 'agent' || entityType === 'session') {
+    boost += BOOST_ENTITY_TYPE;
+  }
+
+  // Recency boost
+  const createdAt = new Date(fact.created_at).getTime();
+  const ageMs = Date.now() - createdAt;
+  const msIn24h = 24 * 60 * 60 * 1000;
+  const msIn7d = 7 * msIn24h;
+  if (ageMs >= 0 && ageMs < msIn24h) {
+    boost += BOOST_RECENCY_24H;
+  } else if (ageMs >= msIn24h && ageMs < msIn7d) {
+    boost += BOOST_RECENCY_7D;
+  }
+
+  // Scope exact-match boost (primary scope only — not a broad wildcard pass)
+  const primaryScope = input.visibleScopes[0];
+  if (primaryScope !== undefined && primaryScope !== '' && fact.scope === primaryScope) {
+    boost += BOOST_SCOPE_EXACT;
+  }
+
+  return Math.min(boost, MAX_BOOST);
 }
 
 function buildScopeCondition(
@@ -157,10 +211,11 @@ export class MemorySearch {
     }
 
     const ranked = this.boostAndRank(
-      [...fused.values()].map((candidate) => ({
-        fact: candidate.fact,
-        rrfScore: candidate.rrfScore,
-      })),
+      [...fused.values()].map((candidate) => {
+        const base: RrfCandidate = { fact: candidate.fact, rrfScore: candidate.rrfScore };
+        const boosted = boostScore(base, input);
+        return { fact: candidate.fact, rrfScore: candidate.rrfScore + boosted };
+      }),
       visibleScopes[0],
       DEFAULT_INJECTION_BUDGET,
       input.role,
