@@ -157,6 +157,7 @@ jobs:
           cache-db: "true"
           fail-build: false
           severity-cutoff: high
+          only-fixed: true
           output-format: sarif
           output-file: grype-${{ matrix.package }}.sarif
 
