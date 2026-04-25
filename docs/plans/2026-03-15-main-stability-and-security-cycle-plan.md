@@ -76,6 +76,17 @@
 > Open code-scanning, Dependabot, and secret-scanning alert feeds all report 0
 > items. Dev-1/dev-2, production deploy, and beta promotion workflows were not
 > changed.
+>
+> Follow-up sync (2026-04-25): after PR #827 and PR #828 landed on
+> `main@751fb236`, the post-#828 main checks passed: CI `24921047042`,
+> Security Audit `24921047049`, and Build & Publish Docker Images
+> `24921047038`. PR #827 delivered the Memory Operations PR G
+> consolidation/synthesis workers and coverage, and PR #828 delivered the
+> MemoryInjector `full-drawer` mode. GitHub reported no open PRs during this
+> sync, and code-scanning, Dependabot, and secret-scanning alert feeds all
+> report 0 open alerts. Docker publish emitted only the known Grype DB cache
+> reservation annotation. Dev-1/dev-2, production deploy, and beta promotion
+> workflows were not changed.
 
 ---
 

@@ -1,10 +1,16 @@
 # PR G — Workers: Consolidation + Synthesis + E2E + Gate 2 + CHANGELOG
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Status sync (2026-04-25):** Landed in PR #827 (`7bc1a639`). The implementation added consolidation/synthesis handlers, worker wiring, focused unit coverage, Memory Ops Playwright coverage for the mocked OpenAI flow, missing-provider alerts, and gated Gemini dimensionality smoke, plus `.env.example`, CHANGELOG, and QUICKSTART rollout updates. Gemini `verified:true` was not flipped; the live Gate 2 check remains gated by `GATE2_GEMINI_API_KEY` and `GEMINI_VERIFIED=1`.
 
 **Goal:** The two remaining job handlers (consolidation + synthesis). Three Playwright e2e tests. Gate 2 verification for Gemini (live dimension check). CHANGELOG entry and runbook update. Flip `MEMORY_OPS_ENABLED_KINDS` to include all four kinds.
 
 **Architecture:** Consolidation and synthesis delegate to existing `MemoryMaintenance` and `MemorySynthesis` classes. They don't require a provider (no embedding calls). Their BullMQ handlers emit progress events and respect cancel polling.
+
+**Landed outcome:** PR #827 shipped the implementation on `codex/memory-ops-pr-g` and verified it with focused control-plane Vitest, control-plane build, Memory Ops Playwright allowlist, web build, PR checks, and post-merge main CI/Security/Docker. The original checklist below is preserved for traceability; follow-up work should not reuse this branch.
+
+**Remaining follow-ups:** Run dev-1 backfill/consolidation/synthesis verification only after rollout env and provider credentials are intentionally enabled. Run Gemini Gate 2 with a real key before a separate `verified:true` catalog flip.
 
 **Prerequisite:** PRs A+B+C+D+E+F merged. Branch from `main`.
 
