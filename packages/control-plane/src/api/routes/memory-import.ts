@@ -14,7 +14,8 @@ import type {
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Pool } from 'pg';
-
+import type { EdgeSourceData } from '../../memory/import-edge-gen.js';
+import { generateImportEdges } from '../../memory/import-edge-gen.js';
 import { readRateLimitEnv } from '../rate-limit.js';
 
 // ---------------------------------------------------------------------------
@@ -983,6 +984,9 @@ async function runImport(
 
       if (rows.length === 0) break;
 
+      // Collect EdgeSourceData for facts successfully imported in this batch
+      const batchEdgeSources: EdgeSourceData[] = [];
+
       for (const row of rows) {
         if (cancelRequested) break;
 
@@ -1035,6 +1039,12 @@ async function runImport(
                 existingIds,
                 sourceKey,
               );
+              batchEdgeSources.push({
+                factId: id,
+                sessionId: row.memory_session_id ?? null,
+                concepts: parseStringArray(row.concepts),
+                projectPath: row.project ?? null,
+              });
             } catch {
               errors++;
             }
@@ -1057,6 +1067,14 @@ async function runImport(
 
         if (cancelRequested || !activeJob || activeJob.id !== jobId) {
           break;
+        }
+      }
+
+      if (batchEdgeSources.length > 0) {
+        try {
+          await generateImportEdges(pool, batchEdgeSources, 'claude-mem');
+        } catch {
+          // Relationship edge generation is best-effort; imports must still complete.
         }
       }
 
