@@ -812,6 +812,128 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
     }
   });
 
+  it('resumes a JSONL import from a stable cursor when earlier files are removed', async () => {
+    const dir = makeTempJsonlDir(2);
+    fs.rmSync(path.join(dir, 'session-0000.jsonl'));
+    const insertedRows: unknown[][] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('FROM memory_import_jobs')) {
+          return {
+            rows: [
+              persistedImportJobRow({
+                id: 'import-persisted',
+                source_path: dir,
+                status: 'interrupted',
+                progress_current: 1,
+                progress_total: 2,
+                imported: 1,
+                skipped: 0,
+                errors: 0,
+                cursor_json: {
+                  kind: 'jsonl-history',
+                  lastRelativePath: 'session-0000.jsonl',
+                  lastImportSourceId: 'jsonl-history:session-0000',
+                },
+              }),
+            ],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('INSERT INTO memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return { rows: [], rowCount: 0 };
+        }
+        insertedRows.push(params ?? []);
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      resetActiveJobForTest();
+      const resume = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import/import-persisted/resume',
+      });
+
+      expect(resume.statusCode).toBe(202);
+      const completedJob = await waitForImportJob(app);
+      expect(completedJob.status).toBe('completed');
+      expect(completedJob.imported).toBe(2);
+      expect(insertedRows).toHaveLength(1);
+      expect(insertedRows[0]?.[9]).toBe('jsonl-history:session-0001');
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
+
+  it('counts same-job JSONL rows as imported after a crash before progress persisted', async () => {
+    const dir = makeTempJsonlDir(1);
+    const insertedRows: unknown[][] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('FROM memory_import_jobs')) {
+          return {
+            rows: [
+              persistedImportJobRow({
+                id: 'import-persisted',
+                source_path: dir,
+                status: 'interrupted',
+                progress_current: 0,
+                progress_total: 1,
+                imported: 0,
+                skipped: 0,
+                errors: 0,
+              }),
+            ],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('INSERT INTO memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return {
+            rows: [
+              {
+                src_id: 'jsonl-history:session-0000',
+                job_id: 'import-persisted',
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+        insertedRows.push(params ?? []);
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      resetActiveJobForTest();
+      const resume = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import/import-persisted/resume',
+      });
+
+      expect(resume.statusCode).toBe(202);
+      const completedJob = await waitForImportJob(app);
+      expect(completedJob.status).toBe('completed');
+      expect(completedJob.imported).toBe(1);
+      expect(completedJob.skipped).toBe(0);
+      expect(insertedRows).toHaveLength(0);
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
+
   it('marks an orphaned running job interrupted before resuming it after restart', async () => {
     const dir = makeTempJsonlDir(2);
     const insertedRows: unknown[][] = [];

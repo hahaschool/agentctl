@@ -367,6 +367,7 @@ export const memoryImportJobs = pgTable(
     errors: integer('errors').notNull().default(0),
     rolledBack: integer('rolled_back').notNull().default(0),
     errorMessage: text('error_message'),
+    cursorJson: jsonb('cursor_json').notNull().default({}),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
