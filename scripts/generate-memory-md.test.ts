@@ -441,6 +441,81 @@ describe('runGenerateMemoryMdDryRun', () => {
     expect(result.selectedFacts).toHaveLength(3);
   });
 
+  it('requests a durable approval gate bound to the write approval token', async () => {
+    const projectPath = path.join(tmpDir, 'agentctl');
+    const claudeProjectsDir = path.join(tmpDir, '.claude', 'projects');
+    const reviewedFact = createFact({
+      id: 'api-fact',
+      content: 'Surface A writes require a durable approval gate.',
+      scope: 'project:agentctl',
+      tags: ['surface-a-reviewed'],
+    });
+    let approvalPayload: Record<string, unknown> | undefined;
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/memory/facts') {
+        return new Response(JSON.stringify({ ok: true, facts: [reviewedFact] }), { status: 200 });
+      }
+
+      approvalPayload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(
+        JSON.stringify({
+          id: 'gate-1',
+          taskDefinitionId: approvalPayload.taskDefinitionId,
+          taskRunId: approvalPayload.taskRunId,
+          threadId: approvalPayload.threadId,
+          requiredApprovers: [],
+          requiredCount: 1,
+          timeoutMs: 3_600_000,
+          timeoutPolicy: 'pause',
+          contextArtifactIds: approvalPayload.contextArtifactIds,
+          status: 'pending',
+          createdAt: '2026-04-25T00:00:00.000Z',
+        }),
+        { status: 201 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runGenerateMemoryMdDryRunFromSource({
+      projectPath,
+      controlPlaneUrl: 'http://127.0.0.1:4111',
+      apiToken: 'token-123',
+      claudeProjectsDir,
+      scope: 'project:agentctl',
+      assumeInputReviewed: false,
+      maxFacts: 8,
+      maxFactChars: 120,
+      factsFetchLimit: 25,
+      factsFetchTimeoutMs: 1500,
+      requestApproval: true,
+      json: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetchMock.mock.calls[1]?.[0])).href).toBe(
+      'http://127.0.0.1:4111/api/approvals',
+    );
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer token-123',
+        'Content-Type': 'application/json',
+      },
+    });
+    expect(approvalPayload).toMatchObject({
+      taskDefinitionId: 'memory.surface-a.write',
+      taskRunId: result.writeApprovalToken,
+      contextArtifactIds: ['api-fact'],
+    });
+    expect(result.approvalGate).toMatchObject({
+      id: 'gate-1',
+      status: 'pending',
+      taskRunId: result.writeApprovalToken,
+    });
+  });
+
   it('rejects malformed control-plane API responses', async () => {
     vi.stubGlobal(
       'fetch',
@@ -551,6 +626,180 @@ describe('runGenerateMemoryMdWriteFromSource', () => {
     expect(result.memoryPath).toBe(memoryPath);
     expect(fs.readFileSync(memoryPath, 'utf8')).toBe(dryRun.proposedContent);
     expect(result.bytesWritten).toBe(Buffer.byteLength(dryRun.proposedContent, 'utf8'));
+  });
+
+  it('requires an approved durable approval gate when approvalGateId is supplied', async () => {
+    const projectPath = path.join(tmpDir, 'agentctl');
+    const claudeProjectsDir = path.join(tmpDir, '.claude', 'projects');
+    const memoryPath = resolveClaudeMemoryPath(projectPath, claudeProjectsDir);
+    const reviewedFact = createFact({
+      id: 'api-write-fact',
+      content: 'Durable approval gates protect Surface A writes from replay.',
+      scope: 'project:agentctl',
+      tags: ['surface-a-reviewed'],
+    });
+    let proposalToken = '';
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/memory/facts') {
+        return new Response(JSON.stringify({ ok: true, facts: [reviewedFact] }), { status: 200 });
+      }
+      if (url.pathname === '/api/approvals' && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { taskRunId: string };
+        proposalToken = payload.taskRunId;
+        return new Response(
+          JSON.stringify({
+            id: 'gate-1',
+            taskDefinitionId: 'memory.surface-a.write',
+            taskRunId: proposalToken,
+            threadId: null,
+            requiredApprovers: [],
+            requiredCount: 1,
+            timeoutMs: 3_600_000,
+            timeoutPolicy: 'pause',
+            contextArtifactIds: ['api-write-fact'],
+            status: 'pending',
+            createdAt: '2026-04-25T00:00:00.000Z',
+          }),
+          { status: 201 },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          id: 'gate-1',
+          taskDefinitionId: 'memory.surface-a.write',
+          taskRunId: proposalToken,
+          threadId: null,
+          requiredApprovers: [],
+          requiredCount: 1,
+          timeoutMs: 3_600_000,
+          timeoutPolicy: 'pause',
+          contextArtifactIds: ['api-write-fact'],
+          status: 'approved',
+          createdAt: '2026-04-25T00:00:00.000Z',
+          decisions: [
+            {
+              id: 'decision-1',
+              gateId: 'gate-1',
+              decidedBy: 'reviewer-1',
+              action: 'approved',
+              comment: null,
+              viaTimeout: false,
+              decidedAt: '2026-04-25T00:01:00.000Z',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const dryRun = await runGenerateMemoryMdDryRunFromSource({
+      projectPath,
+      controlPlaneUrl: 'http://127.0.0.1:4111',
+      claudeProjectsDir,
+      scope: 'project:agentctl',
+      assumeInputReviewed: false,
+      maxFacts: 8,
+      maxFactChars: 140,
+      factsFetchLimit: 25,
+      factsFetchTimeoutMs: 1500,
+      requestApproval: true,
+      json: false,
+    });
+
+    const result = await runGenerateMemoryMdWriteFromSource({
+      projectPath,
+      controlPlaneUrl: 'http://127.0.0.1:4111',
+      claudeProjectsDir,
+      scope: 'project:agentctl',
+      assumeInputReviewed: false,
+      maxFacts: 8,
+      maxFactChars: 140,
+      factsFetchLimit: 25,
+      factsFetchTimeoutMs: 1500,
+      write: true,
+      approvalToken: dryRun.writeApprovalToken,
+      approvalGateId: 'gate-1',
+      json: false,
+    });
+
+    expect(result.approvedBy).toBe('reviewer-1');
+    expect(result.approvalGate).toMatchObject({ id: 'gate-1', status: 'approved' });
+    expect(fs.readFileSync(memoryPath, 'utf8')).toBe(dryRun.proposedContent);
+  });
+
+  it('refuses pending durable approval gates and leaves MEMORY.md untouched', async () => {
+    const projectPath = path.join(tmpDir, 'agentctl');
+    const claudeProjectsDir = path.join(tmpDir, '.claude', 'projects');
+    const memoryPath = resolveClaudeMemoryPath(projectPath, claudeProjectsDir);
+    const reviewedFact = createFact({
+      id: 'api-write-fact',
+      content: 'Pending gates cannot write Surface A memory.',
+      scope: 'project:agentctl',
+      tags: ['surface-a-reviewed'],
+    });
+    const dryRun = generateMemoryMdDryRun([reviewedFact], {
+      projectPath,
+      claudeProjectsDir,
+      scope: 'project:agentctl',
+      assumeInputReviewed: false,
+      maxFacts: 8,
+      maxFactChars: 140,
+      existingMemoryContent: '# Existing Memory\n',
+    });
+    fs.mkdirSync(path.dirname(memoryPath), { recursive: true });
+    fs.writeFileSync(memoryPath, '# Existing Memory\n', 'utf8');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = new URL(String(input));
+        if (url.pathname === '/api/memory/facts') {
+          return new Response(JSON.stringify({ ok: true, facts: [reviewedFact] }), {
+            status: 200,
+          });
+        }
+
+        return new Response(
+          JSON.stringify({
+            id: 'gate-1',
+            taskDefinitionId: 'memory.surface-a.write',
+            taskRunId: dryRun.writeApprovalToken,
+            threadId: null,
+            requiredApprovers: [],
+            requiredCount: 1,
+            timeoutMs: 3_600_000,
+            timeoutPolicy: 'pause',
+            contextArtifactIds: ['api-write-fact'],
+            status: 'pending',
+            createdAt: '2026-04-25T00:00:00.000Z',
+            decisions: [],
+          }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    await expect(
+      runGenerateMemoryMdWriteFromSource({
+        projectPath,
+        controlPlaneUrl: 'http://127.0.0.1:4111',
+        claudeProjectsDir,
+        scope: 'project:agentctl',
+        assumeInputReviewed: false,
+        maxFacts: 8,
+        maxFactChars: 140,
+        factsFetchLimit: 25,
+        factsFetchTimeoutMs: 1500,
+        write: true,
+        approvalToken: dryRun.writeApprovalToken,
+        approvalGateId: 'gate-1',
+        json: false,
+      }),
+    ).rejects.toThrow(/not approved/i);
+
+    expect(fs.readFileSync(memoryPath, 'utf8')).toBe('# Existing Memory\n');
   });
 
   it('refuses stale approval tokens and leaves existing MEMORY.md untouched', async () => {

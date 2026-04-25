@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { MemoryFact, MemoryScope } from '@agentctl/shared';
+import type { ApprovalDecision, ApprovalGate, MemoryFact, MemoryScope } from '@agentctl/shared';
 
 export type ReviewableMemoryFact = MemoryFact & {
   reviewed?: boolean;
@@ -23,8 +23,10 @@ export type GenerateMemoryMdCliOptions = {
   maxFactChars: number;
   factsFetchLimit: number;
   factsFetchTimeoutMs: number;
+  requestApproval?: boolean;
   write?: boolean;
   approvalToken?: string;
+  approvalGateId?: string;
   approvedBy?: string;
   json: boolean;
 };
@@ -52,6 +54,7 @@ export type MemoryMdDryRunResult = {
   existingContentSha256: string;
   proposedContentSha256: string;
   writeApprovalToken: string;
+  approvalGate?: MemoryMdApprovalGate;
   assumptions: string[];
 };
 
@@ -62,8 +65,13 @@ export type MemoryMdWriteResult = Omit<MemoryMdDryRunResult, 'dryRun'> & {
   writtenAt: string;
 };
 
+export type MemoryMdApprovalGate = ApprovalGate & {
+  readonly decisions?: readonly ApprovalDecision[];
+};
+
 const GENERATED_BLOCK_START = '<!-- agentctl-memory-md:start -->';
 const GENERATED_BLOCK_END = '<!-- agentctl-memory-md:end -->';
+const SURFACE_A_WRITE_TASK_DEFINITION_ID = 'memory.surface-a.write';
 const DEFAULT_MAX_FACTS = 8;
 const DEFAULT_MAX_FACT_CHARS = 140;
 const DEFAULT_FACTS_FETCH_LIMIT = 500;
@@ -102,9 +110,11 @@ Options:
   --max-fact-chars <count>     Max characters per generated bullet. Default: ${DEFAULT_MAX_FACT_CHARS}.
   --api-fetch-limit <count>    Max API facts to fetch. Default: ${DEFAULT_FACTS_FETCH_LIMIT}.
   --facts-fetch-timeout-ms <ms> API fetch timeout. Default: ${DEFAULT_FACTS_FETCH_TIMEOUT_MS}.
+  --request-approval           Create a durable approval gate for this proposal.
   --write                      Write the approved proposal to MEMORY.md.
   --approval-token <token>     Required with --write. Must match the current dry-run token.
-  --approved-by <id>           Required with --write. Records who approved the write.
+  --approval-gate-id <id>      Durable approval gate to verify before --write.
+  --approved-by <id>           Offline reviewer id when --write is not using an approval gate.
   --json                       Emit the result as JSON.
   --help, -h                   Show this help text.
 
@@ -124,8 +134,10 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
   let maxFactChars = DEFAULT_MAX_FACT_CHARS;
   let factsFetchLimit = DEFAULT_FACTS_FETCH_LIMIT;
   let factsFetchTimeoutMs = DEFAULT_FACTS_FETCH_TIMEOUT_MS;
+  let requestApproval = false;
   let write = false;
   let approvalToken: string | null = null;
+  let approvalGateId: string | null = null;
   let approvedBy: string | null = null;
   let json = false;
 
@@ -239,12 +251,23 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
       continue;
     }
 
+    if (arg === '--request-approval') {
+      requestApproval = true;
+      continue;
+    }
+
     if (arg === '--approval-token') {
       const value = argv[index + 1];
       if (!value) {
         throw new Error('--approval-token requires a value');
       }
       approvalToken = value.trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--approval-gate-id') {
+      approvalGateId = parseBoundedString(argv[index + 1], '--approval-gate-id', 128);
       index += 1;
       continue;
     }
@@ -266,11 +289,20 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
   if (Number(Boolean(factsJsonPath)) + Number(Boolean(controlPlaneUrl)) !== 1) {
     throw new Error('Provide exactly one fact source: --facts-json or --control-plane-url');
   }
+  if (requestApproval && write) {
+    throw new Error('--request-approval cannot be combined with --write');
+  }
+  if (requestApproval && !controlPlaneUrl) {
+    throw new Error('--request-approval requires --control-plane-url');
+  }
+  if (approvalGateId && !controlPlaneUrl) {
+    throw new Error('--approval-gate-id requires --control-plane-url');
+  }
   if (write && !approvalToken) {
     throw new Error('--write requires --approval-token from a reviewed dry run');
   }
-  if (write && !approvedBy) {
-    throw new Error('--write requires --approved-by to record the reviewer');
+  if (write && !approvedBy && !approvalGateId) {
+    throw new Error('--write requires --approved-by or --approval-gate-id');
   }
 
   const resolvedApiToken = apiToken ?? process.env.AGENTCTL_API_TOKEN;
@@ -286,8 +318,10 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
     maxFactChars,
     factsFetchLimit,
     factsFetchTimeoutMs,
+    requestApproval,
     write,
     ...(approvalToken ? { approvalToken } : {}),
+    ...(approvalGateId ? { approvalGateId } : {}),
     ...(approvedBy ? { approvedBy } : {}),
     json,
   };
@@ -659,7 +693,7 @@ export async function runGenerateMemoryMdDryRunFromSource(
     ? fs.readFileSync(memoryPath, 'utf8')
     : null;
 
-  return generateMemoryMdDryRun(facts, {
+  const dryRun = generateMemoryMdDryRun(facts, {
     projectPath: options.projectPath,
     claudeProjectsDir: options.claudeProjectsDir,
     scope: options.scope,
@@ -668,19 +702,45 @@ export async function runGenerateMemoryMdDryRunFromSource(
     maxFactChars: options.maxFactChars,
     existingMemoryContent,
   });
+
+  if (!options.requestApproval) {
+    return dryRun;
+  }
+
+  const approvalGate = await createMemoryMdApprovalGate({
+    controlPlaneUrl: requireOption(options.controlPlaneUrl, '--control-plane-url'),
+    ...(options.apiToken ? { apiToken: options.apiToken } : {}),
+    dryRun,
+  });
+
+  return { ...dryRun, approvalGate };
 }
 
 export async function runGenerateMemoryMdWriteFromSource(
   options: GenerateMemoryMdCliOptions,
 ): Promise<MemoryMdWriteResult> {
   const approvalToken = requireOption(options.approvalToken, '--approval-token');
-  const approvedBy = requireOption(options.approvedBy, '--approved-by');
   const dryRun = await runGenerateMemoryMdDryRunFromSource(options);
 
   if (approvalToken !== dryRun.writeApprovalToken) {
     throw new Error(
       'Write approval token does not match the current MEMORY.md proposal; rerun the dry run and review the latest diff.',
     );
+  }
+
+  const approvalGate = options.approvalGateId
+    ? await fetchMemoryMdApprovalGate({
+        controlPlaneUrl: requireOption(options.controlPlaneUrl, '--control-plane-url'),
+        ...(options.apiToken ? { apiToken: options.apiToken } : {}),
+        approvalGateId: options.approvalGateId,
+      })
+    : undefined;
+  if (approvalGate) {
+    assertApprovalGateMatchesProposal(approvalGate, dryRun);
+  }
+  const approvedBy = options.approvedBy ?? approvedDecisionActor(approvalGate);
+  if (!approvedBy) {
+    throw new Error('--write requires --approved-by or an approved gate decision');
   }
 
   fs.mkdirSync(path.dirname(dryRun.memoryPath), { recursive: true });
@@ -690,6 +750,7 @@ export async function runGenerateMemoryMdWriteFromSource(
     ...dryRun,
     dryRun: false,
     approvedBy,
+    ...(approvalGate ? { approvalGate } : {}),
     bytesWritten: Buffer.byteLength(dryRun.proposedContent, 'utf8'),
     writtenAt: new Date().toISOString(),
   };
@@ -712,6 +773,9 @@ export function formatMemoryMdDryRun(result: MemoryMdDryRunResult): string {
     ...result.assumptions.map((assumption) => `- ${assumption}`),
     '',
     `Write approval token: ${result.writeApprovalToken}`,
+    ...(result.approvalGate
+      ? [`Approval gate: ${result.approvalGate.id} (${result.approvalGate.status})`]
+      : []),
     '',
     '## Diff',
     '',
@@ -735,6 +799,9 @@ export function formatMemoryMdWriteResult(result: MemoryMdWriteResult): string {
     `Bytes written: ${result.bytesWritten}`,
     `Written at: ${result.writtenAt}`,
     `Write approval token: ${result.writeApprovalToken}`,
+    ...(result.approvalGate
+      ? [`Approval gate: ${result.approvalGate.id} (${result.approvalGate.status})`]
+      : []),
     '',
   ].join('\n');
 }
@@ -795,6 +862,95 @@ function requireOption<T>(value: T | null | undefined, flagName: string): T {
     throw new Error(`${flagName} is required`);
   }
   return value;
+}
+
+async function createMemoryMdApprovalGate(input: {
+  controlPlaneUrl: string;
+  apiToken?: string;
+  dryRun: MemoryMdDryRunResult;
+}): Promise<MemoryMdApprovalGate> {
+  const url = new URL('/api/approvals', ensureTrailingSlash(input.controlPlaneUrl));
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: buildApprovalHeaders(input.apiToken, true),
+    body: JSON.stringify({
+      taskDefinitionId: SURFACE_A_WRITE_TASK_DEFINITION_ID,
+      taskRunId: input.dryRun.writeApprovalToken,
+      threadId: `memory-surface-a:${input.dryRun.writeApprovalToken.slice(0, 32)}`,
+      contextArtifactIds: input.dryRun.selectedFacts.map((fact) => fact.id).slice(0, 256),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to create MEMORY.md approval gate: HTTP ${response.status}`);
+  }
+
+  return parseApprovalGate(await response.json());
+}
+
+async function fetchMemoryMdApprovalGate(input: {
+  controlPlaneUrl: string;
+  apiToken?: string;
+  approvalGateId: string;
+}): Promise<MemoryMdApprovalGate> {
+  const url = new URL(
+    `/api/approvals/${encodeURIComponent(input.approvalGateId)}`,
+    ensureTrailingSlash(input.controlPlaneUrl),
+  );
+  const response = await fetch(url, {
+    headers: buildApprovalHeaders(input.apiToken, false),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch MEMORY.md approval gate: HTTP ${response.status}`);
+  }
+
+  return parseApprovalGate(await response.json());
+}
+
+function buildApprovalHeaders(apiToken: string | undefined, withJsonBody: boolean): HeadersInit {
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (withJsonBody) {
+    headers['Content-Type'] = 'application/json';
+  }
+  if (apiToken) {
+    headers.Authorization = `Bearer ${apiToken}`;
+  }
+  return headers;
+}
+
+function parseApprovalGate(value: unknown): MemoryMdApprovalGate {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== 'string' ||
+    typeof value.taskDefinitionId !== 'string' ||
+    typeof value.status !== 'string'
+  ) {
+    throw new Error('Approval gate response must contain id, taskDefinitionId, and status');
+  }
+  return value as MemoryMdApprovalGate;
+}
+
+function assertApprovalGateMatchesProposal(
+  gate: MemoryMdApprovalGate,
+  dryRun: MemoryMdDryRunResult,
+): void {
+  if (gate.taskDefinitionId !== SURFACE_A_WRITE_TASK_DEFINITION_ID) {
+    throw new Error('Approval gate is not for a MEMORY.md Surface A write');
+  }
+  if (gate.taskRunId !== dryRun.writeApprovalToken) {
+    throw new Error(
+      'Approval gate does not match the current MEMORY.md proposal; rerun the dry run and request approval again.',
+    );
+  }
+  if (gate.status !== 'approved') {
+    throw new Error(`Approval gate '${gate.id}' is not approved (status: ${gate.status})`);
+  }
+}
+
+function approvedDecisionActor(gate: MemoryMdApprovalGate | undefined): string | undefined {
+  const approvedDecision = gate?.decisions?.find((decision) => decision.action === 'approved');
+  return approvedDecision?.decidedBy;
 }
 
 function isReviewedFact(fact: ReviewableMemoryFact, assumeInputReviewed: boolean): boolean {
