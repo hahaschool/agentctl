@@ -97,6 +97,7 @@ jobs:
           # Build args allow the Dockerfile to use the same pnpm version
           build-args: |
             PNPM_VERSION=8.15.4
+            APT_CACHE_BUST=${{ github.run_id }}
           # Provenance attestation for supply chain security
           provenance: true
           sbom: true
