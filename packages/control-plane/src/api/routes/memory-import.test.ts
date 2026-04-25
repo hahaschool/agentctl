@@ -91,6 +91,77 @@ function removeTempDir(dir: string): void {
   }
 }
 
+async function makeTempClaudeMemDb(
+  observations: Array<{
+    id: number;
+    memory_session_id?: string;
+    project?: string;
+    text?: string | null;
+    type?: string;
+    title?: string | null;
+    subtitle?: string | null;
+    facts?: string | null;
+    narrative?: string | null;
+    concepts?: string | null;
+    files_read?: string | null;
+    files_modified?: string | null;
+    created_at?: string;
+  }>,
+): Promise<{ dir: string; dbPath: string }> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mem-import-claude-db-'));
+  const dbPath = path.join(dir, 'claude-mem.db');
+  const { default: Database } = await import('better-sqlite3');
+  const db = new Database(dbPath);
+  try {
+    db.exec(`
+      CREATE TABLE observations (
+        id INTEGER PRIMARY KEY,
+        memory_session_id TEXT,
+        project TEXT,
+        text TEXT,
+        type TEXT,
+        title TEXT,
+        subtitle TEXT,
+        facts TEXT,
+        narrative TEXT,
+        concepts TEXT,
+        files_read TEXT,
+        files_modified TEXT,
+        created_at TEXT
+      )
+    `);
+    const insert = db.prepare(`
+      INSERT INTO observations (
+        id, memory_session_id, project, text, type, title, subtitle, facts,
+        narrative, concepts, files_read, files_modified, created_at
+      ) VALUES (
+        @id, @memory_session_id, @project, @text, @type, @title, @subtitle, @facts,
+        @narrative, @concepts, @files_read, @files_modified, @created_at
+      )
+    `);
+    for (const observation of observations) {
+      insert.run({
+        id: observation.id,
+        memory_session_id: observation.memory_session_id ?? 'session-1',
+        project: observation.project ?? 'agentctl',
+        text: observation.text ?? null,
+        type: observation.type ?? 'decision',
+        title: observation.title ?? 'Prefer structured imports',
+        subtitle: observation.subtitle ?? null,
+        facts: observation.facts ?? null,
+        narrative: observation.narrative ?? 'Structured import data should preserve graph context.',
+        concepts: observation.concepts ?? null,
+        files_read: observation.files_read ?? null,
+        files_modified: observation.files_modified ?? null,
+        created_at: observation.created_at ?? '2026-04-25T00:00:00.000Z',
+      });
+    }
+  } finally {
+    db.close();
+  }
+  return { dir, dbPath };
+}
+
 async function waitForImportJob(app: Awaited<ReturnType<typeof buildAppWithPool>>) {
   for (let i = 0; i < 50; i += 1) {
     const res = await app.inject({ method: 'GET', url: '/api/memory/import/status' });
@@ -997,6 +1068,80 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
       expect(persistedStatuses.indexOf('interrupted')).toBeLessThan(
         persistedStatuses.indexOf('running'),
       );
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
+});
+
+describe('POST /api/memory/import — claude-mem structured fields with mock pool', () => {
+  it('creates child facts and summarizes edges from the observation facts array', async () => {
+    const { dir, dbPath } = await makeTempClaudeMemDb([
+      {
+        id: 42,
+        facts: JSON.stringify([
+          'Use source-local ids for import idempotency',
+          'Preserve child facts as graph edges',
+        ]),
+      },
+    ]);
+    const insertedFacts: unknown[][] = [];
+    const insertedEdges: unknown[][] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return { rows: [], rowCount: 0 };
+        }
+        if (sql.includes('INSERT INTO memory_edges')) {
+          insertedEdges.push(params ?? []);
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes('INSERT INTO memory_facts')) {
+          insertedFacts.push(params ?? []);
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import',
+        payload: { source: 'claude-mem', dbPath },
+      });
+
+      expect(res.statusCode).toBe(202);
+      const job = await waitForImportJob(app);
+      expect(job.status).toBe('completed');
+      expect(job.imported).toBe(1);
+      expect(job.errors).toBe(0);
+
+      expect(insertedFacts.map((params) => params[2])).toEqual([
+        'Prefer structured imports\n\nStructured import data should preserve graph context.',
+        'Use source-local ids for import idempotency',
+        'Preserve child facts as graph edges',
+      ]);
+      const parentId = insertedFacts[0]?.[0];
+      const childIds = insertedFacts.slice(1).map((params) => params[0]);
+      expect(insertedFacts[1]?.[7]).toMatchObject({
+        import_job_id: expect.any(String),
+        import_source_id: 'claude-mem:42:fact:0',
+      });
+      expect(insertedFacts[2]?.[7]).toMatchObject({
+        import_job_id: expect.any(String),
+        import_source_id: 'claude-mem:42:fact:1',
+      });
+      expect(insertedEdges.map((params) => params.slice(1, 5))).toEqual([
+        [childIds[0], parentId, 'summarizes', 0.8],
+        [childIds[1], parentId, 'summarizes', 0.8],
+      ]);
     } finally {
       await app.close();
       resetActiveJobForTest();
