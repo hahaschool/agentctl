@@ -117,6 +117,24 @@ function buildSource(row: ObservationRow): FactSource {
   };
 }
 
+function parseStringArray(value: string | null): string[] {
+  if (!value?.trim()) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function buildChildFactImportSourceId(rowId: number, index: number): string {
+  return `claude-mem:${rowId}:fact:${index}`;
+}
+
 function mapEntityType(obsType: string): EntityType {
   return OBSERVATION_TYPE_TO_ENTITY[obsType] ?? 'concept';
 }
@@ -756,6 +774,79 @@ async function openSqlite(dbPath: string): Promise<SqliteDb> {
   return new BetterSqlite3(dbPath, { readonly: true }) as unknown as SqliteDb;
 }
 
+async function insertClaudeMemChildFacts(
+  pool: Pool,
+  row: ObservationRow,
+  parentFactId: string,
+  jobId: string,
+  existingIds: Set<string>,
+): Promise<number> {
+  let errors = 0;
+  const childFacts = parseStringArray(row.facts);
+  if (childFacts.length === 0) {
+    return errors;
+  }
+
+  const parentImportSourceId = `claude-mem:${row.id}`;
+  const scope = `project:${row.project}` as const;
+  const entityType = mapEntityType(row.type);
+  const createdAt = row.created_at;
+  const baseTags = buildTags(row);
+
+  for (const [index, content] of childFacts.entries()) {
+    const childSourceId = buildChildFactImportSourceId(row.id, index);
+    if (existingIds.has(childSourceId)) {
+      continue;
+    }
+
+    const childFactId = generateImportId();
+    const source: FactSource & Record<string, unknown> = {
+      ...buildSource(row),
+      import_source_id: childSourceId,
+      import_job_id: jobId,
+      parent_import_source_id: parentImportSourceId,
+      structured_fact_index: index,
+    };
+
+    try {
+      await pool.query(
+        `INSERT INTO memory_facts (
+           id, scope, content, content_model, entity_type,
+           confidence, strength, source_json, valid_from, created_at, accessed_at,
+           tags
+         ) VALUES (
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, $9, $9,
+           $10
+         )`,
+        [
+          childFactId,
+          scope,
+          content,
+          'none',
+          entityType,
+          0.7,
+          1.0,
+          source,
+          createdAt,
+          [...baseTags, 'structured:fact'],
+        ],
+      );
+      await pool.query(
+        `INSERT INTO memory_edges (id, source_fact_id, target_fact_id, relation, weight, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (source_fact_id, target_fact_id, relation)
+         DO UPDATE SET weight = EXCLUDED.weight`,
+        [generateImportId(), childFactId, parentFactId, 'summarizes', 0.8, createdAt],
+      );
+      existingIds.add(childSourceId);
+    } catch {
+      errors++;
+    }
+  }
+
+  return errors;
+}
+
 // ---------------------------------------------------------------------------
 // Import engine
 // ---------------------------------------------------------------------------
@@ -851,6 +942,7 @@ async function runImport(
               );
               imported++;
               existingIds.add(sourceId);
+              errors += await insertClaudeMemChildFacts(pool, row, id, jobId, existingIds);
             } catch {
               errors++;
             }
