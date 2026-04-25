@@ -28,6 +28,53 @@ vi.mock('../hooks/audit-logger.js', () => {
 
 const MACHINE_ID = 'test-machine-server';
 
+describe('memory timeline MCP route registration', () => {
+  let app: FastifyInstance;
+  let pool: AgentPool;
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(async () => {
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'MEMORY_TIMELINE_ENTITY_NOT_FOUND' }),
+    });
+
+    const logger = createSilentLogger();
+    pool = new AgentPool({ logger, maxConcurrent: 3 });
+    app = await createWorkerServer({
+      logger,
+      agentPool: pool,
+      machineId: MACHINE_ID,
+      controlPlaneUrl: 'http://localhost:8080',
+    });
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = originalFetch;
+    await pool.stopAll();
+    await app.close();
+  });
+
+  it('registers POST /api/mcp/memory-timeline when controlPlaneUrl is configured', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-timeline',
+      payload: {
+        arguments: { entity: 'fact-A' },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/api/memory/timeline?entity=fact-A&limit=20',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+});
+
 describe('manual takeover route registration', () => {
   let app: FastifyInstance;
   let pool: AgentPool;

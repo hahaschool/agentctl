@@ -12,6 +12,7 @@ import { memoryRecallRoutes } from './memory-recall.js';
 import { memoryReportRoutes } from './memory-report.js';
 import { memorySearchRoutes } from './memory-search.js';
 import { memoryStoreRoutes } from './memory-store-route.js';
+import { memoryTimelineRoutes } from './memory-timeline.js';
 import { memoryTraverseRoutes } from './memory-traverse.js';
 
 const CONTROL_PLANE_URL = 'http://localhost:8080';
@@ -31,6 +32,7 @@ function makeApp(): FastifyInstance {
   void app.register(memoryTraverseRoutes, routeOptions);
   void app.register(memoryDrawerSearchRoutes, routeOptions);
   void app.register(memoryDrawerGetRoutes, routeOptions);
+  void app.register(memoryTimelineRoutes, routeOptions);
 
   return app;
 }
@@ -204,6 +206,31 @@ describe('memory MCP cold-start contract', () => {
     });
   });
 
+  it('returns an empty timeline response when the timeline entity is absent', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'MEMORY_TIMELINE_ENTITY_NOT_FOUND' }),
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/mcp/memory-timeline',
+      payload: {
+        arguments: { entity: 'missing-fact' },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ok: true,
+      as_of: null,
+      limit: 20,
+      next_cursor: null,
+      events: [],
+    });
+  });
+
   it('rejects null arguments on every current memory MCP route without hanging', async () => {
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-search');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-recall');
@@ -215,5 +242,6 @@ describe('memory MCP cold-start contract', () => {
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-traverse');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-drawer-search');
     await expectFastNullArgumentsRejection(app, '/api/mcp/memory-drawer-get');
+    await expectFastNullArgumentsRejection(app, '/api/mcp/memory-timeline');
   });
 });
