@@ -15,6 +15,8 @@ import {
   memoryDrawerBackfillState,
   memoryDrawers,
   memoryEdges,
+  memoryEntities,
+  memoryEntityAliases,
   memoryFactSources,
   memoryFacts,
   memoryImportJobs,
@@ -119,6 +121,8 @@ describe('Schema module exports', () => {
     expect(memoryEdges).toBeDefined();
     expect(memoryDrawers).toBeDefined();
     expect(memoryDrawerBackfillState).toBeDefined();
+    expect(memoryEntities).toBeDefined();
+    expect(memoryEntityAliases).toBeDefined();
     expect(memoryFactSources).toBeDefined();
     expect(memoryImportJobs).toBeDefined();
     expect(getTableName(memoryScopes)).toBe('memory_scopes');
@@ -126,6 +130,8 @@ describe('Schema module exports', () => {
     expect(getTableName(memoryEdges)).toBe('memory_edges');
     expect(getTableName(memoryDrawers)).toBe('memory_drawers');
     expect(getTableName(memoryDrawerBackfillState)).toBe('memory_drawer_backfill_state');
+    expect(getTableName(memoryEntities)).toBe('memory_entities');
+    expect(getTableName(memoryEntityAliases)).toBe('memory_entity_aliases');
     expect(getTableName(memoryFactSources)).toBe('memory_fact_sources');
     expect(getTableName(memoryImportJobs)).toBe('memory_import_jobs');
   });
@@ -1687,7 +1693,7 @@ describe('memory fact provenance columns', () => {
 });
 
 describe('Drizzle memory drawer migration journal', () => {
-  it('tracks fact-source provenance, backfill state, and durable import jobs in order', () => {
+  it('tracks fact-source provenance, backfill state, durable import jobs, and canonical entity tables in order', () => {
     const journal = JSON.parse(
       readFileSync(new URL('../../drizzle/meta/_journal.json', import.meta.url), 'utf8'),
     ) as { entries: Array<{ tag: string }> };
@@ -1698,6 +1704,7 @@ describe('Drizzle memory drawer migration journal', () => {
     expect(tags).toContain('0032_add_memory_drawer_backfill_state');
     expect(tags).toContain('0034_add_memory_import_jobs');
     expect(tags).toContain('0035_add_memory_import_job_cursor');
+    expect(tags).toContain('0036_add_memory_entity_canonicalization');
     expect(tags.indexOf('0031_add_memory_fact_sources_and_versions')).toBeGreaterThan(
       tags.indexOf('0030_add_memory_drawers'),
     );
@@ -1709,6 +1716,9 @@ describe('Drizzle memory drawer migration journal', () => {
     );
     expect(tags.indexOf('0035_add_memory_import_job_cursor')).toBeGreaterThan(
       tags.indexOf('0034_add_memory_import_jobs'),
+    );
+    expect(tags.indexOf('0036_add_memory_entity_canonicalization')).toBeGreaterThan(
+      tags.indexOf('0035_add_memory_import_job_cursor'),
     );
   });
 });
@@ -1801,6 +1811,74 @@ describe('Runtime management foreign key relationships', () => {
     expect(config.foreignKeys).toHaveLength(2);
     expect(getTableName(config.foreignKeys[0].reference().foreignTable)).toBe('memory_facts');
     expect(getTableName(config.foreignKeys[1].reference().foreignTable)).toBe('memory_facts');
+  });
+
+  it('memoryEntityAliases references memoryEntities', () => {
+    const config = getTableConfig(memoryEntityAliases);
+    expect(config.foreignKeys).toHaveLength(1);
+    expect(getTableName(config.foreignKeys[0].reference().foreignTable)).toBe('memory_entities');
+  });
+});
+
+describe('Memory entity canonicalization tables', () => {
+  const entitiesMeta = getColumnMeta(memoryEntities);
+  const aliasesMeta = getColumnMeta(memoryEntityAliases);
+
+  it('stores canonical entities with normalized names and metadata', () => {
+    expect(Object.keys(entitiesMeta)).toEqual([
+      'id',
+      'entityType',
+      'canonicalName',
+      'normalizedCanonicalName',
+      'metadataJson',
+      'createdAt',
+      'updatedAt',
+    ]);
+    expect(entitiesMeta.id.primary).toBe(true);
+    expect(entitiesMeta.entityType.notNull).toBe(true);
+    expect(entitiesMeta.canonicalName.notNull).toBe(true);
+    expect(entitiesMeta.normalizedCanonicalName.notNull).toBe(true);
+    expect(entitiesMeta.metadataJson.notNull).toBe(true);
+    expect(entitiesMeta.metadataJson.hasDefault).toBe(true);
+    expect(entitiesMeta.createdAt.hasDefault).toBe(true);
+    expect(entitiesMeta.updatedAt.hasDefault).toBe(true);
+  });
+
+  it('stores aliases separately with one normalized alias per canonical entity', () => {
+    expect(Object.keys(aliasesMeta)).toEqual([
+      'id',
+      'canonicalId',
+      'alias',
+      'normalizedAlias',
+      'sourceJson',
+      'createdAt',
+    ]);
+    expect(aliasesMeta.id.primary).toBe(true);
+    expect(aliasesMeta.canonicalId.notNull).toBe(true);
+    expect(aliasesMeta.alias.notNull).toBe(true);
+    expect(aliasesMeta.normalizedAlias.notNull).toBe(true);
+    expect(aliasesMeta.sourceJson.notNull).toBe(true);
+    expect(aliasesMeta.sourceJson.hasDefault).toBe(true);
+    expect(aliasesMeta.createdAt.hasDefault).toBe(true);
+  });
+
+  it('exposes lookup and dedupe indexes for canonical names and aliases', () => {
+    const entityIndexNames = getTableConfig(memoryEntities).indexes.map((idx) => idx.config.name);
+    expect(entityIndexNames).toEqual(
+      expect.arrayContaining([
+        'idx_memory_entities_type_normalized_name',
+        'idx_memory_entities_created_at',
+      ]),
+    );
+
+    const aliasConfig = getTableConfig(memoryEntityAliases);
+    const aliasIndexNames = aliasConfig.indexes.map((idx) => idx.config.name);
+    expect(aliasIndexNames).toEqual(
+      expect.arrayContaining([
+        'memory_entity_aliases_canonical_unique',
+        'idx_memory_entity_aliases_normalized_alias',
+      ]),
+    );
   });
 });
 

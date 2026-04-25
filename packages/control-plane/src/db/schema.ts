@@ -379,6 +379,54 @@ export const memoryImportJobs = pgTable(
   ],
 );
 
+// LOCAL-ONLY: first production entity canonicalization slice. Intentionally
+// separate from synced memory_facts/memory_edges until mesh-safe wiring lands.
+export const memoryEntities = pgTable(
+  'memory_entities',
+  {
+    id: text('id').primaryKey(),
+    entityType: text('entity_type').notNull(),
+    canonicalName: text('canonical_name').notNull(),
+    normalizedCanonicalName: text('normalized_canonical_name').notNull(),
+    metadataJson: jsonb('metadata_json').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_memory_entities_type_normalized_name').on(
+      table.entityType,
+      table.normalizedCanonicalName,
+    ),
+    index('idx_memory_entities_created_at').on(table.createdAt),
+  ],
+);
+
+// LOCAL-ONLY: aliases resolve into memory_entities; no historical fact/edge
+// rewrites or synced-row canonical ids in this initial slice.
+export const memoryEntityAliases = pgTable(
+  'memory_entity_aliases',
+  {
+    id: text('id').primaryKey(),
+    canonicalId: text('canonical_id')
+      .notNull()
+      .references(() => memoryEntities.id, { onDelete: 'cascade' }),
+    alias: text('alias').notNull(),
+    normalizedAlias: text('normalized_alias').notNull(),
+    sourceJson: jsonb('source_json').notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('memory_entity_aliases_canonical_unique').on(
+      table.canonicalId,
+      table.normalizedAlias,
+    ),
+    index('idx_memory_entity_aliases_normalized_alias').on(
+      table.normalizedAlias,
+      table.canonicalId,
+    ),
+  ],
+);
+
 export const memoryFacts = pgTable(
   'memory_facts',
   {
