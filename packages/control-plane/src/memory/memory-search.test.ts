@@ -5,7 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMockLogger } from '../api/routes/test-helpers.js';
 
 import type { EmbeddingClient } from './embedding-client.js';
-import { MemorySearch } from './memory-search.js';
+import type { RrfCandidate } from './memory-search.js';
+import { boostScore, MemorySearch } from './memory-search.js';
 
 function createMockEmbedding(): EmbeddingClient {
   return {
@@ -374,5 +375,190 @@ User: Which sanitizer stage handles transcript dumps?`,
     expect(embedding.embed).toHaveBeenCalledWith('security check');
     // Should still return results (role is passed but doesn't break search)
     expect(Array.isArray(results)).toBe(true);
+  });
+});
+
+// ── boostScore unit tests ──────────────────────────────────────────────────
+
+function makeCandidate(overrides: Partial<MemoryFact> = {}): RrfCandidate {
+  const now = new Date().toISOString();
+  return {
+    fact: {
+      id: 'test-fact',
+      scope: 'global' as MemoryScope,
+      content: 'some fact',
+      content_model: 'text-embedding-3-small',
+      entity_type: 'pattern',
+      confidence: 0.9,
+      strength: 1.0,
+      source: {
+        session_id: null,
+        agent_id: null,
+        machine_id: null,
+        turn_index: null,
+        extraction_method: 'manual',
+      },
+      valid_from: now,
+      valid_until: null,
+      created_at: now,
+      accessed_at: now,
+      tags: [],
+      usage_count: 0,
+      ...overrides,
+    },
+    rrfScore: 0.1,
+  };
+}
+
+describe('boostScore', () => {
+  it('returns 0 when no boost signals apply', () => {
+    // entity_type: pattern (no boost), created 30 days ago (no recency boost),
+    // scope: project:foo, primary visible scope: global (no exact match)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'pattern',
+      scope: 'project:foo' as MemoryScope,
+      created_at: thirtyDaysAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['global'] });
+
+    expect(result).toBe(0);
+  });
+
+  it('adds 0.03 for entity_type "agent"', () => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'agent' as MemoryFact['entity_type'],
+      scope: 'project:foo' as MemoryScope,
+      created_at: thirtyDaysAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['global'] });
+
+    expect(result).toBeCloseTo(0.03, 10);
+  });
+
+  it('adds 0.03 for entity_type "session"', () => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'session' as MemoryFact['entity_type'],
+      scope: 'project:foo' as MemoryScope,
+      created_at: thirtyDaysAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['global'] });
+
+    expect(result).toBeCloseTo(0.03, 10);
+  });
+
+  it('adds 0.05 for facts created within the last 24 hours', () => {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'pattern',
+      scope: 'project:foo' as MemoryScope,
+      created_at: oneHourAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['global'] });
+
+    expect(result).toBeCloseTo(0.05, 10);
+  });
+
+  it('adds 0.02 for facts created between 24 hours and 7 days ago', () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'pattern',
+      scope: 'project:foo' as MemoryScope,
+      created_at: threeDaysAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['global'] });
+
+    expect(result).toBeCloseTo(0.02, 10);
+  });
+
+  it('adds 0.02 when scope exactly matches the first visible scope', () => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'pattern',
+      scope: 'agent:worker-1' as MemoryScope,
+      created_at: thirtyDaysAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['agent:worker-1', 'global'] });
+
+    expect(result).toBeCloseTo(0.02, 10);
+  });
+
+  it('does not apply scope boost when scope matches a non-primary visible scope', () => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'pattern',
+      scope: 'global' as MemoryScope,
+      created_at: thirtyDaysAgo,
+    });
+
+    // 'global' is the second scope, not the primary — no scope boost expected
+    const result = boostScore(candidate, { visibleScopes: ['agent:worker-1', 'global'] });
+
+    expect(result).toBe(0);
+  });
+
+  it('accumulates multiple boost factors correctly', () => {
+    // agent entity (0.03) + created 3 days ago (0.02) + scope matches primary (0.02) = 0.07
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'agent' as MemoryFact['entity_type'],
+      scope: 'agent:worker-1' as MemoryScope,
+      created_at: threeDaysAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['agent:worker-1', 'global'] });
+
+    expect(result).toBeCloseTo(0.07, 10);
+  });
+
+  it('caps total boost at 0.10 even when all signals fire', () => {
+    // agent (0.03) + within 24h (0.05) + scope match (0.02) = 0.10 — hits the cap
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'agent' as MemoryFact['entity_type'],
+      scope: 'agent:worker-1' as MemoryScope,
+      created_at: twoHoursAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['agent:worker-1', 'global'] });
+
+    // 0.03 + 0.05 + 0.02 = 0.10 exactly — capped at MAX_BOOST
+    expect(result).toBeCloseTo(0.1, 10);
+  });
+
+  it('caps at 0.10 even if hypothetical boost would exceed it (session + 24h + scope = 0.10)', () => {
+    // Same as above but with session — confirm cap enforcement
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'session' as MemoryFact['entity_type'],
+      scope: 'agent:worker-1' as MemoryScope,
+      created_at: twoHoursAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: ['agent:worker-1'] });
+
+    expect(result).toBeLessThanOrEqual(0.1);
+    expect(result).toBeCloseTo(0.1, 10);
+  });
+
+  it('returns 0 when visibleScopes is empty (no scope boost, no crash)', () => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const candidate = makeCandidate({
+      entity_type: 'pattern',
+      scope: 'global' as MemoryScope,
+      created_at: thirtyDaysAgo,
+    });
+
+    const result = boostScore(candidate, { visibleScopes: [] });
+
+    expect(result).toBe(0);
   });
 });
