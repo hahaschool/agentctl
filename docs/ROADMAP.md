@@ -1871,7 +1871,7 @@ Agent run lifecycle has hidden intermediate states users can't see:
 
 ### 26.1 Agent Worker Runtime Image Refresh — Delivered
 
-- [x] Refresh the worker image to `node:22.22.1-trixie-slim` and restore `node-gyp` compatibility with `python3-setuptools` in the build/deps stages *(PR #307)*
+- [x] Refresh the worker image onto a Debian trixie slim Node 22 runtime and restore `node-gyp` compatibility with `python3-setuptools` in the build/deps stages *(PR #307; current production pin refreshed by PR #823)*
 - [x] Refresh the `git` runtime library closure with a temporary `forky` pin for `libcurl3t64-gnutls`, `libexpat1`, `libnghttp2-14`, `libnghttp3-9`, `libngtcp2-16`, `libtasn1-6`, and `zlib1g` *(PR #314)*
 - [x] Keep the fix scoped to the worker container unless validation data shows the control-plane image must move in lockstep *(PRs #307, #314)*
 - [x] Align the `security-audit` worker Trivy policy with the `build-images` worker upload semantics so the duplicate worker categories converge on the same scan outcome *(PR #326)*
