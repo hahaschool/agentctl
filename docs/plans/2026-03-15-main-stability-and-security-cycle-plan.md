@@ -87,6 +87,16 @@
 > report 0 open alerts. Docker publish emitted only the known Grype DB cache
 > reservation annotation. Dev-1/dev-2, production deploy, and beta promotion
 > workflows were not changed.
+>
+> Follow-up sync (2026-04-25): after PR #830 landed on `main@d9f49985`, the
+> post-#830 main checks passed: CI `24921680418`, Security Audit `24921680421`,
+> and Build & Publish Docker Images `24921680432`. PR #830 delivered
+> MemoryInjector additive evidence budget accounting for `fact-plus-snippet`
+> and `full-drawer`. GitHub reported no open PRs during this sync, and
+> code-scanning, Dependabot, and secret-scanning alert feeds all report 0 open
+> alerts. Docker publish emitted only the known Grype DB cache reservation
+> annotation. Dev-1/dev-2, production deploy, and beta promotion workflows were
+> not changed.
 
 ---
 
