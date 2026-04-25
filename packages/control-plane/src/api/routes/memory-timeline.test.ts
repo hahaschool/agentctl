@@ -106,6 +106,28 @@ describe('memory-timeline routes', () => {
       expect(res.json().message).toMatch(/as_of/i);
     });
 
+    it('rejects malformed asOf strings', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/memory/timeline?entity=fact-A&asOf=not-a-date',
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().message).toMatch(/asOf/i);
+    });
+
+    it('rejects conflicting as_of and asOf values', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/memory/timeline?entity=fact-A&as_of=2026-04-10T00:00:00.000Z&asOf=2026-04-11T00:00:00.000Z',
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ error: 'INVALID_PARAMS' });
+      expect(res.json().message).toMatch(/as_of/i);
+      expect(res.json().message).toMatch(/asOf/);
+    });
+
     it('rejects invalid cursor payloads', async () => {
       const res = await app.inject({
         method: 'GET',
@@ -301,5 +323,41 @@ describe('memory-timeline routes', () => {
     expect(edgeCall).toBeDefined();
     const [, values] = edgeCall as [string, unknown[]];
     expect(values).toEqual(expect.arrayContaining([asOf]));
+  });
+
+  it('accepts asOf as an alias for as_of', async () => {
+    const asOf = '2026-04-10T00:00:00.000Z';
+    pool.query.mockResolvedValueOnce({ rows: [makeFactRow('fact-A')] }).mockResolvedValueOnce({
+      rows: [],
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/memory/timeline?entity=fact-A&asOf=${encodeURIComponent(asOf)}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.as_of).toBe(asOf);
+
+    const edgeCall = pool.query.mock.calls.find((call) => String(call[0]).includes('memory_edges'));
+    expect(edgeCall).toBeDefined();
+    const [, values] = edgeCall as [string, unknown[]];
+    expect(values).toEqual(expect.arrayContaining([asOf]));
+  });
+
+  it('accepts matching as_of and asOf aliases', async () => {
+    const normalizedAsOf = '2026-04-10T00:00:00.000Z';
+    pool.query.mockResolvedValueOnce({ rows: [makeFactRow('fact-A')] }).mockResolvedValueOnce({
+      rows: [],
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/memory/timeline?entity=fact-A&as_of=${encodeURIComponent('2026-04-10T00:00:00Z')}&asOf=${encodeURIComponent(normalizedAsOf)}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().as_of).toBe(normalizedAsOf);
   });
 });

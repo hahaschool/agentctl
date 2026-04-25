@@ -1149,7 +1149,7 @@ failure-mode examples under the gate.
    - For non-person entities, exact-match canonicalized strings first; fall back to null + review.
 4. Backfill canonicalization only through dry-run CSV/JSON proposals followed by a separate human-approved apply path. PR #855 covers proposal generation; never auto-merge historical people/entities.
 5. Add timeline API:
-   - PR #858 delivered the first read-only control-plane `GET /api/memory/timeline?entity=...&as_of=...&limit=...&cursor=...` route with bounded direct-edge reads and fact-validity windows.
+   - PR #858 delivered the first read-only control-plane `GET /api/memory/timeline` route with bounded direct-edge reads, fact-validity windows, `entity` / `limit` / `cursor`, and equivalent `as_of` or `asOf` timestamp query aliases.
    - Extend beyond PR #858 with canonical-ID matching, edge-level temporal fields, recursive edge traversal, worker/MCP/web wiring, and the mutation route below.
    - `POST /api/memory/edges/:id/invalidate`
 6. Define MCP `memory_timeline` parameters:
