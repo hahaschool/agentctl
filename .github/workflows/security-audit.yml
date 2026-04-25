@@ -242,6 +242,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           tags: ${{ matrix.image }}:audit
           load: true
+          build-args: |
+            APT_CACHE_BUST=${{ github.run_id }}
           cache-from: type=gha,scope=security-audit-${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=security-audit-${{ matrix.image }},ignore-error=true
 
