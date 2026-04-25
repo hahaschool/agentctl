@@ -20,7 +20,7 @@
 | **D** | `codex/memory-ops-pr-d` | Backend: jobs CRUD + BullMQ + SSE + preview endpoint + capabilities | patch | Landed in PR #812; CI, Security Audit, Docker publish, container scans, focused local tests/build, and independent CodeQL alert check passed | [pr-d.md](./pr-d.md) |
 | **E** | `codex/memory-ops-pr-e` | Workers: embedding-backfill + drawer-backfill + boot reconciliation | patch | Landed in PR #816; critical path unblocked for dev-1 backfill verification | [pr-e.md](./pr-e.md) |
 | **F** | `codex/memory-ops-pr-f` | Frontend: /memory/operations page + 8 alerts + egress dialog | minor | Landed in PR #820; PR checks and post-merge main CI/Security/Docker passed | [pr-f.md](./pr-f.md) |
-| **G** | `agent/claude-1/feat/memory-ops-pr-g` | Workers: consolidation + synthesis + e2e + Gate 2 + CHANGELOG | patch | Non-critical | [pr-g.md](./pr-g.md) |
+| **G** | `codex/memory-ops-pr-g` | Workers: consolidation + synthesis + e2e + Gate 2 + CHANGELOG | patch | Active implementation lane | [pr-g.md](./pr-g.md) |
 
 ---
 

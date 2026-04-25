@@ -11,8 +11,8 @@
 **Branch:**
 ```bash
 git fetch origin
-git worktree add .trees/pr-g -b agent/claude-1/feat/memory-ops-pr-g
-cd .trees/pr-g
+git worktree add .trees/codex-memory-ops-pr-g -b codex/memory-ops-pr-g
+cd .trees/codex-memory-ops-pr-g
 ```
 
 ---
@@ -570,7 +570,7 @@ pnpm lint
 - [ ] **Step 4: Push + open PR**
 
 ```bash
-git push origin agent/claude-1/feat/memory-ops-pr-g
+git push origin codex/memory-ops-pr-g
 gh pr create --base main \
   --title "feat(memory-ops): PR G — consolidation + synthesis workers, e2e tests, CHANGELOG" \
   --body "$(cat <<'EOF'

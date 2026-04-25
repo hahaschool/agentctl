@@ -63,6 +63,17 @@
 > spaces/tasks detail, agent detail, emergency stop, tasks/spaces, task
 > auto-decompose, machine terminal, memory import, and memory scopes coverage.
 > Beta/dev CD workflows were not changed by this sync.
+>
+> Follow-up sync (2026-04-25): after PR #823 landed on `main@df12baea`, the
+> post-#823 main checks passed: CI `24920016133`, Security Audit
+> `24920016126`, and Build & Publish Docker Images `24920016124`. PR #822
+> refreshed production Docker apt layers plus the agent-worker libngtcp2
+> runtime package/cache-bust path after post-#821 container scans emitted high
+> vulnerability annotations, and PR #823 pinned the production control-plane and
+> agent-worker Node runtime images to 22.22.2 after the remaining Node 22.22.1
+> Grype finding. Open code-scanning, Dependabot, and secret-scanning alert
+> feeds all report 0 items. Dev-1/dev-2, production deploy, and beta promotion
+> workflows were not changed.
 
 ---
 
