@@ -253,6 +253,13 @@
       "when": 1745539200000,
       "tag": "0033_add_memory_ops",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1777096400000,
+      "tag": "0034_add_memory_import_jobs",
+      "breakpoints": true
     }
   ]
 }

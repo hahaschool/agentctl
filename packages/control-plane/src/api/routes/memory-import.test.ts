@@ -22,6 +22,26 @@ type MockPool = {
   ) => Promise<{ rows: Record<string, unknown>[]; rowCount: number }>;
 };
 
+function persistedImportJobRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'import-persisted',
+    source: 'jsonl-history',
+    source_path: '/tmp/persisted-jsonl',
+    status: 'completed',
+    progress_current: 2,
+    progress_total: 2,
+    imported: 2,
+    skipped: 0,
+    errors: 0,
+    rolled_back: 0,
+    error_message: null,
+    started_at: '2026-04-25T00:00:00.000Z',
+    completed_at: '2026-04-25T00:00:01.000Z',
+    updated_at: '2026-04-25T00:00:01.000Z',
+    ...overrides,
+  };
+}
+
 async function buildAppWithPool(pool: MockPool) {
   const app = Fastify({ logger: false });
   await app.register(memoryImportRoutes, { prefix: '/api/memory', pool: pool as never });
@@ -422,6 +442,9 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
     const insertedRows: unknown[][] = [];
     const mockPool: MockPool = {
       query: async (sql, params) => {
+        if (sql.includes('memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
         if (sql.includes("SELECT source_json->>'import_source_id'")) {
           return { rows: [{ src_id: 'jsonl-history:session-0000' }], rowCount: 1 };
         }
@@ -458,6 +481,9 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
     const insertedRows: unknown[][] = [];
     const mockPool: MockPool = {
       query: async (sql, params) => {
+        if (sql.includes('memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
         if (sql.includes("SELECT source_json->>'import_source_id'")) {
           return { rows: [], rowCount: 0 };
         }
@@ -493,6 +519,9 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
     const deletedJobIds: unknown[] = [];
     const mockPool: MockPool = {
       query: async (sql, params) => {
+        if (sql.includes('memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
         if (sql.includes("SELECT source_json->>'import_source_id'")) {
           return { rows: [], rowCount: 0 };
         }
@@ -537,6 +566,245 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
       expect(body.job.status).toBe('rolled_back');
       expect(body.job.imported).toBe(0);
       expect(body.job.rolledBack).toBe(2);
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
+
+  it('returns the latest persisted import job when process memory has no active job', async () => {
+    const selectedSql: string[] = [];
+    const mockPool: MockPool = {
+      query: async (sql) => {
+        if (sql.includes('FROM memory_import_jobs')) {
+          selectedSql.push(sql);
+          return { rows: [persistedImportJobRow()], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      resetActiveJobForTest();
+      const res = await app.inject({ method: 'GET', url: '/api/memory/import/status' });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json<{
+        ok: boolean;
+        job: {
+          id: string;
+          source: string;
+          status: string;
+          progress: { current: number; total: number };
+          imported: number;
+          resumable?: boolean;
+        };
+      }>();
+      expect(body.ok).toBe(true);
+      expect(body.job).toMatchObject({
+        id: 'import-persisted',
+        source: 'jsonl-history',
+        status: 'completed',
+        progress: { current: 2, total: 2 },
+        imported: 2,
+        resumable: false,
+      });
+      expect(selectedSql[0]).toContain('memory_import_jobs');
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+    }
+  });
+
+  it('marks a persisted running import job interrupted after process restart', async () => {
+    const persistedStatuses: unknown[] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('FROM memory_import_jobs')) {
+          return {
+            rows: [
+              persistedImportJobRow({
+                id: 'import-orphaned',
+                status: 'running',
+                progress_current: 1,
+                progress_total: 2,
+                completed_at: null,
+              }),
+            ],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('INSERT INTO memory_import_jobs')) {
+          persistedStatuses.push(params?.[3]);
+        }
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      resetActiveJobForTest();
+      const res = await app.inject({ method: 'GET', url: '/api/memory/import/status' });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json<{
+        ok: boolean;
+        job: { id: string; status: string; resumable?: boolean; completedAt: string | null };
+      }>();
+      expect(body.ok).toBe(true);
+      expect(body.job).toMatchObject({
+        id: 'import-orphaned',
+        status: 'interrupted',
+        resumable: true,
+      });
+      expect(body.job.completedAt).toEqual(expect.any(String));
+      expect(persistedStatuses).toEqual(['interrupted']);
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+    }
+  });
+
+  it('rolls back a persisted completed import job after process restart', async () => {
+    const deletedJobIds: unknown[] = [];
+    const persistedJobIds: unknown[] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('FROM memory_import_jobs')) {
+          return {
+            rows: [persistedImportJobRow({ id: params?.[0] ?? 'import-persisted' })],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes("DELETE FROM memory_facts WHERE source_json->>'import_job_id'")) {
+          deletedJobIds.push(params?.[0]);
+          return { rows: [], rowCount: 2 };
+        }
+        if (sql.includes('INSERT INTO memory_import_jobs')) {
+          persistedJobIds.push(params?.[0]);
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      resetActiveJobForTest();
+      const rollback = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import/import-persisted/rollback',
+      });
+
+      expect(rollback.statusCode).toBe(200);
+      expect(deletedJobIds).toEqual(['import-persisted']);
+      expect(persistedJobIds).toEqual(['import-persisted']);
+      const body = rollback.json<{
+        ok: boolean;
+        job: { id: string; status: string; imported: number; rolledBack: number };
+      }>();
+      expect(body.ok).toBe(true);
+      expect(body.job).toMatchObject({
+        id: 'import-persisted',
+        status: 'rolled_back',
+        imported: 0,
+        rolledBack: 2,
+      });
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+    }
+  });
+
+  it('does not cancel a persisted completed import job after process restart', async () => {
+    let persistedWrites = 0;
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('FROM memory_import_jobs')) {
+          return {
+            rows: [persistedImportJobRow({ id: params?.[0] ?? 'import-persisted' })],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('INSERT INTO memory_import_jobs')) {
+          persistedWrites++;
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      resetActiveJobForTest();
+      const cancel = await app.inject({
+        method: 'DELETE',
+        url: '/api/memory/import/import-persisted',
+      });
+
+      expect(cancel.statusCode).toBe(409);
+      expect(cancel.json<{ error: string }>().error).toBe('Import job is not running');
+      expect(persistedWrites).toBe(0);
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+    }
+  });
+
+  it('resumes a persisted interrupted JSONL import from durable progress', async () => {
+    const dir = makeTempJsonlDir(2);
+    const insertedRows: unknown[][] = [];
+    const persistedStatuses: unknown[] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('FROM memory_import_jobs')) {
+          return {
+            rows: [
+              persistedImportJobRow({
+                id: 'import-persisted',
+                source_path: dir,
+                status: 'interrupted',
+                progress_current: 1,
+                progress_total: 2,
+                imported: 1,
+                skipped: 0,
+                errors: 0,
+              }),
+            ],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('INSERT INTO memory_import_jobs')) {
+          persistedStatuses.push(params?.[3]);
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return { rows: [], rowCount: 0 };
+        }
+        insertedRows.push(params ?? []);
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      resetActiveJobForTest();
+      const resume = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import/import-persisted/resume',
+      });
+
+      expect(resume.statusCode).toBe(202);
+      expect(resume.json<{ job: { status: string } }>().job.status).toBe('running');
+
+      const completedJob = await waitForImportJob(app);
+      expect(completedJob.status).toBe('completed');
+      expect(completedJob.imported).toBe(2);
+      expect(insertedRows).toHaveLength(1);
+      expect(insertedRows[0]?.[9]).toBe('jsonl-history:session-0001');
+      expect(persistedStatuses).toContain('running');
+      expect(persistedStatuses).toContain('completed');
     } finally {
       await app.close();
       resetActiveJobForTest();

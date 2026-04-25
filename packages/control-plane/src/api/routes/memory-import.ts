@@ -7,6 +7,7 @@ import type {
   FactSource,
   ImportJob,
   ImportJobSource,
+  ImportJobStatus,
   ImportPreview,
 } from '@agentctl/shared';
 import rateLimit from '@fastify/rate-limit';
@@ -150,7 +151,7 @@ function walkJsonlFiles(dir: string, cap: number): string[] {
     } catch {
       return;
     }
-    for (const entry of entries) {
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       if (files.length >= cap) break;
       const fullPath = path.join(current, entry.name);
       if (entry.isDirectory()) {
@@ -162,7 +163,7 @@ function walkJsonlFiles(dir: string, cap: number): string[] {
   }
 
   walk(dir);
-  return files;
+  return files.sort((a, b) => a.localeCompare(b));
 }
 
 function buildJsonlSessionId(filePath: string): string {
@@ -269,34 +270,41 @@ async function loadExistingImportSourceIds(
   return new Set(result.rows.map((r) => r.src_id).filter(Boolean));
 }
 
-async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promise<void> {
+async function runJsonlImport(
+  pool: Pool,
+  dirPath: string,
+  jobId: string,
+  resumedJob?: ImportJob,
+): Promise<void> {
   const allFiles = walkJsonlFiles(dirPath, JSONL_MAX_FILES + 1);
   if (allFiles.length > JSONL_MAX_FILES) {
     if (activeJob?.id === jobId) {
-      activeJob = updateJobStatus(activeJob, {
+      await updateActiveJob(pool, jobId, {
         status: 'failed',
         errors: 1,
         completedAt: new Date().toISOString(),
+        error: `Too many JSONL files (${allFiles.length}). Maximum is ${JSONL_MAX_FILES}.`,
       });
     }
     return;
   }
 
   const total = allFiles.length;
+  const startIndex = Math.min(Math.max(resumedJob?.progress.current ?? 0, 0), total);
   const importSourceIds = allFiles.map((filePath) =>
     buildJsonlImportSourceId(buildJsonlSessionId(filePath)),
   );
   const existingIds = await loadExistingImportSourceIds(pool, importSourceIds);
 
   if (activeJob?.id === jobId) {
-    activeJob = updateJobStatus(activeJob, { progress: { current: 0, total } });
+    await updateActiveJob(pool, jobId, { progress: { current: startIndex, total } });
   }
 
-  let imported = 0;
-  let skipped = 0;
-  let errors = 0;
+  let imported = resumedJob?.imported ?? 0;
+  let skipped = resumedJob?.skipped ?? 0;
+  let errors = resumedJob?.errors ?? 0;
 
-  for (let i = 0; i < allFiles.length; i++) {
+  for (let i = startIndex; i < allFiles.length; i++) {
     if (cancelRequested || !activeJob || activeJob.id !== jobId) break;
 
     const filePath = allFiles[i] as string;
@@ -355,7 +363,7 @@ async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promi
     }
 
     if (activeJob?.id === jobId) {
-      activeJob = updateJobStatus(activeJob, {
+      await updateActiveJob(pool, jobId, {
         progress: { current: i + 1, total },
         imported,
         skipped,
@@ -365,7 +373,7 @@ async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promi
   }
 
   if (activeJob?.id === jobId && activeJob.status === 'running') {
-    activeJob = updateJobStatus(activeJob, {
+    await updateActiveJob(pool, jobId, {
       status: 'completed',
       progress: { current: total, total },
       imported,
@@ -383,23 +391,190 @@ async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promi
 let activeJob: ImportJob | null = null;
 let cancelRequested = false;
 
-function createJob(source: ImportJobSource, total: number): ImportJob {
+type ImportJobRow = {
+  id: string;
+  source: ImportJobSource;
+  source_path: string;
+  status: ImportJobStatus;
+  progress_current: number | string;
+  progress_total: number | string;
+  imported: number | string;
+  skipped: number | string;
+  errors: number | string;
+  rolled_back: number | string | null;
+  error_message: string | null;
+  started_at: Date | string;
+  completed_at: Date | string | null;
+};
+
+function toIsoString(value: Date | string | null): string | null {
+  if (value === null) return null;
+  if (value instanceof Date) return value.toISOString();
+  return value;
+}
+
+function isResumableJob(job: ImportJob): boolean {
+  return (
+    Boolean(job.sourcePath) &&
+    (job.status === 'interrupted' || job.status === 'failed' || job.status === 'cancelled')
+  );
+}
+
+function normalizeJob(job: ImportJob): ImportJob {
+  return { ...job, resumable: isResumableJob(job) };
+}
+
+function mapImportJobRow(row: ImportJobRow): ImportJob {
+  const job: ImportJob = {
+    id: row.id,
+    source: row.source,
+    sourcePath: row.source_path,
+    status: row.status,
+    progress: {
+      current: Number(row.progress_current),
+      total: Number(row.progress_total),
+    },
+    imported: Number(row.imported),
+    skipped: Number(row.skipped),
+    errors: Number(row.errors),
+    rolledBack: Number(row.rolled_back ?? 0),
+    error: row.error_message,
+    startedAt: toIsoString(row.started_at) ?? new Date().toISOString(),
+    completedAt: toIsoString(row.completed_at),
+  };
+  return normalizeJob(job);
+}
+
+function createJob(source: ImportJobSource, total: number, sourcePath: string): ImportJob {
   return {
     id: `import-${Date.now()}`,
     source,
+    sourcePath,
     status: 'running',
     progress: { current: 0, total },
     imported: 0,
     skipped: 0,
     errors: 0,
     rolledBack: 0,
+    resumable: false,
+    error: null,
     startedAt: new Date().toISOString(),
     completedAt: null,
   };
 }
 
 function updateJobStatus(job: ImportJob, updates: Partial<ImportJob>): ImportJob {
-  return { ...job, ...updates };
+  return normalizeJob({ ...job, ...updates });
+}
+
+async function persistImportJob(pool: Pool, job: ImportJob): Promise<void> {
+  if (!job.sourcePath) return;
+  await pool.query(
+    `INSERT INTO memory_import_jobs (
+       id, source, source_path, status, progress_current, progress_total,
+       imported, skipped, errors, rolled_back, error_message,
+       started_at, completed_at, updated_at
+     ) VALUES (
+       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW()
+     )
+     ON CONFLICT (id) DO UPDATE SET
+       source = EXCLUDED.source,
+       source_path = EXCLUDED.source_path,
+       status = EXCLUDED.status,
+       progress_current = EXCLUDED.progress_current,
+       progress_total = EXCLUDED.progress_total,
+       imported = EXCLUDED.imported,
+       skipped = EXCLUDED.skipped,
+       errors = EXCLUDED.errors,
+       rolled_back = EXCLUDED.rolled_back,
+       error_message = EXCLUDED.error_message,
+       started_at = EXCLUDED.started_at,
+       completed_at = EXCLUDED.completed_at,
+       updated_at = NOW()`,
+    [
+      job.id,
+      job.source,
+      job.sourcePath,
+      job.status,
+      job.progress.current,
+      job.progress.total,
+      job.imported,
+      job.skipped,
+      job.errors,
+      job.rolledBack ?? 0,
+      job.error ?? null,
+      job.startedAt,
+      job.completedAt,
+    ],
+  );
+}
+
+async function updateActiveJob(
+  pool: Pool,
+  jobId: string,
+  updates: Partial<ImportJob>,
+): Promise<ImportJob | null> {
+  if (!activeJob || activeJob.id !== jobId) return null;
+  activeJob = updateJobStatus(activeJob, updates);
+  await persistImportJob(pool, activeJob);
+  return activeJob;
+}
+
+async function loadImportJob(pool: Pool, id: string): Promise<ImportJob | null> {
+  const result = await pool.query<ImportJobRow>(
+    `SELECT id, source, source_path, status, progress_current, progress_total,
+            imported, skipped, errors, rolled_back, error_message,
+            started_at, completed_at
+     FROM memory_import_jobs
+     WHERE id = $1
+     LIMIT 1`,
+    [id],
+  );
+  return result.rows[0] ? mapImportJobRow(result.rows[0]) : null;
+}
+
+async function loadLatestImportJob(pool: Pool): Promise<ImportJob | null> {
+  const result = await pool.query<ImportJobRow>(
+    `SELECT id, source, source_path, status, progress_current, progress_total,
+            imported, skipped, errors, rolled_back, error_message,
+            started_at, completed_at
+     FROM memory_import_jobs
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+  );
+  return result.rows[0] ? mapImportJobRow(result.rows[0]) : null;
+}
+
+async function loadRunningImportJob(pool: Pool): Promise<ImportJob | null> {
+  const result = await pool.query<ImportJobRow>(
+    `SELECT id, source, source_path, status, progress_current, progress_total,
+            imported, skipped, errors, rolled_back, error_message,
+            started_at, completed_at
+     FROM memory_import_jobs
+     WHERE status = 'running'
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+  );
+  return result.rows[0] ? mapImportJobRow(result.rows[0]) : null;
+}
+
+async function markInterruptedIfOrphaned(pool: Pool, job: ImportJob): Promise<ImportJob> {
+  if (job.status !== 'running' || activeJob?.id === job.id) return job;
+  const interrupted = updateJobStatus(job, {
+    status: 'interrupted',
+    completedAt: new Date().toISOString(),
+    error:
+      'Import worker was interrupted before completion; resume to continue from durable progress.',
+  });
+  await persistImportJob(pool, interrupted);
+  return interrupted;
+}
+
+async function clearOrphanedRunningImport(pool: Pool): Promise<void> {
+  const runningJob = await loadRunningImportJob(pool);
+  if (runningJob) {
+    await markInterruptedIfOrphaned(pool, runningJob);
+  }
 }
 
 async function rollbackImportJob(pool: Pool, job: ImportJob): Promise<ImportJob> {
@@ -408,12 +583,14 @@ async function rollbackImportJob(pool: Pool, job: ImportJob): Promise<ImportJob>
     [job.id],
   );
   const rolledBack = result.rowCount ?? 0;
-  return updateJobStatus(job, {
+  const updated = updateJobStatus(job, {
     status: 'rolled_back',
     imported: Math.max(0, job.imported - rolledBack),
     rolledBack: (job.rolledBack ?? 0) + rolledBack,
     completedAt: new Date().toISOString(),
   });
+  await persistImportJob(pool, updated);
+  return updated;
 }
 
 /** Reset active job — exported for test isolation only. */
@@ -444,7 +621,12 @@ async function openSqlite(dbPath: string): Promise<SqliteDb> {
 // Import engine
 // ---------------------------------------------------------------------------
 
-async function runImport(pool: Pool, dbPath: string, jobId: string): Promise<void> {
+async function runImport(
+  pool: Pool,
+  dbPath: string,
+  jobId: string,
+  resumedJob?: ImportJob,
+): Promise<void> {
   let sqliteDb: SqliteDb | null = null;
   try {
     sqliteDb = await openSqlite(dbPath);
@@ -452,7 +634,9 @@ async function runImport(pool: Pool, dbPath: string, jobId: string): Promise<voi
     const totalRow = sqliteDb.prepare('SELECT COUNT(*) as cnt FROM observations').get();
     const total = (totalRow?.cnt as number) ?? 0;
     if (activeJob?.id === jobId) {
-      activeJob = updateJobStatus(activeJob, { progress: { current: 0, total } });
+      await updateActiveJob(pool, jobId, {
+        progress: { current: resumedJob?.progress.current ?? 0, total },
+      });
     }
 
     // Fetch existing import_source_ids to skip duplicates
@@ -463,10 +647,10 @@ async function runImport(pool: Pool, dbPath: string, jobId: string): Promise<voi
     );
     const existingIds = new Set(existingResult.rows.map((r) => r.src_id));
 
-    let offset = 0;
-    let imported = 0;
-    let skipped = 0;
-    let errors = 0;
+    let offset = Math.min(Math.max(resumedJob?.progress.current ?? 0, 0), total);
+    let imported = resumedJob?.imported ?? 0;
+    let skipped = resumedJob?.skipped ?? 0;
+    let errors = resumedJob?.errors ?? 0;
 
     while (true) {
       if (cancelRequested || !activeJob || activeJob.id !== jobId) break;
@@ -533,7 +717,7 @@ async function runImport(pool: Pool, dbPath: string, jobId: string): Promise<voi
 
       // Update progress
       if (activeJob?.id === jobId) {
-        activeJob = updateJobStatus(activeJob, {
+        await updateActiveJob(pool, jobId, {
           progress: { current: offset, total },
           imported,
           skipped,
@@ -544,7 +728,7 @@ async function runImport(pool: Pool, dbPath: string, jobId: string): Promise<voi
 
     // Finalize
     if (activeJob?.id === jobId && activeJob.status === 'running') {
-      activeJob = updateJobStatus(activeJob, {
+      await updateActiveJob(pool, jobId, {
         status: 'completed',
         progress: { current: total, total },
         imported,
@@ -555,10 +739,12 @@ async function runImport(pool: Pool, dbPath: string, jobId: string): Promise<voi
     }
   } catch (err: unknown) {
     if (activeJob?.id === jobId) {
-      activeJob = updateJobStatus(activeJob, {
+      const message = err instanceof Error ? err.message : 'Unknown import error';
+      await updateActiveJob(pool, jobId, {
         status: 'failed',
         errors: (activeJob.errors ?? 0) + 1,
         completedAt: new Date().toISOString(),
+        error: message,
       });
     }
     throw err;
@@ -765,6 +951,7 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
       if (!pool) {
         return reply.status(503).send({ ok: false, error: 'Database not configured for imports' });
       }
+      await clearOrphanedRunningImport(pool);
 
       if (source === 'jsonl-history') {
         const resolved = expandTilde(dbPath);
@@ -786,8 +973,9 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
         }
 
         cancelRequested = false;
-        activeJob = createJob(source, 0);
+        activeJob = createJob(source, 0, resolved);
         const jobId = activeJob.id;
+        await persistImportJob(pool, activeJob);
 
         runJsonlImport(pool, resolved, jobId).catch((err) => {
           app.log.error({ err, jobId }, 'JSONL import job failed');
@@ -808,8 +996,9 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
       }
 
       cancelRequested = false;
-      activeJob = createJob(source, 0);
+      activeJob = createJob(source, 0, resolved);
       const jobId = activeJob.id;
+      await persistImportJob(pool, activeJob);
 
       // Run import in background (don't await)
       runImport(pool, resolved, jobId).catch((err) => {
@@ -824,9 +1013,16 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
   app.get('/import/status', {
     handler: async (_request, reply) => {
       if (!activeJob) {
+        if (pool) {
+          const job = await loadLatestImportJob(pool);
+          if (job) {
+            const durableJob = await markInterruptedIfOrphaned(pool, job);
+            return reply.send({ ok: true, job: normalizeJob(durableJob) });
+          }
+        }
         return reply.status(404).send({ ok: false, error: 'No active import job' });
       }
-      return reply.send({ ok: true, job: activeJob });
+      return reply.send({ ok: true, job: normalizeJob(activeJob) });
     },
   });
 
@@ -837,14 +1033,92 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
     handler: async (request, reply) => {
       const { id } = request.params;
       if (!activeJob || activeJob.id !== id) {
-        return reply.status(404).send({ ok: false, error: 'Import job not found' });
+        if (!pool) {
+          return reply.status(404).send({ ok: false, error: 'Import job not found' });
+        }
+        const durableJob = await loadImportJob(pool, id);
+        if (!durableJob) {
+          return reply.status(404).send({ ok: false, error: 'Import job not found' });
+        }
+        if (durableJob.status !== 'running' && durableJob.status !== 'interrupted') {
+          return reply.status(409).send({ ok: false, error: 'Import job is not running' });
+        }
+        const cancelled = updateJobStatus(durableJob, {
+          status: 'cancelled',
+          completedAt: new Date().toISOString(),
+        });
+        await persistImportJob(pool, cancelled);
+        return reply.send({ ok: true, job: cancelled });
       }
       cancelRequested = true;
       activeJob = updateJobStatus(activeJob, {
         status: 'cancelled',
         completedAt: new Date().toISOString(),
       });
-      return reply.send({ ok: true, job: activeJob });
+      if (pool) {
+        await persistImportJob(pool, activeJob);
+      }
+      return reply.send({ ok: true, job: normalizeJob(activeJob) });
+    },
+  });
+
+  /** POST /api/memory/import/:id/resume — continue a durable interrupted import job */
+  app.post<{ Params: { id: string } }>('/import/:id/resume', {
+    config: { rateLimit: memoryImportFastifyRateLimit },
+    preHandler: [app.rateLimit(memoryImportFastifyRateLimit)],
+    handler: async (request, reply) => {
+      const { id } = request.params;
+      if (activeJob?.status === 'running') {
+        return reply.status(409).send({ ok: false, error: 'An import job is already running' });
+      }
+      if (!pool) {
+        return reply.status(503).send({ ok: false, error: 'Database not configured for imports' });
+      }
+
+      const job = activeJob?.id === id ? activeJob : await loadImportJob(pool, id);
+      if (!job) {
+        return reply.status(404).send({ ok: false, error: 'Import job not found' });
+      }
+      if (!isResumableJob(job)) {
+        return reply.status(409).send({ ok: false, error: 'Import job cannot be resumed' });
+      }
+
+      const sourcePath = expandTilde(job.sourcePath ?? '');
+      if (job.source === 'jsonl-history') {
+        if (!fs.existsSync(sourcePath)) {
+          return reply
+            .status(400)
+            .send({ ok: false, error: `Directory not found: ${job.sourcePath}` });
+        }
+        const stat = fs.statSync(sourcePath);
+        if (!stat.isDirectory()) {
+          return reply
+            .status(400)
+            .send({ ok: false, error: `Path is not a directory: ${job.sourcePath}` });
+        }
+      } else if (job.source === 'claude-mem' && !fs.existsSync(sourcePath)) {
+        return reply.status(400).send({ ok: false, error: `File not found: ${job.sourcePath}` });
+      }
+
+      cancelRequested = false;
+      activeJob = updateJobStatus(job, {
+        status: 'running',
+        completedAt: null,
+        error: null,
+      });
+      await persistImportJob(pool, activeJob);
+
+      if (activeJob.source === 'jsonl-history') {
+        runJsonlImport(pool, sourcePath, activeJob.id, activeJob).catch((err) => {
+          app.log.error({ err, jobId: activeJob?.id }, 'JSONL import job resume failed');
+        });
+      } else {
+        runImport(pool, sourcePath, activeJob.id, activeJob).catch((err) => {
+          app.log.error({ err, jobId: activeJob?.id }, 'Import job resume failed');
+        });
+      }
+
+      return reply.status(202).send({ ok: true, job: normalizeJob(activeJob) });
     },
   });
 
@@ -854,21 +1128,25 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
     preHandler: [app.rateLimit(memoryImportFastifyRateLimit)],
     handler: async (request, reply) => {
       const { id } = request.params;
-      if (!activeJob || activeJob.id !== id) {
-        return reply.status(404).send({ ok: false, error: 'Import job not found' });
-      }
       if (!pool) {
         return reply.status(503).send({ ok: false, error: 'Database not configured for imports' });
       }
-      if (activeJob.status === 'running') {
+      const job = activeJob?.id === id ? activeJob : await loadImportJob(pool, id);
+      if (!job) {
+        return reply.status(404).send({ ok: false, error: 'Import job not found' });
+      }
+      if (job.status === 'running') {
         return reply.status(409).send({ ok: false, error: 'Import job is still running' });
       }
-      if (activeJob.status === 'rolled_back') {
-        return reply.send({ ok: true, job: activeJob });
+      if (job.status === 'rolled_back') {
+        return reply.send({ ok: true, job: normalizeJob(job) });
       }
 
-      activeJob = await rollbackImportJob(pool, activeJob);
-      return reply.send({ ok: true, job: activeJob });
+      const rolledBackJob = await rollbackImportJob(pool, job);
+      if (activeJob?.id === rolledBackJob.id) {
+        activeJob = rolledBackJob;
+      }
+      return reply.send({ ok: true, job: normalizeJob(rolledBackJob) });
     },
   });
 };

@@ -18,6 +18,7 @@ import {
   importStatusQuery,
   useCancelImport,
   usePreviewImport,
+  useResumeImport,
   useRollbackImport,
   useStartImport,
 } from '@/lib/queries';
@@ -446,9 +447,12 @@ type Step4Props = {
   rolledBack: number;
   status: string;
   canRollback: boolean;
+  canResume: boolean;
   rollbackPending: boolean;
+  resumePending: boolean;
   onStartOver: () => void;
   onRollback: () => void;
+  onResume: () => void;
 };
 
 function Step4Summary({
@@ -458,12 +462,16 @@ function Step4Summary({
   rolledBack,
   status,
   canRollback,
+  canResume,
   rollbackPending,
+  resumePending,
   onStartOver,
   onRollback,
+  onResume,
 }: Step4Props) {
   const success = status === 'completed';
   const wasRolledBack = status === 'rolled_back';
+  const wasInterrupted = status === 'interrupted';
   const summaryColumns = rolledBack > 0 ? 'grid-cols-4' : 'grid-cols-3';
   return (
     <div className="space-y-6">
@@ -479,14 +487,18 @@ function Step4Summary({
               ? 'Import complete'
               : wasRolledBack
                 ? 'Import rolled back'
-                : `Import ${status}`}
+                : wasInterrupted
+                  ? 'Import interrupted'
+                  : `Import ${status}`}
           </h2>
           <p className="text-sm text-muted-foreground">
             {success
               ? 'All data has been imported into your memory store.'
               : wasRolledBack
                 ? 'Facts written by this import were removed. You can preview and import again.'
-                : 'The import did not finish successfully.'}
+                : wasInterrupted
+                  ? 'The import worker stopped before completion. Resume to continue from durable progress.'
+                  : 'The import did not finish successfully.'}
           </p>
         </div>
       </div>
@@ -521,6 +533,22 @@ function Step4Summary({
       </div>
 
       <div className="flex flex-wrap gap-3">
+        {canResume && (
+          <button
+            type="button"
+            onClick={onResume}
+            disabled={resumePending}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-blue-500 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            data-testid="resume-import"
+          >
+            {resumePending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RotateCcw size={14} />
+            )}
+            Resume import
+          </button>
+        )}
         {canRollback && (
           <button
             type="button"
@@ -562,6 +590,7 @@ export function MemoryImportView() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
 
   const isPolling = step === 3;
 
@@ -569,6 +598,7 @@ export function MemoryImportView() {
   const previewImport = usePreviewImport();
   const startImport = useStartImport();
   const cancelImport = useCancelImport();
+  const resumeImport = useResumeImport();
   const rollbackImport = useRollbackImport();
 
   const job = statusQuery.data?.job ?? null;
@@ -579,11 +609,20 @@ export function MemoryImportView() {
   const errors = job?.errors ?? 0;
   const rolledBack = job?.rolledBack ?? 0;
   const jobStatus = job?.status ?? 'pending';
+  const canResume = Boolean(activeJobId && job?.resumable);
   const isImportDone =
     jobStatus === 'completed' ||
     jobStatus === 'cancelled' ||
     jobStatus === 'failed' ||
+    jobStatus === 'interrupted' ||
     jobStatus === 'rolled_back';
+
+  useEffect(() => {
+    if (!activeJobId && job?.id && job.sourcePath && job.id !== dismissedJobId) {
+      setActiveJobId(job.id);
+      setStep(job.status === 'running' ? 3 : 4);
+    }
+  }, [activeJobId, dismissedJobId, job?.id, job?.sourcePath, job?.status]);
 
   // Auto-advance from step 3 to step 4 when import completes
   useEffect(() => {
@@ -630,6 +669,7 @@ export function MemoryImportView() {
     try {
       const result = await startImport.mutateAsync({ source, dbPath });
       if (result.job) {
+        setDismissedJobId(null);
         setActiveJobId(result.job.id);
         setStep(3);
       } else {
@@ -652,7 +692,15 @@ export function MemoryImportView() {
     }
   }
 
+  function handleResume() {
+    if (activeJobId) {
+      resumeImport.mutate(activeJobId);
+      setStep(3);
+    }
+  }
+
   function handleStartOver() {
+    setDismissedJobId(activeJobId);
     setStep(1);
     setDbPath(DEFAULT_PATHS[source]);
     setActiveJobId(null);
@@ -725,9 +773,12 @@ export function MemoryImportView() {
             rolledBack={rolledBack}
             status={jobStatus}
             canRollback={Boolean(activeJobId && isImportDone && jobStatus !== 'rolled_back')}
+            canResume={canResume}
             rollbackPending={rollbackImport.isPending}
+            resumePending={resumeImport.isPending}
             onStartOver={handleStartOver}
             onRollback={handleRollback}
+            onResume={handleResume}
           />
         )}
       </div>

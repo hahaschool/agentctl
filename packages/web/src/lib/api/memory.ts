@@ -442,6 +442,14 @@ export const memoryApi = {
 
   getImportStatus: () => request<{ ok: boolean; job: ImportJob }>('/api/memory/import/status'),
 
+  resumeImport: (id: string) =>
+    request<{ ok: boolean; job: ImportJob }>(
+      `/api/memory/import/${encodeURIComponent(id)}/resume`,
+      {
+        method: 'POST',
+      },
+    ),
+
   cancelImport: (id: string) =>
     request<{ ok: boolean; job: ImportJob }>(`/api/memory/import/${encodeURIComponent(id)}`, {
       method: 'DELETE',
