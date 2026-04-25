@@ -33,7 +33,13 @@ const LLM_RESPONSE = {
   id: 'test-id',
   object: 'chat.completion',
   model: 'claude-haiku-4-5-20251001',
-  choices: [{ index: 0, message: { role: 'assistant', content: 'Summary text here.' }, finishReason: 'stop' }],
+  choices: [
+    {
+      index: 0,
+      message: { role: 'assistant', content: 'Summary text here.' },
+      finishReason: 'stop',
+    },
+  ],
   usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
 };
 
@@ -67,7 +73,11 @@ describe('memoryNarrativeReportRoutes', () => {
 
   it('returns 503 when litellmClient is not configured', async () => {
     const appNoLLM = await buildApp(createMockPool());
-    const res = await appNoLLM.inject({ method: 'POST', url: '/api/memory/narrative-report', payload: {} });
+    const res = await appNoLLM.inject({
+      method: 'POST',
+      url: '/api/memory/narrative-report',
+      payload: {},
+    });
     expect(res.statusCode).toBe(503);
     const body = res.json();
     expect(body.error).toBe('LITELLM_UNAVAILABLE');
