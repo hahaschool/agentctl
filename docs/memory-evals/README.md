@@ -114,6 +114,30 @@ Optional repository variable:
   coverage gate when weekly/release eval jobs need a minimum other than the
   default five rows per required failure-mode tag.
 
+### Provision or rotate private fixture secrets
+
+Use the local preflight before writing the fixture/changelog secrets:
+
+```bash
+pnpm memory:eval:secrets \
+  --fixture path/to/agentctl-private.json \
+  --fixture-changelog path/to/CHANGELOG.md \
+  --repo hahaschool/agentctl \
+  --min-rows 5
+```
+
+The command validates the sanitized fixture schema, required failure-mode tag
+coverage, dated changelog entry, and GitHub Actions secret size limit. Dry-run
+output prints only paths, SHA256 fingerprints, row counts, coverage, and encoded
+sizes; it does not print base64 secret bodies.
+
+After reviewing the dry run, add `--apply` to rotate
+`MEMORY_EVAL_PRIVATE_FIXTURE_JSON_B64` and
+`MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64` with `gh secret set`. Secret values
+are passed through stdin instead of command arguments. Add
+`--release-required true` only after the database and embedding endpoint secrets
+are also provisioned and release tags should fail on missing eval configuration.
+
 ### What counts as a change
 
 - **Ranker or fixture schema changes** that move the committed metrics:
