@@ -11,7 +11,7 @@
 #   - No secrets baked in — pass via environment variables
 # ─────────────────────────────────────────────────────────────────
 
-ARG NODE_IMAGE=node:22.22.1-bookworm-slim
+ARG NODE_IMAGE=node:22.22.2-bookworm-slim
 
 # ── Stage 1: Build ──────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS build

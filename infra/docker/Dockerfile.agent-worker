@@ -14,7 +14,7 @@
 
 # Keep the worker on a glibc-based slim image, but use the newer Debian
 # suite so the shipped OS package set can pick up newer security fixes.
-ARG NODE_IMAGE=node:22.22.1-trixie-slim
+ARG NODE_IMAGE=node:22.22.2-trixie-slim
 
 # ── Stage 1: Build ──────────────────────────────────────────────
 FROM ${NODE_IMAGE} AS build
