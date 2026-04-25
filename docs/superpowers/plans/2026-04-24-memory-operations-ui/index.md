@@ -8,9 +8,9 @@
 
 **Solution:** 7 PRs delivering: provider CRUD (PR A–C), job orchestration (PR D–E), UI (PR F), consolidation/synthesis + e2e (PR G).
 
-**Status sync (2026-04-25):** All planned PRs A-G have landed through PR #827. The remaining work is rollout verification, not another implementation PR from this plan: enable the dev-1 environment intentionally, run the backfill/consolidation/synthesis flows, and complete the live Gemini Gate 2 check before any `verified:true` catalog flip.
+**Status sync (2026-04-25):** All planned PRs A-G have landed through PR #827, and the follow-up dry-run rollout preflight CLI landed in PR #859. The remaining work is rollout verification, not another implementation PR from this plan: run the preflight in an intentionally prepared dev-1/live environment, enable dev-1 deliberately, run the backfill/consolidation/synthesis flows, and complete the live Gemini Gate 2 check before any `verified:true` catalog flip.
 
-Use `pnpm memory:ops:preflight --target dev-1|live [--env-file .env.dev-1]` before flipping rollout gates. The command is dry-run-only: it inspects env/config, local DB/provider readiness, drawer roots, Redis reachability, and Gate 2 env presence without starting jobs or calling live providers.
+Use `pnpm memory:ops:preflight --target dev-1|live [--env-file .env.dev-1]` before flipping rollout gates. The command is dry-run-only: it inspects env/config, local DB/provider readiness, drawer roots, Redis reachability, and Gate 2 env presence without starting jobs or calling live providers. Post-PR #859 main CI `24930333778`, Security Audit `24930333781`, and Build & Publish Docker Images `24930333777` passed at `26197b09`.
 
 ---
 
@@ -30,7 +30,7 @@ Use `pnpm memory:ops:preflight --target dev-1|live [--env-file .env.dev-1]` befo
 
 ## Merge Order
 
-PRs merged in order A → B → C → D → E → F → G. PR A landed in PR #783, PR B landed in PR #797, PR C landed in PR #806 with PR #807/#808 as saved-provider test persistence and hardening follow-ups, PR D landed in PR #812, PR E landed in PR #816, PR F landed in PR #820, and PR G landed in PR #827. There is no remaining implementation branch for this plan; follow-on work should branch from latest `main` and focus on rollout verification or explicitly scoped follow-up gaps.
+PRs merged in order A → B → C → D → E → F → G. PR A landed in PR #783, PR B landed in PR #797, PR C landed in PR #806 with PR #807/#808 as saved-provider test persistence and hardening follow-ups, PR D landed in PR #812, PR E landed in PR #816, PR F landed in PR #820, and PR G landed in PR #827. The rollout preflight follow-up landed separately in PR #859. There is no remaining implementation branch for this plan; follow-on work should branch from latest `main` and focus on rollout verification or explicitly scoped follow-up gaps.
 
 After PR #827, dev-1 backfill/consolidation/synthesis verification can use the `/memory/operations` UI once the rollout env and provider credentials are intentionally enabled. Avoid triggering live provider spend unless the dev-1 environment is explicitly prepared for it.
 

@@ -3,7 +3,7 @@
 **Status:** Current contract before any drawer sync or temporal `memory_edges` payload work
 **Roadmap:** 3.6 / 4.8 / 7.3 MemPalace-Inspired Memory Evolution
 **Created:** 2026-04-25
-**Checkpoint:** `main@f00e4c91` is current through PR #855. PR #853 introduced this contract, PR #854 moved aggregate-only private memory eval fixture validation into the Memory Evals workflow before live runs, PR #855 added dry-run canonicalization proposals without mesh sync or fact/edge mutations, and post-#855 main CI `24929456518`, Security Audit `24929456512`, and Build & Publish Docker Images `24929456505` passed.
+**Checkpoint:** `main@26197b09` is current through PR #859. PR #853 introduced this contract, PR #854 moved aggregate-only private memory eval fixture validation into the Memory Evals workflow before live runs, PR #855 added dry-run canonicalization proposals without mesh sync or fact/edge mutations, PR #857 added private eval fixture/changelog scaffold tooling, PR #858 added the first read-only memory timeline API slice without schema or mesh payload changes, PR #859 added dry-run Memory Operations rollout preflight tooling, and post-#859 main CI `24930333778`, Security Audit `24930333781`, and Build & Publish Docker Images `24930333777` passed.
 
 ## Context
 
