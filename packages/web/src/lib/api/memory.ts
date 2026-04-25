@@ -197,6 +197,45 @@ export type MemoryMaintenanceResponse = {
   result: MemoryMaintenanceResult;
 };
 
+// ---------------------------------------------------------------------------
+// Fact timeline — GET /api/memory/timeline
+// Derives temporal history of a fact from edges and validity windows.
+// ---------------------------------------------------------------------------
+
+export type FactTimelineEntity = {
+  requested_id: string;
+  resolved_fact_id: string;
+  content_preview: string;
+  valid_from: string;
+  valid_until: string | null;
+  confidence: number | null;
+  active_at_as_of: boolean | null;
+  canonicalization_mode: 'fact-id-fallback';
+};
+
+export type FactTimelineEvent = {
+  edge_id: string;
+  relation: string;
+  direction: 'incoming' | 'outgoing';
+  other_fact_id: string;
+  other_fact_preview: string;
+  effective_from: string;
+  effective_until: string | null;
+  edge_created_at: string;
+  source_fact_id: string;
+  target_fact_id: string;
+};
+
+export type FactTimelineResponse = {
+  ok: true;
+  entity: FactTimelineEntity;
+  as_of: string | null;
+  limit: number;
+  next_cursor: string | null;
+  events: FactTimelineEvent[];
+  limitations: string[];
+};
+
 export const memoryApi = {
   // Unified memory foundation
   searchMemoryFacts: (params: {
@@ -363,6 +402,14 @@ export const memoryApi = {
     return request<{ observations: MemoryObservation[] }>(
       `/api/claude-mem/timeline?${qs.toString()}`,
     );
+  },
+
+  getFactTimeline: (params: { entity: string; asOf?: string; limit?: number; cursor?: string }) => {
+    const qs = new URLSearchParams({ entity: params.entity });
+    if (params.asOf) qs.set('as_of', params.asOf);
+    if (params.limit !== undefined) qs.set('limit', String(params.limit));
+    if (params.cursor) qs.set('cursor', params.cursor);
+    return request<FactTimelineResponse>(`/api/memory/timeline?${qs.toString()}`);
   },
 
   generateMemoryReport: (body: {
