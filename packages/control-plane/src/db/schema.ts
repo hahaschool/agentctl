@@ -352,6 +352,32 @@ export const memoryDrawerBackfillState = pgTable(
   ],
 );
 
+// LOCAL-ONLY: durable Memory Import API job state. Not in TABLE_SYNC_CONFIG.
+export const memoryImportJobs = pgTable(
+  'memory_import_jobs',
+  {
+    id: text('id').primaryKey(),
+    source: text('source').notNull(),
+    sourcePath: text('source_path').notNull(),
+    status: text('status').notNull(),
+    progressCurrent: integer('progress_current').notNull().default(0),
+    progressTotal: integer('progress_total').notNull().default(0),
+    imported: integer('imported').notNull().default(0),
+    skipped: integer('skipped').notNull().default(0),
+    errors: integer('errors').notNull().default(0),
+    rolledBack: integer('rolled_back').notNull().default(0),
+    errorMessage: text('error_message'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_memory_import_jobs_status_updated').on(table.status, table.updatedAt),
+    index('idx_memory_import_jobs_source_updated').on(table.source, table.updatedAt),
+    // memory_import_jobs_one_running is a raw-SQL partial unique index in migration 0034.
+  ],
+);
+
 export const memoryFacts = pgTable(
   'memory_facts',
   {

@@ -17,6 +17,7 @@ import {
   memoryEdges,
   memoryFactSources,
   memoryFacts,
+  memoryImportJobs,
   memoryOpsAudit,
   memoryOpsJobEvents,
   memoryOpsJobs,
@@ -119,12 +120,14 @@ describe('Schema module exports', () => {
     expect(memoryDrawers).toBeDefined();
     expect(memoryDrawerBackfillState).toBeDefined();
     expect(memoryFactSources).toBeDefined();
+    expect(memoryImportJobs).toBeDefined();
     expect(getTableName(memoryScopes)).toBe('memory_scopes');
     expect(getTableName(memoryFacts)).toBe('memory_facts');
     expect(getTableName(memoryEdges)).toBe('memory_edges');
     expect(getTableName(memoryDrawers)).toBe('memory_drawers');
     expect(getTableName(memoryDrawerBackfillState)).toBe('memory_drawer_backfill_state');
     expect(getTableName(memoryFactSources)).toBe('memory_fact_sources');
+    expect(getTableName(memoryImportJobs)).toBe('memory_import_jobs');
   });
 });
 
@@ -1655,7 +1658,7 @@ describe('memory fact provenance columns', () => {
 });
 
 describe('Drizzle memory drawer migration journal', () => {
-  it('tracks fact-source provenance before the backfill state migration', () => {
+  it('tracks fact-source provenance, backfill state, and durable import jobs in order', () => {
     const journal = JSON.parse(
       readFileSync(new URL('../../drizzle/meta/_journal.json', import.meta.url), 'utf8'),
     ) as { entries: Array<{ tag: string }> };
@@ -1664,11 +1667,15 @@ describe('Drizzle memory drawer migration journal', () => {
     expect(tags).toContain('0030_add_memory_drawers');
     expect(tags).toContain('0031_add_memory_fact_sources_and_versions');
     expect(tags).toContain('0032_add_memory_drawer_backfill_state');
+    expect(tags).toContain('0034_add_memory_import_jobs');
     expect(tags.indexOf('0031_add_memory_fact_sources_and_versions')).toBeGreaterThan(
       tags.indexOf('0030_add_memory_drawers'),
     );
     expect(tags.indexOf('0031_add_memory_fact_sources_and_versions')).toBeLessThan(
       tags.indexOf('0032_add_memory_drawer_backfill_state'),
+    );
+    expect(tags.indexOf('0034_add_memory_import_jobs')).toBeGreaterThan(
+      tags.indexOf('0033_add_memory_ops'),
     );
   });
 });

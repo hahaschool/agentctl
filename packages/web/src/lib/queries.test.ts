@@ -51,6 +51,7 @@ import {
   sessionContentQuery,
   sessionQuery,
   sessionsQuery,
+  useResumeImport,
   useRollbackImport,
   useStartRuntimeSessionTerminalTakeover,
   useStopRuntimeSessionTerminalTakeover,
@@ -987,6 +988,47 @@ describe('useRollbackImport', () => {
     const apiSpy = vi.spyOn(api, 'rollbackImport').mockResolvedValue(response);
 
     const mutation = useRollbackImport();
+    const result = await mutation.mutationFn('job-1');
+
+    expect(result).toEqual(response);
+    expect(apiSpy).toHaveBeenCalledWith('job-1');
+
+    await mutation.onSuccess?.(response, 'job-1', undefined);
+
+    expect(mockSetQueryData).toHaveBeenCalledWith(queryKeys.memory.importStatus, response);
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(1, {
+      queryKey: queryKeys.memory.importStatus,
+    });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: queryKeys.memory.stats,
+    });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(3, {
+      queryKey: queryKeys.memory.facts(),
+    });
+  });
+});
+
+describe('useResumeImport', () => {
+  it('writes the resumed job into the import status cache and invalidates memory caches', async () => {
+    const response = {
+      ok: true,
+      job: {
+        id: 'job-1',
+        source: 'jsonl-history',
+        status: 'running',
+        progress: { current: 4, total: 10 },
+        imported: 4,
+        skipped: 0,
+        errors: 0,
+        rolledBack: 0,
+        resumable: false,
+        startedAt: '2026-04-25T00:00:00.000Z',
+        completedAt: null,
+      },
+    } as const;
+    const apiSpy = vi.spyOn(api, 'resumeImport').mockResolvedValue(response);
+
+    const mutation = useResumeImport();
     const result = await mutation.mutationFn('job-1');
 
     expect(result).toEqual(response);

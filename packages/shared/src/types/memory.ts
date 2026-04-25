@@ -377,6 +377,7 @@ export type ImportJobStatus =
   | 'completed'
   | 'failed'
   | 'cancelled'
+  | 'interrupted'
   | 'rolled_back';
 
 export type ImportJob = {
@@ -391,6 +392,9 @@ export type ImportJob = {
   skipped: number;
   errors: number;
   rolledBack?: number;
+  sourcePath?: string | null;
+  resumable?: boolean;
+  error?: string | null;
   startedAt: string;
   completedAt: string | null;
 };

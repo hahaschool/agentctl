@@ -9,6 +9,7 @@ const {
   mockCancelMutate,
   mockPreviewMutate,
   mockRollbackMutate,
+  mockResumeMutate,
 } = vi.hoisted(() => ({
   mockUseQuery: vi.fn(),
   mockImportStatusQuery: vi.fn(),
@@ -16,6 +17,7 @@ const {
   mockCancelMutate: vi.fn(),
   mockPreviewMutate: vi.fn(),
   mockRollbackMutate: vi.fn(),
+  mockResumeMutate: vi.fn(),
 }));
 
 vi.mock('@tanstack/react-query', async () => {
@@ -39,6 +41,10 @@ vi.mock('@/lib/queries', () => ({
   }),
   useRollbackImport: () => ({
     mutate: mockRollbackMutate,
+    isPending: false,
+  }),
+  useResumeImport: () => ({
+    mutate: mockResumeMutate,
     isPending: false,
   }),
   usePreviewImport: () => ({
@@ -77,6 +83,7 @@ describe('MemoryImportView', () => {
     mockStartMutate.mockResolvedValue({ job: { id: 'job-1', status: 'running' } });
     mockPreviewMutate.mockResolvedValue(MOCK_PREVIEW);
     mockRollbackMutate.mockResolvedValue({ ok: true });
+    mockResumeMutate.mockResolvedValue({ ok: true });
   });
 
   afterEach(() => {
@@ -436,6 +443,30 @@ describe('MemoryImportView', () => {
       await waitFor(() => screen.getByTestId('import-summary'));
       fireEvent.click(screen.getByTestId('rollback-import'));
       expect(mockRollbackMutate).toHaveBeenCalledWith('job-1');
+    });
+
+    it('calls resumeImport from an interrupted persisted import summary', async () => {
+      mockUseQuery.mockReturnValue({
+        data: {
+          job: {
+            id: 'job-1',
+            status: 'interrupted',
+            sourcePath: '/tmp/jsonl-history',
+            progress: { current: 45, total: 100 },
+            imported: 40,
+            skipped: 5,
+            errors: 0,
+            resumable: true,
+          },
+        },
+        isLoading: false,
+      });
+
+      renderView();
+
+      await waitFor(() => screen.getByTestId('import-summary'));
+      fireEvent.click(screen.getByTestId('resume-import'));
+      expect(mockResumeMutate).toHaveBeenCalledWith('job-1');
     });
   });
 });
