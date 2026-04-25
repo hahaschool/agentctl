@@ -81,6 +81,7 @@ import { machineCapabilitiesRoutes } from './routes/machine-capabilities.js';
 import { manualTakeoverRoutes } from './routes/manual-takeover.js';
 import { mcpTemplateRoutes } from './routes/mcp-templates.js';
 import { mcpToolsRoutes } from './routes/mcp-tools.js';
+import { memoryCanonicalizeApplyRoutes } from './routes/memory-canonicalize-apply.js';
 import { memoryRoutes } from './routes/memory.js';
 import { memoryConsolidationRoutes } from './routes/memory-consolidation.js';
 import { memoryDecayRoutes } from './routes/memory-decay.js';
@@ -605,6 +606,12 @@ export async function createServer({
 
     await app.register(memoryDecayRoutes, {
       prefix: '/api/memory/decay',
+      pool: pgPool,
+      logger,
+    });
+
+    await app.register(memoryCanonicalizeApplyRoutes, {
+      prefix: '/api/memory/canonicalize/apply',
       pool: pgPool,
       logger,
     });
