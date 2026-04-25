@@ -91,6 +91,7 @@ import { memoryFactRoutes } from './routes/memory-facts.js';
 import { memoryImportRoutes } from './routes/memory-import.js';
 import { memoryOpsRoutes } from './routes/memory-ops.js';
 import { memoryProvidersRoutes } from './routes/memory-providers.js';
+import { memoryNarrativeReportRoutes } from './routes/memory-narrative-report.js';
 import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
@@ -593,6 +594,13 @@ export async function createServer({
       prefix: '/api/memory/reports',
       pool: pgPool,
       logger,
+    });
+
+    await app.register(memoryNarrativeReportRoutes, {
+      prefix: '/api/memory/narrative-report',
+      pool: pgPool,
+      logger,
+      litellmClient,
     });
 
     await app.register(memoryDecayRoutes, {
