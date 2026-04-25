@@ -10,6 +10,8 @@
 
 **Status sync (2026-04-25):** All planned PRs A-G have landed through PR #827. The remaining work is rollout verification, not another implementation PR from this plan: enable the dev-1 environment intentionally, run the backfill/consolidation/synthesis flows, and complete the live Gemini Gate 2 check before any `verified:true` catalog flip.
 
+Use `pnpm memory:ops:preflight --target dev-1|live [--env-file .env.dev-1]` before flipping rollout gates. The command is dry-run-only: it inspects env/config, local DB/provider readiness, drawer roots, Redis reachability, and Gate 2 env presence without starting jobs or calling live providers.
+
 ---
 
 ## PR Map
