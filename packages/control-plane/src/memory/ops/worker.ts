@@ -2,12 +2,17 @@ import { ControlPlaneError } from '@agentctl/shared';
 import type { Pool } from 'pg';
 import type { Logger } from 'pino';
 import type { Database } from '../../db/index.js';
-
 import { resolveEmbeddingClient } from '../embedding-client-factory.js';
+import { KnowledgeMaintenance } from '../knowledge-maintenance.js';
+import { KnowledgeSynthesis } from '../knowledge-synthesis.js';
+import { MemoryStore } from '../memory-store.js';
+import { consolidationHandler } from './consolidation.js';
 import { drawerBackfillHandler } from './drawer-backfill.js';
 import { embeddingBackfillHandler } from './embedding-backfill.js';
 import type { JobEventsRepository } from './job-events-repository.js';
 import type { JobsRepository } from './jobs-repository.js';
+import type { MemoryOpsQueueName } from './queue.js';
+import { synthesisHandler } from './synthesis.js';
 import type { MemoryOpsJobHandler } from './worker-runtime.js';
 
 export type CreateMemoryOpsHandlersOptions = {
@@ -21,7 +26,7 @@ export type CreateMemoryOpsHandlersOptions = {
 
 export function createMemoryOpsHandlers(
   opts: CreateMemoryOpsHandlersOptions,
-): Partial<Record<'embedding-backfill' | 'drawer-backfill', MemoryOpsJobHandler>> {
+): Partial<Record<MemoryOpsQueueName, MemoryOpsJobHandler>> {
   return {
     'embedding-backfill': async (bullJob) => {
       const job = await loadJob(opts.jobsRepository, bullJob.data.dbJobId);
@@ -47,6 +52,33 @@ export function createMemoryOpsHandlers(
         pool: opts.pool,
         resolvedClient,
         priceUsdPerMtoken: job.priceUsdPerMtoken,
+        jobsRepository: opts.jobsRepository,
+        eventsRepository: opts.eventsRepository,
+      });
+    },
+    consolidation: async (bullJob) => {
+      const job = await loadJob(opts.jobsRepository, bullJob.data.dbJobId);
+      const memoryStore = new MemoryStore({ pool: opts.pool, logger: opts.logger });
+      await consolidationHandler({
+        jobId: job.id,
+        params: job.params,
+        logger: opts.logger,
+        maintenance: new KnowledgeMaintenance({
+          pool: opts.pool,
+          memoryStore,
+          logger: opts.logger,
+        }),
+        jobsRepository: opts.jobsRepository,
+        eventsRepository: opts.eventsRepository,
+      });
+    },
+    synthesis: async (bullJob) => {
+      const job = await loadJob(opts.jobsRepository, bullJob.data.dbJobId);
+      await synthesisHandler({
+        jobId: job.id,
+        params: job.params,
+        logger: opts.logger,
+        synthesis: new KnowledgeSynthesis({ pool: opts.pool, logger: opts.logger }),
         jobsRepository: opts.jobsRepository,
         eventsRepository: opts.eventsRepository,
       });

@@ -72,6 +72,18 @@ REDIS_URL=redis://localhost:6379
 
 All other variables have sensible defaults or enable optional features. See `.env.example` for the full list.
 
+### Optional: Configure Memory Operations
+
+Memory Operations can run embedding backfills, drawer backfills, consolidation, and synthesis jobs from the web UI. Enable the worker queues and set a long random signing secret before running them:
+
+```bash
+MEMORY_OPS_ENABLED=true
+MEMORY_OPS_ENABLED_KINDS=embedding-backfill,drawer-backfill,consolidation,synthesis
+MEMORY_OPS_SIGNING_SECRET=replace-with-a-long-random-local-secret
+```
+
+For embedding jobs, open `Settings -> Memory & Embeddings`, add an OpenAI provider such as `text-embedding-3-small`, run the provider test, and save it as active. The provider test records the model dimension, which the Memory Operations page uses before confirming data-egress jobs.
+
 ## 4. Start the Control Plane
 
 ```bash
