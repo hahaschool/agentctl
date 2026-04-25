@@ -3,7 +3,7 @@
 **Status:** Current contract before any drawer sync or temporal `memory_edges` payload work
 **Roadmap:** 3.6 / 4.8 / 7.3 MemPalace-Inspired Memory Evolution
 **Created:** 2026-04-25
-**Checkpoint:** `main@bf0bf676` is current through PR #852. PR #851 added aggregate-only private memory eval fixture validation, PR #852 added the first local-only entity canonicalization schema/store slice, and post-#852 main CI `24928487675`, Security Audit `24928487676`, and Build & Publish Docker Images `24928487694` passed.
+**Checkpoint:** `main@f00e4c91` is current through PR #855. PR #853 introduced this contract, PR #854 moved aggregate-only private memory eval fixture validation into the Memory Evals workflow before live runs, PR #855 added dry-run canonicalization proposals without mesh sync or fact/edge mutations, and post-#855 main CI `24929456518`, Security Audit `24929456512`, and Build & Publish Docker Images `24929456505` passed.
 
 ## Context
 
