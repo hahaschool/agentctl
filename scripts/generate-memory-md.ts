@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,6 +23,9 @@ export type GenerateMemoryMdCliOptions = {
   maxFactChars: number;
   factsFetchLimit: number;
   factsFetchTimeoutMs: number;
+  write?: boolean;
+  approvalToken?: string;
+  approvedBy?: string;
   json: boolean;
 };
 
@@ -45,7 +49,17 @@ export type MemoryMdDryRunResult = {
   selectedFacts: SelectedMemoryMdFact[];
   proposedContent: string;
   diff: string;
+  existingContentSha256: string;
+  proposedContentSha256: string;
+  writeApprovalToken: string;
   assumptions: string[];
+};
+
+export type MemoryMdWriteResult = Omit<MemoryMdDryRunResult, 'dryRun'> & {
+  dryRun: false;
+  approvedBy: string;
+  bytesWritten: number;
+  writtenAt: string;
 };
 
 const GENERATED_BLOCK_START = '<!-- agentctl-memory-md:start -->';
@@ -88,7 +102,10 @@ Options:
   --max-fact-chars <count>     Max characters per generated bullet. Default: ${DEFAULT_MAX_FACT_CHARS}.
   --api-fetch-limit <count>    Max API facts to fetch. Default: ${DEFAULT_FACTS_FETCH_LIMIT}.
   --facts-fetch-timeout-ms <ms> API fetch timeout. Default: ${DEFAULT_FACTS_FETCH_TIMEOUT_MS}.
-  --json                       Emit the dry-run result as JSON.
+  --write                      Write the approved proposal to MEMORY.md.
+  --approval-token <token>     Required with --write. Must match the current dry-run token.
+  --approved-by <id>           Required with --write. Records who approved the write.
+  --json                       Emit the result as JSON.
   --help, -h                   Show this help text.
 
 Reviewed facts are explicit by default: reviewed=true, metadata.reviewed=true, source.reviewed=true,
@@ -107,6 +124,9 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
   let maxFactChars = DEFAULT_MAX_FACT_CHARS;
   let factsFetchLimit = DEFAULT_FACTS_FETCH_LIMIT;
   let factsFetchTimeoutMs = DEFAULT_FACTS_FETCH_TIMEOUT_MS;
+  let write = false;
+  let approvalToken: string | null = null;
+  let approvedBy: string | null = null;
   let json = false;
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -214,6 +234,27 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
       continue;
     }
 
+    if (arg === '--write') {
+      write = true;
+      continue;
+    }
+
+    if (arg === '--approval-token') {
+      const value = argv[index + 1];
+      if (!value) {
+        throw new Error('--approval-token requires a value');
+      }
+      approvalToken = value.trim();
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--approved-by') {
+      approvedBy = parseBoundedString(argv[index + 1], '--approved-by', 128);
+      index += 1;
+      continue;
+    }
+
     if (arg?.startsWith('-')) {
       throw new Error(`Unknown option: ${arg}`);
     }
@@ -224,6 +265,12 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
   }
   if (Number(Boolean(factsJsonPath)) + Number(Boolean(controlPlaneUrl)) !== 1) {
     throw new Error('Provide exactly one fact source: --facts-json or --control-plane-url');
+  }
+  if (write && !approvalToken) {
+    throw new Error('--write requires --approval-token from a reviewed dry run');
+  }
+  if (write && !approvedBy) {
+    throw new Error('--write requires --approved-by to record the reviewer');
   }
 
   const resolvedApiToken = apiToken ?? process.env.AGENTCTL_API_TOKEN;
@@ -239,6 +286,9 @@ export function parseArgs(argv: readonly string[]): GenerateMemoryMdCliOptions {
     maxFactChars,
     factsFetchLimit,
     factsFetchTimeoutMs,
+    write,
+    ...(approvalToken ? { approvalToken } : {}),
+    ...(approvedBy ? { approvedBy } : {}),
     json,
   };
 }
@@ -513,13 +563,17 @@ export function generateMemoryMdDryRun(
     | 'apiToken'
     | 'factsFetchLimit'
     | 'factsFetchTimeoutMs'
+    | 'write'
+    | 'approvalToken'
+    | 'approvedBy'
     | 'json'
   > & {
     existingMemoryContent?: string | null;
   },
 ): MemoryMdDryRunResult {
   const memoryPath = resolveClaudeMemoryPath(options.projectPath, options.claudeProjectsDir);
-  const existingMemoryExists = options.existingMemoryContent != null;
+  const existingMemoryContent = options.existingMemoryContent ?? null;
+  const existingMemoryExists = existingMemoryContent != null;
   const selection = selectReviewedFacts({
     facts,
     scope: options.scope,
@@ -528,9 +582,19 @@ export function generateMemoryMdDryRun(
     maxFactChars: options.maxFactChars,
   });
   const proposedContent = mergeMemoryContent(
-    options.existingMemoryContent,
+    existingMemoryContent,
     renderGeneratedMemoryBlock(selection.selectedFacts),
   );
+  const existingContentSha256 = sha256(existingMemoryContent ?? '');
+  const proposedContentSha256 = sha256(proposedContent);
+  const writeApprovalToken = computeMemoryMdWriteApprovalToken({
+    projectPath: options.projectPath,
+    memoryPath,
+    scope: options.scope,
+    existingMemoryExists,
+    existingContentSha256,
+    proposedContentSha256,
+  });
 
   return {
     dryRun: true,
@@ -544,7 +608,10 @@ export function generateMemoryMdDryRun(
     reviewedFacts: selection.reviewedFacts,
     selectedFacts: selection.selectedFacts,
     proposedContent,
-    diff: buildUnifiedDiff(options.existingMemoryContent, proposedContent, memoryPath),
+    diff: buildUnifiedDiff(existingMemoryContent, proposedContent, memoryPath),
+    existingContentSha256,
+    proposedContentSha256,
+    writeApprovalToken,
     assumptions: buildAssumptions(options.assumeInputReviewed, options.scope, options.projectPath),
   };
 }
@@ -603,6 +670,31 @@ export async function runGenerateMemoryMdDryRunFromSource(
   });
 }
 
+export async function runGenerateMemoryMdWriteFromSource(
+  options: GenerateMemoryMdCliOptions,
+): Promise<MemoryMdWriteResult> {
+  const approvalToken = requireOption(options.approvalToken, '--approval-token');
+  const approvedBy = requireOption(options.approvedBy, '--approved-by');
+  const dryRun = await runGenerateMemoryMdDryRunFromSource(options);
+
+  if (approvalToken !== dryRun.writeApprovalToken) {
+    throw new Error(
+      'Write approval token does not match the current MEMORY.md proposal; rerun the dry run and review the latest diff.',
+    );
+  }
+
+  fs.mkdirSync(path.dirname(dryRun.memoryPath), { recursive: true });
+  fs.writeFileSync(dryRun.memoryPath, dryRun.proposedContent, 'utf8');
+
+  return {
+    ...dryRun,
+    dryRun: false,
+    approvedBy,
+    bytesWritten: Buffer.byteLength(dryRun.proposedContent, 'utf8'),
+    writtenAt: new Date().toISOString(),
+  };
+}
+
 export function formatMemoryMdDryRun(result: MemoryMdDryRunResult): string {
   const lines = [
     '# MEMORY.md Dry Run',
@@ -619,6 +711,8 @@ export function formatMemoryMdDryRun(result: MemoryMdDryRunResult): string {
     'Assumptions:',
     ...result.assumptions.map((assumption) => `- ${assumption}`),
     '',
+    `Write approval token: ${result.writeApprovalToken}`,
+    '',
     '## Diff',
     '',
     result.diff || '(no changes)',
@@ -630,16 +724,33 @@ export function formatMemoryMdDryRun(result: MemoryMdDryRunResult): string {
   return lines.join('\n');
 }
 
+export function formatMemoryMdWriteResult(result: MemoryMdWriteResult): string {
+  return [
+    '# MEMORY.md Write Complete',
+    '',
+    `Project path: ${result.projectPath}`,
+    `Target path: ${result.memoryPath}`,
+    `Scope: ${result.scope}`,
+    `Approved by: ${result.approvedBy}`,
+    `Bytes written: ${result.bytesWritten}`,
+    `Written at: ${result.writtenAt}`,
+    `Write approval token: ${result.writeApprovalToken}`,
+    '',
+  ].join('\n');
+}
+
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
-  const result = await runGenerateMemoryMdDryRunFromSource(options);
+  const result = options.write
+    ? await runGenerateMemoryMdWriteFromSource(options)
+    : await runGenerateMemoryMdDryRunFromSource(options);
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
 
-  console.log(formatMemoryMdDryRun(result));
+  console.log(result.dryRun ? formatMemoryMdDryRun(result) : formatMemoryMdWriteResult(result));
 }
 
 function isMemoryScope(value: string): value is MemoryScope {
@@ -662,6 +773,17 @@ function parsePositiveInteger(raw: string | undefined, flagName: string): number
   }
 
   return parsed;
+}
+
+function parseBoundedString(raw: string | undefined, flagName: string, maxLength: number): string {
+  const value = raw?.trim();
+  if (!value) {
+    throw new Error(`${flagName} requires a non-empty value`);
+  }
+  if (value.length > maxLength) {
+    throw new Error(`${flagName} must be at most ${maxLength} characters`);
+  }
+  return value;
 }
 
 function ensureTrailingSlash(value: string): string {
@@ -802,6 +924,31 @@ function buildAssumptions(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function computeMemoryMdWriteApprovalToken(input: {
+  projectPath: string;
+  memoryPath: string;
+  scope: MemoryScope;
+  existingMemoryExists: boolean;
+  existingContentSha256: string;
+  proposedContentSha256: string;
+}): string {
+  return sha256(
+    JSON.stringify({
+      version: 1,
+      projectPath: input.projectPath,
+      memoryPath: input.memoryPath,
+      scope: input.scope,
+      existingMemoryExists: input.existingMemoryExists,
+      existingContentSha256: input.existingContentSha256,
+      proposedContentSha256: input.proposedContentSha256,
+    }),
+  );
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

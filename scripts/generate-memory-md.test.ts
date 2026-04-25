@@ -14,6 +14,7 @@ import {
   resolveClaudeMemoryPath,
   runGenerateMemoryMdDryRun,
   runGenerateMemoryMdDryRunFromSource,
+  runGenerateMemoryMdWriteFromSource,
 } from './generate-memory-md.js';
 
 function createFact(overrides: Partial<ReviewableMemoryFact> = {}): ReviewableMemoryFact {
@@ -328,7 +329,9 @@ describe('runGenerateMemoryMdDryRun', () => {
     expect(result.existingMemoryExists).toBe(true);
     expect(result.selectedFacts.map((fact) => fact.id)).toEqual(['fact-a']);
     expect(result.diff).toContain(memoryPath);
+    expect(result.writeApprovalToken).toMatch(/^[a-f0-9]{64}$/);
     expect(formatMemoryMdDryRun(result)).toContain('# MEMORY.md Dry Run');
+    expect(formatMemoryMdDryRun(result)).toContain('Write approval token:');
     expect(formatMemoryMdDryRun(result)).toContain(
       'Biome is the formatter and lint baseline for touched files.',
     );
@@ -480,6 +483,115 @@ describe('runGenerateMemoryMdDryRun', () => {
         json: false,
       }),
     ).rejects.toThrow(/HTTP 503/i);
+  });
+});
+
+describe('runGenerateMemoryMdWriteFromSource', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'generate-memory-md-write-'));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('writes the exact approved MEMORY.md proposal when the approval token matches', async () => {
+    const projectPath = path.join(tmpDir, 'agentctl');
+    const claudeProjectsDir = path.join(tmpDir, '.claude', 'projects');
+    const factsJsonPath = path.join(tmpDir, 'facts.json');
+    const memoryPath = resolveClaudeMemoryPath(projectPath, claudeProjectsDir);
+
+    fs.mkdirSync(projectPath, { recursive: true });
+    writeJson(factsJsonPath, {
+      facts: [
+        createFact({
+          id: 'write-fact',
+          content: 'Approved Surface A facts can be promoted after reviewing the dry-run diff.',
+          scope: 'project:agentctl',
+          reviewed: true,
+        }),
+      ],
+    });
+
+    const dryRun = await runGenerateMemoryMdDryRunFromSource({
+      projectPath,
+      factsJsonPath,
+      claudeProjectsDir,
+      scope: 'project:agentctl',
+      assumeInputReviewed: false,
+      maxFacts: 8,
+      maxFactChars: 140,
+      factsFetchLimit: 500,
+      factsFetchTimeoutMs: 10_000,
+      json: false,
+      write: false,
+    });
+
+    const result = await runGenerateMemoryMdWriteFromSource({
+      projectPath,
+      factsJsonPath,
+      claudeProjectsDir,
+      scope: 'project:agentctl',
+      assumeInputReviewed: false,
+      maxFacts: 8,
+      maxFactChars: 140,
+      factsFetchLimit: 500,
+      factsFetchTimeoutMs: 10_000,
+      json: false,
+      write: true,
+      approvalToken: dryRun.writeApprovalToken,
+      approvedBy: 'reviewer-1',
+    });
+
+    expect(result.dryRun).toBe(false);
+    expect(result.approvedBy).toBe('reviewer-1');
+    expect(result.memoryPath).toBe(memoryPath);
+    expect(fs.readFileSync(memoryPath, 'utf8')).toBe(dryRun.proposedContent);
+    expect(result.bytesWritten).toBe(Buffer.byteLength(dryRun.proposedContent, 'utf8'));
+  });
+
+  it('refuses stale approval tokens and leaves existing MEMORY.md untouched', async () => {
+    const projectPath = path.join(tmpDir, 'agentctl');
+    const claudeProjectsDir = path.join(tmpDir, '.claude', 'projects');
+    const factsJsonPath = path.join(tmpDir, 'facts.json');
+    const memoryPath = resolveClaudeMemoryPath(projectPath, claudeProjectsDir);
+
+    fs.mkdirSync(projectPath, { recursive: true });
+    writeJson(factsJsonPath, {
+      facts: [
+        createFact({
+          id: 'write-fact',
+          content: 'Approved Surface A facts require a fresh token.',
+          scope: 'project:agentctl',
+          reviewed: true,
+        }),
+      ],
+    });
+    fs.mkdirSync(path.dirname(memoryPath), { recursive: true });
+    fs.writeFileSync(memoryPath, '# Existing Memory\n', 'utf8');
+
+    await expect(
+      runGenerateMemoryMdWriteFromSource({
+        projectPath,
+        factsJsonPath,
+        claudeProjectsDir,
+        scope: 'project:agentctl',
+        assumeInputReviewed: false,
+        maxFacts: 8,
+        maxFactChars: 140,
+        factsFetchLimit: 500,
+        factsFetchTimeoutMs: 10_000,
+        json: false,
+        write: true,
+        approvalToken: '0'.repeat(64),
+        approvedBy: 'reviewer-1',
+      }),
+    ).rejects.toThrow(/approval token/i);
+
+    expect(fs.readFileSync(memoryPath, 'utf8')).toBe('# Existing Memory\n');
   });
 });
 
