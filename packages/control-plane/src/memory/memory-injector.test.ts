@@ -1,3 +1,4 @@
+import type { MemoryFact } from '@agentctl/shared';
 import { ControlPlaneError, DEFAULT_INJECTION_BUDGET } from '@agentctl/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockLogger } from '../api/routes/test-helpers.js';
@@ -30,6 +31,30 @@ function makeMemoryEntry(memory: string): MemoryEntry {
     metadata: {},
     createdAt: '2025-01-01T00:00:00Z',
     updatedAt: '2025-01-01T00:00:00Z',
+  };
+}
+
+function makeFact(overrides: Pick<MemoryFact, 'content' | 'id'> & Partial<MemoryFact>): MemoryFact {
+  return {
+    id: overrides.id,
+    scope: 'agent:agent-1',
+    content: overrides.content,
+    content_model: 'text-embedding-3-small',
+    entity_type: 'pattern',
+    confidence: 0.91,
+    strength: 1,
+    source: {
+      session_id: null,
+      agent_id: 'agent-1',
+      machine_id: null,
+      turn_index: null,
+      extraction_method: 'manual',
+    },
+    valid_from: '2026-03-11T00:00:00.000Z',
+    valid_until: null,
+    created_at: '2026-03-11T00:00:00.000Z',
+    accessed_at: '2026-03-11T00:00:00.000Z',
+    ...overrides,
   };
 }
 
@@ -352,7 +377,121 @@ describe('MemoryInjector', () => {
       expect(context).toBe('## Relevant Memories\n- Use pnpm workspaces for monorepo installs');
     });
 
-    it('falls back to fact-only when full-drawer mode is requested', async () => {
+    it('renders full drawer content for on-demand facts only', async () => {
+      const pinnedFact = makeFact({
+        id: 'pinned-1',
+        scope: 'global',
+        content: 'Never commit secrets',
+        pinned: true,
+        source: {
+          session_id: null,
+          agent_id: null,
+          machine_id: null,
+          turn_index: null,
+          extraction_method: 'manual',
+        },
+      });
+      const onDemandFact = makeFact({
+        id: 'fact-1',
+        content: 'Use pnpm workspaces for monorepo installs',
+      });
+
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([
+          { fact: pinnedFact, score: 0.95, source_path: 'bm25' },
+          { fact: onDemandFact, score: 0.92, source_path: 'vector' },
+        ]),
+      });
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([pinnedFact, onDemandFact]),
+      });
+      const loadFactSourceDrawers = vi.fn().mockResolvedValue([
+        {
+          drawer_id: 'drawer-1',
+          drawer_scope: 'agent:agent-1',
+          drawer_topic: 'tooling',
+          drawer_chunk_index: 0,
+          drawer_source_type: 'manual',
+          drawer_source_id: 'source-1',
+          start_offset: 0,
+          end_offset: 120,
+          drawer_content:
+            'Keep pnpm-workspace.yaml at the repo root\nand keep packageManager pinned.',
+          drawer_token_count: 18,
+          status: 'available',
+          created_at: '2026-03-11T00:00:00.000Z',
+        },
+      ]);
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        loadFactSourceDrawers,
+        injectionBudget: {
+          ...DEFAULT_INJECTION_BUDGET,
+          resultMode: 'full-drawer',
+        },
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe(
+        '## Relevant Memories\n- Never commit secrets\n- Use pnpm workspaces for monorepo installs\n  Drawer tooling#0: Keep pnpm-workspace.yaml at the repo root and keep packageManager pinned.',
+      );
+      expect(loadFactSourceDrawers).toHaveBeenCalledOnce();
+      expect(loadFactSourceDrawers).toHaveBeenCalledWith('fact-1');
+      expect(memoryStore.listFactSourcePreviews).not.toHaveBeenCalled();
+    });
+
+    it('caps full drawer content by the remaining on-demand tier budget', async () => {
+      const fact = makeFact({
+        id: 'fact-1',
+        content: 'Use pnpm',
+      });
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([{ fact, score: 0.92, source_path: 'vector' }]),
+      });
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([fact]),
+      });
+      const loadFactSourceDrawers = vi.fn().mockResolvedValue([
+        {
+          drawer_id: 'drawer-1',
+          drawer_scope: 'agent:agent-1',
+          drawer_topic: 'tooling',
+          drawer_chunk_index: 0,
+          drawer_source_type: 'manual',
+          drawer_source_id: 'source-1',
+          start_offset: 0,
+          end_offset: 26,
+          drawer_content: 'abcdefghijklmnopqrstuvwxyz',
+          drawer_token_count: 7,
+          status: 'available',
+          created_at: '2026-03-11T00:00:00.000Z',
+        },
+      ]);
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        loadFactSourceDrawers,
+        injectionBudget: {
+          ...DEFAULT_INJECTION_BUDGET,
+          resultMode: 'full-drawer',
+          tierTokenCaps: { 'on-demand': 4 },
+        },
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe('## Relevant Memories\n- Use pnpm\n  Drawer tooling#0: abcde...');
+    });
+
+    it('falls back to fact-only when full-drawer loader support is unavailable', async () => {
       const fact = {
         id: 'fact-1',
         scope: 'agent:agent-1',
