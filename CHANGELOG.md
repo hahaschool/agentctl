@@ -2,6 +2,26 @@
 
 All notable changes to AgentCTL are documented in this file.
 
+## [Unreleased] — 2026-04-25
+
+### Features
+
+- **Memory Operations UI** — Settings → Memory & Embeddings for embedding provider CRUD and `/memory/operations` for triggering, observing, and cancelling memory maintenance jobs.
+- Added `embedding-backfill`, `drawer-backfill`, `consolidation`, and `synthesis` job kinds behind the progressive `MEMORY_OPS_ENABLED` / `MEMORY_OPS_ENABLED_KINDS` rollout flags.
+- Added missing-provider alerts across the main memory surfaces and SSE job progress streaming for executor-local jobs.
+- Added preview + confirmation for write-kind memory egress before job creation.
+
+### Infrastructure
+
+- Migration `0033` added local provider custody plus durable memory operation job, event, and audit tables.
+- Removed the legacy `LITELLM_URL` embedding fallback; embedding providers are configured through Settings.
+- Added `MEMORY_OPS_SIGNING_SECRET` for ephemeral test-before-save provider tokens.
+
+### Known limitations
+
+- Fleet backfill races remain operator-managed in v1. Do not run concurrent write-kind jobs across peers with different active providers.
+- Gemini remains hidden until Gate 2 is verified with a live key proving `output_dimensionality=1536` is honored.
+
 ## [0.8.2] — 2026-04-23
 
 Release hygiene refresh after the beta-only `v0.8.1` tag diverged from `main`.

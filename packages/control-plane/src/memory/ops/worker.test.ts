@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Database } from '../../db/index.js';
 import { resolveEmbeddingClient } from '../embedding-client-factory.js';
+import { consolidationHandler } from './consolidation.js';
 import { drawerBackfillHandler } from './drawer-backfill.js';
 import { embeddingBackfillHandler } from './embedding-backfill.js';
 import type { JobEventsRepository } from './job-events-repository.js';
 import type { JobsRepository } from './jobs-repository.js';
+import { synthesisHandler } from './synthesis.js';
 import { createMemoryOpsHandlers } from './worker.js';
 
 vi.mock('../embedding-client-factory.js', () => ({
@@ -19,6 +21,14 @@ vi.mock('./embedding-backfill.js', () => ({
 
 vi.mock('./drawer-backfill.js', () => ({
   drawerBackfillHandler: vi.fn(),
+}));
+
+vi.mock('./consolidation.js', () => ({
+  consolidationHandler: vi.fn(),
+}));
+
+vi.mock('./synthesis.js', () => ({
+  synthesisHandler: vi.fn(),
 }));
 
 const logger = {
@@ -75,6 +85,8 @@ describe('createMemoryOpsHandlers', () => {
     } as never);
     vi.mocked(embeddingBackfillHandler).mockResolvedValue(undefined);
     vi.mocked(drawerBackfillHandler).mockResolvedValue(undefined);
+    vi.mocked(consolidationHandler).mockResolvedValue(undefined);
+    vi.mocked(synthesisHandler).mockResolvedValue(undefined);
   });
 
   it('dispatches embedding-backfill with the stored job row price', async () => {
@@ -114,5 +126,53 @@ describe('createMemoryOpsHandlers', () => {
 
     expect(resolveEmbeddingClient).not.toHaveBeenCalled();
     expect(drawerBackfillHandler).not.toHaveBeenCalled();
+  });
+
+  it('dispatches consolidation without resolving embedding credentials', async () => {
+    const { handlers, jobsRepository, eventsRepository } = makeHandlers({
+      encryptionKey: '',
+      job: makeJob({ kind: 'consolidation', credentialId: null, params: { scope: 'global' } }),
+    });
+
+    await handlers.consolidation?.({
+      data: { dbJobId: 'job-1' },
+      name: 'consolidation',
+    } as never);
+
+    expect(resolveEmbeddingClient).not.toHaveBeenCalled();
+    expect(consolidationHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        params: { scope: 'global' },
+        jobsRepository,
+        eventsRepository,
+      }),
+    );
+  });
+
+  it('dispatches synthesis without resolving embedding credentials', async () => {
+    const { handlers, jobsRepository, eventsRepository } = makeHandlers({
+      encryptionKey: '',
+      job: makeJob({
+        kind: 'synthesis',
+        credentialId: null,
+        params: { scope: 'project:agentctl' },
+      }),
+    });
+
+    await handlers.synthesis?.({
+      data: { dbJobId: 'job-1' },
+      name: 'synthesis',
+    } as never);
+
+    expect(resolveEmbeddingClient).not.toHaveBeenCalled();
+    expect(synthesisHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        params: { scope: 'project:agentctl' },
+        jobsRepository,
+        eventsRepository,
+      }),
+    );
   });
 });
