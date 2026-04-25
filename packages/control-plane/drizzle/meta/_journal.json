@@ -260,6 +260,13 @@
       "when": 1777096400000,
       "tag": "0034_add_memory_import_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1777104000000,
+      "tag": "0035_add_memory_import_job_cursor",
+      "breakpoints": true
     }
   ]
 }

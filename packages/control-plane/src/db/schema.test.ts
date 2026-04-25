@@ -1623,6 +1623,35 @@ describe('memoryDrawerBackfillState table columns', () => {
   });
 });
 
+describe('memoryImportJobs table columns', () => {
+  const meta = getColumnMeta(memoryImportJobs);
+
+  it('has durable progress and cursor columns', () => {
+    expect(Object.keys(meta)).toEqual([
+      'id',
+      'source',
+      'sourcePath',
+      'status',
+      'progressCurrent',
+      'progressTotal',
+      'imported',
+      'skipped',
+      'errors',
+      'rolledBack',
+      'errorMessage',
+      'cursorJson',
+      'startedAt',
+      'completedAt',
+      'updatedAt',
+    ]);
+  });
+
+  it('stores the resume cursor as required JSON with a default', () => {
+    expect(meta.cursorJson.notNull).toBe(true);
+    expect(meta.cursorJson.hasDefault).toBe(true);
+  });
+});
+
 describe('memory fact provenance columns', () => {
   const factsMeta = getColumnMeta(memoryFacts);
   const edgesMeta = getColumnMeta(memoryEdges);
@@ -1668,6 +1697,7 @@ describe('Drizzle memory drawer migration journal', () => {
     expect(tags).toContain('0031_add_memory_fact_sources_and_versions');
     expect(tags).toContain('0032_add_memory_drawer_backfill_state');
     expect(tags).toContain('0034_add_memory_import_jobs');
+    expect(tags).toContain('0035_add_memory_import_job_cursor');
     expect(tags.indexOf('0031_add_memory_fact_sources_and_versions')).toBeGreaterThan(
       tags.indexOf('0030_add_memory_drawers'),
     );
@@ -1676,6 +1706,9 @@ describe('Drizzle memory drawer migration journal', () => {
     );
     expect(tags.indexOf('0034_add_memory_import_jobs')).toBeGreaterThan(
       tags.indexOf('0033_add_memory_ops'),
+    );
+    expect(tags.indexOf('0035_add_memory_import_job_cursor')).toBeGreaterThan(
+      tags.indexOf('0034_add_memory_import_jobs'),
     );
   });
 });
