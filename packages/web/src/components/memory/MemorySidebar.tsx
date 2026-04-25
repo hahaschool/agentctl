@@ -12,6 +12,7 @@ import { Badge } from '../ui/badge';
 const MEMORY_NAV_ITEMS = [
   { href: '/memory/browser', label: 'Browser', description: 'Inspect facts and filters' },
   { href: '/memory/graph', label: 'Graph', description: 'Explore relationships' },
+  { href: '/memory/timeline', label: 'Timeline', description: 'Fact edge history' },
   { href: '/memory/dashboard', label: 'Dashboard', description: 'Track memory health' },
   { href: '/memory/operations', label: 'Operations', description: 'Run and monitor jobs' },
   {

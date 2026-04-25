@@ -170,6 +170,8 @@ export const queryKeys = {
     stats: ['memory', 'stats'] as const,
     decayStats: ['memory', 'decay', 'stats'] as const,
     timeline: (sessionId: string) => ['memory', 'timeline', sessionId] as const,
+    factTimeline: (entity: string, asOf?: string, cursor?: string) =>
+      ['memory', 'fact-timeline', entity, asOf ?? null, cursor ?? null] as const,
     observation: (id: number) => ['memory', 'observation', id] as const,
     reports: (params?: { reportType?: MemoryReportType; scope?: string; limit?: number }) =>
       params ? (['memory', 'reports', params] as const) : (['memory', 'reports'] as const),
@@ -868,6 +870,20 @@ export function memoryTimelineQuery(sessionId: string | undefined) {
     queryFn: () => api.getMemoryTimeline(sessionId as string),
     enabled: !!sessionId,
     staleTime: 60_000,
+  });
+}
+
+export function factTimelineQuery(params: {
+  entity: string;
+  asOf?: string;
+  limit?: number;
+  cursor?: string;
+}) {
+  return queryOptions({
+    queryKey: queryKeys.memory.factTimeline(params.entity, params.asOf, params.cursor),
+    queryFn: () => api.getFactTimeline(params),
+    enabled: !!params.entity,
+    staleTime: 30_000,
   });
 }
 
