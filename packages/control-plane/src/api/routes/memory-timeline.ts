@@ -179,7 +179,7 @@ function validateQuery(query: TimelineQuerystring): ValidationResult<NormalizedT
     return invalidParams('entity must be a non-empty safe id');
   }
 
-  const asOfResult = validateAsOf(query.as_of ?? query.asOf);
+  const asOfResult = validateAliasedAsOf(query);
   if (!asOfResult.ok) {
     return asOfResult;
   }
@@ -232,17 +232,47 @@ function normalizeEntityId(value: unknown): string | null {
   return trimmed;
 }
 
-function validateAsOf(value: unknown): ValidationResult<string | undefined> {
+function validateAliasedAsOf(
+  query: Pick<TimelineQuerystring, 'as_of' | 'asOf'>,
+): ValidationResult<string | undefined> {
+  const asOfResult = validateAsOf(query.as_of, 'as_of');
+  if (!asOfResult.ok) {
+    return asOfResult;
+  }
+
+  const asOfAliasResult = validateAsOf(query.asOf, 'asOf');
+  if (!asOfAliasResult.ok) {
+    return asOfAliasResult;
+  }
+
+  if (
+    asOfResult.value !== undefined &&
+    asOfAliasResult.value !== undefined &&
+    asOfResult.value !== asOfAliasResult.value
+  ) {
+    return invalidParams('as_of and asOf must match when both are provided');
+  }
+
+  return {
+    ok: true,
+    value: asOfResult.value ?? asOfAliasResult.value,
+  };
+}
+
+function validateAsOf(
+  value: unknown,
+  parameterName: 'as_of' | 'asOf',
+): ValidationResult<string | undefined> {
   if (value === undefined) {
     return { ok: true, value: undefined };
   }
   if (typeof value !== 'string') {
-    return invalidParams('as_of must be a valid timestamp string');
+    return invalidParams(`${parameterName} must be a valid timestamp string`);
   }
 
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) {
-    return invalidParams('as_of must be a valid timestamp string');
+    return invalidParams(`${parameterName} must be a valid timestamp string`);
   }
 
   return { ok: true, value: new Date(timestamp).toISOString() };
