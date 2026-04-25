@@ -19,16 +19,16 @@
 | **C** | `agent/claude-1/feat/memory-ops-pr-c` | Frontend: Settings → Memory & Embeddings + ApiError.details | minor | Landed in PR #806; saved-provider persistence follow-up landed in PR #807 and hardening follow-up landed in PR #808 | [pr-c.md](./pr-c.md) |
 | **D** | `codex/memory-ops-pr-d` | Backend: jobs CRUD + BullMQ + SSE + preview endpoint + capabilities | patch | Landed in PR #812; CI, Security Audit, Docker publish, container scans, focused local tests/build, and independent CodeQL alert check passed | [pr-d.md](./pr-d.md) |
 | **E** | `codex/memory-ops-pr-e` | Workers: embedding-backfill + drawer-backfill + boot reconciliation | patch | Landed in PR #816; critical path unblocked for dev-1 backfill verification | [pr-e.md](./pr-e.md) |
-| **F** | `agent/claude-1/feat/memory-ops-pr-f` | Frontend: /memory/operations page + 8 alerts + egress dialog | minor | Non-critical | [pr-f.md](./pr-f.md) |
+| **F** | `codex/memory-ops-pr-f` | Frontend: /memory/operations page + 8 alerts + egress dialog | minor | Landed in PR #820; PR checks and post-merge main CI/Security/Docker passed | [pr-f.md](./pr-f.md) |
 | **G** | `agent/claude-1/feat/memory-ops-pr-g` | Workers: consolidation + synthesis + e2e + Gate 2 + CHANGELOG | patch | Non-critical | [pr-g.md](./pr-g.md) |
 
 ---
 
 ## Merge Order
 
-PRs must merge in order A → B → C → D → E → F → G. PR A landed in PR #783, PR B landed in PR #797, PR C landed in PR #806 with PR #807/#808 as saved-provider test persistence and hardening follow-ups, PR D landed in PR #812, and PR E landed in PR #816. Continue with PR F from latest `main`. Each remaining PR has its own branch off `main`. Never branch from another PR's branch.
+PRs must merge in order A → B → C → D → E → F → G. PR A landed in PR #783, PR B landed in PR #797, PR C landed in PR #806 with PR #807/#808 as saved-provider test persistence and hardening follow-ups, PR D landed in PR #812, PR E landed in PR #816, and PR F landed in PR #820. Continue with PR G from latest `main`. Each remaining PR has its own branch off `main`. Never branch from another PR's branch.
 
-After PR #816, intentionally set `MEMORY_OPS_ENABLED=true` in dev-1 and trigger the 19,226-fact backfill from the API. Verify before PR F.
+After PR #820, dev-1 backfill verification can use the `/memory/operations` UI once the rollout env and provider credentials are intentionally enabled. Avoid triggering live provider spend unless the dev-1 environment is explicitly prepared for it.
 
 ---
 

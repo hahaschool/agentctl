@@ -1,8 +1,12 @@
 # PR F — Frontend: /memory/operations Page + 8 Alerts
 
+> Status: Landed in PR #820 (`01d71b42`) from `codex/memory-ops-pr-f`. The PR delivered the `/memory/operations` page, memory ops web API client/query helpers, job cards/table/detail drawer, local SSE job stream, egress confirmation flow, mixed-model banner, sidebar Operations nav item, missing-provider alerts across the memory surfaces, and `MEMORY_OPS_ENABLED=true`; all PR checks passed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The `/memory/operations` page where operators can trigger, observe, and cancel jobs. `<MissingEmbeddingAlert />` mounted on 8 existing memory views. `<MixedModelsBanner />` for mixed-model detection. `<EgressConfirmationDialog />` for write-kind jobs.
+
+**Landing note:** Landed in PR #820 on branch `codex/memory-ops-pr-f`. Final backend/frontend egress preview contract uses `{ snapshot, egressToken }`; older draft snippets below that mention `previewToken` are historical plan scaffolding, not the live API contract.
 
 **Architecture:** New components in `packages/web/src/components/memory/`. The operations page polls capabilities and jobs list. SSE streaming connects to live job progress. The sidebar gets a new nav item.
 
@@ -11,7 +15,7 @@
 **Branch:**
 ```bash
 git fetch origin
-git worktree add .trees/pr-f -b agent/claude-1/feat/memory-ops-pr-f
+git worktree add .trees/pr-f -b codex/memory-ops-pr-f origin/main
 cd .trees/pr-f
 ```
 
@@ -755,7 +759,7 @@ pm2 restart agentctl-web-dev1
 ```bash
 git add packages/web/src/
 git commit -m "feat(memory-ops): /memory/operations page with job cards, egress confirmation, and 8-view alerts"
-git push origin agent/claude-1/feat/memory-ops-pr-f
+git push origin codex/memory-ops-pr-f
 gh pr create --base main \
   --title "feat(memory-ops): PR F — /memory/operations page + MissingEmbeddingAlert on 8 views" \
   --body "Operators can trigger, observe, and cancel jobs from /memory/operations. Alert appears on 8 memory views when no provider configured. Egress confirmation flow via preview endpoint."
