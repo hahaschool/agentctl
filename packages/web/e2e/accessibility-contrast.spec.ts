@@ -3,17 +3,133 @@ import { expect, type Locator, test } from '@playwright/test';
 type ThemeMode = 'light' | 'dark';
 
 type ActionTarget = {
-  role: 'link' | 'button';
   name: string;
+  href: string;
 };
 
 const DASHBOARD_ACTIONS: ActionTarget[] = [
-  { role: 'link', name: 'New Session' },
-  { role: 'link', name: 'View Agents' },
-  { role: 'button', name: 'Refresh' },
+  { name: 'Start Agent', href: '/agents?new=1' },
+  { name: 'New Session', href: '/sessions?new=1' },
+  { name: 'View Logs', href: '/logs' },
+  { name: 'Discover Sessions', href: '/discover' },
 ];
 
 const MIN_CONTRAST_RATIO = 4.5; // WCAG AA for normal-size text
+
+async function fulfillJson(
+  route: import('@playwright/test').Route,
+  body: unknown,
+  status = 200,
+): Promise<void> {
+  await route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+}
+
+async function mockDashboardApis(page: import('@playwright/test').Page): Promise<void> {
+  await page.route('**/health?**', async (route) => {
+    await fulfillJson(route, {
+      status: 'ok',
+      timestamp: '2026-04-25T00:00:00.000Z',
+      dependencies: {},
+    });
+  });
+
+  await page.route('**/metrics', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/plain',
+      body: [
+        'agentctl_agents_active 0',
+        'agentctl_runs_total 0',
+        'agentctl_control_plane_up 1',
+        'agentctl_total_cost_usd 0',
+      ].join('\n'),
+    });
+  });
+
+  await page.route('**/api/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const { pathname } = url;
+
+    if (request.method() !== 'GET') {
+      throw new Error(`Unhandled non-GET request in dashboard accessibility mock: ${pathname}`);
+    }
+
+    if (pathname === '/api/agents') {
+      await fulfillJson(route, []);
+      return;
+    }
+    if (pathname === '/api/agents/list') {
+      await fulfillJson(route, { agents: [], total: 0, hasMore: false });
+      return;
+    }
+    if (pathname === '/api/sessions') {
+      await fulfillJson(route, { sessions: [], total: 0, limit: 50, offset: 0, hasMore: false });
+      return;
+    }
+    if (pathname === '/api/sessions/discover') {
+      await fulfillJson(route, {
+        sessions: [],
+        count: 0,
+        machinesQueried: 0,
+        machinesFailed: 0,
+      });
+      return;
+    }
+    if (pathname === '/api/runtime-sessions') {
+      await fulfillJson(route, { sessions: [], count: 0 });
+      return;
+    }
+    if (pathname === '/api/runtime-sessions/handoffs/summary') {
+      await fulfillJson(route, { items: [], total: 0 });
+      return;
+    }
+    if (pathname === '/api/memory/stats') {
+      await fulfillJson(route, {
+        ok: true,
+        stats: {
+          totalFacts: 0,
+          newThisWeek: 0,
+          avgConfidence: 0,
+          pendingConsolidation: 0,
+          byScope: {},
+          byEntityType: {},
+          strengthDistribution: {},
+          growthTrend: [],
+        },
+      });
+      return;
+    }
+    if (pathname === '/api/permission-requests') {
+      await fulfillJson(route, []);
+      return;
+    }
+    if (pathname === '/api/sync/conflicts/count') {
+      await fulfillJson(route, { count: 0 });
+      return;
+    }
+    if (pathname === '/api/settings/accounts') {
+      await fulfillJson(route, []);
+      return;
+    }
+    if (pathname === '/api/version-compat') {
+      await fulfillJson(route, {
+        appVersion: '0.8.2',
+        gitSha: 'test',
+        schemaVersion: 26,
+        minSupportedMobileBuild: 0,
+        minSupportedWebBuild: 0,
+      });
+      return;
+    }
+
+    throw new Error(`Unhandled API request in dashboard accessibility mock: ${pathname}`);
+  });
+}
 
 async function openDashboardInTheme(
   page: import('@playwright/test').Page,
@@ -23,6 +139,7 @@ async function openDashboardInTheme(
     window.localStorage.setItem('theme', preferredTheme);
   }, theme);
 
+  await mockDashboardApis(page);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /command center/i })).toBeVisible({
     timeout: 15_000,
@@ -242,11 +359,9 @@ test.describe('Dashboard action contrast', () => {
       await openDashboardInTheme(page, theme);
 
       for (const target of DASHBOARD_ACTIONS) {
-        const locator =
-          target.role === 'link'
-            ? page.getByRole('link', { name: target.name, exact: true })
-            : page.getByRole('button', { name: target.name, exact: true });
+        const locator = page.getByRole('link', { name: target.name, exact: true });
         await expect(locator).toBeVisible();
+        await expect(locator).toHaveAttribute('href', target.href);
 
         const ratio = await getContrastRatio(locator);
         expect(ratio).toBeGreaterThanOrEqual(MIN_CONTRAST_RATIO);
