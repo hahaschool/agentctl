@@ -13,6 +13,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ConsolidationAction } from '@/components/memory/ConsolidationCard';
 import { ConsolidationCard } from '@/components/memory/ConsolidationCard';
 import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
+import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -290,6 +291,7 @@ export function ConsolidationBoardView(): React.JSX.Element {
   );
 
   const resolveItem = useResolveConsolidationItem();
+  const toast = useToast();
 
   /**
    * Build the initial merged text to pre-populate the dialog.
@@ -314,18 +316,37 @@ export function ConsolidationBoardView(): React.JSX.Element {
   );
 
   const handleAction = useCallback(
-    (id: string, action: ConsolidationAction) => {
-      if (action === 'accept') {
-        // Find the item to get its initial content for the dialog
+    (id: string, action: ConsolidationAction, survivorId?: string) => {
+      if (action === 'accept' && !survivorId) {
         const item = allItems.find((i) => i.id === id);
         if (item) {
           setEditDialog({ itemId: id, content: buildInitialContent(item) });
           return;
         }
       }
-      resolveItem.mutate({ id, action });
+      resolveItem.mutate(
+        { id, action, survivorId },
+        {
+          onSuccess: () => {
+            if (action === 'accept') {
+              const item = allItems.find((i) => i.id === id);
+              if (item?.type === 'near-duplicate') {
+                toast.success('Merged 1 near-duplicate');
+              } else if (item?.type === 'contradiction') {
+                toast.success('Resolved 1 contradiction');
+              } else {
+                toast.success('Accepted 1 item');
+              }
+            } else if (action === 'skip') {
+              toast.info('Skipped 1 item');
+            } else if (action === 'delete') {
+              toast.info('Deleted 1 item');
+            }
+          },
+        },
+      );
     },
-    [resolveItem, allItems, buildInitialContent],
+    [resolveItem, allItems, buildInitialContent, toast],
   );
 
   const handleEditConfirm = useCallback(() => {

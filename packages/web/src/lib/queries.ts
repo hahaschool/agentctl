@@ -1508,12 +1508,15 @@ export function useResolveConsolidationItem() {
       action: 'accept' | 'skip' | 'delete';
       /** Optional hand-edited merged content (only used when action is 'accept'). */
       customContent?: string;
+      /** For near-duplicate merges: the fact ID whose content should survive. */
+      survivorId?: string;
     }) => {
       const statusMap = { accept: 'accepted', skip: 'skipped', delete: 'skipped' } as const;
       return api.resolveConsolidationItem(variables.id, {
         action: variables.action,
         status: statusMap[variables.action],
         customContent: variables.action === 'accept' ? variables.customContent : undefined,
+        ...(variables.survivorId ? { survivorFactId: variables.survivorId } : {}),
       });
     },
     onSuccess: () => {

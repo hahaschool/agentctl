@@ -7,6 +7,7 @@ import type {
   MemoryFact,
 } from '@agentctl/shared';
 import type React from 'react';
+import { useCallback, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -15,6 +16,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader } from '../ui/card';
 import { ConfidenceBar } from './ConfidenceBar';
 import { EntityTypeBadge } from './EntityTypeBadge';
+import { MergePreviewPanel } from './MergePreviewPanel';
 import { ScopeBadge } from './ScopeBadge';
 
 // ---------------------------------------------------------------------------
@@ -103,59 +105,109 @@ function FactSkeleton(): React.JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Action buttons row
+// Action buttons — varies by item type to support merge / contradiction flows
 // ---------------------------------------------------------------------------
 
-type ConsolidationAction = 'accept' | 'skip' | 'delete';
+export type ConsolidationAction = 'accept' | 'skip' | 'delete';
+
+type ActionButtonsProps = {
+  item: ConsolidationItem;
+  facts: readonly MemoryFact[];
+  isPending: boolean;
+  onAction: (id: string, action: ConsolidationAction, survivorId?: string) => void;
+};
 
 function ActionButtons({
-  itemId,
+  item,
+  facts,
   isPending,
   onAction,
-}: {
-  itemId: string;
-  isPending: boolean;
-  onAction: (id: string, action: ConsolidationAction) => void;
-}): React.JSX.Element {
+}: ActionButtonsProps): React.JSX.Element {
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const needsPreview =
+    (item.type === 'near-duplicate' || item.type === 'contradiction') && facts.length >= 2;
+
+  const handleAcceptClick = useCallback((): void => {
+    if (needsPreview) {
+      setPreviewOpen(true);
+    } else {
+      onAction(item.id, 'accept');
+    }
+  }, [needsPreview, item.id, onAction]);
+
+  const handlePreviewConfirm = useCallback(
+    (survivorId: string): void => {
+      setPreviewOpen(false);
+      onAction(item.id, 'accept', survivorId);
+    },
+    [item.id, onAction],
+  );
+
+  const handleKeepBoth = useCallback((): void => {
+    setPreviewOpen(false);
+    onAction(item.id, 'skip');
+  }, [item.id, onAction]);
+
+  const acceptLabel =
+    item.type === 'near-duplicate'
+      ? 'Merge…'
+      : item.type === 'contradiction'
+        ? 'Resolve…'
+        : 'Accept';
+
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-1">
-      <Button
-        size="xs"
-        variant="default"
-        disabled={isPending}
-        onClick={() => onAction(itemId, 'accept')}
-        aria-label="Accept suggestion"
-      >
-        Accept
-      </Button>
-      <Button
-        size="xs"
-        variant="ghost"
-        disabled={isPending}
-        onClick={() => onAction(itemId, 'skip')}
-        aria-label="Skip"
-      >
-        Skip
-      </Button>
-      <Button
-        size="xs"
-        variant="ghost"
-        disabled={isPending}
-        onClick={() => onAction(itemId, 'delete')}
-        aria-label="Delete"
-        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-      >
-        Delete
-      </Button>
-    </div>
+    <>
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <Button
+          size="xs"
+          variant="default"
+          disabled={isPending}
+          onClick={handleAcceptClick}
+          aria-label="Accept suggestion"
+        >
+          {acceptLabel}
+        </Button>
+        <Button
+          size="xs"
+          variant="ghost"
+          disabled={isPending}
+          onClick={() => onAction(item.id, 'skip')}
+          aria-label="Skip"
+        >
+          Skip
+        </Button>
+        <Button
+          size="xs"
+          variant="ghost"
+          disabled={isPending}
+          onClick={() => onAction(item.id, 'delete')}
+          aria-label="Delete"
+          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+        >
+          Delete
+        </Button>
+      </div>
+
+      {/* Side-by-side merge/contradiction preview dialog */}
+      {needsPreview && (
+        <MergePreviewPanel
+          open={previewOpen}
+          mode={item.type === 'contradiction' ? 'contradiction' : 'near-duplicate'}
+          facts={facts}
+          onConfirm={handlePreviewConfirm}
+          onKeepBoth={handleKeepBoth}
+          onCancel={() => setPreviewOpen(false)}
+          isPending={isPending}
+        />
+      )}
+    </>
   );
 }
 
 // ---------------------------------------------------------------------------
 // ConsolidationCard — public component
 // ---------------------------------------------------------------------------
-
-export type { ConsolidationAction };
 
 export function ConsolidationCard({
   item,
@@ -170,7 +222,7 @@ export function ConsolidationCard({
   facts: readonly MemoryFact[];
   factsLoading?: boolean;
   isPending?: boolean;
-  onAction: (id: string, action: ConsolidationAction) => void;
+  onAction: (id: string, action: ConsolidationAction, survivorId?: string) => void;
   className?: string;
 }): React.JSX.Element {
   const meta = ISSUE_TYPE_META[item.type];
@@ -208,7 +260,7 @@ export function ConsolidationCard({
         </div>
 
         {/* Action buttons */}
-        <ActionButtons itemId={item.id} isPending={isPending} onAction={onAction} />
+        <ActionButtons item={item} facts={facts} isPending={isPending} onAction={onAction} />
       </CardContent>
     </Card>
   );
