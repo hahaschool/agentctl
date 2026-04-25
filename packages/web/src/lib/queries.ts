@@ -5,6 +5,7 @@ import type {
   AgentConfig,
   EventSenderType,
   EventVisibility,
+  MemoryEntityTimelineParams,
   MemoryReportTimeRange,
   MemoryReportType,
   NotificationChannel,
@@ -23,6 +24,7 @@ import { STORAGE_KEYS } from './storage-keys';
 type RuntimeSessionsQueryParams = Parameters<typeof api.listRuntimeSessions>[0];
 type MemoryFactsQueryParams = Parameters<typeof api.searchMemoryFacts>[0];
 type MemoryGraphQueryParams = Parameters<typeof api.getMemoryGraph>[0];
+type MemoryEntityTimelineQueryParams = Omit<MemoryEntityTimelineParams, 'entity'>;
 type MemoryOpsJobsQueryParams = Parameters<typeof api.memoryOps.listJobs>[0];
 type SecurityFindingsQueryParams = Parameters<typeof api.listSecurityFindings>[0];
 
@@ -169,6 +171,10 @@ export const queryKeys = {
       params ? (['memory', 'graph', params] as const) : (['memory', 'graph'] as const),
     stats: ['memory', 'stats'] as const,
     decayStats: ['memory', 'decay', 'stats'] as const,
+    entityTimeline: (entity: string, params?: MemoryEntityTimelineQueryParams) =>
+      params
+        ? (['memory', 'entityTimeline', entity, params] as const)
+        : (['memory', 'entityTimeline', entity] as const),
     timeline: (sessionId: string) => ['memory', 'timeline', sessionId] as const,
     factTimeline: (entity: string, asOf?: string, cursor?: string) =>
       ['memory', 'fact-timeline', entity, asOf ?? null, cursor ?? null] as const,
@@ -797,6 +803,18 @@ export function memoryGraphQuery(params?: MemoryGraphQueryParams) {
   return queryOptions({
     queryKey: queryKeys.memory.graph(params),
     queryFn: () => api.getMemoryGraph(params),
+    staleTime: 30_000,
+  });
+}
+
+export function memoryEntityTimelineQuery(
+  entity: string | undefined,
+  params?: MemoryEntityTimelineQueryParams,
+) {
+  return queryOptions({
+    queryKey: queryKeys.memory.entityTimeline(entity ?? '', params),
+    queryFn: () => api.getMemoryEntityTimeline({ entity: entity ?? '', ...params }),
+    enabled: !!entity,
     staleTime: 30_000,
   });
 }

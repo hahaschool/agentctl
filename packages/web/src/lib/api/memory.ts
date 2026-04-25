@@ -64,6 +64,45 @@ export type GeneratedMemoryReport = {
   generatedAt: string;
 };
 
+export type MemoryEntityTimelineParams = {
+  entity: string;
+  asOf?: string;
+  limit?: number;
+  cursor?: string;
+};
+
+export type MemoryEntityTimelineEvent = {
+  edge_id: string;
+  relation: string;
+  direction: 'incoming' | 'outgoing';
+  other_fact_id: string;
+  other_fact_preview: string;
+  effective_from: string;
+  effective_until: string | null;
+  edge_created_at: string;
+  source_fact_id: string;
+  target_fact_id: string;
+};
+
+export type MemoryEntityTimelineResponse = {
+  ok: true;
+  entity: {
+    requested_id: string;
+    resolved_fact_id: string;
+    content_preview: string;
+    valid_from: string;
+    valid_until: string | null;
+    confidence: number | null;
+    active_at_as_of: boolean | null;
+    canonicalization_mode: 'fact-id-fallback';
+  };
+  as_of: string | null;
+  limit: number;
+  next_cursor: string | null;
+  events: MemoryEntityTimelineEvent[];
+  limitations: readonly string[];
+};
+
 // ---------------------------------------------------------------------------
 // Memory knowledge synthesis — §3.6
 //
@@ -335,6 +374,15 @@ export const memoryApi = {
     return request<{ ok: boolean; nodes: MemoryFact[]; edges: MemoryEdge[] }>(
       suffix ? `/api/memory/graph?${suffix}` : '/api/memory/graph',
     );
+  },
+
+  getMemoryEntityTimeline: (params: MemoryEntityTimelineParams) => {
+    const qs = new URLSearchParams({ entity: params.entity });
+    if (params.asOf) qs.set('asOf', params.asOf);
+    if (params.limit !== undefined) qs.set('limit', String(params.limit));
+    if (params.cursor) qs.set('cursor', params.cursor);
+
+    return request<MemoryEntityTimelineResponse>(`/api/memory/timeline?${qs.toString()}`);
   },
 
   getMemoryStats: () => request<{ ok: boolean; stats: MemoryStats }>('/api/memory/stats'),

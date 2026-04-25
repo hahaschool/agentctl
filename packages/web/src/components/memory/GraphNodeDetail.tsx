@@ -4,6 +4,7 @@ import type { MemoryEdge, MemoryFact } from '@agentctl/shared';
 import { XIcon } from 'lucide-react';
 import type React from 'react';
 
+import type { MemoryEntityTimelineResponse } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 import { Button } from '../ui/button';
@@ -12,10 +13,20 @@ import { ConfidenceBar } from './ConfidenceBar';
 import { EntityTypeBadge } from './EntityTypeBadge';
 import { ScopeBadge } from './ScopeBadge';
 
+function formatRelation(relation: string): string {
+  return relation.replace(/_/g, ' ');
+}
+
+function formatTimelineDate(value: string | null): string {
+  return value ? value.slice(0, 10) : 'open';
+}
+
 export function GraphNodeDetail({
   node,
   edges,
   isLoading,
+  timeline,
+  isTimelineLoading,
   onClose,
   onSelectNode,
   className,
@@ -23,6 +34,8 @@ export function GraphNodeDetail({
   node: MemoryFact | null;
   edges: readonly MemoryEdge[];
   isLoading: boolean;
+  timeline: MemoryEntityTimelineResponse | null;
+  isTimelineLoading: boolean;
   onClose: () => void;
   onSelectNode: (nodeId: string) => void;
   className?: string;
@@ -99,7 +112,7 @@ export function GraphNodeDetail({
                 {outgoing.map((edge) => (
                   <li key={edge.id} className="rounded-md border border-border px-3 py-2">
                     <div className="text-xs font-medium capitalize">
-                      {edge.relation.replace(/_/g, ' ')}
+                      {formatRelation(edge.relation)}
                     </div>
                     <button
                       type="button"
@@ -129,7 +142,7 @@ export function GraphNodeDetail({
                 {incoming.map((edge) => (
                   <li key={edge.id} className="rounded-md border border-border px-3 py-2">
                     <div className="text-xs font-medium capitalize">
-                      {edge.relation.replace(/_/g, ' ')}
+                      {formatRelation(edge.relation)}
                     </div>
                     <button
                       type="button"
@@ -148,6 +161,57 @@ export function GraphNodeDetail({
             ) : (
               <p className="text-xs text-muted-foreground">No incoming edges.</p>
             )}
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Timeline
+              </h4>
+              {timeline?.next_cursor ? (
+                <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  More
+                </span>
+              ) : null}
+            </div>
+
+            {isTimelineLoading ? (
+              <p className="text-xs text-muted-foreground">Loading timeline...</p>
+            ) : timeline && timeline.events.length > 0 ? (
+              <ol className="space-y-1.5">
+                {timeline.events.map((event) => (
+                  <li key={event.edge_id} className="rounded-md border border-border px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span className="capitalize">{event.direction}</span>
+                      <span>{formatTimelineDate(event.effective_from)}</span>
+                      <span>to</span>
+                      <span>{formatTimelineDate(event.effective_until)}</span>
+                    </div>
+                    <div className="mt-1 text-xs font-medium capitalize">
+                      {formatRelation(event.relation)}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onSelectNode(event.other_fact_id)}
+                      className="mt-1 block max-w-full truncate text-left text-xs text-primary underline-offset-2 hover:underline"
+                      aria-label={`Navigate to timeline node ${event.other_fact_id.slice(0, 8)}`}
+                    >
+                      {event.other_fact_preview}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="text-xs text-muted-foreground">No timeline events.</p>
+            )}
+
+            {timeline && timeline.limitations.length > 0 ? (
+              <p className="text-[11px] leading-4 text-muted-foreground">
+                {timeline.limitations[0]}
+              </p>
+            ) : null}
           </div>
 
           <Separator />
