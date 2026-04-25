@@ -292,9 +292,9 @@ jobs:
           restore-keys: |
             nm-${{ runner.os }}-${{ github.run_id }}-
 
-      # Cache both .tsbuildinfo AND dist/ together — restoring only
-      # .tsbuildinfo without dist/ causes tsc to skip compilation,
-      # leaving dist/ empty and breaking downstream packages.
+      # Cache both .tsbuildinfo AND dist/ together. Only restore exact
+      # source-hash matches: fallback restore-keys can revive stale declarations
+      # from older shared builds and break downstream package compilation.
       - name: Restore TypeScript build cache
         uses: actions/cache@v5
         with:
@@ -308,8 +308,6 @@ jobs:
             packages/mobile/.tsbuildinfo
             packages/mobile/dist
           key: tsbuildinfo-${{ runner.os }}-${{ hashFiles('packages/*/src/**/*.ts', 'tsconfig.base.json') }}
-          restore-keys: |
-            tsbuildinfo-${{ runner.os }}-
 
       # On main pushes: full build for safety
       - name: Build all packages
