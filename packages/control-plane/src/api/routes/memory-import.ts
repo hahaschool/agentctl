@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -40,6 +41,8 @@ const OBSERVATION_TYPE_TO_ENTITY: Record<string, EntityType> = {
   discovery: 'concept',
   change: 'code_artifact',
 };
+
+const CLAUDE_MEM_IMPORTABLE_OBSERVATION_WHERE = `COALESCE(TRIM(title), '') != '' OR COALESCE(TRIM(narrative), '') != '' OR COALESCE(TRIM(text), '') != ''`;
 
 // ---------------------------------------------------------------------------
 // SQLite row type (from claude-mem observations table)
@@ -106,14 +109,51 @@ function buildTags(row: ObservationRow): string[] {
   return tags;
 }
 
-function buildSource(row: ObservationRow): FactSource {
+function normalizeSourcePathForKey(sourcePath: string): string {
+  return path.resolve(expandTilde(sourcePath)).split(path.sep).join('/');
+}
+
+function buildClaudeMemSourceKey(dbPath: string): string {
+  return createHash('sha256').update(normalizeSourcePathForKey(dbPath)).digest('hex').slice(0, 16);
+}
+
+function buildClaudeMemObservationLocalId(rowId: number): string {
+  return `observation:${rowId}`;
+}
+
+function buildClaudeMemObservationImportSourceId(sourceKey: string, rowId: number): string {
+  return `claude-mem:${sourceKey}:${buildClaudeMemObservationLocalId(rowId)}`;
+}
+
+function buildLegacyClaudeMemObservationImportSourceId(rowId: number): string {
+  return `claude-mem:${rowId}`;
+}
+
+function buildClaudeMemChildFactLocalId(rowId: number, index: number): string {
+  return `${buildClaudeMemObservationLocalId(rowId)}:fact:${index}`;
+}
+
+function hasExistingClaudeMemObservation(
+  existingIds: Set<string>,
+  sourceKey: string,
+  rowId: number,
+): boolean {
+  return (
+    existingIds.has(buildClaudeMemObservationImportSourceId(sourceKey, rowId)) ||
+    existingIds.has(buildLegacyClaudeMemObservationImportSourceId(rowId))
+  );
+}
+
+function buildSource(row: ObservationRow, sourceKey: string): FactSource & Record<string, unknown> {
   return {
     session_id: row.memory_session_id,
     agent_id: null,
     machine_id: null,
     turn_index: null,
     extraction_method: 'import',
-    import_source_id: `claude-mem:${row.id}`,
+    import_source_id: buildClaudeMemObservationImportSourceId(sourceKey, row.id),
+    import_source_key: sourceKey,
+    import_source_local_id: buildClaudeMemObservationLocalId(row.id),
   };
 }
 
@@ -131,8 +171,8 @@ function parseStringArray(value: string | null): string[] {
   }
 }
 
-function buildChildFactImportSourceId(rowId: number, index: number): string {
-  return `claude-mem:${rowId}:fact:${index}`;
+function buildChildFactImportSourceId(sourceKey: string, rowId: number, index: number): string {
+  return `claude-mem:${sourceKey}:${buildClaudeMemChildFactLocalId(rowId, index)}`;
 }
 
 function mapEntityType(obsType: string): EntityType {
@@ -407,6 +447,54 @@ async function loadExistingImportSourceIds(
   importSourceIds: string[],
 ): Promise<Set<string>> {
   return new Set((await loadExistingImportSourceJobs(pool, importSourceIds)).keys());
+}
+
+async function loadExistingClaudeMemImportSourceIds(
+  pool: Pool | null,
+  sourceKey: string,
+  sourcePath?: string,
+): Promise<Set<string>> {
+  if (!pool) return new Set();
+
+  const result = await pool.query<{ src_id: string }>(
+    `SELECT source_json->>'import_source_id' AS src_id
+     FROM memory_facts
+     WHERE source_json->>'import_source_key' = $1`,
+    [sourceKey],
+  );
+  const existingIds = new Set(result.rows.map((r) => r.src_id).filter(Boolean));
+
+  if (sourcePath) {
+    const legacyResult = await pool.query<{ src_id: string }>(
+      `SELECT mf.source_json->>'import_source_id' AS src_id
+       FROM memory_facts mf
+       JOIN memory_import_jobs mij
+         ON mij.id = mf.source_json->>'import_job_id'
+       WHERE mij.source_path = $1
+         AND mf.source_json->>'import_source_id' LIKE 'claude-mem:%'
+         AND mf.source_json->>'import_source_key' IS NULL`,
+      [sourcePath],
+    );
+    for (const row of legacyResult.rows) {
+      if (row.src_id) existingIds.add(row.src_id);
+    }
+  }
+
+  return existingIds;
+}
+
+function countImportedClaudeMemObservations(
+  existingIds: Set<string>,
+  sourceKey: string,
+  rowIds: number[],
+): number {
+  let count = 0;
+  for (const rowId of rowIds) {
+    if (hasExistingClaudeMemObservation(existingIds, sourceKey, rowId)) {
+      count++;
+    }
+  }
+  return count;
 }
 
 async function runJsonlImport(
@@ -780,6 +868,7 @@ async function insertClaudeMemChildFacts(
   parentFactId: string,
   jobId: string,
   existingIds: Set<string>,
+  sourceKey: string,
 ): Promise<number> {
   let errors = 0;
   const childFacts = parseStringArray(row.facts);
@@ -787,23 +876,24 @@ async function insertClaudeMemChildFacts(
     return errors;
   }
 
-  const parentImportSourceId = `claude-mem:${row.id}`;
+  const parentImportSourceId = buildClaudeMemObservationImportSourceId(sourceKey, row.id);
   const scope = `project:${row.project}` as const;
   const entityType = mapEntityType(row.type);
   const createdAt = row.created_at;
   const baseTags = buildTags(row);
 
   for (const [index, content] of childFacts.entries()) {
-    const childSourceId = buildChildFactImportSourceId(row.id, index);
+    const childSourceId = buildChildFactImportSourceId(sourceKey, row.id, index);
     if (existingIds.has(childSourceId)) {
       continue;
     }
 
     const childFactId = generateImportId();
     const source: FactSource & Record<string, unknown> = {
-      ...buildSource(row),
+      ...buildSource(row, sourceKey),
       import_source_id: childSourceId,
       import_job_id: jobId,
+      import_source_local_id: buildClaudeMemChildFactLocalId(row.id, index),
       parent_import_source_id: parentImportSourceId,
       structured_fact_index: index,
     };
@@ -860,6 +950,7 @@ async function runImport(
   let sqliteDb: SqliteDb | null = null;
   try {
     sqliteDb = await openSqlite(dbPath);
+    const sourceKey = buildClaudeMemSourceKey(dbPath);
 
     const totalRow = sqliteDb.prepare('SELECT COUNT(*) as cnt FROM observations').get();
     const total = (totalRow?.cnt as number) ?? 0;
@@ -869,13 +960,7 @@ async function runImport(
       });
     }
 
-    // Fetch existing import_source_ids to skip duplicates
-    const existingResult = await pool.query<{ src_id: string }>(
-      `SELECT source_json->>'import_source_id' AS src_id
-       FROM memory_facts
-       WHERE source_json->>'import_source_id' LIKE 'claude-mem:%'`,
-    );
-    const existingIds = new Set(existingResult.rows.map((r) => r.src_id));
+    const existingIds = await loadExistingClaudeMemImportSourceIds(pool, sourceKey, dbPath);
 
     let progressCurrent = Math.min(Math.max(resumedJob?.progress.current ?? 0, 0), total);
     let offset = progressCurrent;
@@ -901,9 +986,9 @@ async function runImport(
       for (const row of rows) {
         if (cancelRequested) break;
 
-        const sourceId = `claude-mem:${row.id}`;
+        const sourceId = buildClaudeMemObservationImportSourceId(sourceKey, row.id);
         const cursorJson = buildClaudeMemImportCursor(row.id);
-        if (existingIds.has(sourceId)) {
+        if (hasExistingClaudeMemObservation(existingIds, sourceKey, row.id)) {
           skipped++;
         } else {
           const content = buildFactContent(row);
@@ -912,7 +997,7 @@ async function runImport(
           } else {
             const id = generateImportId();
             const tags = buildTags(row);
-            const source = buildSource(row);
+            const source = buildSource(row, sourceKey);
             source.import_job_id = jobId;
             const entityType = mapEntityType(row.type);
             const createdAt = row.created_at;
@@ -942,7 +1027,14 @@ async function runImport(
               );
               imported++;
               existingIds.add(sourceId);
-              errors += await insertClaudeMemChildFacts(pool, row, id, jobId, existingIds);
+              errors += await insertClaudeMemChildFacts(
+                pool,
+                row,
+                id,
+                jobId,
+                existingIds,
+                sourceKey,
+              );
             } catch {
               errors++;
             }
@@ -1119,18 +1211,15 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
       let sqliteDb: SqliteDb | null = null;
       try {
         sqliteDb = await openSqlite(resolved);
+        const sourceKey = buildClaudeMemSourceKey(resolved);
 
         const totalRow = sqliteDb.prepare('SELECT COUNT(*) as cnt FROM observations').get();
         const totalObservations = (totalRow?.cnt as number) ?? 0;
 
-        // Count observations with importable content (non-empty title or narrative or text)
-        const importableRow = sqliteDb
-          .prepare(
-            `SELECT COUNT(*) as cnt FROM observations
-             WHERE COALESCE(TRIM(title), '') != '' OR COALESCE(TRIM(narrative), '') != '' OR COALESCE(TRIM(text), '') != ''`,
-          )
-          .get();
-        const importableCount = (importableRow?.cnt as number) ?? 0;
+        const importableRows = sqliteDb
+          .prepare(`SELECT id FROM observations WHERE ${CLAUDE_MEM_IMPORTABLE_OBSERVATION_WHERE}`)
+          .all() as Array<{ id: number }>;
+        const importableCount = importableRows.length;
 
         const typeRows = sqliteDb
           .prepare('SELECT type, COUNT(*) as cnt FROM observations GROUP BY type ORDER BY cnt DESC')
@@ -1150,11 +1239,12 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
         // Count already-imported if pool is available
         let alreadyImported = 0;
         if (pool) {
-          const result = await pool.query<{ cnt: string }>(
-            `SELECT COUNT(*) as cnt FROM memory_facts
-             WHERE source_json->>'import_source_id' LIKE 'claude-mem:%'`,
+          const existingIds = await loadExistingClaudeMemImportSourceIds(pool, sourceKey, resolved);
+          alreadyImported = countImportedClaudeMemObservations(
+            existingIds,
+            sourceKey,
+            importableRows.map((row) => row.id),
           );
-          alreadyImported = Number.parseInt(result.rows[0]?.cnt ?? '0', 10);
         }
 
         const preview: ImportPreview = {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -162,6 +163,15 @@ async function makeTempClaudeMemDb(
   return { dir, dbPath };
 }
 
+function expectedClaudeMemSourceKey(dbPath: string): string {
+  const normalizedPath = path.resolve(dbPath).split(path.sep).join('/');
+  return createHash('sha256').update(normalizedPath).digest('hex').slice(0, 16);
+}
+
+function expectedClaudeMemObservationSourceId(dbPath: string, rowId: number): string {
+  return `claude-mem:${expectedClaudeMemSourceKey(dbPath)}:observation:${rowId}`;
+}
+
 async function waitForImportJob(app: Awaited<ReturnType<typeof buildAppWithPool>>) {
   for (let i = 0; i < 50; i += 1) {
     const res = await app.inject({ method: 'GET', url: '/api/memory/import/status' });
@@ -315,6 +325,51 @@ describe('memoryImportRoutes', () => {
           url: '/api/memory/import/preview',
           payload: { source: 'jsonl-history', dbPath: dir },
         });
+        expect(res.statusCode).toBe(200);
+        const body = res.json<{ ok: boolean; preview: Record<string, unknown> }>();
+        expect(body.ok).toBe(true);
+        expect(body.preview.totalObservations).toBe(2);
+        expect(body.preview.alreadyImported).toBe(1);
+        expect(body.preview.newToImport).toBe(1);
+      } finally {
+        await appWithPool.close();
+        removeTempDir(dir);
+        resetActiveJobForTest();
+      }
+    });
+
+    it('counts only same-source claude-mem parent observations as already imported', async () => {
+      const { dir, dbPath } = await makeTempClaudeMemDb([
+        { id: 42, title: 'Already imported parent' },
+        { id: 43, title: 'New parent with imported child elsewhere' },
+      ]);
+      const mockPool: MockPool = {
+        query: async (sql) => {
+          if (sql.includes('COUNT(*) as cnt FROM memory_facts')) {
+            return { rows: [{ cnt: '4' }], rowCount: 1 };
+          }
+          if (sql.includes("source_json->>'import_source_key'")) {
+            return {
+              rows: [
+                { src_id: expectedClaudeMemObservationSourceId(dbPath, 42) },
+                { src_id: `${expectedClaudeMemObservationSourceId(dbPath, 43)}:fact:0` },
+                { src_id: 'claude-mem:other-source:observation:43' },
+              ],
+              rowCount: 3,
+            };
+          }
+          return { rows: [], rowCount: 0 };
+        },
+      };
+      const appWithPool = await buildAppWithPool(mockPool);
+
+      try {
+        const res = await appWithPool.inject({
+          method: 'POST',
+          url: '/api/memory/import/preview',
+          payload: { source: 'claude-mem', dbPath },
+        });
+
         expect(res.statusCode).toBe(200);
         const body = res.json<{ ok: boolean; preview: Record<string, unknown> }>();
         expect(body.ok).toBe(true);
@@ -1077,6 +1132,163 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
 });
 
 describe('POST /api/memory/import — claude-mem structured fields with mock pool', () => {
+  it('qualifies observation import ids by claude-mem source so row ids from different databases do not collide', async () => {
+    const { dir, dbPath } = await makeTempClaudeMemDb([
+      {
+        id: 42,
+        title: 'Import from a second claude-mem database',
+        narrative: 'Observation ids are only local to one claude-mem source.',
+      },
+    ]);
+    const insertedFacts: unknown[][] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes("source_json->>'import_source_key'")) {
+          return { rows: [], rowCount: 0 };
+        }
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return { rows: [{ src_id: 'claude-mem:42' }], rowCount: 1 };
+        }
+        if (sql.includes('INSERT INTO memory_facts')) {
+          insertedFacts.push(params ?? []);
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import',
+        payload: { source: 'claude-mem', dbPath },
+      });
+
+      expect(res.statusCode).toBe(202);
+      const job = await waitForImportJob(app);
+      expect(job.status).toBe('completed');
+      expect(job.imported).toBe(1);
+      expect(job.skipped).toBe(0);
+      expect(job.errors).toBe(0);
+
+      expect(insertedFacts).toHaveLength(1);
+      expect(insertedFacts[0]?.[7]).toMatchObject({
+        import_source_id: expectedClaudeMemObservationSourceId(dbPath, 42),
+        import_source_key: expectedClaudeMemSourceKey(dbPath),
+        import_source_local_id: 'observation:42',
+      });
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
+
+  it('skips a legacy observation id when its import job came from the same claude-mem source path', async () => {
+    const { dir, dbPath } = await makeTempClaudeMemDb([
+      {
+        id: 42,
+        title: 'Repeat import from a legacy claude-mem import',
+        narrative: 'The legacy import job points at the same database path.',
+      },
+    ]);
+    const insertedFacts: unknown[][] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('JOIN memory_import_jobs')) {
+          expect(params?.[0]).toBe(dbPath);
+          return { rows: [{ src_id: 'claude-mem:42' }], rowCount: 1 };
+        }
+        if (sql.includes('memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes("source_json->>'import_source_key'")) {
+          return { rows: [], rowCount: 0 };
+        }
+        if (sql.includes('INSERT INTO memory_facts')) {
+          insertedFacts.push(params ?? []);
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import',
+        payload: { source: 'claude-mem', dbPath },
+      });
+
+      expect(res.statusCode).toBe(202);
+      const job = await waitForImportJob(app);
+      expect(job.status).toBe('completed');
+      expect(job.imported).toBe(0);
+      expect(job.skipped).toBe(1);
+      expect(job.errors).toBe(0);
+      expect(insertedFacts).toHaveLength(0);
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
+
+  it('skips an observation already imported from the same claude-mem source', async () => {
+    const { dir, dbPath } = await makeTempClaudeMemDb([
+      {
+        id: 42,
+        title: 'Repeat import from the same claude-mem database',
+        narrative: 'The source-qualified observation id already exists.',
+      },
+    ]);
+    const insertedFacts: unknown[][] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('memory_import_jobs')) {
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return {
+            rows: [{ src_id: expectedClaudeMemObservationSourceId(dbPath, 42) }],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('INSERT INTO memory_facts')) {
+          insertedFacts.push(params ?? []);
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import',
+        payload: { source: 'claude-mem', dbPath },
+      });
+
+      expect(res.statusCode).toBe(202);
+      const job = await waitForImportJob(app);
+      expect(job.status).toBe('completed');
+      expect(job.imported).toBe(0);
+      expect(job.skipped).toBe(1);
+      expect(job.errors).toBe(0);
+      expect(insertedFacts).toHaveLength(0);
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
+
   it('creates child facts and summarizes edges from the observation facts array', async () => {
     const { dir, dbPath } = await makeTempClaudeMemDb([
       {
@@ -1132,11 +1344,15 @@ describe('POST /api/memory/import — claude-mem structured fields with mock poo
       const childIds = insertedFacts.slice(1).map((params) => params[0]);
       expect(insertedFacts[1]?.[7]).toMatchObject({
         import_job_id: expect.any(String),
-        import_source_id: 'claude-mem:42:fact:0',
+        import_source_id: `${expectedClaudeMemObservationSourceId(dbPath, 42)}:fact:0`,
+        import_source_key: expectedClaudeMemSourceKey(dbPath),
+        import_source_local_id: 'observation:42:fact:0',
       });
       expect(insertedFacts[2]?.[7]).toMatchObject({
         import_job_id: expect.any(String),
-        import_source_id: 'claude-mem:42:fact:1',
+        import_source_id: `${expectedClaudeMemObservationSourceId(dbPath, 42)}:fact:1`,
+        import_source_key: expectedClaudeMemSourceKey(dbPath),
+        import_source_local_id: 'observation:42:fact:1',
       });
       expect(insertedEdges.map((params) => params.slice(1, 5))).toEqual([
         [childIds[0], parentId, 'summarizes', 0.8],
