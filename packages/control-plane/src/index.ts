@@ -26,6 +26,7 @@ import {
   resolveEmbeddingClient,
 } from './memory/embedding-client-factory.js';
 import { Mem0Client } from './memory/mem0-client.js';
+import { listFactSourceDrawers } from './memory/memory-fact-source-drawers.js';
 import { MemoryInjector } from './memory/memory-injector.js';
 import { MemorySearch } from './memory/memory-search.js';
 import { MemoryStore } from './memory/memory-store.js';
@@ -431,6 +432,7 @@ async function main(): Promise<void> {
           backend: 'postgres',
           memorySearch,
           memoryStore,
+          loadFactSourceDrawers: (factId) => listFactSourceDrawers(pgPool, factId),
           injectionBudget: memoryInjectionBudget,
           logger: logger.child({ component: 'memory-injector' }),
         });

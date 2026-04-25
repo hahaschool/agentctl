@@ -8,8 +8,9 @@ import type {
 import { ControlPlaneError, DEFAULT_INJECTION_BUDGET } from '@agentctl/shared';
 import type { Logger } from 'pino';
 
-import { buildContextBudget } from './context-budget.js';
+import { buildContextBudget, estimateTokens } from './context-budget.js';
 import type { Mem0Client } from './mem0-client.js';
+import type { MemoryFactSourceDrawer } from './memory-fact-source-drawers.js';
 import type { MemorySearch } from './memory-search.js';
 import type { MemoryStore } from './memory-store.js';
 
@@ -18,17 +19,28 @@ const DEFAULT_INJECTION_RESULT_MODE = DEFAULT_INJECTION_BUDGET.resultMode;
 const MAX_SNIPPET_FACTS = 3;
 const MAX_SNIPPET_CHARS = 160;
 const MAX_TOTAL_SNIPPET_CHARS = MAX_SNIPPET_FACTS * MAX_SNIPPET_CHARS;
+const MAX_FULL_DRAWER_FACTS = 2;
+const MAX_FULL_DRAWER_CHARS = 1200;
+const CHARS_PER_ESTIMATED_TOKEN = 4;
 
 export type MemoryBackend = 'mem0' | 'postgres';
 
 type MemoryStoreLike = Pick<MemoryStore, 'addFact' | 'listFacts'> &
   Partial<Pick<MemoryStore, 'listFactSourcePreviews'>>;
 
+type FactSourceDrawerLoader = (factId: string) => Promise<readonly MemoryFactSourceDrawer[]>;
+
+type RenderMemoryLineOptions = {
+  onDemandFactIds: ReadonlySet<string>;
+  injectionTokenCount: number;
+};
+
 export type MemoryInjectorOptions = {
   backend?: MemoryBackend;
   mem0Client?: Mem0Client;
   memorySearch?: Pick<MemorySearch, 'search'>;
   memoryStore?: MemoryStoreLike;
+  loadFactSourceDrawers?: FactSourceDrawerLoader;
   maxMemories?: number;
   injectionBudget?: InjectionBudget;
   logger: Logger;
@@ -39,6 +51,7 @@ export class MemoryInjector {
   private readonly mem0Client: Mem0Client | null;
   private readonly memorySearch: Pick<MemorySearch, 'search'> | null;
   private readonly memoryStore: MemoryStoreLike | null;
+  private readonly loadFactSourceDrawers: FactSourceDrawerLoader | null;
   private readonly maxMemories: number;
   private readonly injectionBudget: InjectionBudget;
   private readonly resultMode: MemoryInjectionResultMode;
@@ -48,6 +61,7 @@ export class MemoryInjector {
     this.mem0Client = options.mem0Client ?? null;
     this.memorySearch = options.memorySearch ?? null;
     this.memoryStore = options.memoryStore ?? null;
+    this.loadFactSourceDrawers = options.loadFactSourceDrawers ?? null;
     this.maxMemories = options.maxMemories ?? DEFAULT_MAX_MEMORIES;
     this.injectionBudget = options.injectionBudget ?? DEFAULT_INJECTION_BUDGET;
     this.logger = options.logger;
@@ -189,23 +203,17 @@ export class MemoryInjector {
   private resolveResultMode(requestedMode?: MemoryInjectionResultMode): MemoryInjectionResultMode {
     const resultMode = requestedMode ?? DEFAULT_INJECTION_RESULT_MODE;
 
-    if (resultMode === 'full-drawer') {
-      this.logger.warn(
-        { requestedMode: resultMode },
-        'full-drawer injection mode is not implemented yet - falling back to fact-only',
-      );
-      return DEFAULT_INJECTION_RESULT_MODE;
-    }
-
-    if (resultMode === 'fact-plus-snippet') {
+    if (resultMode === 'fact-plus-snippet' || resultMode === 'full-drawer') {
       if (this.backend !== 'postgres') {
         this.logger.warn(
           { requestedMode: resultMode, backend: this.backend },
-          'fact-plus-snippet injection mode requires the postgres backend - falling back to fact-only',
+          'memory injection result mode requires the postgres backend - falling back to fact-only',
         );
         return DEFAULT_INJECTION_RESULT_MODE;
       }
+    }
 
+    if (resultMode === 'fact-plus-snippet') {
       if (!this.memoryStore || typeof this.memoryStore.listFactSourcePreviews !== 'function') {
         this.logger.warn(
           { requestedMode: resultMode },
@@ -213,6 +221,14 @@ export class MemoryInjector {
         );
         return DEFAULT_INJECTION_RESULT_MODE;
       }
+    }
+
+    if (resultMode === 'full-drawer' && !this.loadFactSourceDrawers) {
+      this.logger.warn(
+        { requestedMode: resultMode },
+        'full-drawer injection mode requires fact source drawer support - falling back to fact-only',
+      );
+      return DEFAULT_INJECTION_RESULT_MODE;
     }
 
     return resultMode;
@@ -254,7 +270,14 @@ export class MemoryInjector {
         return '';
       }
 
-      const memoryLines = await this.renderMemoryLines(injectionResult.facts);
+      const memoryLines = await this.renderMemoryLines(injectionResult.facts, {
+        onDemandFactIds: this.onDemandFactIdsForInjection(
+          injectionResult.facts,
+          injectionResult.tierBreakdown.pinned,
+          injectionResult.tierBreakdown['on-demand'],
+        ),
+        injectionTokenCount: injectionResult.tokenCount,
+      });
       const context = `## Relevant Memories\n${memoryLines.join('\n')}`;
 
       this.logger.info(
@@ -322,12 +345,27 @@ export class MemoryInjector {
     }
   }
 
-  private async renderMemoryLines(facts: readonly MemoryFact[]): Promise<string[]> {
+  private async renderMemoryLines(
+    facts: readonly MemoryFact[],
+    options: RenderMemoryLineOptions,
+  ): Promise<string[]> {
     if (this.resultMode === 'fact-plus-snippet') {
       return this.renderFactPlusSnippetLines(facts);
     }
 
+    if (this.resultMode === 'full-drawer') {
+      return this.renderFullDrawerLines(facts, options);
+    }
+
     return facts.map((fact) => `- ${fact.content}`);
+  }
+
+  private onDemandFactIdsForInjection(
+    facts: readonly MemoryFact[],
+    pinnedCount: number,
+    onDemandCount: number,
+  ): ReadonlySet<string> {
+    return new Set(facts.slice(pinnedCount, pinnedCount + onDemandCount).map((fact) => fact.id));
   }
 
   private async renderFactPlusSnippetLines(facts: readonly MemoryFact[]): Promise<string[]> {
@@ -416,6 +454,126 @@ export class MemoryInjector {
       return '.'.repeat(maxSnippetChars);
     }
     return `${snippet.slice(0, maxSnippetChars - 3)}...`;
+  }
+
+  private async renderFullDrawerLines(
+    facts: readonly MemoryFact[],
+    options: RenderMemoryLineOptions,
+  ): Promise<string[]> {
+    if (!this.loadFactSourceDrawers) {
+      return facts.map((fact) => `- ${fact.content}`);
+    }
+
+    try {
+      const sourceLoader = this.loadFactSourceDrawers;
+      const fullDrawerFactIds = facts
+        .filter((fact) => options.onDemandFactIds.has(fact.id))
+        .slice(0, MAX_FULL_DRAWER_FACTS)
+        .map((fact) => fact.id);
+      const drawerCandidates = await Promise.all(
+        fullDrawerFactIds.map(async (factId) => ({
+          factId,
+          drawer: this.selectFullDrawerForInjection(await sourceLoader(factId)),
+        })),
+      );
+      const drawersByFactId = new Map(
+        drawerCandidates
+          .filter(
+            (candidate): candidate is { factId: string; drawer: MemoryFactSourceDrawer } =>
+              candidate.drawer !== null,
+          )
+          .map((candidate) => [candidate.factId, candidate.drawer]),
+      );
+
+      let remainingDrawerTokens = this.fullDrawerTokenBudget(
+        facts,
+        options.onDemandFactIds,
+        options.injectionTokenCount,
+      );
+      const lines: string[] = [];
+
+      for (const fact of facts) {
+        lines.push(`- ${fact.content}`);
+        const drawer = drawersByFactId.get(fact.id);
+        if (!drawer || remainingDrawerTokens <= 0) {
+          continue;
+        }
+
+        const drawerContent = this.normalizeFullDrawerContent(
+          drawer.drawer_content,
+          remainingDrawerTokens,
+        );
+        if (!drawerContent) {
+          continue;
+        }
+
+        lines.push(
+          `  Drawer ${drawer.drawer_topic}#${drawer.drawer_chunk_index}: ${drawerContent}`,
+        );
+        remainingDrawerTokens -= estimateTokens(drawerContent);
+      }
+
+      return lines;
+    } catch (error: unknown) {
+      this.logger.warn(
+        { err: error, resultMode: this.resultMode },
+        'Failed to hydrate full drawer sources for memory injection - falling back to fact-only',
+      );
+      return facts.map((fact) => `- ${fact.content}`);
+    }
+  }
+
+  private selectFullDrawerForInjection(
+    drawers: readonly MemoryFactSourceDrawer[],
+  ): MemoryFactSourceDrawer | null {
+    return (
+      drawers.find(
+        (drawer) =>
+          drawer.status === 'available' &&
+          typeof drawer.drawer_content === 'string' &&
+          drawer.drawer_content.trim().length > 0,
+      ) ?? null
+    );
+  }
+
+  private fullDrawerTokenBudget(
+    facts: readonly MemoryFact[],
+    onDemandFactIds: ReadonlySet<string>,
+    injectionTokenCount: number,
+  ): number {
+    const remainingGlobalTokens = Math.max(0, this.injectionBudget.maxTokens - injectionTokenCount);
+    const onDemandCap = this.injectionBudget.tierTokenCaps?.['on-demand'];
+    if (onDemandCap === undefined) {
+      return remainingGlobalTokens;
+    }
+
+    const onDemandFactTokens = facts
+      .filter((fact) => onDemandFactIds.has(fact.id))
+      .reduce((total, fact) => total + estimateTokens(fact.content), 0);
+    const remainingOnDemandTokens = Math.max(0, onDemandCap - onDemandFactTokens);
+    return Math.min(remainingGlobalTokens, remainingOnDemandTokens);
+  }
+
+  private normalizeFullDrawerContent(
+    drawerContent: string | null,
+    remainingDrawerTokens: number,
+  ): string | null {
+    const normalized = drawerContent?.replace(/\s+/g, ' ').trim();
+    if (!normalized || remainingDrawerTokens <= 0) {
+      return null;
+    }
+
+    const maxDrawerChars = Math.min(
+      MAX_FULL_DRAWER_CHARS,
+      remainingDrawerTokens * CHARS_PER_ESTIMATED_TOKEN,
+    );
+    if (normalized.length <= maxDrawerChars) {
+      return normalized;
+    }
+    if (maxDrawerChars <= 3) {
+      return '.'.repeat(maxDrawerChars);
+    }
+    return `${normalized.slice(0, maxDrawerChars - 3)}...`;
   }
 
   private stringMetadata(
