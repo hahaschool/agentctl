@@ -116,6 +116,15 @@
 > Dependabot, and secret-scanning alert feeds all report 0 open alerts.
 > Dev-1/dev-2, production deploy, and beta promotion workflows were not
 > changed.
+>
+> Follow-up sync (2026-04-25): after PR #836 and PR #835 landed, `main@4bc82924`
+> passed CI `24923565770`, Security Audit `24923565779`, and Build & Publish
+> Docker Images `24923565766`. PR #836 added JSONL import job provenance plus
+> rollback UI/API for completed memory imports, and PR #835 added private
+> memory-eval fixture/changelog secret preflight plus stdin-based `gh` rotation
+> tooling. GitHub reported no open PRs during this sync, and code-scanning,
+> Dependabot, and secret-scanning alert feeds all report 0 open alerts.
+> Dev-1/dev-2, production deploy, and beta promotion workflows were not changed.
 
 ---
 
