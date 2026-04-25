@@ -9,6 +9,7 @@ import {
   Database,
   FileJson,
   Loader2,
+  RotateCcw,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -17,6 +18,7 @@ import {
   importStatusQuery,
   useCancelImport,
   usePreviewImport,
+  useRollbackImport,
   useStartImport,
 } from '@/lib/queries';
 
@@ -441,12 +443,28 @@ type Step4Props = {
   imported: number;
   skipped: number;
   errors: number;
+  rolledBack: number;
   status: string;
+  canRollback: boolean;
+  rollbackPending: boolean;
   onStartOver: () => void;
+  onRollback: () => void;
 };
 
-function Step4Summary({ imported, skipped, errors, status, onStartOver }: Step4Props) {
+function Step4Summary({
+  imported,
+  skipped,
+  errors,
+  rolledBack,
+  status,
+  canRollback,
+  rollbackPending,
+  onStartOver,
+  onRollback,
+}: Step4Props) {
   const success = status === 'completed';
+  const wasRolledBack = status === 'rolled_back';
+  const summaryColumns = rolledBack > 0 ? 'grid-cols-4' : 'grid-cols-3';
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -457,17 +475,23 @@ function Step4Summary({ imported, skipped, errors, status, onStartOver }: Step4P
         )}
         <div>
           <h2 className="text-lg font-semibold">
-            {success ? 'Import complete' : `Import ${status}`}
+            {success
+              ? 'Import complete'
+              : wasRolledBack
+                ? 'Import rolled back'
+                : `Import ${status}`}
           </h2>
           <p className="text-sm text-muted-foreground">
             {success
               ? 'All data has been imported into your memory store.'
-              : 'The import did not finish successfully.'}
+              : wasRolledBack
+                ? 'Facts written by this import were removed. You can preview and import again.'
+                : 'The import did not finish successfully.'}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3" data-testid="import-summary">
+      <div className={`grid ${summaryColumns} gap-3`} data-testid="import-summary">
         <div className="rounded-md border border-border p-3 text-center">
           <div className="text-2xl font-bold text-green-500" data-testid="imported-count">
             {imported.toLocaleString()}
@@ -486,16 +510,42 @@ function Step4Summary({ imported, skipped, errors, status, onStartOver }: Step4P
           </div>
           <div className="text-xs text-muted-foreground mt-1">Errors</div>
         </div>
+        {rolledBack > 0 && (
+          <div className="rounded-md border border-border p-3 text-center">
+            <div className="text-2xl font-bold text-blue-500" data-testid="rolled-back-count">
+              {rolledBack.toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Rolled back</div>
+          </div>
+        )}
       </div>
 
-      <button
-        type="button"
-        onClick={onStartOver}
-        className="px-4 py-2 rounded-md border border-border text-sm font-medium hover:bg-muted transition-colors"
-        data-testid="start-over"
-      >
-        Start another import
-      </button>
+      <div className="flex flex-wrap gap-3">
+        {canRollback && (
+          <button
+            type="button"
+            onClick={onRollback}
+            disabled={rollbackPending}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md border border-destructive/40 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            data-testid="rollback-import"
+          >
+            {rollbackPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RotateCcw size={14} />
+            )}
+            Roll back import
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onStartOver}
+          className="px-4 py-2 rounded-md border border-border text-sm font-medium hover:bg-muted transition-colors"
+          data-testid="start-over"
+        >
+          Start another import
+        </button>
+      </div>
     </div>
   );
 }
@@ -519,6 +569,7 @@ export function MemoryImportView() {
   const previewImport = usePreviewImport();
   const startImport = useStartImport();
   const cancelImport = useCancelImport();
+  const rollbackImport = useRollbackImport();
 
   const job = statusQuery.data?.job ?? null;
   const progress = job?.progress.current ?? 0;
@@ -526,9 +577,13 @@ export function MemoryImportView() {
   const imported = job?.imported ?? 0;
   const skipped = job?.skipped ?? 0;
   const errors = job?.errors ?? 0;
+  const rolledBack = job?.rolledBack ?? 0;
   const jobStatus = job?.status ?? 'pending';
   const isImportDone =
-    jobStatus === 'completed' || jobStatus === 'cancelled' || jobStatus === 'failed';
+    jobStatus === 'completed' ||
+    jobStatus === 'cancelled' ||
+    jobStatus === 'failed' ||
+    jobStatus === 'rolled_back';
 
   // Auto-advance from step 3 to step 4 when import completes
   useEffect(() => {
@@ -588,6 +643,12 @@ export function MemoryImportView() {
   function handleCancel() {
     if (activeJobId) {
       cancelImport.mutate(activeJobId);
+    }
+  }
+
+  function handleRollback() {
+    if (activeJobId) {
+      rollbackImport.mutate(activeJobId);
     }
   }
 
@@ -661,8 +722,12 @@ export function MemoryImportView() {
             imported={imported}
             skipped={skipped}
             errors={errors}
+            rolledBack={rolledBack}
             status={jobStatus}
+            canRollback={Boolean(activeJobId && isImportDone && jobStatus !== 'rolled_back')}
+            rollbackPending={rollbackImport.isPending}
             onStartOver={handleStartOver}
+            onRollback={handleRollback}
           />
         )}
       </div>
