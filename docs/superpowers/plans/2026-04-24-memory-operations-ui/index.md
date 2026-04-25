@@ -8,6 +8,8 @@
 
 **Solution:** 7 PRs delivering: provider CRUD (PR A–C), job orchestration (PR D–E), UI (PR F), consolidation/synthesis + e2e (PR G).
 
+**Status sync (2026-04-25):** All planned PRs A-G have landed through PR #827. The remaining work is rollout verification, not another implementation PR from this plan: enable the dev-1 environment intentionally, run the backfill/consolidation/synthesis flows, and complete the live Gemini Gate 2 check before any `verified:true` catalog flip.
+
 ---
 
 ## PR Map
@@ -20,15 +22,15 @@
 | **D** | `codex/memory-ops-pr-d` | Backend: jobs CRUD + BullMQ + SSE + preview endpoint + capabilities | patch | Landed in PR #812; CI, Security Audit, Docker publish, container scans, focused local tests/build, and independent CodeQL alert check passed | [pr-d.md](./pr-d.md) |
 | **E** | `codex/memory-ops-pr-e` | Workers: embedding-backfill + drawer-backfill + boot reconciliation | patch | Landed in PR #816; critical path unblocked for dev-1 backfill verification | [pr-e.md](./pr-e.md) |
 | **F** | `codex/memory-ops-pr-f` | Frontend: /memory/operations page + 8 alerts + egress dialog | minor | Landed in PR #820; PR checks and post-merge main CI/Security/Docker passed | [pr-f.md](./pr-f.md) |
-| **G** | `codex/memory-ops-pr-g` | Workers: consolidation + synthesis + e2e + Gate 2 + CHANGELOG | patch | Active implementation lane | [pr-g.md](./pr-g.md) |
+| **G** | `codex/memory-ops-pr-g` | Workers: consolidation + synthesis + e2e + Gate 2 + CHANGELOG | patch | Landed in PR #827; PR checks and post-merge main CI/Security/Docker passed | [pr-g.md](./pr-g.md) |
 
 ---
 
 ## Merge Order
 
-PRs must merge in order A → B → C → D → E → F → G. PR A landed in PR #783, PR B landed in PR #797, PR C landed in PR #806 with PR #807/#808 as saved-provider test persistence and hardening follow-ups, PR D landed in PR #812, PR E landed in PR #816, and PR F landed in PR #820. Continue with PR G from latest `main`. Each remaining PR has its own branch off `main`. Never branch from another PR's branch.
+PRs merged in order A → B → C → D → E → F → G. PR A landed in PR #783, PR B landed in PR #797, PR C landed in PR #806 with PR #807/#808 as saved-provider test persistence and hardening follow-ups, PR D landed in PR #812, PR E landed in PR #816, PR F landed in PR #820, and PR G landed in PR #827. There is no remaining implementation branch for this plan; follow-on work should branch from latest `main` and focus on rollout verification or explicitly scoped follow-up gaps.
 
-After PR #820, dev-1 backfill verification can use the `/memory/operations` UI once the rollout env and provider credentials are intentionally enabled. Avoid triggering live provider spend unless the dev-1 environment is explicitly prepared for it.
+After PR #827, dev-1 backfill/consolidation/synthesis verification can use the `/memory/operations` UI once the rollout env and provider credentials are intentionally enabled. Avoid triggering live provider spend unless the dev-1 environment is explicitly prepared for it.
 
 ---
 
@@ -70,7 +72,7 @@ curl -s -o /dev/null -w "%{http_code}" \
 
 Gate 1 must be verified manually and the result added to the Gate 1 contract test in PR A.
 
-## Gate 2 (required before Gemini `verified:true` flip in PR G)
+## Gate 2 (required before Gemini `verified:true` follow-up)
 
 With a real `GEMINI_API_KEY`:
 1. Response vector length === 1536
@@ -78,3 +80,5 @@ With a real `GEMINI_API_KEY`:
 3. `output_dimensionality: 1536` is honored
 
 If the compat layer ignores `output_dimensionality`, switch catalog to `gemini-embedding-2-preview` and re-run.
+
+PR #827 added the gated Gemini smoke path, but did not flip the catalog entry because the live key gate was not available during the PR. Run the gate with `GATE2_GEMINI_API_KEY` and `GEMINI_VERIFIED=1`, then land a separate catalog follow-up if the live response passes.
