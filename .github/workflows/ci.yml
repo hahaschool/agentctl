@@ -250,7 +250,8 @@ jobs:
         run: |
           pnpm --dir packages/shared exec vitest --root ../.. run \
             scripts/deploy-fleet-workflow.test.ts \
-            scripts/deploy-workflows.test.ts
+            scripts/deploy-workflows.test.ts \
+            scripts/memory-eval.test.ts
 
   # ---------------------------------------------------------------------------
   # Build — compile TypeScript once; upload dist/ for the test job.

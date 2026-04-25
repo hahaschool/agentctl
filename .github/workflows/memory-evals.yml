@@ -90,6 +90,9 @@ jobs:
           if [ -z "${MEMORY_EVAL_PRIVATE_FIXTURE_JSON_B64:-}" ]; then
             missing+=("MEMORY_EVAL_PRIVATE_FIXTURE_JSON_B64")
           fi
+          if [ -z "${MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64:-}" ]; then
+            missing+=("MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64")
+          fi
           if [ -z "${MEMORY_EVAL_EMBEDDING_API_URL:-}" ] \
             && [ -z "${MEMORY_EVAL_LITELLM_PROXY_URL:-}" ] \
             && [ -z "${MEMORY_EVAL_LITELLM_URL:-}" ]; then
@@ -127,9 +130,7 @@ jobs:
 
           mkdir -p "$(dirname "$PRIVATE_FIXTURE_PATH")" "$(dirname "$PRIVATE_FIXTURE_CHANGELOG_PATH")"
           printf '%s' "$MEMORY_EVAL_PRIVATE_FIXTURE_JSON_B64" | base64 --decode > "$PRIVATE_FIXTURE_PATH"
-          if [ -n "${MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64:-}" ]; then
-            printf '%s' "$MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64" | base64 --decode > "$PRIVATE_FIXTURE_CHANGELOG_PATH"
-          fi
+          printf '%s' "$MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64" | base64 --decode > "$PRIVATE_FIXTURE_CHANGELOG_PATH"
 
       - name: Set up pnpm
         if: steps.prep.outputs.should_run == 'true'
@@ -156,6 +157,7 @@ jobs:
           LITELLM_PROXY_URL: ${{ secrets.MEMORY_EVAL_LITELLM_PROXY_URL }}
           LITELLM_URL: ${{ secrets.MEMORY_EVAL_LITELLM_URL }}
           MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE: 'true'
+          MEMORY_EVAL_REQUIRE_FIXTURE_CHANGELOG: 'true'
           MEMORY_EVAL_FAILURE_MODE_MIN_ROWS: ${{ vars.MEMORY_EVAL_FAILURE_MODE_MIN_ROWS }}
         run: |
           set -euo pipefail
@@ -172,7 +174,8 @@ jobs:
           pnpm memory:eval \
             --no-mock \
             --split "${{ steps.prep.outputs.split }}" \
-            --fixture "$PRIVATE_FIXTURE_PATH" 2>&1 | tee "$report_path"
+            --fixture "$PRIVATE_FIXTURE_PATH" \
+            --fixture-changelog "$PRIVATE_FIXTURE_CHANGELOG_PATH" 2>&1 | tee "$report_path"
           status=${PIPESTATUS[0]}
           set -e
 
