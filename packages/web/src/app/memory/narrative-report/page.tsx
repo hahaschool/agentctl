@@ -31,7 +31,7 @@ export default function NarrativeReportPage(): React.JSX.Element {
     setResult(null);
 
     try {
-      const data = await api.memory.generateNarrativeReport({
+      const data = await api.generateNarrativeReport({
         scope: scope.trim() || undefined,
         entity_type: entityType.trim() || undefined,
         limit,

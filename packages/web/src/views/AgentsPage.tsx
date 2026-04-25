@@ -760,35 +760,32 @@ export function AgentsPage(): React.JSX.Element {
                   >
                     Start
                   </Button>
-                  {agent.type === 'loop' && (
-                    <>
-                      {agent.status === 'running' ? (
-                        <ConfirmButton
-                          label={stopAgentLoop.isPending ? 'Stopping...' : 'Stop Loop'}
-                          confirmLabel="Confirm Stop Loop"
-                          onConfirm={() => handleStopLoop(agent.id)}
-                          disabled={stopAgentLoop.isPending}
-                          className="px-2.5 py-1.5 text-[12px] font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 rounded-md cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/60"
-                          confirmClassName="px-2.5 py-1.5 text-[12px] font-medium bg-red-700 text-white border border-red-600 rounded-md cursor-pointer animate-pulse"
-                        />
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="border-blue-500/40 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
-                          onClick={() => {
-                            setLoopDialogAgent({ id: agent.id, name: agent.name });
-                            setLoopPrompt('');
-                          }}
-                          disabled={startAgentLoop.isPending || agent.status === 'starting'}
-                        >
-                          <InfinityIcon className="h-3 w-3 mr-1" />
-                          Loop
-                        </Button>
-                      )}
-                    </>
-                  )}
+                  {agent.type === 'loop' &&
+                    (agent.status === 'running' ? (
+                      <ConfirmButton
+                        label={stopAgentLoop.isPending ? 'Stopping...' : 'Stop Loop'}
+                        confirmLabel="Confirm Stop Loop"
+                        onConfirm={() => handleStopLoop(agent.id)}
+                        disabled={stopAgentLoop.isPending}
+                        className="px-2.5 py-1.5 text-[12px] font-medium bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-800 rounded-md cursor-pointer hover:bg-red-200 dark:hover:bg-red-900/60"
+                        confirmClassName="px-2.5 py-1.5 text-[12px] font-medium bg-red-700 text-white border border-red-600 rounded-md cursor-pointer animate-pulse"
+                      />
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-blue-500/40 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
+                        onClick={() => {
+                          setLoopDialogAgent({ id: agent.id, name: agent.name });
+                          setLoopPrompt('');
+                        }}
+                        disabled={startAgentLoop.isPending || agent.status === 'starting'}
+                      >
+                        <InfinityIcon className="h-3 w-3 mr-1" />
+                        Loop
+                      </Button>
+                    ))}
                   <Button asChild size="sm" variant="ghost">
                     <Link
                       href={`/agents/${agent.id}/settings`}

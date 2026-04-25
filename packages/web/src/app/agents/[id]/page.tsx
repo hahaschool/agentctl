@@ -407,31 +407,28 @@ function AgentDetailPageContent(): React.JSX.Element {
                 Start
               </Button>
             )}
-            {data.type === 'loop' && (
-              <>
-                {data.status === 'running' ? (
-                  <ConfirmButton
-                    label={stopAgentLoop.isPending ? 'Stopping Loop...' : 'Stop Loop'}
-                    confirmLabel="Confirm Stop Loop"
-                    onConfirm={handleStopLoop}
-                    disabled={stopAgentLoop.isPending}
-                    className="px-3 py-1.5 text-sm font-medium rounded-md bg-red-900/40 text-red-300 border border-red-800 cursor-pointer hover:bg-red-900/60"
-                    confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
-                  />
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="border-blue-500/40 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
-                    onClick={() => setLoopDialogOpen(true)}
-                    disabled={startAgentLoop.isPending || data.status === 'starting'}
-                  >
-                    <InfinityIcon className="h-3.5 w-3.5 mr-1.5" />
-                    Start Loop
-                  </Button>
-                )}
-              </>
-            )}
+            {data.type === 'loop' &&
+              (data.status === 'running' ? (
+                <ConfirmButton
+                  label={stopAgentLoop.isPending ? 'Stopping Loop...' : 'Stop Loop'}
+                  confirmLabel="Confirm Stop Loop"
+                  onConfirm={handleStopLoop}
+                  disabled={stopAgentLoop.isPending}
+                  className="px-3 py-1.5 text-sm font-medium rounded-md bg-red-900/40 text-red-300 border border-red-800 cursor-pointer hover:bg-red-900/60"
+                  confirmClassName="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white animate-pulse cursor-pointer"
+                />
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-500/40 text-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
+                  onClick={() => setLoopDialogOpen(true)}
+                  disabled={startAgentLoop.isPending || data.status === 'starting'}
+                >
+                  <InfinityIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Start Loop
+                </Button>
+              ))}
             <LastUpdated dataUpdatedAt={agent.dataUpdatedAt} />
             <RefreshButton
               onClick={() => {
