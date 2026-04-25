@@ -97,6 +97,16 @@
 > alerts. Docker publish emitted only the known Grype DB cache reservation
 > annotation. Dev-1/dev-2, production deploy, and beta promotion workflows were
 > not changed.
+>
+> Follow-up sync (2026-04-25): after PR #832 and PR #833 landed, `main@3eca0152`
+> passed CI `24922472045`, Security Audit `24922472039`, and Build & Publish
+> Docker Images `24922472047`. PR #832 delivered the Surface A `MEMORY.md`
+> approval-token/durable-gate write path, and PR #833 delivered private
+> memory-eval changelog discipline. GitHub reported no open PRs during this
+> sync, and code-scanning, Dependabot, and secret-scanning alert feeds all
+> report 0 open alerts. Docker publish emitted only the known Grype DB cache
+> reservation annotation. Dev-1/dev-2, production deploy, and beta promotion
+> workflows were not changed.
 
 ---
 
