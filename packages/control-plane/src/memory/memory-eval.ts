@@ -7,6 +7,7 @@ export const DEFAULT_MEMORY_BENCH_NEEDLE_COUNT = 100;
 export const DEFAULT_MEMORY_BENCH_NOISE_COUNT = 2_000;
 export const DEFAULT_MEMORY_BENCH_MIN_RECALL = 0.85;
 export const DEFAULT_MEMORY_EVAL_FAILURE_EXAMPLE_LIMIT = 5;
+const FIXTURE_CHANGELOG_DATE_PATTERN = /^(?:\s*#{1,6}\s+|\s*[-*]\s+)(\d{4}-\d{2}-\d{2})(?:\b|:)/gm;
 export const DEFAULT_FAILURE_MODE_TAGS = [
   'vocabulary-gap',
   'temporal-ambiguity',
@@ -116,6 +117,11 @@ export type MemoryEvalFailureModeCoverageSummary = {
   missingTags: string[];
 };
 
+export type FixtureChangelogSummary = {
+  path: string;
+  latestDatedEntry: string;
+};
+
 export type MemoryEvalRun = {
   rowResults: MemoryEvalRowResult[];
   summary: MemoryEvalSummary;
@@ -203,6 +209,32 @@ export function toDrawerSourceKey(source: MemoryEvalDrawerSource): string {
 export function loadMemoryEvalFixture(path: string): MemoryEvalFixtureFile {
   const raw = JSON.parse(fs.readFileSync(path, 'utf8')) as unknown;
   return assertSanitizedMemoryEvalFixture(raw);
+}
+
+export function readMemoryEvalFixtureChangelog(changelogPath: string): FixtureChangelogSummary {
+  if (!fs.existsSync(changelogPath)) {
+    throw new Error(`Fixture changelog path does not exist: ${changelogPath}`);
+  }
+
+  const content = fs.readFileSync(changelogPath, 'utf8');
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error(`Fixture changelog ${changelogPath} must not be empty`);
+  }
+
+  const datedEntries = [...content.matchAll(FIXTURE_CHANGELOG_DATE_PATTERN)]
+    .map((match) => match[1])
+    .filter((date): date is string => Boolean(date));
+  if (datedEntries.length === 0) {
+    throw new Error(
+      `Fixture changelog ${changelogPath} must include a date-stamped entry such as "## 2026-04-25" or "- 2026-04-25: ...".`,
+    );
+  }
+
+  return {
+    path: changelogPath,
+    latestDatedEntry: datedEntries.sort().at(-1) ?? datedEntries[0] ?? '',
+  };
 }
 
 export function assertSanitizedMemoryEvalFixture(raw: unknown): MemoryEvalFixtureFile {

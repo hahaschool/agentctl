@@ -26,6 +26,7 @@
     "coord": "tsx scripts/agent-coord.ts",
     "memory:bench": "node --import tsx scripts/memory-bench.ts",
     "memory:eval": "node --import tsx scripts/memory-eval.ts",
+    "memory:eval:secrets": "node --import tsx scripts/memory-eval-secrets.ts",
     "memory:backfill-drawers": "pnpm --filter @agentctl/control-plane build && node --import tsx scripts/backfill-memory-drawers.ts",
     "agentctl:deploy": "npx tsx scripts/deploy.ts",
     "peer-update": "tsx scripts/peer-update.ts"

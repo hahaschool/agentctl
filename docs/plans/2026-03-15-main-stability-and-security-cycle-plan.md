@@ -108,6 +108,14 @@
 > open alerts. Docker publish emitted only the known Grype DB cache reservation
 > annotation. Dev-1/dev-2, production deploy, and beta promotion
 > workflows were not changed.
+>
+> Follow-up sync (2026-04-25): after PR #834 landed, `main@04158328` passed CI
+> `24922781723`, Security Audit `24922781720`, and Build & Publish Docker
+> Images `24922781722`. PR #834 synced roadmap and plan docs after PR
+> #832/#833. GitHub reported no open PRs during this sync, and code-scanning,
+> Dependabot, and secret-scanning alert feeds all report 0 open alerts.
+> Dev-1/dev-2, production deploy, and beta promotion workflows were not
+> changed.
 
 ---
 

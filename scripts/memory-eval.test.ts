@@ -15,9 +15,15 @@ const { mockEmbeddingClient, mockMemorySearch, mockPool, mockSearch } = vi.hoist
   };
 
   return {
-    mockEmbeddingClient: vi.fn(() => embeddingClientInstance),
-    mockMemorySearch: vi.fn(() => ({ search: mockSearch })),
-    mockPool: vi.fn(() => poolInstance),
+    mockEmbeddingClient: vi.fn(function EmbeddingClient() {
+      return embeddingClientInstance;
+    }),
+    mockMemorySearch: vi.fn(function MemorySearch() {
+      return { search: mockSearch };
+    }),
+    mockPool: vi.fn(function Pool() {
+      return poolInstance;
+    }),
     mockSearch,
   };
 });

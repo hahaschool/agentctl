@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
@@ -7,6 +6,7 @@ import { EmbeddingClient } from '../packages/control-plane/src/memory/embedding-
 import {
   assertFailureModeCoverage,
   createDeterministicMockRanker,
+  type FixtureChangelogSummary,
   formatFailureModeCoverageMarkdown,
   formatMemoryEvalReport,
   getDevSet,
@@ -17,6 +17,7 @@ import {
   type MemoryEvalFixtureRow,
   type MemoryEvalRanker,
   type MemoryEvalRun,
+  readMemoryEvalFixtureChangelog,
   runMemoryEval,
   summarizeFailureModeCoverage,
 } from '../packages/control-plane/src/memory/memory-eval.js';
@@ -41,10 +42,6 @@ export type LiveMemoryEvalConfig = {
 
 type MemoryEvalEnv = Record<string, string | undefined>;
 type LiveMemorySearch = Pick<MemorySearch, 'search'>;
-type FixtureChangelogSummary = {
-  path: string;
-  latestDatedEntry: string;
-};
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -61,7 +58,6 @@ const EMBEDDING_BASE_URL_ENV_KEYS = [
 const REQUIRE_FAILURE_MODE_COVERAGE_ENV = 'MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE';
 const FAILURE_MODE_MIN_ROWS_ENV = 'MEMORY_EVAL_FAILURE_MODE_MIN_ROWS';
 const REQUIRE_FIXTURE_CHANGELOG_ENV = 'MEMORY_EVAL_REQUIRE_FIXTURE_CHANGELOG';
-const FIXTURE_CHANGELOG_DATE_PATTERN = /^(?:\s*#{1,6}\s+|\s*[-*]\s+)(\d{4}-\d{2}-\d{2})(?:\b|:)/gm;
 
 function usage(): string {
   return `Usage: pnpm memory:eval [--fixture path] [--fixture-changelog path] [--split dev|held-out|full] [--json] [--mock|--no-mock]
@@ -308,29 +304,7 @@ function readOptionalFixtureChangelog(
     return null;
   }
 
-  if (!fs.existsSync(changelogPath)) {
-    throw new Error(`Fixture changelog path does not exist: ${changelogPath}`);
-  }
-
-  const content = fs.readFileSync(changelogPath, 'utf8');
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new Error(`Fixture changelog ${changelogPath} must not be empty`);
-  }
-
-  const datedEntries = [...content.matchAll(FIXTURE_CHANGELOG_DATE_PATTERN)]
-    .map((match) => match[1])
-    .filter((date): date is string => Boolean(date));
-  if (datedEntries.length === 0) {
-    throw new Error(
-      `Fixture changelog ${changelogPath} must include a date-stamped entry such as "## 2026-04-25" or "- 2026-04-25: ...".`,
-    );
-  }
-
-  return {
-    path: changelogPath,
-    latestDatedEntry: datedEntries.sort().at(-1) ?? datedEntries[0] ?? '',
-  };
+  return readMemoryEvalFixtureChangelog(changelogPath);
 }
 
 function formatFixtureChangelogSection(changelog: FixtureChangelogSummary): string {
