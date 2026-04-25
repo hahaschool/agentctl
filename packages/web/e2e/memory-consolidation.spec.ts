@@ -317,7 +317,9 @@ test.describe('Memory consolidation board', () => {
     await expect(page.getByText('Queue is clear')).toBeVisible();
   });
 
-  test('accepts a suggestion and posts the expected action payload', async ({ page }) => {
+  test('contradiction resolve opens side-by-side dialog and posts accept on Keep A', async ({
+    page,
+  }) => {
     const state = await mockConsolidationApis(page);
     await openConsolidation(page);
 
@@ -325,17 +327,141 @@ test.describe('Memory consolidation board', () => {
       .locator('[data-slot="card"]')
       .filter({ hasText: 'Facts disagree about the primary control-plane datastore.' });
 
+    // Clicking "Resolve…" should open the side-by-side preview dialog
+    await contradictionCard.getByRole('button', { name: 'Accept suggestion' }).click();
+
+    // Both conflicting facts should appear in the dialog
+    await expect(page.getByTestId('side-by-side-facts')).toBeVisible();
+    await expect(page.getByText('Fact A')).toBeVisible();
+    await expect(page.getByText('Fact B')).toBeVisible();
+
+    // Select Fact A and confirm
+    await page.getByText('Fact A').click();
     await Promise.all([
       page.waitForResponse(
         (response) =>
           response.url().includes('/api/memory/consolidation/item-contradiction-1/action') &&
           response.request().method() === 'POST',
       ),
-      contradictionCard.getByRole('button', { name: 'Accept suggestion' }).click(),
+      page.getByRole('button', { name: 'Keep Fact A' }).click(),
     ]);
 
+    expect(state.resolveRequests[0]).toMatchObject({
+      id: 'item-contradiction-1',
+      action: 'accept',
+      status: 'accepted',
+    });
+  });
+
+  test('near-duplicate merge flow opens dialog, shows merge preview, and confirms', async ({
+    page,
+  }) => {
+    const state = await mockConsolidationApis(page);
+    await openConsolidation(page);
+
+    const dupCard = page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: 'Two facts describe the same NanoClaw IPC polling behaviour.' });
+
+    // Clicking "Merge…" should open the preview dialog
+    await dupCard.getByRole('button', { name: 'Accept suggestion' }).click();
+
+    await expect(page.getByTestId('side-by-side-facts')).toBeVisible();
+
+    // Confirm merge button should be disabled until a fact is selected
+    await expect(page.getByRole('button', { name: 'Confirm merge' })).toBeDisabled();
+
+    // Select Fact B
+    await page.getByText('Fact B').click();
+
+    // Confirm merge should be enabled after selection
+    await expect(page.getByRole('button', { name: 'Confirm merge' })).toBeEnabled();
+
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/memory/consolidation/item-duplicate-1/action') &&
+          response.request().method() === 'POST',
+      ),
+      page.getByRole('button', { name: 'Confirm merge' }).click(),
+    ]);
+
+    expect(state.resolveRequests[0]).toMatchObject({
+      id: 'item-duplicate-1',
+      action: 'accept',
+      status: 'accepted',
+    });
+  });
+
+  test('contradiction "Keep both" maps to skip action', async ({ page }) => {
+    const state = await mockConsolidationApis(page);
+    await openConsolidation(page);
+
+    const contradictionCard = page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: 'Facts disagree about the primary control-plane datastore.' });
+
+    await contradictionCard.getByRole('button', { name: 'Accept suggestion' }).click();
+    await expect(page.getByTestId('side-by-side-facts')).toBeVisible();
+
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/memory/consolidation/item-contradiction-1/action') &&
+          response.request().method() === 'POST',
+      ),
+      page.getByRole('button', { name: 'Keep both facts' }).click(),
+    ]);
+
+    expect(state.resolveRequests[0]).toMatchObject({
+      id: 'item-contradiction-1',
+      action: 'skip',
+      status: 'skipped',
+    });
+  });
+
+  test('cancelling the merge dialog leaves the card in place', async ({ page }) => {
+    await mockConsolidationApis(page);
+    await openConsolidation(page);
+
+    const contradictionCard = page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: 'Facts disagree about the primary control-plane datastore.' });
+
+    await contradictionCard.getByRole('button', { name: 'Accept suggestion' }).click();
+    await expect(page.getByTestId('side-by-side-facts')).toBeVisible();
+
+    // Cancel the dialog
+    await page.getByRole('button', { name: 'Cancel contradiction resolution' }).click();
+
+    // Dialog should close and the card should still be visible
+    await expect(page.getByTestId('side-by-side-facts')).not.toBeVisible();
+    await expect(
+      page.getByText('Facts disagree about the primary control-plane datastore.'),
+    ).toBeVisible();
+  });
+
+  test('accept on stale item (single fact) skips dialog and posts directly', async ({ page }) => {
+    const state = await mockConsolidationApis(page);
+    await openConsolidation(page);
+
+    const staleCard = page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: 'Mem0 decision has very low confidence and is likely outdated.' });
+
+    await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/memory/consolidation/item-stale-1/action') &&
+          response.request().method() === 'POST',
+      ),
+      staleCard.getByRole('button', { name: 'Accept suggestion' }).click(),
+    ]);
+
+    // No dialog should have appeared
+    expect(page.getByTestId('side-by-side-facts')).not.toBeVisible();
     expect(state.resolveRequests).toEqual([
-      { id: 'item-contradiction-1', action: 'accept', status: 'accepted' },
+      { id: 'item-stale-1', action: 'accept', status: 'accepted' },
     ]);
   });
 

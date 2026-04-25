@@ -515,6 +515,8 @@ export const memoryApi = {
       status: ConsolidationStatus;
       /** Hand-edited merged content to use as the survivor fact's content. */
       customContent?: string;
+      /** For near-duplicate merges: the fact ID whose content should survive. */
+      survivorFactId?: string;
     },
   ) =>
     request<{ ok: boolean }>(`/api/memory/consolidation/${id}/action`, {
