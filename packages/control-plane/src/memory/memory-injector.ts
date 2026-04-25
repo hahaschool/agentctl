@@ -1,5 +1,6 @@
 import type {
   InjectionBudget,
+  InjectionTier,
   MemoryFact,
   MemoryFactSourcePreview,
   MemoryInjectionResultMode,
@@ -32,7 +33,14 @@ type FactSourceDrawerLoader = (factId: string) => Promise<readonly MemoryFactSou
 
 type RenderMemoryLineOptions = {
   onDemandFactIds: ReadonlySet<string>;
+  factTierById: ReadonlyMap<string, InjectionTier>;
   injectionTokenCount: number;
+  tierTokenCounts: Readonly<Record<InjectionTier, number>>;
+};
+
+type AdditiveBudgetState = {
+  globalTokens: number;
+  tierTokens: Record<InjectionTier, number | null>;
 };
 
 export type MemoryInjectorOptions = {
@@ -276,6 +284,10 @@ export class MemoryInjector {
           injectionResult.tierBreakdown.pinned,
           injectionResult.tierBreakdown['on-demand'],
         ),
+        ...this.additiveBudgetInputsForInjection(
+          injectionResult.facts,
+          injectionResult.tierBreakdown,
+        ),
         injectionTokenCount: injectionResult.tokenCount,
       });
       const context = `## Relevant Memories\n${memoryLines.join('\n')}`;
@@ -350,7 +362,7 @@ export class MemoryInjector {
     options: RenderMemoryLineOptions,
   ): Promise<string[]> {
     if (this.resultMode === 'fact-plus-snippet') {
-      return this.renderFactPlusSnippetLines(facts);
+      return this.renderFactPlusSnippetLines(facts, options);
     }
 
     if (this.resultMode === 'full-drawer') {
@@ -368,7 +380,88 @@ export class MemoryInjector {
     return new Set(facts.slice(pinnedCount, pinnedCount + onDemandCount).map((fact) => fact.id));
   }
 
-  private async renderFactPlusSnippetLines(facts: readonly MemoryFact[]): Promise<string[]> {
+  private additiveBudgetInputsForInjection(
+    facts: readonly MemoryFact[],
+    tierBreakdown: Readonly<Record<InjectionTier, number>>,
+  ): Pick<RenderMemoryLineOptions, 'factTierById' | 'tierTokenCounts'> {
+    const factTierById = new Map<string, InjectionTier>();
+    const tierTokenCounts: Record<InjectionTier, number> = {
+      pinned: 0,
+      'on-demand': 0,
+      triggered: 0,
+    };
+    let offset = 0;
+
+    for (const tier of this.injectionTiers()) {
+      const tierFacts = facts.slice(offset, offset + tierBreakdown[tier]);
+      for (const fact of tierFacts) {
+        factTierById.set(fact.id, tier);
+        tierTokenCounts[tier] += estimateTokens(fact.content);
+      }
+      offset += tierFacts.length;
+    }
+
+    return { factTierById, tierTokenCounts };
+  }
+
+  private injectionTiers(): readonly InjectionTier[] {
+    return ['pinned', 'on-demand', 'triggered'];
+  }
+
+  private createAdditiveBudgetState(options: RenderMemoryLineOptions): AdditiveBudgetState {
+    return {
+      globalTokens: Math.max(0, this.injectionBudget.maxTokens - options.injectionTokenCount),
+      tierTokens: {
+        pinned: this.remainingTierAdditiveTokens('pinned', options),
+        'on-demand': this.remainingTierAdditiveTokens('on-demand', options),
+        triggered: this.remainingTierAdditiveTokens('triggered', options),
+      },
+    };
+  }
+
+  private remainingTierAdditiveTokens(
+    tier: InjectionTier,
+    options: RenderMemoryLineOptions,
+  ): number | null {
+    const tierCap = this.injectionBudget.tierTokenCaps?.[tier];
+    if (tierCap === undefined) {
+      return null;
+    }
+    return Math.max(0, tierCap - options.tierTokenCounts[tier]);
+  }
+
+  private remainingAdditiveTokensForFact(
+    fact: MemoryFact,
+    options: RenderMemoryLineOptions,
+    additiveBudget: AdditiveBudgetState,
+  ): number {
+    const tier = options.factTierById.get(fact.id);
+    const tierTokens = tier ? additiveBudget.tierTokens[tier] : null;
+    if (tierTokens === null) {
+      return additiveBudget.globalTokens;
+    }
+    return Math.min(additiveBudget.globalTokens, tierTokens);
+  }
+
+  private consumeAdditiveTokensForFact(
+    fact: MemoryFact,
+    options: RenderMemoryLineOptions,
+    additiveBudget: AdditiveBudgetState,
+    tokenCount: number,
+  ): void {
+    additiveBudget.globalTokens = Math.max(0, additiveBudget.globalTokens - tokenCount);
+
+    const tier = options.factTierById.get(fact.id);
+    if (!tier || additiveBudget.tierTokens[tier] === null) {
+      return;
+    }
+    additiveBudget.tierTokens[tier] = Math.max(0, additiveBudget.tierTokens[tier] - tokenCount);
+  }
+
+  private async renderFactPlusSnippetLines(
+    facts: readonly MemoryFact[],
+    options: RenderMemoryLineOptions,
+  ): Promise<string[]> {
     if (!this.memoryStore || typeof this.memoryStore.listFactSourcePreviews !== 'function') {
       return facts.map((fact) => `- ${fact.content}`);
     }
@@ -392,22 +485,37 @@ export class MemoryInjector {
       );
 
       let remainingSnippetChars = MAX_TOTAL_SNIPPET_CHARS;
+      const additiveBudget = this.createAdditiveBudgetState(options);
       const lines: string[] = [];
 
       for (const fact of facts) {
         lines.push(`- ${fact.content}`);
         const snippet = snippetsByFactId.get(fact.id);
-        if (!snippet || remainingSnippetChars <= 0) {
+        const remainingSnippetTokens = this.remainingAdditiveTokensForFact(
+          fact,
+          options,
+          additiveBudget,
+        );
+        if (!snippet || remainingSnippetChars <= 0 || remainingSnippetTokens <= 0) {
           continue;
         }
 
-        const cappedSnippet = this.capSnippetForBudget(snippet, remainingSnippetChars);
+        const cappedSnippet = this.capSnippetForBudget(
+          snippet,
+          Math.min(remainingSnippetChars, remainingSnippetTokens * CHARS_PER_ESTIMATED_TOKEN),
+        );
         if (!cappedSnippet) {
           continue;
         }
 
         lines.push(`  Evidence: ${cappedSnippet}`);
         remainingSnippetChars -= cappedSnippet.length;
+        this.consumeAdditiveTokensForFact(
+          fact,
+          options,
+          additiveBudget,
+          estimateTokens(cappedSnippet),
+        );
       }
 
       return lines;
@@ -485,16 +593,17 @@ export class MemoryInjector {
           .map((candidate) => [candidate.factId, candidate.drawer]),
       );
 
-      let remainingDrawerTokens = this.fullDrawerTokenBudget(
-        facts,
-        options.onDemandFactIds,
-        options.injectionTokenCount,
-      );
+      const additiveBudget = this.createAdditiveBudgetState(options);
       const lines: string[] = [];
 
       for (const fact of facts) {
         lines.push(`- ${fact.content}`);
         const drawer = drawersByFactId.get(fact.id);
+        const remainingDrawerTokens = this.remainingAdditiveTokensForFact(
+          fact,
+          options,
+          additiveBudget,
+        );
         if (!drawer || remainingDrawerTokens <= 0) {
           continue;
         }
@@ -510,7 +619,12 @@ export class MemoryInjector {
         lines.push(
           `  Drawer ${drawer.drawer_topic}#${drawer.drawer_chunk_index}: ${drawerContent}`,
         );
-        remainingDrawerTokens -= estimateTokens(drawerContent);
+        this.consumeAdditiveTokensForFact(
+          fact,
+          options,
+          additiveBudget,
+          estimateTokens(drawerContent),
+        );
       }
 
       return lines;
@@ -534,24 +648,6 @@ export class MemoryInjector {
           drawer.drawer_content.trim().length > 0,
       ) ?? null
     );
-  }
-
-  private fullDrawerTokenBudget(
-    facts: readonly MemoryFact[],
-    onDemandFactIds: ReadonlySet<string>,
-    injectionTokenCount: number,
-  ): number {
-    const remainingGlobalTokens = Math.max(0, this.injectionBudget.maxTokens - injectionTokenCount);
-    const onDemandCap = this.injectionBudget.tierTokenCaps?.['on-demand'];
-    if (onDemandCap === undefined) {
-      return remainingGlobalTokens;
-    }
-
-    const onDemandFactTokens = facts
-      .filter((fact) => onDemandFactIds.has(fact.id))
-      .reduce((total, fact) => total + estimateTokens(fact.content), 0);
-    const remainingOnDemandTokens = Math.max(0, onDemandCap - onDemandFactTokens);
-    return Math.min(remainingGlobalTokens, remainingOnDemandTokens);
   }
 
   private normalizeFullDrawerContent(

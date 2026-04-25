@@ -330,6 +330,138 @@ describe('MemoryInjector', () => {
       expect(memoryStore.listFactSourcePreviews).toHaveBeenNthCalledWith(2, 'fact-2');
     });
 
+    it('does not add fact-plus-snippet evidence after the global token budget is exhausted', async () => {
+      const fact = makeFact({
+        id: 'fact-1',
+        content: 'Use pnpm',
+      });
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([{ fact, score: 0.92, source_path: 'vector' }]),
+      });
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([fact]),
+        listFactSourcePreviews: vi.fn().mockResolvedValue([
+          {
+            drawer_id: 'drawer-1',
+            drawer_scope: 'agent:agent-1',
+            drawer_topic: 'tooling',
+            drawer_chunk_index: 0,
+            drawer_source_type: 'manual',
+            drawer_source_id: 'source-1',
+            start_offset: 0,
+            end_offset: 120,
+            quote_preview: 'pnpm-workspace.yaml should stay at the repo root.',
+            status: 'available',
+            created_at: '2026-03-11T00:00:00.000Z',
+          },
+        ]),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        injectionBudget: {
+          ...DEFAULT_INJECTION_BUDGET,
+          maxTokens: 2,
+          resultMode: 'fact-plus-snippet',
+        },
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe('## Relevant Memories\n- Use pnpm');
+    });
+
+    it('caps fact-plus-snippet evidence by the remaining global token budget', async () => {
+      const fact = makeFact({
+        id: 'fact-1',
+        content: 'Use pnpm',
+      });
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([{ fact, score: 0.92, source_path: 'vector' }]),
+      });
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([fact]),
+        listFactSourcePreviews: vi.fn().mockResolvedValue([
+          {
+            drawer_id: 'drawer-1',
+            drawer_scope: 'agent:agent-1',
+            drawer_topic: 'tooling',
+            drawer_chunk_index: 0,
+            drawer_source_type: 'manual',
+            drawer_source_id: 'source-1',
+            start_offset: 0,
+            end_offset: 26,
+            quote_preview: 'abcdefghijklmnopqrstuvwxyz',
+            status: 'available',
+            created_at: '2026-03-11T00:00:00.000Z',
+          },
+        ]),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        injectionBudget: {
+          ...DEFAULT_INJECTION_BUDGET,
+          maxTokens: 4,
+          resultMode: 'fact-plus-snippet',
+        },
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe('## Relevant Memories\n- Use pnpm\n  Evidence: abcde...');
+    });
+
+    it('does not add fact-plus-snippet evidence after the on-demand tier budget is exhausted', async () => {
+      const fact = makeFact({
+        id: 'fact-1',
+        content: 'Use pnpm',
+      });
+      const memorySearch = createMockMemorySearch({
+        search: vi.fn().mockResolvedValue([{ fact, score: 0.92, source_path: 'vector' }]),
+      });
+      const memoryStore = createMockMemoryStore({
+        listFacts: vi.fn().mockResolvedValue([fact]),
+        listFactSourcePreviews: vi.fn().mockResolvedValue([
+          {
+            drawer_id: 'drawer-1',
+            drawer_scope: 'agent:agent-1',
+            drawer_topic: 'tooling',
+            drawer_chunk_index: 0,
+            drawer_source_type: 'manual',
+            drawer_source_id: 'source-1',
+            start_offset: 0,
+            end_offset: 120,
+            quote_preview: 'pnpm-workspace.yaml should stay at the repo root.',
+            status: 'available',
+            created_at: '2026-03-11T00:00:00.000Z',
+          },
+        ]),
+      });
+
+      const injector = new MemoryInjector({
+        backend: 'postgres',
+        memorySearch,
+        memoryStore,
+        injectionBudget: {
+          ...DEFAULT_INJECTION_BUDGET,
+          resultMode: 'fact-plus-snippet',
+          tierTokenCaps: { 'on-demand': 2 },
+        },
+        logger,
+      });
+
+      const context = await injector.buildMemoryContext('agent-1', 'Set up project tooling');
+
+      expect(context).toBe('## Relevant Memories\n- Use pnpm');
+    });
+
     it('falls back to fact-only when fact-plus-snippet preview support is unavailable', async () => {
       const fact = {
         id: 'fact-1',
