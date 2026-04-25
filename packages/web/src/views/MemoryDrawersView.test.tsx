@@ -44,6 +44,10 @@ vi.mock('@/components/memory/drawerMatchType', () => ({
   matchTypeLabel: (matchType: string | null) => matchType ?? 'unknown',
 }));
 
+vi.mock('@/components/memory/MissingEmbeddingAlert', () => ({
+  MissingEmbeddingAlert: () => <div data-testid="missing-embedding-alert" />,
+}));
+
 vi.mock('@/components/ui/badge', () => ({
   Badge: ({
     children,

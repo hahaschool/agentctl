@@ -37,10 +37,15 @@ vi.mock('@/lib/queries', () => ({
     queryFn: vi.fn(),
     enabled: !!id,
   }),
+  memoryProvidersQuery: () => ({
+    queryKey: ['memory', 'providers'],
+    queryFn: vi.fn(),
+  }),
   queryKeys: {
     memory: {
       facts: () => ['memory', 'facts'],
       fact: (id: string) => ['memory', 'fact', id],
+      providers: ['memory', 'providers'],
       stats: ['memory', 'stats'],
     },
   },
@@ -110,6 +115,17 @@ describe('MemoryBrowserView', () => {
           isLoading: false,
         };
       }
+      if (
+        Array.isArray(opts.queryKey) &&
+        opts.queryKey[0] === 'memory' &&
+        opts.queryKey[1] === 'providers'
+      ) {
+        return {
+          data: { providers: [] },
+          isPending: false,
+          isError: false,
+        };
+      }
       return { data: null, isLoading: false };
     });
   });
@@ -125,6 +141,12 @@ describe('MemoryBrowserView', () => {
     expect(screen.getByText('2 facts')).toBeDefined();
     expect(screen.getByText('First fact')).toBeDefined();
     expect(screen.getByText('Second fact')).toBeDefined();
+  });
+
+  it('renders the missing embedding provider alert', () => {
+    render(<MemoryBrowserView />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/no embedding provider configured/i);
   });
 
   it('shows loading state', () => {

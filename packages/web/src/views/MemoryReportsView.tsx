@@ -14,6 +14,7 @@ import { useCallback, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
 import type { ReportCardConfig, ReportType } from '@/components/memory/ReportCard';
 import { ReportCard } from '@/components/memory/ReportCard';
 import { ScopeSelector } from '@/components/memory/ScopeSelector';
@@ -199,6 +200,8 @@ export function MemoryReportsView(): React.JSX.Element {
           statistics.
         </p>
       </div>
+
+      <MissingEmbeddingAlert />
 
       {/* Report type selector */}
       <section aria-label="Report type">

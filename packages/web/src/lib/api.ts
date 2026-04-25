@@ -115,6 +115,7 @@ export * from './api/core';
 export * from './api/deployment';
 export * from './api/machines';
 export * from './api/memory';
+export * from './api/memory-ops';
 export * from './api/memory-providers';
 export * from './api/mesh-auto-update';
 export * from './api/mesh-config';
@@ -132,6 +133,7 @@ import { type Attachment, healthApi } from './api/core';
 import { deploymentApi } from './api/deployment';
 import { machinesApi } from './api/machines';
 import { memoryApi, memoryDrawersApi } from './api/memory';
+import { memoryOpsApi } from './api/memory-ops';
 import { memoryProvidersApi } from './api/memory-providers';
 import { meshAutoUpdateApi } from './api/mesh-auto-update';
 import { meshConfigApi } from './api/mesh-config';
@@ -157,6 +159,7 @@ export const api = {
   ...securityApi,
   ...machinesApi,
   ...memoryApi,
+  memoryOps: memoryOpsApi,
   memoryProviders: memoryProvidersApi,
   memoryDrawers: memoryDrawersApi,
   ...schedulerApi,

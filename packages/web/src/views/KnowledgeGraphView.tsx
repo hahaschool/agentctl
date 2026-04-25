@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { GraphNodeDetail } from '@/components/memory/GraphNodeDetail';
 import { GraphTableView } from '@/components/memory/GraphTableView';
+import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { memoryFactQuery, memoryGraphQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
@@ -547,6 +548,10 @@ export function KnowledgeGraphView(): React.JSX.Element {
             </>
           )}
         </span>
+      </div>
+
+      <div className="border-b border-border px-4 py-3">
+        <MissingEmbeddingAlert />
       </div>
 
       {/* Content area */}

@@ -16,6 +16,7 @@ import type React from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 import { matchTypeClass, matchTypeLabel } from '@/components/memory/drawerMatchType';
+import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -323,6 +324,8 @@ export function MemoryDrawersView(): React.JSX.Element {
           the original evidence behind a fact or audit what the MemPalace layer has indexed.
         </p>
       </div>
+
+      <MissingEmbeddingAlert />
 
       <DrawerSearchControls
         queryValue={queryInput}

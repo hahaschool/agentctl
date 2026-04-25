@@ -29,6 +29,10 @@ vi.mock('@/lib/queries', () => ({
   }),
 }));
 
+vi.mock('@/components/memory/MissingEmbeddingAlert', () => ({
+  MissingEmbeddingAlert: () => <div data-testid="missing-embedding-alert" />,
+}));
+
 // ---------------------------------------------------------------------------
 // Import after mocks
 // ---------------------------------------------------------------------------
