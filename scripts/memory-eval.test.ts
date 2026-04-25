@@ -138,6 +138,15 @@ function writeCoverageFixture(): string {
   return fixturePath;
 }
 
+function writeChangelog(
+  contents = '# Private Fixture Changelog\n\n## 2026-04-25\n\n- Added reviewed held-out examples for the default failure-mode tags.\n',
+): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-eval-changelog-'));
+  const changelogPath = path.join(dir, 'CHANGELOG.md');
+  fs.writeFileSync(changelogPath, contents, 'utf8');
+  return changelogPath;
+}
+
 describe('memory-eval live mode', () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
@@ -226,6 +235,69 @@ describe('memory-eval live mode', () => {
     expect(mockSearch).not.toHaveBeenCalled();
   });
 
+  it('requires a fixture changelog when the private changelog gate is enabled', async () => {
+    process.env.MEMORY_EVAL_REQUIRE_FIXTURE_CHANGELOG = 'true';
+    delete process.env.DATABASE_URL;
+    delete process.env.EMBEDDING_API_URL;
+    delete process.env.LITELLM_PROXY_URL;
+    delete process.env.LITELLM_URL;
+
+    await expect(main(['--fixture', writeCoverageFixture(), '--json'])).rejects.toThrow(
+      /MEMORY_EVAL_REQUIRE_FIXTURE_CHANGELOG|--fixture-changelog/,
+    );
+
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(mockPool).not.toHaveBeenCalled();
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty or undated fixture changelog when the private gate is enabled', async () => {
+    process.env.MEMORY_EVAL_REQUIRE_FIXTURE_CHANGELOG = 'true';
+
+    await expect(
+      main([
+        '--fixture',
+        writeCoverageFixture(),
+        '--fixture-changelog',
+        writeChangelog('# Private Fixture Changelog\n\n- Added rows without a date.\n'),
+        '--json',
+      ]),
+    ).rejects.toThrow(/date-stamped entry/i);
+
+    await expect(
+      main([
+        '--fixture',
+        writeCoverageFixture(),
+        '--fixture-changelog',
+        writeChangelog('   \n'),
+        '--json',
+      ]),
+    ).rejects.toThrow(/must not be empty/i);
+
+    expect(logSpy).not.toHaveBeenCalled();
+    expect(mockPool).not.toHaveBeenCalled();
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
+
+  it('accepts a dated fixture changelog and reports it with private gate metadata', async () => {
+    process.env.MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE = 'true';
+    process.env.MEMORY_EVAL_REQUIRE_FIXTURE_CHANGELOG = 'true';
+    process.env.MEMORY_EVAL_FAILURE_MODE_MIN_ROWS = '1';
+    const changelogPath = writeChangelog(
+      '# Private Fixture Changelog\n\n## 2026-04-24\n\n- Rotated fixture examples.\n\n## 2026-04-25\n\n- Added reviewed held-out examples for the default failure-mode tags.\n',
+    );
+
+    await main(['--fixture', writeCoverageFixture(), '--fixture-changelog', changelogPath]);
+
+    const output = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(output).toContain('## Fixture Changelog');
+    expect(output).toContain(`Path: ${changelogPath}`);
+    expect(output).toContain('Latest dated entry: 2026-04-25');
+    expect(output).toContain('## Fixture Failure-Mode Coverage');
+    expect(mockPool).not.toHaveBeenCalled();
+    expect(mockSearch).not.toHaveBeenCalled();
+  });
+
   it('requires DATABASE_URL for --no-mock runs', async () => {
     process.env.LITELLM_URL = 'http://localhost:4000';
     delete process.env.DATABASE_URL;
@@ -308,5 +380,19 @@ describe('memory-eval live mode', () => {
     expect(output.rowResults[0].rankedResultKeys).toEqual(['fact:fact:alpha']);
     expect(output.rowResults[0].matchedExpectedKeysAt5).toEqual(['fact:fact:alpha']);
     expect(mockPool.mock.results[0]?.value.end).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('memory-evals workflow changelog gate', () => {
+  it('treats the private fixture changelog as required eval configuration', () => {
+    const workflow = fs.readFileSync(
+      new URL('../.github/workflows/memory-evals.yml', import.meta.url),
+      'utf8',
+    );
+
+    expect(workflow).toContain('MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64');
+    expect(workflow).toContain('missing+=("MEMORY_EVAL_PRIVATE_FIXTURE_CHANGELOG_B64")');
+    expect(workflow).toContain("MEMORY_EVAL_REQUIRE_FIXTURE_CHANGELOG: 'true'");
+    expect(workflow).toContain('--fixture-changelog "$PRIVATE_FIXTURE_CHANGELOG_PATH"');
   });
 });

@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
@@ -26,6 +27,7 @@ type EvalSplit = 'dev' | 'held-out' | 'full';
 
 type CliOptions = {
   fixturePath: string;
+  fixtureChangelogPath?: string;
   split: EvalSplit;
   json: boolean;
   mock: boolean;
@@ -39,6 +41,10 @@ export type LiveMemoryEvalConfig = {
 
 type MemoryEvalEnv = Record<string, string | undefined>;
 type LiveMemorySearch = Pick<MemorySearch, 'search'>;
+type FixtureChangelogSummary = {
+  path: string;
+  latestDatedEntry: string;
+};
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -54,9 +60,11 @@ const EMBEDDING_BASE_URL_ENV_KEYS = [
 ] as const;
 const REQUIRE_FAILURE_MODE_COVERAGE_ENV = 'MEMORY_EVAL_REQUIRE_FAILURE_MODE_COVERAGE';
 const FAILURE_MODE_MIN_ROWS_ENV = 'MEMORY_EVAL_FAILURE_MODE_MIN_ROWS';
+const REQUIRE_FIXTURE_CHANGELOG_ENV = 'MEMORY_EVAL_REQUIRE_FIXTURE_CHANGELOG';
+const FIXTURE_CHANGELOG_DATE_PATTERN = /^(?:\s*#{1,6}\s+|\s*[-*]\s+)(\d{4}-\d{2}-\d{2})(?:\b|:)/gm;
 
 function usage(): string {
-  return `Usage: pnpm memory:eval [--fixture path] [--split dev|held-out|full] [--json] [--mock|--no-mock]
+  return `Usage: pnpm memory:eval [--fixture path] [--fixture-changelog path] [--split dev|held-out|full] [--json] [--mock|--no-mock]
 
 Runs the Phase 0 memory eval harness.
 
@@ -89,6 +97,14 @@ export function parseArgs(argv: readonly string[]): CliOptions {
       const value = argv[index + 1];
       if (!value) throw new Error('--fixture requires a path');
       options.fixturePath = path.resolve(value);
+      index += 1;
+      continue;
+    }
+
+    if (arg === '--fixture-changelog') {
+      const value = argv[index + 1];
+      if (!value) throw new Error('--fixture-changelog requires a path');
+      options.fixtureChangelogPath = path.resolve(value);
       index += 1;
       continue;
     }
@@ -208,6 +224,8 @@ export async function runLiveMemoryEval(
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const options = parseArgs(argv);
   const fixture = loadMemoryEvalFixture(options.fixturePath);
+  const fixtureChangelog = readOptionalFixtureChangelog(options.fixtureChangelogPath);
+  assertRequiredFixtureChangelog(fixtureChangelog, options.fixturePath);
   const minimumPerTag = readOptionalPositiveIntegerEnv(process.env, FAILURE_MODE_MIN_ROWS_ENV);
   assertRequiredFailureModeCoverage(fixture.rows, options.fixturePath, minimumPerTag);
   const rows = selectRows(fixture.rows, options);
@@ -224,6 +242,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     `# Memory Eval (${options.split}, ${options.mock ? 'mock ranking' : 'live MemorySearch'})`,
     formatMemoryEvalReport(run),
   ];
+  if (fixtureChangelog) {
+    sections.push(formatFixtureChangelogSection(fixtureChangelog));
+  }
   const failureModeCoverageSection = formatRequiredFailureModeCoverageSection(
     fixture.rows,
     minimumPerTag,
@@ -262,6 +283,62 @@ function assertRequiredFailureModeCoverage(
       `${REQUIRE_FAILURE_MODE_COVERAGE_ENV}=true rejected fixture ${fixturePath}: ${message}. Add private rows for the missing failure-mode tags or unset ${REQUIRE_FAILURE_MODE_COVERAGE_ENV} for local public-fixture runs.`,
     );
   }
+}
+
+function assertRequiredFixtureChangelog(
+  changelog: FixtureChangelogSummary | null,
+  fixturePath: string,
+  env: MemoryEvalEnv = process.env,
+): void {
+  if (env[REQUIRE_FIXTURE_CHANGELOG_ENV] !== 'true') {
+    return;
+  }
+
+  if (!changelog) {
+    throw new Error(
+      `${REQUIRE_FIXTURE_CHANGELOG_ENV}=true rejected fixture ${fixturePath}: --fixture-changelog is required so private held-out/full fixture changes include a reviewed dated changelog entry.`,
+    );
+  }
+}
+
+function readOptionalFixtureChangelog(
+  changelogPath: string | undefined,
+): FixtureChangelogSummary | null {
+  if (!changelogPath) {
+    return null;
+  }
+
+  if (!fs.existsSync(changelogPath)) {
+    throw new Error(`Fixture changelog path does not exist: ${changelogPath}`);
+  }
+
+  const content = fs.readFileSync(changelogPath, 'utf8');
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error(`Fixture changelog ${changelogPath} must not be empty`);
+  }
+
+  const datedEntries = [...content.matchAll(FIXTURE_CHANGELOG_DATE_PATTERN)]
+    .map((match) => match[1])
+    .filter((date): date is string => Boolean(date));
+  if (datedEntries.length === 0) {
+    throw new Error(
+      `Fixture changelog ${changelogPath} must include a date-stamped entry such as "## 2026-04-25" or "- 2026-04-25: ...".`,
+    );
+  }
+
+  return {
+    path: changelogPath,
+    latestDatedEntry: datedEntries.sort().at(-1) ?? datedEntries[0] ?? '',
+  };
+}
+
+function formatFixtureChangelogSection(changelog: FixtureChangelogSummary): string {
+  return [
+    '## Fixture Changelog',
+    `Path: ${changelog.path}`,
+    `Latest dated entry: ${changelog.latestDatedEntry}`,
+  ].join('\n');
 }
 
 function readFirstEnv(env: MemoryEvalEnv, names: readonly string[]): string | null {
