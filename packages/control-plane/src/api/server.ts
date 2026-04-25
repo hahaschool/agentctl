@@ -95,6 +95,7 @@ import { memoryReportsRoutes } from './routes/memory-reports.js';
 import { memoryScopeRoutes } from './routes/memory-scopes.js';
 import { memoryStatsRoutes } from './routes/memory-stats.js';
 import { memorySynthesisRoutes } from './routes/memory-synthesis.js';
+import { memoryTimelineRoutes } from './routes/memory-timeline.js';
 import { memoryTraverseRoutes } from './routes/memory-traverse.js';
 import { meshAutoUpdateRoutes } from './routes/mesh-auto-update.js';
 import { meshConfigRoutes } from './routes/mesh-config.js';
@@ -602,6 +603,12 @@ export async function createServer({
 
     await app.register(memoryTraverseRoutes, {
       prefix: '/api/memory/traverse',
+      pool: pgPool,
+      logger,
+    });
+
+    await app.register(memoryTimelineRoutes, {
+      prefix: '/api/memory/timeline',
       pool: pgPool,
       logger,
     });
