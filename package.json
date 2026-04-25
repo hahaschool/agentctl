@@ -27,6 +27,7 @@
     "memory:bench": "node --import tsx scripts/memory-bench.ts",
     "memory:canonicalization:propose": "node --import tsx scripts/memory-canonicalization-propose.ts",
     "memory:eval": "node --import tsx scripts/memory-eval.ts",
+    "memory:eval:fixture-scaffold": "node --import tsx scripts/memory-eval-fixture-scaffold.ts",
     "memory:eval:fixture-check": "node --import tsx scripts/memory-eval-fixture-check.ts",
     "memory:eval:secrets": "node --import tsx scripts/memory-eval-secrets.ts",
     "memory:backfill-drawers": "pnpm --filter @agentctl/control-plane build && node --import tsx scripts/backfill-memory-drawers.ts",

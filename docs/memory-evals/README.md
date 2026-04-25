@@ -116,6 +116,23 @@ Optional repository variable:
 
 ### Provision or rotate private fixture secrets
 
+Bootstrap a local authoring scaffold first when you need a fresh private fixture
+layout under the same gitignored paths the workflow expects:
+
+```bash
+pnpm memory:eval:fixture-scaffold
+```
+
+The scaffold writes:
+
+- `tmp/memory-eval/agentctl-private.json`
+- `tmp/memory-eval/fixtures/CHANGELOG.md`
+
+It seeds five excluded placeholder rows for each default failure-mode tag so
+operators can fill in richer held-out/full examples without committing private
+data. The command refuses to overwrite existing files unless you add `--force`,
+and `--json` emits only path/count metadata rather than fixture bodies.
+
 Use the local preflight before writing the fixture/changelog secrets:
 
 ```bash
