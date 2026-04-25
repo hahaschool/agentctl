@@ -1,14 +1,7 @@
 import { render, screen } from '@testing-library/react';
 
 const mockPathname = vi.fn(() => '/memory/browser');
-const mockUseQuery = vi.fn(() => ({
-  data: {
-    stats: {
-      totalFacts: 12,
-      pendingConsolidation: 3,
-    },
-  },
-}));
+const mockUseQuery = vi.fn();
 
 vi.mock('next/navigation', () => ({
   usePathname: () => mockPathname(),
@@ -42,6 +35,17 @@ vi.mock('@/lib/queries', () => ({
 import { MemorySidebar } from './MemorySidebar';
 
 describe('MemorySidebar', () => {
+  beforeEach(() => {
+    mockUseQuery.mockReturnValue({
+      data: {
+        stats: {
+          totalFacts: 12,
+          pendingConsolidation: 3,
+        },
+      },
+    });
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
     mockPathname.mockReturnValue('/memory/browser');
@@ -54,6 +58,9 @@ describe('MemorySidebar', () => {
       '/memory/browser',
     );
     expect(screen.getByRole('link', { name: /Graph/i }).getAttribute('href')).toBe('/memory/graph');
+    expect(screen.getByRole('link', { name: /Operations/i }).getAttribute('href')).toBe(
+      '/memory/operations',
+    );
     expect(screen.getByRole('link', { name: /Scopes/i }).getAttribute('href')).toBe(
       '/memory/scopes',
     );

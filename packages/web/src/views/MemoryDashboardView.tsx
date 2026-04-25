@@ -9,6 +9,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { ActivityFeed } from '@/components/memory/ActivityFeed';
 import { KpiCard } from '@/components/memory/KpiCard';
 import { MemoryDecayCard } from '@/components/memory/MemoryDecayCard';
+import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatNumber } from '@/lib/format-utils';
@@ -292,6 +293,8 @@ export function MemoryDashboardView(): React.JSX.Element {
           Overview of your AI agent memory health and activity.
         </p>
       </div>
+
+      <MissingEmbeddingAlert />
 
       {failureMessage && (
         <ErrorBanner

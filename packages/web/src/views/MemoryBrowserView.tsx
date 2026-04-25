@@ -15,6 +15,7 @@ import {
 import { DrawerResultsSection } from '@/components/memory/DrawerResultsSection';
 import { FactsList } from '@/components/memory/FactsList';
 import type { FactMatchSourcePath } from '@/components/memory/MatchSourceBadge';
+import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -325,6 +326,9 @@ export function MemoryBrowserView(): React.JSX.Element {
 
       {/* Results List */}
       <div className="flex min-w-0 flex-1 flex-col">
+        <div className="border-b border-border px-4 py-3">
+          <MissingEmbeddingAlert />
+        </div>
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
           <div className="text-sm text-muted-foreground">
             {factsQueryResult.isLoading ? (

@@ -12,6 +12,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import type { ConsolidationAction } from '@/components/memory/ConsolidationCard';
 import { ConsolidationCard } from '@/components/memory/ConsolidationCard';
+import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -358,6 +359,10 @@ export function ConsolidationBoardView(): React.JSX.Element {
         onConfirm={handleEditConfirm}
         onCancel={handleEditCancel}
       />
+
+      <div className="border-b border-border px-4 py-3">
+        <MissingEmbeddingAlert />
+      </div>
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-2">

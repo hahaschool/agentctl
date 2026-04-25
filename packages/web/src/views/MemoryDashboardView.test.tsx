@@ -42,6 +42,10 @@ vi.mock('@/components/memory/MemoryDecayCard', () => ({
   MemoryDecayCard: () => <div data-testid="memory-decay-card-mock" />,
 }));
 
+vi.mock('@/components/memory/MissingEmbeddingAlert', () => ({
+  MissingEmbeddingAlert: () => <div data-testid="missing-embedding-alert" />,
+}));
+
 vi.mock('@/components/memory/ActivityFeed', () => ({
   ActivityFeed: ({
     items,

@@ -14,6 +14,7 @@ import type React from 'react';
 import { type ReactNode, useCallback, useState } from 'react';
 
 import { EmptyState } from '@/components/EmptyState';
+import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
 import { ScopeSelector } from '@/components/memory/ScopeSelector';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -425,6 +426,8 @@ export function MemorySynthesisPage(): React.JSX.Element {
           preview — it doesn&rsquo;t modify memory.
         </p>
       </div>
+
+      <MissingEmbeddingAlert />
 
       {/* Controls */}
       <section aria-label="Synthesis parameters" className="flex flex-wrap items-end gap-4">

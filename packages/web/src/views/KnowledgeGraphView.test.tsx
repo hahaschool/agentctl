@@ -20,6 +20,10 @@ vi.mock('@/lib/queries', () => ({
   }),
 }));
 
+vi.mock('@/components/memory/MissingEmbeddingAlert', () => ({
+  MissingEmbeddingAlert: () => <div data-testid="missing-embedding-alert" />,
+}));
+
 import { KnowledgeGraphView } from './KnowledgeGraphView';
 
 function makeNode(overrides: Partial<MemoryFact> = {}): MemoryFact {

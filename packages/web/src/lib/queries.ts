@@ -23,6 +23,7 @@ import { STORAGE_KEYS } from './storage-keys';
 type RuntimeSessionsQueryParams = Parameters<typeof api.listRuntimeSessions>[0];
 type MemoryFactsQueryParams = Parameters<typeof api.searchMemoryFacts>[0];
 type MemoryGraphQueryParams = Parameters<typeof api.getMemoryGraph>[0];
+type MemoryOpsJobsQueryParams = Parameters<typeof api.memoryOps.listJobs>[0];
 type SecurityFindingsQueryParams = Parameters<typeof api.listSecurityFindings>[0];
 
 export type TaskGraphSummary = {
@@ -179,6 +180,14 @@ export const queryKeys = {
     scopes: ['memory', 'scopes'] as const,
     providers: ['memory', 'providers'] as const,
     provider: (id: string) => ['memory', 'providers', id] as const,
+    ops: {
+      capabilities: ['memory', 'ops', 'capabilities'] as const,
+      jobs: (params?: MemoryOpsJobsQueryParams) =>
+        params
+          ? (['memory', 'ops', 'jobs', params] as const)
+          : (['memory', 'ops', 'jobs'] as const),
+      job: (id: string) => ['memory', 'ops', 'job', id] as const,
+    },
     importStatus: ['memory', 'import', 'status'] as const,
     drawersSearch: (params: MemoryDrawerSearchRequest) =>
       ['memory', 'drawers', 'search', params] as const,
@@ -813,6 +822,34 @@ export function memoryProvidersQuery() {
     queryKey: queryKeys.memory.providers,
     queryFn: api.memoryProviders.list,
     staleTime: 30_000,
+  });
+}
+
+export function memoryOpsCapabilitiesQuery() {
+  return queryOptions({
+    queryKey: queryKeys.memory.ops.capabilities,
+    queryFn: api.memoryOps.capabilities,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function memoryOpsJobsQuery(params?: MemoryOpsJobsQueryParams) {
+  return queryOptions({
+    queryKey: queryKeys.memory.ops.jobs(params),
+    queryFn: () => api.memoryOps.listJobs(params),
+    refetchInterval: 3_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function memoryOpsJobQuery(id: string) {
+  return queryOptions({
+    queryKey: queryKeys.memory.ops.job(id),
+    queryFn: () => api.memoryOps.getJob(id),
+    enabled: !!id,
+    refetchInterval: 3_000,
+    refetchOnWindowFocus: true,
   });
 }
 
