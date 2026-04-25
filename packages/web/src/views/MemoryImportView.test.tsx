@@ -8,12 +8,14 @@ const {
   mockStartMutate,
   mockCancelMutate,
   mockPreviewMutate,
+  mockRollbackMutate,
 } = vi.hoisted(() => ({
   mockUseQuery: vi.fn(),
   mockImportStatusQuery: vi.fn(),
   mockStartMutate: vi.fn(),
   mockCancelMutate: vi.fn(),
   mockPreviewMutate: vi.fn(),
+  mockRollbackMutate: vi.fn(),
 }));
 
 vi.mock('@tanstack/react-query', async () => {
@@ -33,6 +35,10 @@ vi.mock('@/lib/queries', () => ({
   }),
   useCancelImport: () => ({
     mutate: mockCancelMutate,
+    isPending: false,
+  }),
+  useRollbackImport: () => ({
+    mutate: mockRollbackMutate,
     isPending: false,
   }),
   usePreviewImport: () => ({
@@ -70,6 +76,7 @@ describe('MemoryImportView', () => {
     mockUseQuery.mockReturnValue({ data: { job: null }, isLoading: false, isError: false });
     mockStartMutate.mockResolvedValue({ job: { id: 'job-1', status: 'running' } });
     mockPreviewMutate.mockResolvedValue(MOCK_PREVIEW);
+    mockRollbackMutate.mockResolvedValue({ ok: true });
   });
 
   afterEach(() => {
@@ -374,6 +381,61 @@ describe('MemoryImportView', () => {
       await waitFor(() => screen.getByTestId('import-summary'));
       fireEvent.click(screen.getByTestId('start-over'));
       expect(screen.getByTestId('step1-next')).toBeDefined();
+    });
+
+    it('renders rolled-back import jobs as a finished summary', async () => {
+      mockUseQuery.mockReturnValue({
+        data: {
+          job: {
+            id: 'job-1',
+            status: 'rolled_back',
+            progress: { current: 100, total: 100 },
+            imported: 0,
+            skipped: 0,
+            errors: 0,
+            rolledBack: 2,
+          },
+        },
+        isLoading: false,
+      });
+
+      renderView();
+      const input = screen.getByTestId('db-path-input');
+      fireEvent.change(input, { target: { value: '/tmp/x.db' } });
+      fireEvent.click(screen.getByTestId('step1-next'));
+      await waitFor(() => screen.getByTestId('step2-start'));
+      fireEvent.click(screen.getByTestId('step2-start'));
+
+      await waitFor(() => screen.getByTestId('import-summary'));
+      expect(screen.getByText('Import rolled back')).toBeDefined();
+      expect(screen.getByTestId('rolled-back-count').textContent).toBe('2');
+    });
+
+    it('calls rollbackImport from a completed import summary', async () => {
+      mockUseQuery.mockReturnValue({
+        data: {
+          job: {
+            id: 'job-1',
+            status: 'completed',
+            progress: { current: 100, total: 100 },
+            imported: 10,
+            skipped: 0,
+            errors: 0,
+          },
+        },
+        isLoading: false,
+      });
+
+      renderView();
+      const input = screen.getByTestId('db-path-input');
+      fireEvent.change(input, { target: { value: '/tmp/x.db' } });
+      fireEvent.click(screen.getByTestId('step1-next'));
+      await waitFor(() => screen.getByTestId('step2-start'));
+      fireEvent.click(screen.getByTestId('step2-start'));
+
+      await waitFor(() => screen.getByTestId('import-summary'));
+      fireEvent.click(screen.getByTestId('rollback-import'));
+      expect(mockRollbackMutate).toHaveBeenCalledWith('job-1');
     });
   });
 });

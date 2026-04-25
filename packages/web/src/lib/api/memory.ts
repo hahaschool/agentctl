@@ -446,6 +446,14 @@ export const memoryApi = {
     request<{ ok: boolean; job: ImportJob }>(`/api/memory/import/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     }),
+
+  rollbackImport: (id: string) =>
+    request<{ ok: boolean; job: ImportJob }>(
+      `/api/memory/import/${encodeURIComponent(id)}/rollback`,
+      {
+        method: 'POST',
+      },
+    ),
 };
 
 // ---------------------------------------------------------------------------

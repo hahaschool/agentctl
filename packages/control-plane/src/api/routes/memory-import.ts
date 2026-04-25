@@ -314,6 +314,7 @@ async function runJsonlImport(pool: Pool, dirPath: string, jobId: string): Promi
         turn_index: null,
         extraction_method: 'import',
         import_source_id: importSourceId,
+        import_job_id: jobId,
       };
       try {
         const result = await pool.query(
@@ -391,6 +392,7 @@ function createJob(source: ImportJobSource, total: number): ImportJob {
     imported: 0,
     skipped: 0,
     errors: 0,
+    rolledBack: 0,
     startedAt: new Date().toISOString(),
     completedAt: null,
   };
@@ -398,6 +400,20 @@ function createJob(source: ImportJobSource, total: number): ImportJob {
 
 function updateJobStatus(job: ImportJob, updates: Partial<ImportJob>): ImportJob {
   return { ...job, ...updates };
+}
+
+async function rollbackImportJob(pool: Pool, job: ImportJob): Promise<ImportJob> {
+  const result = await pool.query(
+    `DELETE FROM memory_facts WHERE source_json->>'import_job_id' = $1`,
+    [job.id],
+  );
+  const rolledBack = result.rowCount ?? 0;
+  return updateJobStatus(job, {
+    status: 'rolled_back',
+    imported: Math.max(0, job.imported - rolledBack),
+    rolledBack: (job.rolledBack ?? 0) + rolledBack,
+    completedAt: new Date().toISOString(),
+  });
 }
 
 /** Reset active job — exported for test isolation only. */
@@ -479,6 +495,7 @@ async function runImport(pool: Pool, dbPath: string, jobId: string): Promise<voi
         const id = generateImportId();
         const tags = buildTags(row);
         const source = buildSource(row);
+        source.import_job_id = jobId;
         const entityType = mapEntityType(row.type);
         const createdAt = row.created_at;
 
@@ -827,6 +844,30 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
         status: 'cancelled',
         completedAt: new Date().toISOString(),
       });
+      return reply.send({ ok: true, job: activeJob });
+    },
+  });
+
+  /** POST /api/memory/import/:id/rollback — remove facts written by a finished import job */
+  app.post<{ Params: { id: string } }>('/import/:id/rollback', {
+    config: { rateLimit: memoryImportFastifyRateLimit },
+    preHandler: [app.rateLimit(memoryImportFastifyRateLimit)],
+    handler: async (request, reply) => {
+      const { id } = request.params;
+      if (!activeJob || activeJob.id !== id) {
+        return reply.status(404).send({ ok: false, error: 'Import job not found' });
+      }
+      if (!pool) {
+        return reply.status(503).send({ ok: false, error: 'Database not configured for imports' });
+      }
+      if (activeJob.status === 'running') {
+        return reply.status(409).send({ ok: false, error: 'Import job is still running' });
+      }
+      if (activeJob.status === 'rolled_back') {
+        return reply.send({ ok: true, job: activeJob });
+      }
+
+      activeJob = await rollbackImportJob(pool, activeJob);
       return reply.send({ ok: true, job: activeJob });
     },
   });

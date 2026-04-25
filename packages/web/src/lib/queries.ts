@@ -1606,6 +1606,19 @@ export function useCancelImport() {
   });
 }
 
+export function useRollbackImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.rollbackImport(id),
+    onSuccess: (data) => {
+      qc.setQueryData(queryKeys.memory.importStatus, data);
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.importStatus });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.stats });
+      void qc.invalidateQueries({ queryKey: queryKeys.memory.facts() });
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Collaboration spaces queries + mutations
 // ---------------------------------------------------------------------------

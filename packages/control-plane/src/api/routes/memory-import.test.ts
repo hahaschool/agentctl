@@ -486,6 +486,63 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
       removeTempDir(dir);
     }
   });
+
+  it('rolls back completed JSONL imports by job id', async () => {
+    const dir = makeTempJsonlDir(2);
+    const insertedRows: unknown[][] = [];
+    const deletedJobIds: unknown[] = [];
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return { rows: [], rowCount: 0 };
+        }
+        if (sql.includes("DELETE FROM memory_facts WHERE source_json->>'import_job_id'")) {
+          deletedJobIds.push(params?.[0]);
+          return { rows: [], rowCount: 2 };
+        }
+        insertedRows.push(params ?? []);
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import',
+        payload: { source: 'jsonl-history', dbPath: dir },
+      });
+      expect(res.statusCode).toBe(202);
+      const startedJob = res.json<{ job: { id: string } }>().job;
+
+      const completedJob = await waitForImportJob(app);
+      expect(completedJob.status).toBe('completed');
+      expect(completedJob.imported).toBe(2);
+      expect(insertedRows).toHaveLength(2);
+      for (const params of insertedRows) {
+        expect(params[7]).toMatchObject({ import_job_id: startedJob.id });
+      }
+
+      const rollback = await app.inject({
+        method: 'POST',
+        url: `/api/memory/import/${startedJob.id}/rollback`,
+      });
+      expect(rollback.statusCode).toBe(200);
+      expect(deletedJobIds).toEqual([startedJob.id]);
+      const body = rollback.json<{
+        ok: boolean;
+        job: { status: string; imported: number; rolledBack: number };
+      }>();
+      expect(body.ok).toBe(true);
+      expect(body.job.status).toBe('rolled_back');
+      expect(body.job.imported).toBe(0);
+      expect(body.job.rolledBack).toBe(2);
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

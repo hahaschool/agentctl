@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockUseMutation, mockUseQueryClient, mockInvalidateQueries } = vi.hoisted(() => ({
-  mockUseMutation: vi.fn((options: unknown) => options),
-  mockUseQueryClient: vi.fn(),
-  mockInvalidateQueries: vi.fn(),
-}));
+const { mockUseMutation, mockUseQueryClient, mockInvalidateQueries, mockSetQueryData } = vi.hoisted(
+  () => ({
+    mockUseMutation: vi.fn((options: unknown) => options),
+    mockUseQueryClient: vi.fn(),
+    mockInvalidateQueries: vi.fn(),
+    mockSetQueryData: vi.fn(),
+  }),
+);
 
 vi.mock('@tanstack/react-query', async () => {
   const actual =
@@ -48,6 +51,7 @@ import {
   sessionContentQuery,
   sessionQuery,
   sessionsQuery,
+  useRollbackImport,
   useStartRuntimeSessionTerminalTakeover,
   useStopRuntimeSessionTerminalTakeover,
   useSubmitFactFeedback,
@@ -57,8 +61,10 @@ beforeEach(() => {
   mockUseMutation.mockClear();
   mockUseQueryClient.mockReset();
   mockInvalidateQueries.mockReset();
+  mockSetQueryData.mockReset();
   mockUseQueryClient.mockReturnValue({
     invalidateQueries: mockInvalidateQueries,
+    setQueryData: mockSetQueryData,
   });
 });
 
@@ -958,5 +964,45 @@ describe('useSubmitFactFeedback', () => {
     await mutation.mutationFn({ id: 'fact-2', signal: 'outdated' });
 
     expect(apiSpy).toHaveBeenCalledWith('fact-2', 'outdated');
+  });
+});
+
+describe('useRollbackImport', () => {
+  it('writes the rollback result into the import status cache and invalidates memory caches', async () => {
+    const response = {
+      ok: true,
+      job: {
+        id: 'job-1',
+        source: 'jsonl-history',
+        status: 'rolled_back',
+        progress: { current: 2, total: 2 },
+        imported: 0,
+        skipped: 0,
+        errors: 0,
+        rolledBack: 2,
+        startedAt: '2026-04-25T00:00:00.000Z',
+        completedAt: '2026-04-25T00:00:01.000Z',
+      },
+    } as const;
+    const apiSpy = vi.spyOn(api, 'rollbackImport').mockResolvedValue(response);
+
+    const mutation = useRollbackImport();
+    const result = await mutation.mutationFn('job-1');
+
+    expect(result).toEqual(response);
+    expect(apiSpy).toHaveBeenCalledWith('job-1');
+
+    await mutation.onSuccess?.(response, 'job-1', undefined);
+
+    expect(mockSetQueryData).toHaveBeenCalledWith(queryKeys.memory.importStatus, response);
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(1, {
+      queryKey: queryKeys.memory.importStatus,
+    });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: queryKeys.memory.stats,
+    });
+    expect(mockInvalidateQueries).toHaveBeenNthCalledWith(3, {
+      queryKey: queryKeys.memory.facts(),
+    });
   });
 });

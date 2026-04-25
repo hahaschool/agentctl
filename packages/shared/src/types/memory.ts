@@ -99,6 +99,7 @@ export type FactSource = {
   turn_index: number | null;
   extraction_method: 'llm' | 'rule' | 'manual' | 'import';
   import_source_id?: string | null;
+  import_job_id?: string | null;
 };
 
 export type TriggerSpec = {
@@ -370,7 +371,13 @@ export type MemoryScopeRecord = {
 
 export type ImportJobSource = 'claude-mem' | 'jsonl-history';
 
-export type ImportJobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type ImportJobStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'rolled_back';
 
 export type ImportJob = {
   id: string;
@@ -383,6 +390,7 @@ export type ImportJob = {
   imported: number;
   skipped: number;
   errors: number;
+  rolledBack?: number;
   startedAt: string;
   completedAt: string | null;
 };
