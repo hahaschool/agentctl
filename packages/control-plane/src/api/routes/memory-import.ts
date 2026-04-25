@@ -559,7 +559,9 @@ async function loadRunningImportJob(pool: Pool): Promise<ImportJob | null> {
 }
 
 async function markInterruptedIfOrphaned(pool: Pool, job: ImportJob): Promise<ImportJob> {
-  if (job.status !== 'running' || activeJob?.id === job.id) return job;
+  if (job.status !== 'running' || (activeJob?.id === job.id && activeJob.status === 'running')) {
+    return job;
+  }
   const interrupted = updateJobStatus(job, {
     status: 'interrupted',
     completedAt: new Date().toISOString(),
@@ -1074,6 +1076,8 @@ export const memoryImportRoutes: FastifyPluginAsync<MemoryImportRouteOptions> = 
       if (!pool) {
         return reply.status(503).send({ ok: false, error: 'Database not configured for imports' });
       }
+
+      await clearOrphanedRunningImport(pool);
 
       const job = activeJob?.id === id ? activeJob : await loadImportJob(pool, id);
       if (!job) {

@@ -811,6 +811,76 @@ describe('POST /api/memory/import — jsonl-history with mock pool', () => {
       removeTempDir(dir);
     }
   });
+
+  it('marks an orphaned running job interrupted before resuming it after restart', async () => {
+    const dir = makeTempJsonlDir(2);
+    const insertedRows: unknown[][] = [];
+    const persistedStatuses: unknown[] = [];
+    let orphanMarkedInterrupted = false;
+    const mockPool: MockPool = {
+      query: async (sql, params) => {
+        if (sql.includes('FROM memory_import_jobs')) {
+          const row = persistedImportJobRow({
+            id: 'import-orphaned',
+            source_path: dir,
+            status: orphanMarkedInterrupted ? 'interrupted' : 'running',
+            progress_current: 1,
+            progress_total: 2,
+            imported: 1,
+            skipped: 0,
+            errors: 0,
+            completed_at: orphanMarkedInterrupted ? '2026-04-25T00:00:02.000Z' : null,
+          });
+
+          if (sql.includes("WHERE status = 'running'")) {
+            return { rows: orphanMarkedInterrupted ? [] : [row], rowCount: 1 };
+          }
+          return { rows: [row], rowCount: 1 };
+        }
+        if (sql.includes('INSERT INTO memory_import_jobs')) {
+          const status = params?.[3];
+          persistedStatuses.push(status);
+          if (status === 'interrupted') {
+            orphanMarkedInterrupted = true;
+          }
+          return { rows: [], rowCount: 1 };
+        }
+        if (sql.includes("SELECT source_json->>'import_source_id'")) {
+          return { rows: [], rowCount: 0 };
+        }
+        insertedRows.push(params ?? []);
+        return { rows: [], rowCount: 1 };
+      },
+    };
+    const app = await buildAppWithPool(mockPool);
+
+    try {
+      resetActiveJobForTest();
+      const resume = await app.inject({
+        method: 'POST',
+        url: '/api/memory/import/import-orphaned/resume',
+      });
+
+      expect(resume.statusCode).toBe(202);
+      expect(resume.json<{ job: { status: string } }>().job.status).toBe('running');
+
+      const completedJob = await waitForImportJob(app);
+      expect(completedJob.status).toBe('completed');
+      expect(completedJob.imported).toBe(2);
+      expect(insertedRows).toHaveLength(1);
+      expect(insertedRows[0]?.[9]).toBe('jsonl-history:session-0001');
+      expect(persistedStatuses).toEqual(
+        expect.arrayContaining(['interrupted', 'running', 'completed']),
+      );
+      expect(persistedStatuses.indexOf('interrupted')).toBeLessThan(
+        persistedStatuses.indexOf('running'),
+      );
+    } finally {
+      await app.close();
+      resetActiveJobForTest();
+      removeTempDir(dir);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
