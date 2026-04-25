@@ -30,6 +30,7 @@ import {
   discoverQuery,
   healthQuery,
   machinesQuery,
+  memoryEntityTimelineQuery,
   memoryFactQuery,
   memoryFactsQuery,
   memoryGraphQuery,
@@ -861,6 +862,31 @@ describe('memoryGraphQuery', () => {
 
     expect(options.queryKey).toEqual(queryKeys.memory.graph(params));
     expect(options.staleTime).toBe(30_000);
+  });
+});
+
+describe('memoryEntityTimelineQuery', () => {
+  it('returns queryOptions for a selected memory fact timeline', () => {
+    const options = memoryEntityTimelineQuery('fact-1', {
+      asOf: '2026-04-25T00:00:00.000Z',
+      limit: 10,
+    });
+
+    expect(options.queryKey).toEqual(
+      queryKeys.memory.entityTimeline('fact-1', {
+        asOf: '2026-04-25T00:00:00.000Z',
+        limit: 10,
+      }),
+    );
+    expect(options.enabled).toBe(true);
+    expect(options.staleTime).toBe(30_000);
+  });
+
+  it('stays disabled until a memory fact is selected', () => {
+    const options = memoryEntityTimelineQuery(undefined);
+
+    expect(options.queryKey).toEqual(queryKeys.memory.entityTimeline('', undefined));
+    expect(options.enabled).toBe(false);
   });
 });
 

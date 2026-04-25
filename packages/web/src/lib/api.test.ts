@@ -426,6 +426,46 @@ describe('api.getMemoryGraph', () => {
   });
 });
 
+describe('api.getMemoryEntityTimeline', () => {
+  it('calls GET /api/memory/timeline with entity timeline params', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeFetchResponse({
+        ok: true,
+        entity: {
+          requested_id: 'fact-1',
+          resolved_fact_id: 'fact-1',
+          content_preview: 'Fact one',
+          valid_from: '2026-04-24T00:00:00.000Z',
+          valid_until: null,
+          confidence: 0.9,
+          active_at_as_of: true,
+          canonicalization_mode: 'fact-id-fallback',
+        },
+        as_of: '2026-04-25T00:00:00.000Z',
+        limit: 10,
+        next_cursor: 'cursor-1',
+        events: [],
+        limitations: [],
+      }),
+    );
+
+    await api.getMemoryEntityTimeline({
+      entity: 'fact-1',
+      asOf: '2026-04-25T00:00:00.000Z',
+      limit: 10,
+      cursor: 'cursor-0',
+    });
+
+    const [url] = lastFetchCall();
+    const parsed = new URL(url as string, 'http://localhost');
+    expect(parsed.pathname).toBe('/api/memory/timeline');
+    expect(parsed.searchParams.get('entity')).toBe('fact-1');
+    expect(parsed.searchParams.get('asOf')).toBe('2026-04-25T00:00:00.000Z');
+    expect(parsed.searchParams.get('limit')).toBe('10');
+    expect(parsed.searchParams.get('cursor')).toBe('cursor-0');
+  });
+});
+
 describe('api.getMemoryStats', () => {
   it('calls GET /api/memory/stats', async () => {
     vi.mocked(fetch).mockResolvedValue(makeFetchResponse({ ok: true, stats: { totalFacts: 0 } }));

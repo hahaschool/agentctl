@@ -9,7 +9,7 @@ import { GraphNodeDetail } from '@/components/memory/GraphNodeDetail';
 import { GraphTableView } from '@/components/memory/GraphTableView';
 import { MissingEmbeddingAlert } from '@/components/memory/MissingEmbeddingAlert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { memoryFactQuery, memoryGraphQuery } from '@/lib/queries';
+import { memoryEntityTimelineQuery, memoryFactQuery, memoryGraphQuery } from '@/lib/queries';
 import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
@@ -459,6 +459,9 @@ export function KnowledgeGraphView(): React.JSX.Element {
 
   const selectedNode = nodeDetailQuery.data?.fact ?? null;
   const selectedNodeEdges: readonly MemoryEdge[] = nodeDetailQuery.data?.edges ?? [];
+  const nodeTimelineQuery = useQuery(
+    memoryEntityTimelineQuery(selectedNodeId ?? undefined, { limit: 10 }),
+  );
 
   const handleSwitchToTable = useCallback(() => setViewMode('table'), []);
   const handleSwitchToGraph = useCallback(() => setViewMode('graph'), []);
@@ -579,6 +582,8 @@ export function KnowledgeGraphView(): React.JSX.Element {
             node={selectedNode}
             edges={selectedNodeEdges as MemoryEdge[]}
             isLoading={nodeDetailQuery.isLoading}
+            timeline={nodeTimelineQuery.data ?? null}
+            isTimelineLoading={nodeTimelineQuery.isLoading}
             onClose={handleCloseDetail}
             onSelectNode={(nodeId) => handleSelectNode(nodeId)}
             className="hidden w-80 shrink-0 xl:flex"

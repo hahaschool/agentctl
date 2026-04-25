@@ -18,6 +18,11 @@ vi.mock('@/lib/queries', () => ({
     queryFn: vi.fn(),
     enabled: !!id,
   }),
+  memoryEntityTimelineQuery: (entity?: string, params?: unknown) => ({
+    queryKey: ['memory', 'entityTimeline', entity ?? '', params],
+    queryFn: vi.fn(),
+    enabled: !!entity,
+  }),
 }));
 
 vi.mock('@/components/memory/MissingEmbeddingAlert', () => ({
@@ -91,6 +96,13 @@ describe('KnowledgeGraphView', () => {
         Array.isArray(opts.queryKey) &&
         opts.queryKey[0] === 'memory' &&
         opts.queryKey[1] === 'fact'
+      ) {
+        return { data: null, isLoading: false };
+      }
+      if (
+        Array.isArray(opts.queryKey) &&
+        opts.queryKey[0] === 'memory' &&
+        opts.queryKey[1] === 'entityTimeline'
       ) {
         return { data: null, isLoading: false };
       }
@@ -204,5 +216,92 @@ describe('KnowledgeGraphView', () => {
 
     // GraphNodeDetail panel heading should appear
     expect(screen.getByText('Node Detail')).toBeDefined();
+  });
+
+  it('renders the selected node timeline from the entity timeline query', () => {
+    const nodeWithDetail = makeNode({ id: 'node-1' });
+
+    mockUseQuery.mockImplementation((opts: { queryKey: unknown[]; enabled?: boolean }) => {
+      if (
+        Array.isArray(opts.queryKey) &&
+        opts.queryKey[0] === 'memory' &&
+        opts.queryKey[1] === 'fact' &&
+        opts.enabled
+      ) {
+        return {
+          data: { fact: nodeWithDetail, edges: [] },
+          isLoading: false,
+        };
+      }
+      if (
+        Array.isArray(opts.queryKey) &&
+        opts.queryKey[0] === 'memory' &&
+        opts.queryKey[1] === 'entityTimeline' &&
+        opts.enabled
+      ) {
+        return {
+          data: {
+            ok: true,
+            entity: {
+              requested_id: 'node-1',
+              resolved_fact_id: 'node-1',
+              content_preview: 'BullMQ decision',
+              valid_from: '2026-03-11T10:00:00.000Z',
+              valid_until: null,
+              confidence: 0.9,
+              active_at_as_of: null,
+              canonicalization_mode: 'fact-id-fallback',
+            },
+            as_of: null,
+            limit: 10,
+            next_cursor: null,
+            events: [
+              {
+                edge_id: 'timeline-edge-1',
+                relation: 'unblocks',
+                direction: 'outgoing',
+                other_fact_id: 'node-2',
+                other_fact_preview: 'Redis pattern timeline target',
+                effective_from: '2026-03-12T10:00:00.000Z',
+                effective_until: null,
+                edge_created_at: '2026-03-12T10:00:00.000Z',
+                source_fact_id: 'node-1',
+                target_fact_id: 'node-2',
+              },
+            ],
+            limitations: ['Timeline currently resolves selected graph facts by fact id.'],
+          },
+          isLoading: false,
+        };
+      }
+      if (
+        Array.isArray(opts.queryKey) &&
+        opts.queryKey[0] === 'memory' &&
+        opts.queryKey[1] === 'graph'
+      ) {
+        return {
+          data: {
+            nodes: [
+              makeNode({ id: 'node-1', content: 'BullMQ decision' }),
+              makeNode({ id: 'node-2', content: 'Redis pattern', entity_type: 'pattern' }),
+            ],
+            edges: [makeEdge({ source_fact_id: 'node-1', target_fact_id: 'node-2' })],
+          },
+          isLoading: false,
+        };
+      }
+      return { data: null, isLoading: false };
+    });
+
+    render(<KnowledgeGraphView />);
+
+    fireEvent.click(screen.getByLabelText('Select source node node-1'));
+
+    expect(screen.getByText('Timeline')).toBeDefined();
+    expect(screen.getByText('unblocks')).toBeDefined();
+    expect(screen.getByText('Redis pattern timeline target')).toBeDefined();
+    expect(
+      screen.getByText('Timeline currently resolves selected graph facts by fact id.'),
+    ).toBeDefined();
   });
 });
