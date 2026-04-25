@@ -32,7 +32,7 @@
 
 > Follow-up sync (2026-04-15): PR #524 synced the roadmap/main-stability checkpoint after the Docker-action cleanup, and PR #525 expanded sidebar keyboard access with `1-9,0` digit navigation plus `g`-prefix Go To chords for all sidebar destinations. The PR #525 review follow-up also made Settings render the grouped shortcut catalog and added regression coverage so modified second keys preserve browser/app shortcuts. At the post-#525 checkpoint, `main@0f49e772` has green CI `24437117041`, Security Audit `24437117038`, and Build & Publish Docker Images `24437117043`. Follow-up: PR #550-#552 delivered mesh peer ping/edit/registration groundwork, PR #554-#556 added machine provenance and version metadata, PR #557 delivered mesh envelope compat gates/docs, and the post-#557 checkpoint is `main@7c0f0fa3` with CI `24444895702`, Security Audit `24444895704`, and Build & Publish Docker Images `24444895701` green. PR #558 added mesh version UI and the lazy sidebar peer-version tooltip; post-#558 checks are tracked from `main@2bdd54f2` as CI `24445468284`, Security Audit `24445468249`, and Build & Publish Docker Images `24445468269`.
 
-> Follow-up sync (2026-04-15): PR #526 landed the post-#525 roadmap/plan consistency sync on `main@56ae0b24`. Post-#526 main checks passed: CI `24437448007`, Security Audit `24437448002`, and Build & Publish Docker Images `24437448013`; Docker publish still only reports the known nonblocking Grype high-severity annotations. Follow-up: PR #550-#552 delivered mesh peer ping/edit/registration groundwork, PR #554-#556 added machine provenance and version metadata, PR #557 delivered mesh envelope compat gates/docs, and the post-#557 checkpoint is `main@7c0f0fa3` with CI `24444895702`, Security Audit `24444895704`, and Build & Publish Docker Images `24444895701` green. PR #558 added mesh version UI and the lazy sidebar peer-version tooltip; post-#558 checks are tracked from `main@2bdd54f2` as CI `24445468284`, Security Audit `24445468249`, and Build & Publish Docker Images `24445468269`.
+> Follow-up sync (2026-04-15): PR #526 landed the post-#525 roadmap/plan consistency sync on `main@56ae0b24`. Post-#526 main checks passed: CI `24437448007`, Security Audit `24437448002`, and Build & Publish Docker Images `24437448013`; at that historical checkpoint Docker publish still reported the known nonblocking Grype high-severity annotations, before PR #825 later narrowed Grype output to fixed-version vulnerabilities only. Follow-up: PR #550-#552 delivered mesh peer ping/edit/registration groundwork, PR #554-#556 added machine provenance and version metadata, PR #557 delivered mesh envelope compat gates/docs, and the post-#557 checkpoint is `main@7c0f0fa3` with CI `24444895702`, Security Audit `24444895704`, and Build & Publish Docker Images `24444895701` green. PR #558 added mesh version UI and the lazy sidebar peer-version tooltip; post-#558 checks are tracked from `main@2bdd54f2` as CI `24445468284`, Security Audit `24445468249`, and Build & Publish Docker Images `24445468269`.
 
 > Follow-up sync (2026-04-15): PR #527 completed the post-#526 checkpoint sync, PR #529 added backend-independent `/sessions/[id]` route smoke coverage for the ended-session detail shell and Memory tab session-scoped fact lookup, PR #528 added backend-independent `/memory/dashboard` route smoke coverage for sidebar/dashboard/KPI/recent-activity/decay-card composition, and PR #530 synced the row-level roadmap ledger after those E2E landings. At the post-#530 checkpoint, `main@536480ae` had green CI `24438180676`, Security Audit `24438180686`, and Build & Publish Docker Images `24438180685`; dev-1/dev-2, production deploy, and beta promotion workflows were untouched. Follow-up: PR #550-#552 delivered mesh peer ping/edit/registration groundwork, PR #554-#556 added machine provenance and version metadata, PR #557 delivered mesh envelope compat gates/docs, and the post-#557 checkpoint is `main@7c0f0fa3` with CI `24444895702`, Security Audit `24444895704`, and Build & Publish Docker Images `24444895701` green. PR #558 added mesh version UI and the lazy sidebar peer-version tooltip; post-#558 checks are tracked from `main@2bdd54f2` as CI `24445468284`, Security Audit `24445468249`, and Build & Publish Docker Images `24445468269`.
 
@@ -64,16 +64,18 @@
 > auto-decompose, machine terminal, memory import, and memory scopes coverage.
 > Beta/dev CD workflows were not changed by this sync.
 >
-> Follow-up sync (2026-04-25): after PR #823 landed on `main@df12baea`, the
-> post-#823 main checks passed: CI `24920016133`, Security Audit
-> `24920016126`, and Build & Publish Docker Images `24920016124`. PR #822
+> Follow-up sync (2026-04-25): after PR #825 landed on `main@b36171aa`, the
+> post-#825 main checks passed: CI `24920301524`, Security Audit
+> `24920301538`, and Build & Publish Docker Images `24920301534`. PR #822
 > refreshed production Docker apt layers plus the agent-worker libngtcp2
 > runtime package/cache-bust path after post-#821 container scans emitted high
-> vulnerability annotations, and PR #823 pinned the production control-plane and
+> vulnerability annotations, PR #823 pinned the production control-plane and
 > agent-worker Node runtime images to 22.22.2 after the remaining Node 22.22.1
-> Grype finding. Open code-scanning, Dependabot, and secret-scanning alert
-> feeds all report 0 items. Dev-1/dev-2, production deploy, and beta promotion
-> workflows were not changed.
+> Grype finding, and PR #825 made Docker publish Grype results report only
+> vulnerabilities with fixed versions to match Trivy's ignore-unfixed policy.
+> Open code-scanning, Dependabot, and secret-scanning alert feeds all report 0
+> items. Dev-1/dev-2, production deploy, and beta promotion workflows were not
+> changed.
 
 ---
 

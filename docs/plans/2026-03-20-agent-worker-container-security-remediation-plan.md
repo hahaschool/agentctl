@@ -27,9 +27,10 @@ The remediation direction stayed intentionally conservative:
 - prefer a runtime-image refresh over broader app-layer churn
 - keep the code change as close to the Docker base selection as possible unless the scan proves a package-level reduction is still required
 
-That worker-only base-image refresh is now on `main` via PR #307:
+That worker-only base-image refresh is now on `main` via PR #307, with the
+current production pin refreshed by PR #823:
 
-- `infra/docker/Dockerfile.agent-worker` now uses `node:22.22.1-trixie-slim`
+- `infra/docker/Dockerfile.agent-worker` now uses `node:22.22.2-trixie-slim`
 - the build/deps stages also install `python3-setuptools` because Debian trixie no longer bundles the `distutils` shim node-gyp still expects during `node-pty` compilation
 
 The second, package-level follow-up is now also on `main` via PR #314:
