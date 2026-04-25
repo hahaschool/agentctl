@@ -1,6 +1,8 @@
 import type { MemoryEdge, MemoryFact } from '@agentctl/shared';
 import { fireEvent, render, screen } from '@testing-library/react';
 
+import type { FactTimelineResponse } from '@/lib/api';
+
 import { GraphNodeDetail } from './GraphNodeDetail';
 
 function makeNode(overrides: Partial<MemoryFact> = {}): MemoryFact {
@@ -39,11 +41,48 @@ function makeEdge(overrides: Partial<MemoryEdge> = {}): MemoryEdge {
   };
 }
 
+function makeTimeline(overrides: Partial<FactTimelineResponse> = {}): FactTimelineResponse {
+  return {
+    ok: true,
+    entity: {
+      requested_id: 'node-1',
+      resolved_fact_id: 'node-1',
+      content_preview: 'Use immutable data patterns',
+      valid_from: '2026-03-11T10:00:00.000Z',
+      valid_until: null,
+      confidence: 0.9,
+      active_at_as_of: null,
+      canonicalization_mode: 'fact-id-fallback',
+    },
+    as_of: null,
+    limit: 10,
+    next_cursor: null,
+    events: [
+      {
+        edge_id: 'timeline-edge-1',
+        relation: 'supports',
+        direction: 'outgoing',
+        other_fact_id: 'timeline-target-1',
+        other_fact_preview: 'Timeline target fact preview',
+        effective_from: '2026-03-12T10:00:00.000Z',
+        effective_until: null,
+        edge_created_at: '2026-03-12T10:00:00.000Z',
+        source_fact_id: 'node-1',
+        target_fact_id: 'timeline-target-1',
+      },
+    ],
+    limitations: ['Timeline currently resolves graph facts by fact id.'],
+    ...overrides,
+  };
+}
+
 describe('GraphNodeDetail', () => {
   const defaultProps = {
     node: null as MemoryFact | null,
     edges: [] as MemoryEdge[],
     isLoading: false,
+    timeline: null as FactTimelineResponse | null,
+    isTimelineLoading: false,
     onClose: vi.fn(),
     onSelectNode: vi.fn(),
   };
@@ -155,5 +194,19 @@ describe('GraphNodeDetail', () => {
 
     expect(screen.getByText('agent-1')).toBeDefined();
     expect(screen.getByText('llm')).toBeDefined();
+  });
+
+  it('renders timeline events and can navigate to their related fact', () => {
+    const node = makeNode();
+    render(<GraphNodeDetail {...defaultProps} node={node} timeline={makeTimeline()} />);
+
+    expect(screen.getByText('Timeline')).toBeDefined();
+    expect(screen.getByText('supports')).toBeDefined();
+    expect(screen.getByText('Timeline target fact preview')).toBeDefined();
+    expect(screen.getByText('Timeline currently resolves graph facts by fact id.')).toBeDefined();
+
+    fireEvent.click(screen.getByLabelText('Navigate to timeline node timeline'));
+
+    expect(defaultProps.onSelectNode).toHaveBeenCalledWith('timeline-target-1');
   });
 });
