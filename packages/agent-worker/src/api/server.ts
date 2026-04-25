@@ -34,6 +34,7 @@ import { memoryRecallRoutes } from './routes/memory-recall.js';
 import { memoryReportRoutes } from './routes/memory-report.js';
 import { memorySearchRoutes } from './routes/memory-search.js';
 import { memoryStoreRoutes } from './routes/memory-store-route.js';
+import { memoryTimelineRoutes } from './routes/memory-timeline.js';
 import { memoryTraverseRoutes } from './routes/memory-traverse.js';
 import { workerMetricsRoutes } from './routes/metrics.js';
 import { permissionResponseRoutes } from './routes/permission-response.js';
@@ -351,6 +352,11 @@ export async function createWorkerServer({
       logger,
     });
     await app.register(memoryDrawerGetRoutes, {
+      prefix: '/api/mcp',
+      controlPlaneUrl,
+      logger,
+    });
+    await app.register(memoryTimelineRoutes, {
       prefix: '/api/mcp',
       controlPlaneUrl,
       logger,
