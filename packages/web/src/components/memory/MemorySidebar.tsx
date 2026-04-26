@@ -32,6 +32,11 @@ const MEMORY_NAV_ITEMS = [
   },
   { href: '/memory/reports', label: 'Reports', description: 'Generated summaries and exports' },
   {
+    href: '/memory/narrative-report',
+    label: 'Narrative',
+    description: 'LLM-written prose summary',
+  },
+  {
     href: '/memory/drawers',
     label: 'Drawers',
     description: 'Search verbatim MemPalace drawers',

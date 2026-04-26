@@ -485,6 +485,17 @@ export const memoryApi = {
     );
   },
 
+  generateNarrativeReport: (body: {
+    scope?: string;
+    entity_type?: string;
+    limit?: number;
+    style?: 'prose' | 'bullet' | 'timeline';
+  }) =>
+    request<{ ok: boolean; text: string; factCount: number; model: string }>(
+      '/api/memory/narrative-report',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
   runMemorySynthesis: (body?: { scope?: string }) =>
     request<{ ok: boolean; result: MemorySynthesisResult }>('/api/memory/synthesis', {
       method: 'POST',
