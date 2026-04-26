@@ -570,6 +570,26 @@ export const memoryApi = {
         method: 'POST',
       },
     ),
+
+  applyCanonicalizeProposals: (body: {
+    proposals: Array<{
+      factId: string;
+      entityName: string;
+      proposalAction: string;
+      canonicalId: string | null;
+    }>;
+    dryRun?: boolean;
+  }) =>
+    request<{
+      ok: boolean;
+      dryRun: boolean;
+      applied: number;
+      skipped: number;
+      errors: Array<{ factId: string; canonicalId: string; alias: string; error: string }>;
+    }>('/api/memory/canonicalize/apply', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
 
 // ---------------------------------------------------------------------------
