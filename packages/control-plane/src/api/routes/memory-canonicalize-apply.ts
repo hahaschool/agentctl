@@ -83,7 +83,12 @@ export const memoryCanonicalizeApplyRoutes: FastifyPluginAsync<
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           logger.warn({ factId: proposal.factId, canonicalId, err }, 'Failed to apply alias');
-          errors.push({ factId: proposal.factId, canonicalId, alias: proposal.entityName, error: message });
+          errors.push({
+            factId: proposal.factId,
+            canonicalId,
+            alias: proposal.entityName,
+            error: message,
+          });
         }
       }
     } else {
@@ -91,7 +96,14 @@ export const memoryCanonicalizeApplyRoutes: FastifyPluginAsync<
     }
 
     logger.info(
-      { dryRun, total: proposals.length, actionable: actionable.length, applied, skipped, errors: errors.length },
+      {
+        dryRun,
+        total: proposals.length,
+        actionable: actionable.length,
+        applied,
+        skipped,
+        errors: errors.length,
+      },
       'Canonicalization apply completed',
     );
 

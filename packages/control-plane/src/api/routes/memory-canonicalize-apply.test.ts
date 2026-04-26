@@ -27,7 +27,9 @@ async function buildApp(pool: MockPool): Promise<FastifyInstance> {
   return app;
 }
 
-function makeProposal(overrides: Partial<EntityCanonicalizationProposalRow> = {}): EntityCanonicalizationProposalRow {
+function makeProposal(
+  overrides: Partial<EntityCanonicalizationProposalRow> = {},
+): EntityCanonicalizationProposalRow {
   return {
     factId: 'fact_001',
     scope: 'project:agentctl',
@@ -65,13 +67,23 @@ describe('memoryCanonicalizeApplyRoutes', () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
     pool = makePool();
-    upsertAliasMock = vi.fn().mockResolvedValue({ id: 'mea_001', canonicalId: 'me_canon_001', alias: 'Garry Tan', normalizedAlias: 'garry tan', sourceJson: {}, createdAt: new Date().toISOString() });
-    vi.mocked(EntityCanonicalizationStore).mockImplementation(() => ({
-      upsertAlias: upsertAliasMock,
-      createEntity: vi.fn(),
-      listAliases: vi.fn(),
-      resolveEntityName: vi.fn(),
-    }) as never);
+    upsertAliasMock = vi.fn().mockResolvedValue({
+      id: 'mea_001',
+      canonicalId: 'me_canon_001',
+      alias: 'Garry Tan',
+      normalizedAlias: 'garry tan',
+      sourceJson: {},
+      createdAt: new Date().toISOString(),
+    });
+    vi.mocked(EntityCanonicalizationStore).mockImplementation(
+      () =>
+        ({
+          upsertAlias: upsertAliasMock,
+          createEntity: vi.fn(),
+          listAliases: vi.fn(),
+          resolveEntityName: vi.fn(),
+        }) as never,
+    );
     app = await buildApp(pool);
   });
 
